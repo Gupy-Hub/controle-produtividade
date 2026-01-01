@@ -4,16 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Produtividade</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
-
     <script>
         const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
@@ -22,14 +19,10 @@
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (!usuario) { window.location.href = 'index.html'; return; }
-
             const navbarHTML = `
             <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
                 <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
-                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
-                    </div>
+                    <div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div>
                 </div>
                 <div class="hidden md:flex items-center gap-1 h-full">
                     ${createNavLink('Gestão', 'gestao.html')}
@@ -39,14 +32,10 @@
                     ${createNavLink('Minha Área', 'minha_area.html')}
                 </div>
                 <div class="flex items-center gap-4">
-                    <div class="text-right hidden sm:block">
-                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
-                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
-                    </div>
+                    <div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div>
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
                 </div>
-            </nav>
-            <div class="h-20"></div>`;
+            </nav><div class="h-20"></div>`;
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
         function createNavLink(label, linkUrl) {
@@ -58,295 +47,122 @@
     </script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-8 flex flex-wrap gap-4 items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-                </div>
-                <h1 class="text-xl font-bold text-slate-800">Controle de Produção</h1>
-            </div>
-
+            <div class="flex items-center gap-3"><div class="p-2 bg-blue-100 text-blue-700 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><h1 class="text-xl font-bold text-slate-800">Controle de Produção</h1></div>
             <div class="flex flex-wrap gap-3 items-center">
                 <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
-                    <option value="dia">📅 Dia Específico</option>
-                    <option value="semana">📅 Por Semana</option>
-                    <option value="mes">📊 Mês Completo</option>
+                    <option value="dia">📅 Dia Específico</option><option value="semana">📅 Por Semana</option><option value="mes">📊 Mês Completo</option>
                 </select>
-
                 <input type="date" id="select-dia" onchange="carregarDados()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
-                
                 <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
-                
                 <select id="select-semana" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
-                    <option value="1">Semana 1</option>
-                    <option value="2">Semana 2</option>
-                    <option value="3">Semana 3</option>
-                    <option value="4">Semana 4</option>
-                    <option value="5">Semana 5</option>
+                    <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
                 </select>
-
                 <input type="file" id="excel-files" accept=".xlsx" multiple class="hidden" onchange="importarArquivos()">
-                <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">
-                    📂 Importar Excel
-                </button>
+                <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">📂 Importar Excel</button>
             </div>
         </div>
-
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total</p>
-                <p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média do Time</p>
-                <p class="text-3xl font-extrabold text-slate-800" id="p-media">0</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assistentes Ativos</p>
-                <p class="text-3xl font-extrabold text-slate-800" id="p-headcount">0</p>
-            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total</p><p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média do Time</p><p class="text-3xl font-extrabold text-slate-800" id="p-media">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assistentes Ativos</p><p class="text-3xl font-extrabold text-slate-800" id="p-headcount">0</p></div>
         </div>
-
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                <h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3>
-                <span id="panel-titulo" class="text-sm font-medium text-slate-500">Carregando...</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left text-slate-600">
-                    <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                        <tr>
-                            <th class="px-6 py-3">Assistente</th>
-                            <th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th>
-                            <th class="px-6 py-3 text-center">FIFO</th>
-                            <th class="px-6 py-3 text-center">G. Total</th>
-                            <th class="px-6 py-3 text-center">G. Parcial</th>
-                            <th class="px-6 py-3 text-center">Meta</th>
-                            <th class="px-6 py-3 text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3><span id="panel-titulo" class="text-sm font-medium text-slate-500">Carregando...</span></div>
+            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th><th class="px-6 py-3 text-center">FIFO</th><th class="px-6 py-3 text-center">G. Total</th><th class="px-6 py-3 text-center">G. Parcial</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Status</th></tr></thead><tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody></table></div>
         </div>
     </div>
 
     <script>
         let dadosGlobais = [], metasGlobais = [];
-
         document.addEventListener('DOMContentLoaded', () => {
-            const ontem = new Date(); 
-            ontem.setDate(ontem.getDate() - 1);
+            const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
             document.getElementById('select-dia').value = ontem.toISOString().split('T')[0];
             document.getElementById('select-mes').value = ontem.toISOString().substring(0, 7);
             ajustarSeletores(); 
         });
-
-        // Controla quais inputs aparecem
         function ajustarSeletores() {
             const view = document.getElementById('view-selector').value;
-            const d = document.getElementById('select-dia');
-            const m = document.getElementById('select-mes');
-            const s = document.getElementById('select-semana');
-
-            d.classList.add('hidden');
-            m.classList.add('hidden');
-            s.classList.add('hidden');
-
-            if (view === 'dia') {
-                d.classList.remove('hidden');
-            } else if (view === 'semana') {
-                // Para ver semana, precisa escolher o mês e o número da semana
-                m.classList.remove('hidden');
-                s.classList.remove('hidden');
-                // Sincroniza mês se necessário
-                if(d.value && !m.value) m.value = d.value.substring(0, 7);
-            } else {
-                // Visão Mês
-                m.classList.remove('hidden');
-                if(d.value && !m.value) m.value = d.value.substring(0, 7);
-            }
+            const d = document.getElementById('select-dia'), m = document.getElementById('select-mes'), s = document.getElementById('select-semana');
+            d.classList.add('hidden'); m.classList.add('hidden'); s.classList.add('hidden');
+            if (view === 'dia') d.classList.remove('hidden');
+            else if (view === 'semana') { m.classList.remove('hidden'); s.classList.remove('hidden'); if(d.value && !m.value) m.value = d.value.substring(0, 7); }
+            else { m.classList.remove('hidden'); if(d.value && !m.value) m.value = d.value.substring(0, 7); }
             carregarDados();
         }
-
-        // Função auxiliar para calcular a semana do mês
-        function getWeek(dateString) {
-            const date = new Date(dateString + 'T12:00:00');
-            const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-            // Fórmula: (Dia do mês + Dia da semana do 1º dia) / 7
-            return Math.ceil((date.getDate() + firstDay) / 7);
-        }
-
+        function getWeek(dateString) { const date = new Date(dateString + 'T12:00:00'); const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); return Math.ceil((date.getDate() + firstDay) / 7); }
         async function carregarDados() {
             const view = document.getElementById('view-selector').value;
             let dataInicio, dataFim, titulo, semanaSel;
-
             if (view === 'dia') {
-                const dia = document.getElementById('select-dia').value; 
-                if(!dia) return;
-                dataInicio = dia; dataFim = dia;
-                titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
+                const dia = document.getElementById('select-dia').value; if(!dia) return;
+                dataInicio = dia; dataFim = dia; titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
             } else {
-                // Tanto para 'mes' quanto 'semana', buscamos o mês inteiro no banco
-                // e filtramos localmente se for semana
-                const mes = document.getElementById('select-mes').value; 
-                if(!mes) return;
-                
-                dataInicio = `${mes}-01`;
-                const [ano, m] = mes.split('-');
-                const ultimoDia = new Date(ano, m, 0).getDate();
-                dataFim = `${mes}-${ultimoDia}`;
-                
-                if (view === 'semana') {
-                    semanaSel = parseInt(document.getElementById('select-semana').value);
-                    titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`;
-                } else {
-                    titulo = `Visão Mensal: ${mes}`;
-                }
+                const mes = document.getElementById('select-mes').value; if(!mes) return;
+                dataInicio = `${mes}-01`; const [ano, m] = mes.split('-'); const ultimoDia = new Date(ano, m, 0).getDate(); dataFim = `${mes}-${ultimoDia}`;
+                if (view === 'semana') { semanaSel = parseInt(document.getElementById('select-semana').value); titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`; }
+                else { titulo = `Visão Mensal: ${mes}`; }
             }
-
-            document.getElementById('panel-titulo').innerText = "Carregando...";
-            document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando dados...</td></tr>';
-
+            document.getElementById('panel-titulo').innerText = "Carregando..."; document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando dados...</td></tr>';
             try {
-                // Busca dados do Supabase
-                const { data: p, error: eP } = await _supabase
-                    .from('producao')
-                    .select('*, usuarios(*)')
-                    .gte('data_referencia', dataInicio)
-                    .lte('data_referencia', dataFim);
-
+                const { data: p, error: eP } = await _supabase.from('producao').select('*, usuarios(*)').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
                 if (eP) throw eP;
-                
-                const { data: m, error: eM } = await _supabase.from('metas').select('*');
-                if (eM) throw eM;
-
-                dadosGlobais = p || [];
-                metasGlobais = m || [];
-
-                // Se for visão semanal, filtra os dados aqui
-                if (view === 'semana') {
-                    dadosGlobais = dadosGlobais.filter(d => getWeek(d.data_referencia) === semanaSel);
-                }
-
-                renderizarTabela(titulo, view === 'semana' ? 5 : (view === 'dia' ? 1 : 20)); // Base de dias aproximada para meta
-
-            } catch (err) {
-                console.error(err);
-                alert("Erro ao carregar dados.");
-            }
+                const { data: m, error: eM } = await _supabase.from('metas').select('*'); if (eM) throw eM;
+                dadosGlobais = p || []; metasGlobais = m || [];
+                if (view === 'semana') dadosGlobais = dadosGlobais.filter(d => getWeek(d.data_referencia) === semanaSel);
+                renderizarTabela(titulo);
+            } catch (err) { console.error(err); alert("Erro ao carregar dados."); }
         }
-
-        function renderizarTabela(titulo, diasEstimados) {
+        function renderizarTabela(titulo) {
             document.getElementById('panel-titulo').innerText = titulo;
             let stats = {};
-
             dadosGlobais.forEach(item => {
                 if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                 const uid = item.usuario_id;
-                
-                // Soma também o valor manual se houver
-                const qtdTotal = (item.quantidade || 0) + (item.quantidade_manual || 0);
+                // CORREÇÃO: Usar APENAS a quantidade do sistema
+                const qtdTotal = (item.quantidade || 0); 
 
-                if (!stats[uid]) stats[uid] = { 
-                    id: uid, nome: item.usuarios.nome, 
-                    total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() 
-                };
-                
+                if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
                 stats[uid].total += qtdTotal;
                 stats[uid].fifo += (item.fifo || 0);
                 stats[uid].gt += (item.gradual_total || 0);
                 stats[uid].gp += (item.gradual_parcial || 0);
                 stats[uid].dias.add(item.data_referencia);
             });
-
             const lista = Object.values(stats).sort((a, b) => b.total - a.total);
             const total = lista.reduce((a, b) => a + b.total, 0);
-            
             document.getElementById('p-total').innerText = total.toLocaleString();
             document.getElementById('p-media').innerText = lista.length ? Math.round(total / lista.length).toLocaleString() : 0;
             document.getElementById('p-headcount').innerText = lista.length;
-
             const tbody = document.getElementById('tabela-corpo');
-            if (!lista.length) { 
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado para este período.</td></tr>'; 
-                return; 
-            }
-
+            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado.</td></tr>'; return; }
             let html = '';
             lista.forEach(u => {
-                // Meta dinâmica baseada nos dias trabalhados no período
-                const diasTrab = u.dias.size || 1;
-                const meta = 650 * diasTrab; 
-                
-                const atingiu = u.total >= meta;
-                const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-                
-                html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
-                    <td class="px-6 py-4 font-medium text-slate-900">${u.nome}</td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center">${u.fifo}</td>
-                    <td class="px-6 py-4 text-center">${u.gt}</td>
-                    <td class="px-6 py-4 text-center">${u.gp}</td>
-                    <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center"><span class="${badge} text-xs font-bold px-2 py-1 rounded-full">${atingiu ? 'Atingida' : 'Abaixo'}</span></td>
-                </tr>`;
+                const diasTrab = u.dias.size || 1; const meta = 650 * diasTrab; const atingiu = u.total >= meta; const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+                html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100"><td class="px-6 py-4 font-medium text-slate-900">${u.nome}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center">${u.fifo}</td><td class="px-6 py-4 text-center">${u.gt}</td><td class="px-6 py-4 text-center">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badge} text-xs font-bold px-2 py-1 rounded-full">${atingiu ? 'Atingida' : 'Abaixo'}</span></td></tr>`;
             });
             tbody.innerHTML = html;
         }
-
-        // --- IMPORTAÇÃO ---
         async function importarArquivos() {
-            const files = document.getElementById('excel-files').files;
-            if (files.length === 0) return;
-
-            const btn = document.getElementById('btn-import');
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '⏳ Processando...';
-            btn.disabled = true;
-
+            const files = document.getElementById('excel-files').files; if (files.length === 0) return;
+            const btn = document.getElementById('btn-import'); const originalText = btn.innerHTML; btn.innerHTML = '⏳ Processando...'; btn.disabled = true;
             let log = { ok: 0, dup: 0, err: 0 };
-
             for (let f of files) {
                 try {
-                    const name = f.name.replace('.xlsx', '');
-                    if (!/^\d{8}$/.test(name)) { log.err++; continue; }
-                    
+                    const name = f.name.replace('.xlsx', ''); if (!/^\d{8}$/.test(name)) { log.err++; continue; }
                     const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
-                    const buffer = await f.arrayBuffer();
-                    const wb = XLSX.read(buffer, { type: 'array' });
-                    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
-
+                    const buffer = await f.arrayBuffer(); const wb = XLSX.read(buffer, { type: 'array' }); const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
                     for (let row of json) {
                         if (!row.id_assistente) continue;
-
-                        const { data: exists } = await _supabase.from('producao')
-                            .select('id').eq('usuario_id', row.id_assistente).eq('data_referencia', dataRef).maybeSingle();
-                        
-                        if (exists) {
-                            log.dup++;
-                        } else {
-                            await _supabase.from('producao').insert({
-                                usuario_id: row.id_assistente,
-                                data_referencia: dataRef,
-                                fifo: row.documentos_validados_fifo || 0,
-                                gradual_total: row.documentos_validados_gradual_total || 0,
-                                gradual_parcial: row.documentos_validados_gradual_parcial || 0,
-                                perfil_fc: row.documentos_validados_perfil_fc || 0,
-                                quantidade: row.documentos_validados || 0
-                            });
-                            log.ok++;
+                        const { data: exists } = await _supabase.from('producao').select('id').eq('usuario_id', row.id_assistente).eq('data_referencia', dataRef).maybeSingle();
+                        if (exists) { log.dup++; } else {
+                            await _supabase.from('producao').insert({ usuario_id: row.id_assistente, data_referencia: dataRef, fifo: row.documentos_validados_fifo || 0, gradual_total: row.documentos_validados_gradual_total || 0, gradual_parcial: row.documentos_validados_gradual_parcial || 0, perfil_fc: row.documentos_validados_perfil_fc || 0, quantidade: row.documentos_validados || 0 }); log.ok++;
                         }
                     }
                 } catch (e) { console.error(e); log.err++; }
             }
-
             alert(`Fim da Importação!\n✅ Sucesso: ${log.ok}\n⚠️ Duplicados: ${log.dup}\n❌ Erros: ${log.err}`);
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            document.getElementById('excel-files').value = ""; 
-            carregarDados(); 
+            btn.innerHTML = originalText; btn.disabled = false; document.getElementById('excel-files').value = ""; carregarDados();
         }
     </script>
 </body>

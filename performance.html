@@ -4,410 +4,136 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Performance e Ranking</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <style> 
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
-        
-        /* Estilos da Tabela */
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .selected-row td { color: #1e40af; font-weight: 700; }
         .cursor-pointer { cursor: pointer; }
         .me-row { background-color: #f8fafc; border-left: 4px solid #94a3b8; }
-
-        /* Colunas de destaque na Matriz */
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
     </style>
 </head>
 <body class="text-slate-800">
-
     <script>
         const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
         const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
-
         function renderNavbar() {
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-            if (!usuario) { window.location.href = 'index.html'; return; }
-
-            const navbarHTML = `
-            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
-                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
-                    </div>
-                </div>
-                <div class="hidden md:flex items-center gap-1 h-full">
-                    ${createNavLink('Gestão', 'gestao.html')}
-                    ${createNavLink('Produtividade', 'produtividade.html')}
-                    ${createNavLink('Performance', 'performance.html')}
-                    ${createNavLink('Consolidado', 'consolidado.html')}
-                    ${createNavLink('Minha Área', 'minha_area.html')}
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="text-right hidden sm:block">
-                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
-                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
-                    </div>
-                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
-                </div>
-            </nav>
-            <div class="h-20"></div>`;
+            const usuario = JSON.parse(localStorage.getItem('usuario')); if (!usuario) { window.location.href = 'index.html'; return; }
+            const navbarHTML = `<nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6"><div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'"><div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div></div><div class="hidden md:flex items-center gap-1 h-full">${createNavLink('Gestão', 'gestao.html')}${createNavLink('Produtividade', 'produtividade.html')}${createNavLink('Performance', 'performance.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Minha Área', 'minha_area.html')}</div><div class="flex items-center gap-4"><div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div><button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button></div></nav><div class="h-20"></div>`;
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
-        function createNavLink(label, linkUrl) {
-            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-        }
+        function createNavLink(label, linkUrl) { const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white"; return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`; }
         function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
         renderNavbar();
     </script>
-
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Performance</h1>
-                <p class="text-slate-500 text-sm">Acompanhe o ranking e a evolução anual.</p>
-            </div>
-            <div class="bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex">
-                <button onclick="switchMode('individual')" id="tab-individual" class="px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm">📊 Ranking</button>
-                <button onclick="switchMode('matrix')" id="tab-matrix" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700">🏆 Matriz Anual</button>
-            </div>
-        </div>
-
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"><div><h1 class="text-2xl font-bold text-slate-800">Performance</h1><p class="text-slate-500 text-sm">Acompanhe o ranking e a evolução anual.</p></div><div class="bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex"><button onclick="switchMode('individual')" id="tab-individual" class="px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm">📊 Ranking</button><button onclick="switchMode('matrix')" id="tab-matrix" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700">🏆 Matriz Anual</button></div></div>
         <div id="view-individual">
-            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6 flex flex-wrap gap-4 items-end">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo Período</label>
-                    <select id="period-type" onchange="atualizarOpcoesPeriodo()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 font-medium w-32">
-                        <option value="mes">Mensal</option>
-                        <option value="trimestre">Trimestral</option>
-                        <option value="semestre">Semestral</option>
-                        <option value="ano">Anual</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ano</label>
-                    <select id="year-selector" onchange="atualizarOpcoesPeriodo()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 w-24"></select>
-                </div>
-                <div class="flex-1">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Referência</label>
-                    <select id="period-value" onchange="limparSelecaoECarregar()" class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5"></select>
-                </div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo Período</label><select id="period-type" onchange="atualizarOpcoesPeriodo()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 font-medium w-32"><option value="mes">Mensal</option><option value="trimestre">Trimestral</option><option value="semestre">Semestral</option><option value="ano">Anual</option></select></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ano</label><select id="year-selector" onchange="atualizarOpcoesPeriodo()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 w-24"></select></div>
+                <div class="flex-1"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Referência</label><select id="period-value" onchange="limparSelecaoECarregar()" class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5"></select></div>
             </div>
-
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-total">Total Produzido</p>
-                    <p class="text-3xl font-extrabold text-blue-700" id="card-total">0</p>
-                </div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p>
-                    <p class="text-3xl font-extrabold text-slate-800" id="card-media">0</p>
-                </div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta do Período</p>
-                    <p class="text-3xl font-extrabold text-slate-500" id="card-meta">0</p>
-                </div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-rank">Destaques</p>
-                    <div id="card-rank-content" class="text-sm font-medium text-slate-700"></div>
-                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-total">Total Produzido</p><p class="text-3xl font-extrabold text-blue-700" id="card-total">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p><p class="text-3xl font-extrabold text-slate-800" id="card-media">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta do Período</p><p class="text-3xl font-extrabold text-slate-500" id="card-meta">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white"><p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-rank">Destaques</p><div id="card-rank-content" class="text-sm font-medium text-slate-700"></div></div>
             </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
-                    <button onclick="limparSelecaoECarregar()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="btn-limpar">✕ Limpar Seleção</button>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left text-slate-600">
-                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                            <tr>
-                                <th class="px-6 py-3">#</th>
-                                <th class="px-6 py-3">Assistente</th>
-                                <th class="px-6 py-3 text-center text-blue-700 font-bold">Total Produzido</th>
-                                <th class="px-6 py-3 text-center">Dias Trab.</th>
-                                <th class="px-6 py-3 text-center">Média/Dia</th>
-                                <th class="px-6 py-3 text-center">Meta Total</th>
-                                <th class="px-6 py-3 text-center">% Meta</th>
-                            </tr>
-                        </thead>
-                        <tbody id="ranking-body" class="divide-y divide-slate-100"></tbody>
-                    </table>
-                </div>
-            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Ranking Detalhado</h3><button onclick="limparSelecaoECarregar()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="btn-limpar">✕ Limpar Seleção</button></div><div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">#</th><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Total Produzido</th><th class="px-6 py-3 text-center">Dias Trab.</th><th class="px-6 py-3 text-center">Média/Dia</th><th class="px-6 py-3 text-center">Meta Total</th><th class="px-6 py-3 text-center">% Meta</th></tr></thead><tbody id="ranking-body" class="divide-y divide-slate-100"></tbody></table></div></div>
         </div>
-
         <div id="view-matrix" class="hidden">
-            
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6">
-                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ano de Referência</label>
-                <select id="matrix-year" onchange="carregarMatriz()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 w-32"></select>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                    <h3 class="font-bold text-slate-700">Visão Panorâmica (Matriz Completa)</h3>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
-                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                            <tr>
-                                <th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Nome</th>
-                                <th class="px-2 py-3 text-center">Jan</th><th class="px-2 py-3 text-center">Fev</th><th class="px-2 py-3 text-center">Mar</th>
-                                <th class="px-2 py-3 col-tri">TRI 1</th>
-                                <th class="px-2 py-3 text-center">Abr</th><th class="px-2 py-3 text-center">Mai</th><th class="px-2 py-3 text-center">Jun</th>
-                                <th class="px-2 py-3 col-tri">TRI 2</th>
-                                <th class="px-2 py-3 col-sem">SEM 1</th>
-                                <th class="px-2 py-3 text-center">Jul</th><th class="px-2 py-3 text-center">Ago</th><th class="px-2 py-3 text-center">Set</th>
-                                <th class="px-2 py-3 col-tri">TRI 3</th>
-                                <th class="px-2 py-3 text-center">Out</th><th class="px-2 py-3 text-center">Nov</th><th class="px-2 py-3 text-center">Dez</th>
-                                <th class="px-2 py-3 col-tri">TRI 4</th>
-                                <th class="px-2 py-3 col-sem">SEM 2</th>
-                                <th class="px-4 py-3 col-ano">ANUAL</th>
-                            </tr>
-                        </thead>
-                        <tbody id="matrix-body" class="divide-y divide-slate-100"></tbody>
-                    </table>
-                </div>
-            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-6"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ano de Referência</label><select id="matrix-year" onchange="carregarMatriz()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 w-32"></select></div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><div class="px-6 py-4 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700">Visão Panorâmica (Matriz Completa)</h3></div><div class="overflow-x-auto"><table class="w-full text-xs text-left text-slate-600 whitespace-nowrap"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Nome</th><th class="px-2 py-3 text-center">Jan</th><th class="px-2 py-3 text-center">Fev</th><th class="px-2 py-3 text-center">Mar</th><th class="px-2 py-3 col-tri">TRI 1</th><th class="px-2 py-3 text-center">Abr</th><th class="px-2 py-3 text-center">Mai</th><th class="px-2 py-3 text-center">Jun</th><th class="px-2 py-3 col-tri">TRI 2</th><th class="px-2 py-3 col-sem">SEM 1</th><th class="px-2 py-3 text-center">Jul</th><th class="px-2 py-3 text-center">Ago</th><th class="px-2 py-3 text-center">Set</th><th class="px-2 py-3 col-tri">TRI 3</th><th class="px-2 py-3 text-center">Out</th><th class="px-2 py-3 text-center">Nov</th><th class="px-2 py-3 text-center">Dez</th><th class="px-2 py-3 col-tri">TRI 4</th><th class="px-2 py-3 col-sem">SEM 2</th><th class="px-4 py-3 col-ano">ANUAL</th></tr></thead><tbody id="matrix-body" class="divide-y divide-slate-100"></tbody></table></div></div>
         </div>
-
     </div>
-
     <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario'));
-        let selectedUserId = null; 
-        let dadosCarregados = []; 
-
+        const sessao = JSON.parse(localStorage.getItem('usuario')); let selectedUserId = null; let dadosCarregados = [];
         document.addEventListener('DOMContentLoaded', init);
-
-        function init() {
-            const cy = new Date().getFullYear();
-            const ys = document.getElementById('year-selector');
-            const my = document.getElementById('matrix-year');
-            [ys, my].forEach(sel => {
-                sel.innerHTML = '';
-                for(let y=cy; y>=2024; y--) sel.innerHTML+=`<option value="${y}">${y}</option>`;
-            });
-            atualizarOpcoesPeriodo(); 
-        }
-
-        // --- ABAS ---
+        function init() { const cy = new Date().getFullYear(); const ys = document.getElementById('year-selector'); const my = document.getElementById('matrix-year'); [ys, my].forEach(sel => { sel.innerHTML = ''; for(let y=cy; y>=2024; y--) sel.innerHTML+=`<option value="${y}">${y}</option>`; }); atualizarOpcoesPeriodo(); }
         function switchMode(mode) {
-            const v1 = document.getElementById('view-individual');
-            const v2 = document.getElementById('view-matrix');
-            const b1 = document.getElementById('tab-individual');
-            const b2 = document.getElementById('tab-matrix');
-
-            if (mode === 'individual') {
-                v1.classList.remove('hidden'); v2.classList.add('hidden');
-                b1.className = "px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm";
-                b2.className = "px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700";
-                carregarRanking();
-            } else {
-                v1.classList.add('hidden'); v2.classList.remove('hidden');
-                b2.className = "px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm";
-                b1.className = "px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700";
-                carregarMatriz();
-            }
+            const v1 = document.getElementById('view-individual'); const v2 = document.getElementById('view-matrix'); const b1 = document.getElementById('tab-individual'); const b2 = document.getElementById('tab-matrix');
+            if (mode === 'individual') { v1.classList.remove('hidden'); v2.classList.add('hidden'); b1.className = "px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm"; b2.className = "px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700"; carregarRanking(); }
+            else { v1.classList.add('hidden'); v2.classList.remove('hidden'); b2.className = "px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm"; b1.className = "px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700"; carregarMatriz(); }
         }
-
-        // --- RANKING ---
         function atualizarOpcoesPeriodo() {
-            const tipo = document.getElementById('period-type').value;
-            const sel = document.getElementById('period-value');
-            sel.innerHTML = '';
-            if (tipo === 'mes') {
-                ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => {
-                    sel.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`;
-                });
-            } else if (tipo === 'trimestre') {
-                sel.innerHTML = '<option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>';
-            } else if (tipo === 'semestre') {
-                sel.innerHTML = '<option value="1">1º Semestre</option><option value="2">2º Semestre</option>';
-            } else { sel.innerHTML = '<option value="1">Ano Completo</option>'; }
+            const tipo = document.getElementById('period-type').value; const sel = document.getElementById('period-value'); sel.innerHTML = '';
+            if (tipo === 'mes') { ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => { sel.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`; }); }
+            else if (tipo === 'trimestre') { sel.innerHTML = '<option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>'; }
+            else if (tipo === 'semestre') { sel.innerHTML = '<option value="1">1º Semestre</option><option value="2">2º Semestre</option>'; } else { sel.innerHTML = '<option value="1">Ano Completo</option>'; }
             limparSelecaoECarregar();
         }
-
-        function limparSelecaoECarregar() {
-            selectedUserId = null;
-            document.getElementById('btn-limpar').classList.add('hidden');
-            carregarRanking();
-        }
-
-        function toggleUsuario(id) {
-            if (selectedUserId === id) {
-                selectedUserId = null;
-                document.getElementById('btn-limpar').classList.add('hidden');
-            } else {
-                selectedUserId = id;
-                document.getElementById('btn-limpar').classList.remove('hidden');
-            }
-            renderizarTelaRanking();
-        }
-
+        function limparSelecaoECarregar() { selectedUserId = null; document.getElementById('btn-limpar').classList.add('hidden'); carregarRanking(); }
+        function toggleUsuario(id) { if (selectedUserId === id) { selectedUserId = null; document.getElementById('btn-limpar').classList.add('hidden'); } else { selectedUserId = id; document.getElementById('btn-limpar').classList.remove('hidden'); } renderizarTelaRanking(); }
         async function carregarRanking() {
-            const tbody = document.getElementById('ranking-body');
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
+            const tbody = document.getElementById('ranking-body'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
             try {
-                // Datas
-                const tipo = document.getElementById('period-type').value;
-                const val = parseInt(document.getElementById('period-value').value);
-                const ano = document.getElementById('year-selector').value;
-                let s, e;
+                const tipo = document.getElementById('period-type').value; const val = parseInt(document.getElementById('period-value').value); const ano = document.getElementById('year-selector').value; let s, e;
                 if (tipo === 'mes') { s = `${ano}-${String(val).padStart(2,'0')}-01`; e = `${ano}-${String(val).padStart(2,'0')}-${new Date(ano, val, 0).getDate()}`; }
                 else if (tipo === 'trimestre') { const mStart = ((val-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
-                else if (tipo === 'semestre') { s = val === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = val === 1 ? `${ano}-06-30` : `${ano}-12-31`; }
-                else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
-
+                else if (tipo === 'semestre') { s = val === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = val === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
                 const { data: prods, error: ep } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', s).lte('data_referencia', e);
                 if (ep) throw ep;
-
                 let stats = {};
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
                     if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
-                    
-                    // CORREÇÃO CRÍTICA: Forçando conversão para Número para evitar concatenação de texto
-                    const sys = Number(item.quantidade) || 0;
-                    const man = Number(item.quantidade_manual) || 0;
-                    const qtd = sys + man;
-
+                    // CORREÇÃO: Usar apenas SYSTEM
+                    const qtd = Number(item.quantidade) || 0;
                     stats[uid].total += qtd;
                     stats[uid].dias.add(item.data_referencia);
                 });
-
                 dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
                 renderizarTelaRanking();
-
             } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-red-500">Erro ao carregar dados.</td></tr>'; }
         }
-
         function renderizarTelaRanking() {
-            const tbody = document.getElementById('ranking-body');
-            if (!dadosCarregados.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado neste período.</td></tr>'; atualizarCards(null); return; }
-
-            let html = '';
-            let userStats = null;
-
+            const tbody = document.getElementById('ranking-body'); if (!dadosCarregados.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado neste período.</td></tr>'; atualizarCards(null); return; }
+            let html = ''; let userStats = null;
             dadosCarregados.forEach((u, idx) => {
-                const dias = u.dias.size || 1;
-                const media = Math.round(u.total / dias);
-                const meta = 650 * dias;
-                const pct = Math.round((u.total / meta) * 100);
-                
-                const isSelected = selectedUserId === u.id;
-                if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
-                
-                const isMe = sessao && u.id === sessao.id;
-                let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer ";
-                if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
+                const dias = u.dias.size || 1; const media = Math.round(u.total / dias); const meta = 650 * dias; const pct = Math.round((u.total / meta) * 100);
+                const isSelected = selectedUserId === u.id; if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
+                const isMe = sessao && u.id === sessao.id; let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
                 let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-                
-                html += `<tr class="${rowClass}" onclick="toggleUsuario(${u.id})">
-                    <td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td>
-                    <td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
-                    <td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td>
-                </tr>`;
+                html += `<tr class="${rowClass}" onclick="toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td><td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
             });
-            tbody.innerHTML = html;
-            atualizarCards(userStats);
+            tbody.innerHTML = html; atualizarCards(userStats);
         }
-
         function atualizarCards(userStats) {
             if (userStats) {
-                document.getElementById('card-label-total').innerText = "Total Produzido (" + userStats.nome.split(' ')[0] + ")";
-                document.getElementById('card-total').innerText = userStats.total.toLocaleString();
-                document.getElementById('card-media').innerText = userStats.media.toLocaleString();
-                document.getElementById('card-meta').innerText = userStats.meta.toLocaleString();
-                document.getElementById('card-label-rank').innerText = "Ranking no Time";
-                document.getElementById('card-rank-content').innerHTML = `<div class="text-3xl font-extrabold text-blue-700">#${userStats.rank}</div><div class="text-xs text-slate-400">de ${dadosCarregados.length} assistentes</div>`;
+                document.getElementById('card-label-total').innerText = "Total Produzido (" + userStats.nome.split(' ')[0] + ")"; document.getElementById('card-total').innerText = userStats.total.toLocaleString(); document.getElementById('card-media').innerText = userStats.media.toLocaleString(); document.getElementById('card-meta').innerText = userStats.meta.toLocaleString(); document.getElementById('card-label-rank').innerText = "Ranking no Time"; document.getElementById('card-rank-content').innerHTML = `<div class="text-3xl font-extrabold text-blue-700">#${userStats.rank}</div><div class="text-xs text-slate-400">de ${dadosCarregados.length} assistentes</div>`;
             } else {
-                // Cálculo Geral
-                const totalGeral = dadosCarregados.reduce((acc, curr) => acc + curr.total, 0);
-                // Soma de dias de todos (headcount * dias trabalhados)
-                const diasGeral = dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0);
-                const metaGeral = 650 * diasGeral;
-                // Média ponderada
-                const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
-
-                document.getElementById('card-label-total').innerText = "Total Produzido (Time)";
-                document.getElementById('card-total').innerText = totalGeral.toLocaleString();
-                document.getElementById('card-media').innerText = mediaGeral.toLocaleString();
-                document.getElementById('card-meta').innerText = metaGeral.toLocaleString();
-                document.getElementById('card-label-rank').innerText = "Melhores do Período";
-                let top5Html = '<div class="flex flex-col gap-1">';
-                dadosCarregados.slice(0, 5).forEach((u, i) => { top5Html += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600">${u.total.toLocaleString()}</span></div>`; });
-                top5Html += '</div>';
-                document.getElementById('card-rank-content').innerHTML = top5Html;
+                const totalGeral = dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); const diasGeral = dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); const metaGeral = 650 * diasGeral; const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
+                document.getElementById('card-label-total').innerText = "Total Produzido (Time)"; document.getElementById('card-total').innerText = totalGeral.toLocaleString(); document.getElementById('card-media').innerText = mediaGeral.toLocaleString(); document.getElementById('card-meta').innerText = metaGeral.toLocaleString(); document.getElementById('card-label-rank').innerText = "Melhores do Período";
+                let top5Html = '<div class="flex flex-col gap-1">'; dadosCarregados.slice(0, 5).forEach((u, i) => { top5Html += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600">${u.total.toLocaleString()}</span></div>`; }); top5Html += '</div>'; document.getElementById('card-rank-content').innerHTML = top5Html;
             }
         }
-
-        // --- MATRIZ ANUAL ---
         async function carregarMatriz() {
-            const tbody = document.getElementById('matrix-body');
-            tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Calculando matriz...</td></tr>';
+            const tbody = document.getElementById('matrix-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Calculando matriz...</td></tr>';
             try {
-                const ano = document.getElementById('matrix-year').value;
-                const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
-                if (error) throw error;
-
+                const ano = document.getElementById('matrix-year').value; const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`); if (error) throw error;
                 let map = {};
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
-                    
-                    // CORREÇÃO: Forçando conversão para Número
-                    const sys = Number(item.quantidade) || 0;
-                    const man = Number(item.quantidade_manual) || 0;
-                    const qtd = sys + man;
-
+                    // CORREÇÃO: Usar apenas SYSTEM
+                    const qtd = Number(item.quantidade) || 0;
                     if (!map[uid]) map[uid] = { nome: item.usuarios.nome, m: Array(12).fill(0), t: 0 };
-                    const mes = new Date(item.data_referencia + 'T12:00:00').getMonth();
-                    map[uid].m[mes] += qtd;
-                    map[uid].t += qtd;
+                    const mes = new Date(item.data_referencia + 'T12:00:00').getMonth(); map[uid].m[mes] += qtd; map[uid].t += qtd;
                 });
-
-                const lista = Object.values(map).sort((a, b) => b.t - a.t);
-                if (!lista.length) { tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Sem dados.</td></tr>'; return; }
-
+                const lista = Object.values(map).sort((a, b) => b.t - a.t); if (!lista.length) { tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Sem dados.</td></tr>'; return; }
                 let html = '';
                 lista.forEach(u => {
-                    const q1 = u.m[0]+u.m[1]+u.m[2];
-                    const q2 = u.m[3]+u.m[4]+u.m[5];
-                    const s1 = q1 + q2;
-                    const q3 = u.m[6]+u.m[7]+u.m[8];
-                    const q4 = u.m[9]+u.m[10]+u.m[11];
-                    const s2 = q3 + q4;
-
-                    const cell = (v) => v ? v.toLocaleString() : '-';
-                    const cTri = "col-tri"; const cSem = "col-sem"; const cAno = "col-ano";
-
-                    html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
-                        <td class="px-4 py-3 font-medium sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="${cTri}">${cell(q1)}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="${cTri}">${cell(q2)}</td>
-                        <td class="${cSem}">${cell(s1)}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="${cTri}">${cell(q3)}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="${cTri}">${cell(q4)}</td>
-                        <td class="${cSem}">${cell(s2)}</td>
-                        <td class="${cAno}">${u.t.toLocaleString()}</td>
-                    </tr>`;
+                    const q1 = u.m[0]+u.m[1]+u.m[2]; const q2 = u.m[3]+u.m[4]+u.m[5]; const s1 = q1 + q2; const q3 = u.m[6]+u.m[7]+u.m[8]; const q4 = u.m[9]+u.m[10]+u.m[11]; const s2 = q3 + q4;
+                    const cell = (v) => v ? v.toLocaleString() : '-'; const cTri = "col-tri"; const cSem = "col-sem"; const cAno = "col-ano";
+                    html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100"><td class="px-4 py-3 font-medium sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="${cTri}">${cell(q1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="${cTri}">${cell(q2)}</td><td class="${cSem}">${cell(s1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="${cTri}">${cell(q3)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="${cTri}">${cell(q4)}</td><td class="${cSem}">${cell(s2)}</td><td class="${cAno}">${u.t.toLocaleString()}</td></tr>`;
                 });
                 tbody.innerHTML = html;
             } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-4 text-red-500">Erro.</td></tr>'; }
