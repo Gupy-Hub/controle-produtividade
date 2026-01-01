@@ -11,9 +11,16 @@
     
     <style> 
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
-        /* Estilo para destacar a linha do próprio usuário */
-        .me-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
-        .me-row td { color: #1e40af; font-weight: 700; }
+        
+        /* Linha selecionada */
+        .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
+        .selected-row td { color: #1e40af; font-weight: 700; }
+        
+        /* Cursor interativo */
+        .cursor-pointer { cursor: pointer; }
+        
+        /* Linha do próprio usuário (quando não selecionada) */
+        .me-row { background-color: #f8fafc; border-left: 4px solid #94a3b8; }
     </style>
 </head>
 <body class="text-slate-800">
@@ -92,13 +99,36 @@
                 </div>
                 <div class="flex-1">
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Referência</label>
-                    <select id="period-value" onchange="carregarRanking()" class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5"></select>
+                    <select id="period-value" onchange="limparSelecaoECarregar()" class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5"></select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-total">Total Produzido (Time)</p>
+                    <p class="text-3xl font-extrabold text-blue-700" id="card-total">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p>
+                    <p class="text-3xl font-extrabold text-slate-800" id="card-media">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta do Período</p>
+                    <p class="text-3xl font-extrabold text-slate-500" id="card-meta">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-rank">Destaques</p>
+                    <div id="card-rank-content" class="text-sm font-medium text-slate-700">
+                        </div>
                 </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                    <h3 class="font-bold text-slate-700">Ranking do Período</h3>
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
+                    <button onclick="limparSelecaoECarregar()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="btn-limpar">
+                        ✕ Limpar Seleção
+                    </button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-slate-600">
@@ -156,11 +186,12 @@
 
     <script>
         const sessao = JSON.parse(localStorage.getItem('usuario'));
+        let selectedUserId = null; // Variável para controlar a seleção
+        let dadosCarregados = []; // Cache dos dados atuais
 
         document.addEventListener('DOMContentLoaded', init);
 
         function init() {
-            // Popula Anos
             const cy = new Date().getFullYear();
             const ys = document.getElementById('year-selector');
             const my = document.getElementById('matrix-year');
@@ -169,7 +200,7 @@
                 for(let y=cy; y>=2024; y--) sel.innerHTML+=`<option value="${y}">${y}</option>`;
             });
 
-            atualizarOpcoesPeriodo(); // Isso já dispara o carregamento do ranking
+            atualizarOpcoesPeriodo(); 
         }
 
         // --- SISTEMA DE ABAS ---
@@ -192,7 +223,7 @@
             }
         }
 
-        // --- CONTROLES DE RANKING ---
+        // --- CONTROLES ---
         function atualizarOpcoesPeriodo() {
             const tipo = document.getElementById('period-type').value;
             const sel = document.getElementById('period-value');
@@ -210,7 +241,24 @@
             } else {
                 sel.innerHTML = '<option value="1">Ano Completo</option>';
             }
+            limparSelecaoECarregar();
+        }
+
+        function limparSelecaoECarregar() {
+            selectedUserId = null;
+            document.getElementById('btn-limpar').classList.add('hidden');
             carregarRanking();
+        }
+
+        function toggleUsuario(id) {
+            if (selectedUserId === id) {
+                selectedUserId = null;
+                document.getElementById('btn-limpar').classList.add('hidden');
+            } else {
+                selectedUserId = id;
+                document.getElementById('btn-limpar').classList.remove('hidden');
+            }
+            renderizarTelaRanking(); // Não precisa buscar no banco de novo, só redesenhar
         }
 
         function getDatas() {
@@ -236,7 +284,7 @@
             return { s, e };
         }
 
-        // --- CARREGAR RANKING ---
+        // --- CARREGAR DADOS ---
         async function carregarRanking() {
             const tbody = document.getElementById('ranking-body');
             tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
@@ -244,58 +292,28 @@
             try {
                 const { s, e } = getDatas();
                 
-                // Busca Dados
                 const { data: prods, error: ep } = await _supabase.from('producao')
                     .select('*, usuarios(nome, funcao)')
                     .gte('data_referencia', s).lte('data_referencia', e);
                 
                 if (ep) throw ep;
 
-                // Agrega
+                // Processa dados brutos
                 let stats = {};
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
                     if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
                     
-                    stats[uid].total += item.quantidade;
+                    const qtd = (item.quantidade || 0) + (item.quantidade_manual || 0);
+                    stats[uid].total += qtd;
                     stats[uid].dias.add(item.data_referencia);
                 });
 
-                // Ordena
-                const lista = Object.values(stats).sort((a, b) => b.total - a.total);
-
-                if (!lista.length) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado neste período.</td></tr>';
-                    return;
-                }
-
-                // Renderiza
-                let html = '';
-                lista.forEach((u, idx) => {
-                    const dias = u.dias.size || 1;
-                    const media = Math.round(u.total / dias);
-                    const meta = 650 * dias;
-                    const pct = Math.round((u.total / meta) * 100);
-                    const isMe = sessao && u.id === sessao.id;
-                    
-                    // Cores do Badge
-                    let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-                    
-                    html += `
-                    <tr class="hover:bg-slate-50 transition border-b border-slate-100 ${isMe ? 'me-row' : ''}">
-                        <td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td>
-                        <td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td>
-                        <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
-                        <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
-                        <td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td>
-                        <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
-                        <td class="px-6 py-4 text-center">
-                            <span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span>
-                        </td>
-                    </tr>`;
-                });
-                tbody.innerHTML = html;
+                // Transforma em lista ordenada e salva no cache global
+                dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
+                
+                renderizarTelaRanking();
 
             } catch (err) {
                 console.error(err);
@@ -303,84 +321,136 @@
             }
         }
 
-        // --- CARREGAR MATRIZ ANUAL ---
+        function renderizarTelaRanking() {
+            const tbody = document.getElementById('ranking-body');
+            
+            if (!dadosCarregados.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado neste período.</td></tr>';
+                atualizarCards(null);
+                return;
+            }
+
+            // 1. Atualizar Tabela
+            let html = '';
+            let userStats = null;
+            let userRank = 0;
+
+            dadosCarregados.forEach((u, idx) => {
+                const dias = u.dias.size || 1;
+                const media = Math.round(u.total / dias);
+                const meta = 650 * dias;
+                const pct = Math.round((u.total / meta) * 100);
+                
+                // Verifica seleção
+                const isSelected = selectedUserId === u.id;
+                const isMe = sessao && u.id === sessao.id;
+
+                if (isSelected) {
+                    userStats = { ...u, media, meta, rank: idx + 1 };
+                }
+                
+                let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer ";
+                if (isSelected) rowClass += "selected-row";
+                else if (isMe) rowClass += "me-row";
+
+                let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+                
+                html += `
+                <tr class="${rowClass}" onclick="toggleUsuario(${u.id})">
+                    <td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td>
+                    <td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
+                    <td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center">
+                        <span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span>
+                    </td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+
+            // 2. Atualizar Cards
+            atualizarCards(userStats);
+        }
+
+        function atualizarCards(userStats) {
+            if (userStats) {
+                // MODO: Usuário Selecionado
+                document.getElementById('card-label-total').innerText = "Total Produzido (" + userStats.nome.split(' ')[0] + ")";
+                document.getElementById('card-total').innerText = userStats.total.toLocaleString();
+                document.getElementById('card-media').innerText = userStats.media.toLocaleString();
+                document.getElementById('card-meta').innerText = userStats.meta.toLocaleString();
+                
+                // Card Ranking: Posição
+                document.getElementById('card-label-rank').innerText = "Ranking no Time";
+                document.getElementById('card-rank-content').innerHTML = `
+                    <div class="text-3xl font-extrabold text-blue-700">#${userStats.rank}</div>
+                    <div class="text-xs text-slate-400">de ${dadosCarregados.length} assistentes</div>
+                `;
+            } else {
+                // MODO: Visão Geral (Sem seleção)
+                // Calcula totais do time
+                const totalGeral = dadosCarregados.reduce((acc, curr) => acc + curr.total, 0);
+                const diasGeral = dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0);
+                const metaGeral = 650 * diasGeral; // Soma das metas de todos os dias trabalhados
+                const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0; // Média ponderada real
+
+                document.getElementById('card-label-total').innerText = "Total Produzido (Time)";
+                document.getElementById('card-total').innerText = totalGeral.toLocaleString();
+                document.getElementById('card-media').innerText = mediaGeral.toLocaleString(); // Média do time
+                document.getElementById('card-meta').innerText = metaGeral.toLocaleString(); // Meta somada
+                
+                // Card Ranking: Top 5
+                document.getElementById('card-label-rank').innerText = "Melhores do Período";
+                let top5Html = '<div class="flex flex-col gap-1">';
+                dadosCarregados.slice(0, 5).forEach((u, i) => {
+                    top5Html += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600">${u.total.toLocaleString()}</span></div>`;
+                });
+                top5Html += '</div>';
+                document.getElementById('card-rank-content').innerHTML = top5Html;
+            }
+        }
+
+        // --- MATRIZ ANUAL (Mantida igual) ---
         async function carregarMatriz() {
             const tbody = document.getElementById('matrix-body');
             tbody.innerHTML = '<tr><td colspan="18" class="text-center py-8 text-slate-400">Carregando matriz...</td></tr>';
-
             try {
                 const ano = document.getElementById('matrix-year').value;
                 const { data: prods, error } = await _supabase.from('producao')
                     .select('*, usuarios(nome, funcao)')
-                    .gte('data_referencia', `${ano}-01-01`)
-                    .lte('data_referencia', `${ano}-12-31`);
-
+                    .gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
                 if (error) throw error;
-
-                // Estrutura: { uid: { nome: 'Maria', meses: [0,0,0...], total: 0 } }
                 let map = {};
-
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
+                    const qtd = (item.quantidade || 0) + (item.quantidade_manual || 0);
                     if (!map[uid]) map[uid] = { nome: item.usuarios.nome, m: Array(12).fill(0), t: 0 };
-                    
-                    // Pega o mês (0-11) da data
-                    // Ajuste de fuso: criar data com T12:00 evita problemas de timezone
                     const mes = new Date(item.data_referencia + 'T12:00:00').getMonth();
-                    map[uid].m[mes] += item.quantidade;
-                    map[uid].t += item.quantidade;
+                    map[uid].m[mes] += qtd;
+                    map[uid].t += qtd;
                 });
-
                 const lista = Object.values(map).sort((a, b) => b.t - a.t);
-
-                if (!lista.length) {
-                    tbody.innerHTML = '<tr><td colspan="18" class="text-center py-8 text-slate-400">Sem dados para este ano.</td></tr>';
-                    return;
-                }
-
+                if (!lista.length) { tbody.innerHTML = '<tr><td colspan="18" class="text-center py-8 text-slate-400">Sem dados.</td></tr>'; return; }
                 let html = '';
                 lista.forEach(u => {
-                    const q1 = u.m[0]+u.m[1]+u.m[2];
-                    const q2 = u.m[3]+u.m[4]+u.m[5];
-                    const q3 = u.m[6]+u.m[7]+u.m[8];
-                    const q4 = u.m[9]+u.m[10]+u.m[11];
-                    
+                    const q1 = u.m[0]+u.m[1]+u.m[2]; const q2 = u.m[3]+u.m[4]+u.m[5];
+                    const q3 = u.m[6]+u.m[7]+u.m[8]; const q4 = u.m[9]+u.m[10]+u.m[11];
                     const cell = (v) => v ? v.toLocaleString() : '-';
-                    const hl = "bg-blue-50 font-bold text-blue-800 text-center"; // Estilo Trimestre
-
-                    html += `
-                    <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+                    const hl = "bg-blue-50 font-bold text-blue-800 text-center";
+                    html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
                         <td class="px-4 py-3 font-medium sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td>
-                        <td class="${hl}">${cell(q1)}</td>
-                        
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td>
-                        <td class="${hl}">${cell(q2)}</td>
-
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td>
-                        <td class="${hl}">${cell(q3)}</td>
-
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td>
-                        <td class="${hl}">${cell(q4)}</td>
-
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="${hl}">${cell(q1)}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="${hl}">${cell(q2)}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="${hl}">${cell(q3)}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="${hl}">${cell(q4)}</td>
                         <td class="px-4 py-3 text-center font-extrabold text-slate-900 bg-slate-50 border-l border-slate-200">${u.t.toLocaleString()}</td>
                     </tr>`;
                 });
                 tbody.innerHTML = html;
-
-            } catch (err) {
-                console.error(err);
-                tbody.innerHTML = '<tr><td colspan="18" class="text-center py-4 text-red-500">Erro ao gerar matriz.</td></tr>';
-            }
+            } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="18" class="text-center py-4 text-red-500">Erro.</td></tr>'; }
         }
     </script>
 </body>
