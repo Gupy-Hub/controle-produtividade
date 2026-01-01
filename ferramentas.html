@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ferramentas e Recursos</title>
+    <title>Ferramentas</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
@@ -14,73 +15,43 @@
         .tab-active { background-color: #eff6ff; color: #1d4ed8; border-color: #2563eb; }
         .tab-inactive { color: #64748b; border-color: transparent; }
         .tab-inactive:hover { color: #334155; border-color: #cbd5e1; }
+        
+        /* Animação suave */
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="text-slate-800">
 
-    <script>
-        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
-
-        function renderNavbar() {
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-            if (!usuario) { window.location.href = 'index.html'; return; }
-
-            const navbarHTML = `
-            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
-                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
-                    </div>
-                </div>
-                <div class="hidden md:flex items-center gap-1 h-full">
-                    ${createNavLink('Gestão', 'gestao.html')}
-                    ${createNavLink('Produtividade', 'produtividade.html')}
-                    ${createNavLink('Performance', 'performance.html')}
-                    ${createNavLink('Consolidado', 'consolidado.html')}
-                    ${createNavLink('Minha Área', 'minha_area.html')}
-                    ${createNavLink('Ferramentas', 'ferramentas.html')}
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="text-right hidden sm:block">
-                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
-                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
-                    </div>
-                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
-                </div>
-            </nav>
-            <div class="h-20"></div>`;
-            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
-        }
-        function createNavLink(label, linkUrl) {
-            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-        }
-        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        renderNavbar();
-    </script>
-
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <div class="flex justify-between items-center mb-6">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Ferramentas Úteis</h1>
-                <p class="text-slate-500 text-sm">Biblioteca de conhecimento e calculadoras trabalhistas.</p>
+                <h1 class="text-2xl font-bold text-slate-800">Ferramentas & Recursos</h1>
+                <p class="text-slate-500 text-sm">Biblioteca e utilitários do dia a dia.</p>
             </div>
             
-            <div class="flex border-b border-slate-200">
-                <button onclick="switchTab('lib')" id="btn-lib" class="px-6 py-2 text-sm font-bold border-b-2 tab-active transition">📚 Biblioteca</button>
-                <button onclick="switchTab('calc')" id="btn-calc" class="px-6 py-2 text-sm font-bold border-b-2 tab-inactive transition">🧮 Calculadoras</button>
+            <div class="flex border-b border-slate-200 bg-white rounded-t-xl overflow-hidden shadow-sm">
+                <button onclick="switchTab('lib')" id="btn-lib" class="px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2">
+                    <i class="fas fa-book-open"></i> Biblioteca
+                </button>
+                <button onclick="switchTab('calc')" id="btn-calc" class="px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2">
+                    <i class="fas fa-calculator"></i> Calculadora Datas
+                </button>
+                <button onclick="switchTab('cep')" id="btn-cep" class="px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2">
+                    <i class="fas fa-map-marked-alt"></i> Busca CEP
+                </button>
             </div>
         </div>
 
-        <div id="tab-lib" class="space-y-6">
+        <div id="tab-lib" class="view-section animate-fade-in space-y-6">
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-4 justify-between items-center">
-                <input type="text" id="lib-search" onkeyup="filtrarFrases()" placeholder="🔍 Buscar frase ou tag..." class="w-full max-w-lg bg-slate-50 border border-slate-300 rounded-lg px-4 py-2 text-sm">
-                <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2">
-                    + Nova Frase
+                <div class="relative flex-1 max-w-lg">
+                    <input type="text" id="lib-search" onkeyup="filtrarFrases()" placeholder="Buscar frase ou tag..." class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 transition">
+                    <i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i>
+                </div>
+                <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2 transition shadow-md">
+                    <i class="fas fa-plus"></i> Nova Frase
                 </button>
             </div>
 
@@ -89,22 +60,110 @@
             </div>
         </div>
 
-        <div id="tab-calc" class="hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            <div class="lg:col-span-1 space-y-2">
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-                    <h3 class="font-bold text-slate-700 mb-3 px-2">Escolha a Calculadora</h3>
-                    <button onclick="showCalc('rescisao')" class="w-full text-left px-4 py-2 rounded-lg hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-medium transition flex justify-between">📄 Rescisão <span>→</span></button>
-                    <button onclick="showCalc('ferias')" class="w-full text-left px-4 py-2 rounded-lg hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-medium transition flex justify-between">🏖️ Férias <span>→</span></button>
-                    <button onclick="showCalc('decimo')" class="w-full text-left px-4 py-2 rounded-lg hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-medium transition flex justify-between">🎁 13º Salário <span>→</span></button>
-                    <button onclick="showCalc('fgts')" class="w-full text-left px-4 py-2 rounded-lg hover:bg-blue-50 text-slate-600 hover:text-blue-700 font-medium transition flex justify-between">🏦 FGTS Líquido <span>→</span></button>
+        <div id="tab-calc" class="view-section hidden animate-fade-in">
+            <div class="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+                <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
+                    <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2">
+                        <i class="fas fa-calculator text-blue-400"></i> Calculadora de Datas
+                    </h3>
+                </div>
+                
+                <div class="p-8 space-y-8">
+                    <div class="flex justify-center">
+                        <div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200">
+                            <button onclick="mudarModoCalculadora('intervalo')" id="btn-mode-intervalo" class="px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition">Tempo Decorrido</button>
+                            <button onclick="mudarModoCalculadora('soma')" id="btn-mode-soma" class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition">Somar Dias</button>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row gap-4 items-end">
+                        <div class="relative flex-1 w-full group">
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider" id="label-data-base">Data Inicial</label>
+                            <div class="relative">
+                                <input id="calc-data-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
+                                <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg"></i>
+                            </div>
+                        </div>
+
+                        <div id="container-input-dias" class="relative w-full md:w-32 hidden">
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Dias</label>
+                            <input id="calc-dias-input" type="number" placeholder="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center">
+                        </div>
+
+                        <button onclick="processarCalculadora()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">
+                            Calcular
+                        </button>
+                    </div>
+
+                    <div id="resultado-intervalo" class="hidden animate-fade-in space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center">
+                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span>
+                                <span id="res-data-base" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span>
+                            </div>
+                            <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden">
+                                <i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10"></i>
+                                <span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias</span>
+                                <div class="flex items-baseline gap-1">
+                                    <span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span>
+                                    <span class="text-sm font-bold text-blue-200">dias</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3">
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-anos" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-meses" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-semanas" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-dias" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div>
+                        </div>
+                    </div>
+
+                    <div id="resultado-soma" class="hidden animate-fade-in">
+                        <div id="box-resultado-soma" class="border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300">
+                            <p id="label-resultado-soma" class="text-xs font-bold uppercase tracking-widest mb-2">A data futura será</p>
+                            <h2 id="res-data-futura" class="text-4xl md:text-5xl font-black mb-2 font-mono">--/--/----</h2>
+                            <p id="res-dia-semana" class="text-sm font-bold px-3 py-1 rounded-lg">Segunda-feira</p>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div class="lg:col-span-2">
-                <div id="calc-container" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-                    <div class="text-center text-slate-400 py-10">
-                        Select a calculator on the left to start.
+        <div id="tab-cep" class="view-section hidden animate-fade-in">
+            <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+                <div class="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
+                    <h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Consulta CEP</h3>
+                </div>
+                <div class="p-8">
+                    <div class="flex gap-2 mb-6">
+                        <input id="cep-input" type="text" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300 text-lg">
+                        <button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl">
+                            <i class="fas fa-search"></i>
+                        </button>
+                    </div>
+                    
+                    <div id="cep-loading" class="hidden text-center py-8 text-blue-500">
+                        <i class="fas fa-circle-notch fa-spin text-3xl"></i>
+                        <p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p>
+                    </div>
+                    
+                    <div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-4 shadow-inner">
+                        <div class="flex justify-between items-baseline border-b border-slate-200 pb-2">
+                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> 
+                            <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span>
+                        </div>
+                        <div class="flex justify-between items-baseline border-b border-slate-200 pb-2">
+                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> 
+                            <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span>
+                        </div>
+                        <div class="flex justify-between items-baseline border-b border-slate-200 pb-2">
+                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Localidade</span> 
+                            <span id="cep-localidade" class="font-bold text-slate-700 text-right text-sm"></span>
+                        </div>
+                        <div class="flex justify-between items-center pt-2">
+                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">CEP</span> 
+                            <span id="cep-display-num" class="font-black text-blue-600 text-right text-lg bg-blue-100 px-3 py-1 rounded-lg"></span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -119,18 +178,9 @@
                 <button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
             </div>
             <div class="p-6 space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label>
-                    <input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label>
-                    <textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea>
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tags (separadas por vírgula)</label>
-                    <input type="text" id="form-tags" placeholder="Ex: saudação, erro, email" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5">
-                </div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tags</label><input type="text" id="form-tags" placeholder="Ex: saudação, erro" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
                 <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition">Salvar</button>
@@ -138,245 +188,181 @@
         </div>
     </div>
 
+    <script src="js/config.js"></script>
+    <script src="js/layout.js"></script>
     <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario'));
-        let frasesGlobal = [];
-
-        document.addEventListener('DOMContentLoaded', () => {
-            carregarFrases();
-            showCalc('rescisao'); // Default
-        });
-
-        // --- NAVEGAÇÃO ---
+        // --- NAVEGAÇÃO DE ABAS ---
         function switchTab(tab) {
-            document.getElementById('tab-lib').classList.add('hidden');
-            document.getElementById('tab-calc').classList.add('hidden');
-            document.getElementById('btn-lib').className = 'px-6 py-2 text-sm font-bold border-b-2 transition tab-inactive';
-            document.getElementById('btn-calc').className = 'px-6 py-2 text-sm font-bold border-b-2 transition tab-inactive';
-
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.getElementById('tab-' + tab).classList.remove('hidden');
-            document.getElementById('btn-' + tab).className = 'px-6 py-2 text-sm font-bold border-b-2 transition tab-active';
+            
+            ['lib', 'calc', 'cep'].forEach(t => {
+                const btn = document.getElementById('btn-' + t);
+                if (t === tab) btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2';
+                else btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2';
+            });
         }
 
-        // --- BIBLIOTECA DE FRASES ---
-        async function carregarFrases() {
-            const container = document.getElementById('lib-grid');
-            const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
-            
-            if (error) {
-                console.error(error);
-                container.innerHTML = '<div class="col-span-full text-center text-red-500">Erro ao carregar frases (Tabela não existe?).</div>';
-                return;
-            }
+        // --- BIBLIOTECA ---
+        let frasesGlobal = [];
+        document.addEventListener('DOMContentLoaded', () => { carregarFrases(); });
 
-            frasesGlobal = data || [];
-            renderizarFrases(frasesGlobal);
+        async function carregarFrases() {
+            const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
+            if (!error) { frasesGlobal = data || []; renderizarFrases(frasesGlobal); }
         }
 
         function renderizarFrases(lista) {
             const container = document.getElementById('lib-grid');
-            if (lista.length === 0) {
-                container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada. Adicione a primeira!</div>';
-                return;
-            }
-
+            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada.</div>'; return; }
             let html = '';
             lista.forEach(item => {
                 const tagsHtml = item.tags ? item.tags.split(',').map(t => `<span class="bg-slate-100 text-slate-600 text-[10px] px-2 py-1 rounded-full uppercase font-bold">${t.trim()}</span>`).join('') : '';
-                
-                // Escapar aspas para o onclick
                 const safeContent = item.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-
-                html += `
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full">
-                    <div class="flex justify-between items-start mb-3">
-                        <h4 class="font-bold text-slate-800">${item.titulo}</h4>
-                        <button onclick="copiarTexto('${safeContent}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition">
-                            📋 Copiar
-                        </button>
-                    </div>
-                    <p class="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-2 rounded border border-slate-100">${item.conteudo}</p>
-                    <div class="flex flex-wrap gap-2 mt-auto">
-                        ${tagsHtml}
-                    </div>
-                </div>`;
+                html += `<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full"><div class="flex justify-between items-start mb-3"><h4 class="font-bold text-slate-800">${item.titulo}</h4><button onclick="copiarTexto('${safeContent}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition">📋 Copiar</button></div><p class="text-slate-600 text-sm mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-2 rounded border border-slate-100">${item.conteudo}</p><div class="flex flex-wrap gap-2 mt-auto">${tagsHtml}</div></div>`;
             });
             container.innerHTML = html;
         }
 
         function filtrarFrases() {
             const term = document.getElementById('lib-search').value.toLowerCase();
-            const filtered = frasesGlobal.filter(f => 
-                f.titulo.toLowerCase().includes(term) || 
-                f.conteudo.toLowerCase().includes(term) || 
-                (f.tags && f.tags.toLowerCase().includes(term))
-            );
-            renderizarFrases(filtered);
+            renderizarFrases(frasesGlobal.filter(f => f.titulo.toLowerCase().includes(term) || f.conteudo.toLowerCase().includes(term)));
         }
-
-        function copiarTexto(texto) {
-            navigator.clipboard.writeText(texto).then(() => {
-                alert("Texto copiado para a área de transferência!");
-            });
-        }
-
+        function copiarTexto(texto) { navigator.clipboard.writeText(texto).then(() => alert("Copiado!")); }
         function abrirModalFrase() { document.getElementById('modal-frase').classList.remove('hidden'); document.getElementById('modal-frase').classList.add('flex'); }
         function fecharModalFrase() { document.getElementById('modal-frase').classList.add('hidden'); document.getElementById('modal-frase').classList.remove('flex'); }
-
         async function salvarFrase() {
-            const titulo = document.getElementById('form-titulo').value;
-            const conteudo = document.getElementById('form-conteudo').value;
-            const tags = document.getElementById('form-tags').value;
-
-            if (!titulo || !conteudo) return alert("Preencha Título e Conteúdo.");
-
-            const { error } = await _supabase.from('biblioteca').insert({
-                titulo, conteudo, tags, criado_por: sessao.nome
-            });
-
-            if (error) alert("Erro: " + error.message);
-            else {
-                fecharModalFrase();
-                document.getElementById('form-titulo').value = '';
-                document.getElementById('form-conteudo').value = '';
-                document.getElementById('form-tags').value = '';
-                carregarFrases();
-            }
+            const titulo = document.getElementById('form-titulo').value; const conteudo = document.getElementById('form-conteudo').value; const tags = document.getElementById('form-tags').value;
+            if (!titulo || !conteudo) return alert("Preencha campos.");
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            const { error } = await _supabase.from('biblioteca').insert({ titulo, conteudo, tags, criado_por: usuario.nome });
+            if (!error) { fecharModalFrase(); carregarFrases(); } else alert(error.message);
         }
 
-        // --- CALCULADORAS (Portadas do código antigo) ---
-        function showCalc(type) {
-            const container = document.getElementById('calc-container');
-            let html = '';
+        // --- MÁSCARAS ---
+        function mascaraData(input) {
+            let v = input.value.replace(/\D/g, '').slice(0, 8);
+            if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
+            else if (v.length >= 3) v = v.replace(/(\d{2})(\d{1,2})/, '$1/$2');
+            input.value = v;
+        }
+        function mascaraCEP(input) {
+            let v = input.value.replace(/\D/g, '').slice(0, 8);
+            if (v.length >= 6) v = v.replace(/(\d{5})(\d{1,3})/, '$1-$2');
+            input.value = v;
+        }
 
-            if (type === 'rescisao') {
-                html = `
-                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">📄 Simulador de Rescisão</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-slate-500">Salário Base</label><input type="number" id="c-salario" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Meses Trabalhados</label><input type="number" id="c-meses" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Dias de Férias Vencidas</label><input type="number" id="c-ferias-dias" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Aviso Prévio (0=Não, 1=Indenizado)</label><select id="c-aviso" class="w-full border p-2 rounded"><option value="0">Trabalhado</option><option value="1">Indenizado</option></select></div>
-                    </div>
-                    <button onclick="calcRescisao()" class="mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded w-full">Calcular</button>
-                    <div id="c-res-result" class="mt-4 p-4 bg-slate-50 rounded hidden text-sm font-mono"></div>
-                `;
-            } else if (type === 'ferias') {
-                html = `
-                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">🏖️ Simulador de Férias</h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-slate-500">Salário</label><input type="number" id="f-salario" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Dias de Férias</label><input type="number" id="f-dias" value="30" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Vender 10 dias? (Abono)</label><select id="f-abono" class="w-full border p-2 rounded"><option value="0">Não</option><option value="1">Sim</option></select></div>
-                    </div>
-                    <button onclick="calcFerias()" class="mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded w-full">Calcular</button>
-                    <div id="f-result" class="mt-4 p-4 bg-slate-50 rounded hidden text-sm font-mono"></div>
-                `;
-            } else if (type === 'decimo') {
-                html = `
-                     <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2">🎁 13º Salário</h3>
-                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div><label class="text-xs font-bold text-slate-500">Salário</label><input type="number" id="d-salario" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Meses Trabalhados no Ano</label><input type="number" id="d-meses" value="12" class="w-full border p-2 rounded"></div>
-                        <div><label class="text-xs font-bold text-slate-500">Parcela</label><select id="d-parcela" class="w-full border p-2 rounded"><option value="1">1ª Parcela (sem desconto)</option><option value="2">2ª Parcela (com descontos)</option></select></div>
-                    </div>
-                    <button onclick="calcDecimo()" class="mt-4 bg-blue-600 text-white font-bold py-2 px-4 rounded w-full">Calcular</button>
-                    <div id="d-result" class="mt-4 p-4 bg-slate-50 rounded hidden text-sm font-mono"></div>
-                `;
+        // --- CALCULADORA (Lógica Original) ---
+        let modoCalculadora = 'intervalo';
+        function mudarModoCalculadora(modo) {
+            modoCalculadora = modo;
+            const btnIntervalo = document.getElementById('btn-mode-intervalo');
+            const btnSoma = document.getElementById('btn-mode-soma');
+            if (modo === 'intervalo') {
+                btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
+                btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
+                document.getElementById('container-input-dias').classList.add('hidden');
+                document.getElementById('resultado-soma').classList.add('hidden');
+                document.getElementById('label-data-base').innerText = "Data Inicial";
             } else {
-                html = `<div class="p-10 text-center text-slate-400">Calculadora de FGTS em desenvolvimento...</div>`;
+                btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
+                btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
+                document.getElementById('container-input-dias').classList.remove('hidden');
+                document.getElementById('resultado-intervalo').classList.add('hidden');
+                document.getElementById('label-data-base').innerText = "Data Base";
             }
-            container.innerHTML = html;
         }
 
-        // --- LÓGICA DE CÁLCULO ---
-        function calcRescisao() {
-            const salario = parseFloat(document.getElementById('c-salario').value) || 0;
-            const meses = parseInt(document.getElementById('c-meses').value) || 0;
-            const feriasDias = parseInt(document.getElementById('c-ferias-dias').value) || 0;
-            const aviso = document.getElementById('c-aviso').value === "1";
+        function processarCalculadora() {
+            const valData = document.getElementById('calc-data-input').value;
+            if(valData.length !== 10) return alert('Data incompleta (DD/MM/AAAA)');
+            const parts = valData.split('/'); const dataBase = new Date(parts[2], parts[1]-1, parts[0]);
+            if (isNaN(dataBase.getTime())) return alert('Data inválida');
 
-            const saldoSalario = salario; // Simplificado
-            const decimoProp = (salario / 12) * (meses % 12); // Apenas lógica básica
-            const feriasVencidas = (salario / 30) * feriasDias * 1.33;
-            const feriasProp = (salario / 12) * (meses % 12) * 1.33;
-            const valorAviso = aviso ? salario : 0;
-            const multaFgts = (salario * 0.08 * meses) * 0.40; // Estimativa
+            if (modoCalculadora === 'intervalo') {
+                const hoje = new Date(); dataBase.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
+                // Permite datas futuras
+                const diffTime = Math.abs(hoje - dataBase);
+                const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                
+                // Lógica de Anos/Meses
+                let d1 = (dataBase < hoje) ? dataBase : hoje;
+                let d2 = (dataBase < hoje) ? hoje : dataBase;
+                let anos = d2.getFullYear() - d1.getFullYear();
+                let meses = d2.getMonth() - d1.getMonth();
+                let dias = d2.getDate() - d1.getDate();
+                if (dias < 0) { meses--; dias += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate(); }
+                if (meses < 0) { anos--; meses += 12; }
+                const semanas = Math.floor(totalDias / 7);
 
-            const total = saldoSalario + decimoProp + feriasVencidas + feriasProp + valorAviso + multaFgts;
+                document.getElementById('res-data-base').innerText = valData;
+                document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
+                document.getElementById('res-anos').innerText = anos;
+                document.getElementById('res-meses').innerText = meses;
+                document.getElementById('res-semanas').innerText = semanas;
+                document.getElementById('res-dias').innerText = dias;
+                document.getElementById('resultado-intervalo').classList.remove('hidden');
+            } else {
+                const diasParaSomar = parseInt(document.getElementById('calc-dias-input').value);
+                if (isNaN(diasParaSomar)) return alert('Digite os dias');
+                const dataFutura = new Date(dataBase); dataFutura.setDate(dataFutura.getDate() + diasParaSomar);
+                
+                const dia = String(dataFutura.getDate()).padStart(2, '0');
+                const mes = String(dataFutura.getMonth() + 1).padStart(2, '0');
+                const ano = dataFutura.getFullYear();
+                const diaSemana = dataFutura.toLocaleDateString('pt-BR', { weekday: 'long' });
+                
+                const box = document.getElementById('box-resultado-soma');
+                const label = document.getElementById('label-resultado-soma');
+                const textoData = document.getElementById('res-data-futura');
+                const textoSemana = document.getElementById('res-dia-semana');
+                
+                // Reset classes
+                box.className = "border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300";
+                
+                const hoje = new Date(); hoje.setHours(0,0,0,0);
+                if (dataFutura < hoje) {
+                    box.classList.add('bg-red-50', 'border-red-100');
+                    label.innerText = "Data Passada"; label.className = "text-xs font-bold uppercase tracking-widest mb-2 text-red-500";
+                    textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono text-red-700";
+                    textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg text-red-600 bg-red-100";
+                } else {
+                    box.classList.add('bg-emerald-50', 'border-emerald-100');
+                    label.innerText = "A data futura será"; label.className = "text-xs font-bold uppercase tracking-widest mb-2 text-emerald-500";
+                    textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono text-emerald-700";
+                    textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg text-emerald-600 bg-emerald-100";
+                }
 
-            const r = document.getElementById('c-res-result');
-            r.innerHTML = `
-                <div class="flex justify-between mb-1"><span>Saldo Salário (Est.):</span> <span>R$ ${saldoSalario.toFixed(2)}</span></div>
-                <div class="flex justify-between mb-1"><span>13º Proporcional:</span> <span>R$ ${decimoProp.toFixed(2)}</span></div>
-                <div class="flex justify-between mb-1"><span>Férias + 1/3:</span> <span>R$ ${(feriasVencidas + feriasProp).toFixed(2)}</span></div>
-                <div class="flex justify-between mb-1"><span>Aviso Prévio:</span> <span>R$ ${valorAviso.toFixed(2)}</span></div>
-                <div class="flex justify-between mb-1 text-slate-500"><span>Multa FGTS (Est.):</span> <span>R$ ${multaFgts.toFixed(2)}</span></div>
-                <div class="border-t pt-2 font-bold text-lg flex justify-between text-blue-700 mt-2"><span>TOTAL BRUTO ESTIMADO:</span> <span>R$ ${total.toFixed(2)}</span></div>
-                <div class="text-[10px] text-red-400 mt-2">* Valores aproximados. Não substitui cálculo contábil oficial.</div>
-            `;
-            r.classList.remove('hidden');
+                textoData.innerText = `${dia}/${mes}/${ano}`;
+                textoSemana.innerText = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
+                document.getElementById('resultado-soma').classList.remove('hidden');
+            }
         }
 
-        function calcFerias() {
-            const salario = parseFloat(document.getElementById('f-salario').value) || 0;
-            const dias = parseInt(document.getElementById('f-dias').value) || 30;
-            const abono = document.getElementById('f-abono').value === "1";
-
-            let valorFerias = (salario / 30) * dias;
-            let umTerco = valorFerias / 3;
-            let abonoPecuniario = 0;
-            let umTercoAbono = 0;
-
-            if (abono) {
-                valorFerias = (salario / 30) * (dias - 10);
-                umTerco = valorFerias / 3;
-                abonoPecuniario = (salario / 30) * 10;
-                umTercoAbono = abonoPecuniario / 3;
-            }
-
-            const total = valorFerias + umTerco + abonoPecuniario + umTercoAbono;
+        // --- BUSCA CEP (Original ViaCEP) ---
+        async function buscarCEP() {
+            const cep = document.getElementById('cep-input').value.replace(/\D/g, '');
+            if(cep.length !== 8) return alert('CEP inválido');
             
-            // INSS/IRRF simplificado (apenas estimativa de desconto 10%)
-            const descontos = total * 0.09; 
-            const liquido = total - descontos;
-
-            const r = document.getElementById('f-result');
-            r.innerHTML = `
-                <div class="flex justify-between mb-1"><span>Valor Férias:</span> <span>R$ ${valorFerias.toFixed(2)}</span></div>
-                <div class="flex justify-between mb-1"><span>1/3 Férias:</span> <span>R$ ${umTerco.toFixed(2)}</span></div>
-                ${abono ? `<div class="flex justify-between mb-1 text-blue-600"><span>Abono Pecuniário:</span> <span>R$ ${(abonoPecuniario + umTercoAbono).toFixed(2)}</span></div>` : ''}
-                <div class="flex justify-between mb-1 text-red-400"><span>Descontos Est. (INSS/IR):</span> <span>- R$ ${descontos.toFixed(2)}</span></div>
-                <div class="border-t pt-2 font-bold text-lg flex justify-between text-emerald-700 mt-2"><span>LÍQUIDO A RECEBER:</span> <span>R$ ${liquido.toFixed(2)}</span></div>
-            `;
-            r.classList.remove('hidden');
-        }
-
-        function calcDecimo() {
-            const salario = parseFloat(document.getElementById('d-salario').value) || 0;
-            const meses = parseInt(document.getElementById('d-meses').value) || 12;
-            const parcela = document.getElementById('d-parcela').value;
-
-            const total = (salario / 12) * meses;
-            let resultado = 0;
-            let texto = "";
-
-            if (parcela === "1") {
-                resultado = total / 2;
-                texto = "1ª Parcela (50%)";
-            } else {
-                const primeira = total / 2;
-                const descontos = total * 0.09; // Estimativa INSS
-                resultado = total - primeira - descontos;
-                texto = "2ª Parcela (Restante - Descontos)";
+            document.getElementById('cep-loading').classList.remove('hidden');
+            document.getElementById('cep-resultado').classList.add('hidden');
+            
+            try {
+                const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+                const data = await res.json();
+                if(data.erro) throw new Error('Não encontrado');
+                
+                document.getElementById('cep-logradouro').innerText = data.logradouro || '---';
+                document.getElementById('cep-bairro').innerText = data.bairro || '---';
+                document.getElementById('cep-localidade').innerText = `${data.localidade} - ${data.uf}`;
+                document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
+                
+                document.getElementById('cep-loading').classList.add('hidden');
+                document.getElementById('cep-resultado').classList.remove('hidden');
+            } catch (e) {
+                document.getElementById('cep-loading').classList.add('hidden');
+                alert('Erro ao buscar CEP: ' + e.message);
             }
-
-            const r = document.getElementById('d-result');
-            r.innerHTML = `
-                <div class="flex justify-between mb-1"><span>Valor Integral:</span> <span>R$ ${total.toFixed(2)}</span></div>
-                <div class="border-t pt-2 font-bold text-lg flex justify-between text-blue-700 mt-2"><span>${texto}:</span> <span>R$ ${resultado.toFixed(2)}</span></div>
-            `;
-            r.classList.remove('hidden');
         }
     </script>
 </body>
