@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Área</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style> 
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
+        /* Inputs Personalizados */
+        .input-manual { text-align: center; font-weight: 600; transition: all 0.2s; }
+        .input-manual:focus { ring: 2px; ring-color: #2563eb; outline: none; background: white; }
+        .bg-lock { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+    </style>
+</head>
+<body class="text-slate-800">
+
+    <script>
+        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
+        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+
+        function renderNavbar() {
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) { window.location.href = 'index.html'; return; }
+
+            const navbarHTML = `
+            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
+                    <div class="flex flex-col leading-tight">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
+                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
+                    </div>
+                </div>
+                <div class="hidden md:flex items-center gap-1 h-full">
+                    ${createNavLink('Gestão', 'gestao.html')}
+                    ${createNavLink('Produtividade', 'produtividade.html')}
+                    ${createNavLink('Performance', 'performance.html')}
+                    ${createNavLink('Consolidado', 'consolidado.html')}
+                    ${createNavLink('Minha Área', 'minha_area.html')}
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right hidden sm:block">
+                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
+                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
+                    </div>
+                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
+                </div>
+            </nav>
+            <div class="h-20"></div>`;
+            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
+        }
+        function createNavLink(label, linkUrl) {
+            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+        }
+        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
+        renderNavbar();
+    </script>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    Minha Área <span id="welcome-name" class="text-blue-600"></span>
+                </h1>
+            </div>
+            
+            <div class="flex flex-wrap gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                
+                <div id="manager-control" class="hidden border-r border-slate-200 pr-3 mr-1">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Visão Gestora</label>
+                    <select id="user-selector" onchange="carregarDados()" class="text-sm font-bold text-blue-700 bg-transparent outline-none cursor-pointer"></select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Ano</label>
+                    <select id="year-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none"></select>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Mês</label>
+                    <select id="month-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none text-slate-700 w-24"></select>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Sistema (Automático)</p>
+                <p class="text-3xl font-extrabold text-blue-700" id="kpi-sys">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Manual (Ajustes)</p>
+                <p class="text-3xl font-extrabold text-amber-600" id="kpi-man">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-1">% Meta Atingida (Dias)</p>
+                <p class="text-3xl font-extrabold text-emerald-600" id="kpi-hit">0%</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-8 h-80 relative">
+            <canvas id="productionChart"></canvas>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700">Diário de Produção</h3>
+                <span class="text-xs text-slate-400 flex items-center gap-1">🔒 = Validado pela Gestão</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-slate-600">
+                    <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                        <tr>
+                            <th class="px-4 py-3 text-center">Data</th>
+                            <th class="px-4 py-3 text-center text-blue-700">Sis</th>
+                            <th class="px-4 py-3 text-center text-amber-600">Manual</th>
+                            <th class="px-4 py-3 text-center">Meta</th>
+                            <th class="px-4 py-3 text-center">Status</th>
+                            <th class="px-4 py-3 w-1/4">Anotações (Assistente)</th>
+                            <th class="px-4 py-3 w-1/4 text-blue-800">Feedback (Gestão)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const sessao = JSON.parse(localStorage.getItem('usuario'));
+        const isMgr = sessao.funcao === 'Gestora';
+        let chartInstance = null;
+        let currentUserTarget = sessao.id; // Por padrão, vê a si mesmo
+
+        document.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            // Saudação
+            document.getElementById('welcome-name').innerText = isMgr ? "(Visão Geral)" : `Olá, ${sessao.nome.split(' ')[0]}`;
+
+            // Configura Selects de Data
+            const cy = new Date().getFullYear();
+            const ys = document.getElementById('year-selector');
+            const ms = document.getElementById('month-selector');
+            
+            for(let y=cy; y>=2024; y--) ys.innerHTML += `<option value="${y}">${y}</option>`;
+            
+            ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => {
+                ms.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`;
+            });
+
+            // Se for Gestora, carrega lista de assistentes
+            if (isMgr) {
+                document.getElementById('manager-control').classList.remove('hidden');
+                const { data } = await _supabase.from('usuarios').select('*').eq('funcao', 'Assistente').order('nome');
+                const us = document.getElementById('user-selector');
+                if(data && data.length) {
+                    data.forEach(u => us.innerHTML += `<option value="${u.id}">${u.nome}</option>`);
+                    currentUserTarget = data[0].id; // Seleciona o primeiro
+                }
+            }
+
+            carregarDados();
+        }
+
+        async function carregarDados() {
+            if (isMgr) currentUserTarget = document.getElementById('user-selector').value;
+
+            const ano = document.getElementById('year-selector').value;
+            const mes = document.getElementById('month-selector').value;
+            
+            const startStr = `${ano}-${mes.toString().padStart(2,'0')}-01`;
+            const endObj = new Date(ano, mes, 0);
+            const endStr = `${ano}-${mes.toString().padStart(2,'0')}-${endObj.getDate()}`;
+
+            // Loading
+            document.getElementById('log-body').innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
+
+            try {
+                // 1. Busca Produção
+                const { data: prods } = await _supabase.from('producao')
+                    .select('*')
+                    .eq('usuario_id', currentUserTarget)
+                    .gte('data_referencia', startStr)
+                    .lte('data_referencia', endStr)
+                    .order('data_referencia');
+
+                // 2. Busca Meta Vigente
+                const { data: metas } = await _supabase.from('metas')
+                    .select('*')
+                    .eq('usuario_id', currentUserTarget)
+                    .order('data_inicio', { ascending: false });
+                
+                // Encontra a meta que estava valendo no fim do mês selecionado
+                const metaVigente = metas.find(m => m.data_inicio <= endStr)?.valor_meta || 650;
+
+                renderizarTela(prods || [], metaVigente, startStr, endStr);
+
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao carregar dados.");
+            }
+        }
+
+        function renderizarTela(dados, meta, sDate, eDate) {
+            // Mapa rápido para acesso por data
+            const map = {};
+            dados.forEach(d => map[d.data_referencia] = d);
+
+            let html = '';
+            let s = new Date(sDate + 'T12:00:00');
+            let e = new Date(eDate + 'T12:00:00');
+            
+            let totalSys = 0, totalMan = 0, diasMeta = 0, diasUteis = 0;
+            let labels = [], dataSys = [], dataMeta = [];
+
+            // Loop dia a dia do mês
+            for (let dt = new Date(s); dt <= e; dt.setDate(dt.getDate() + 1)) {
+                const diaStr = dt.toISOString().split('T')[0];
+                const diaSemana = dt.getDay(); // 0=Dom, 6=Sáb
+                const isFds = diaSemana === 0 || diaSemana === 6;
+                const row = map[diaStr] || {};
+                
+                const qSys = row.quantidade || 0;
+                const qMan = row.quantidade_manual; // pode ser null
+                const obs = row.observacao || '';
+                const feed = row.observacao_gestora || '';
+                
+                // Valores para Gráfico
+                if (!isFds || qSys > 0) {
+                    labels.push(dt.getDate());
+                    dataSys.push(qSys + (qMan ? qMan : 0));
+                    dataMeta.push(meta);
+                    diasUteis++;
+                    if (qSys + (qMan||0) >= meta) diasMeta++;
+                }
+                
+                totalSys += qSys;
+                if (qMan) totalMan += qMan;
+
+                // Lógica de Bloqueio (Lock)
+                // Se tem feedback da gestão, o assistente não pode mais editar
+                const isLocked = !isMgr && (feed && feed.trim() !== '');
+                const lockClass = isLocked ? 'bg-lock' : 'bg-white';
+                const lockIcon = isLocked ? '🔒' : '';
+
+                // Campos Editáveis
+                // Assistente só edita Manual e Obs se não travado. Gestora edita Feedback.
+                const disableMan = isMgr || isLocked ? 'disabled' : '';
+                const disableObs = isMgr || isLocked ? 'disabled' : '';
+                const disableFeed = !isMgr ? 'disabled' : '';
+                
+                // Classes visuais
+                const valMan = (qMan !== null && qMan !== undefined) ? qMan : '';
+                const statusBadge = (qSys + (qMan||0)) >= meta 
+                    ? '<span class="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full">Sim</span>' 
+                    : '<span class="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-1 rounded-full">Não</span>';
+                
+                // Linha de Fim de Semana (mais clara)
+                const rowClass = isFds ? 'bg-slate-50' : 'hover:bg-slate-50';
+
+                html += `
+                <tr class="${rowClass} transition border-b border-slate-100">
+                    <td class="px-2 py-3 text-center font-medium text-slate-500">${diaStr.split('-').reverse().join('/').substring(0,5)}</td>
+                    <td class="px-2 py-3 text-center font-bold text-blue-700">${qSys || '-'}</td>
+                    <td class="px-2 py-3 text-center">
+                        <input type="number" value="${valMan}" 
+                            class="input-manual w-16 p-1 border border-slate-200 rounded text-amber-600 ${lockClass}"
+                            placeholder="-" 
+                            onchange="salvar(this, '${diaStr}', 'quantidade_manual')" ${disableMan}>
+                    </td>
+                    <td class="px-2 py-3 text-center text-slate-400 text-xs">${meta}</td>
+                    <td class="px-2 py-3 text-center">${(qSys||valMan)?statusBadge:'-'}</td>
+                    <td class="px-2 py-3">
+                        <div class="flex items-center gap-2">
+                            <input type="text" value="${obs}" 
+                                class="w-full text-xs p-1 border border-slate-200 rounded ${lockClass}"
+                                placeholder="..." 
+                                onchange="salvar(this, '${diaStr}', 'observacao')" ${disableObs}>
+                            ${lockIcon}
+                        </div>
+                    </td>
+                    <td class="px-2 py-3">
+                        <input type="text" value="${feed}" 
+                            class="w-full text-xs p-1 border border-amber-100 bg-amber-50 rounded text-blue-800 font-medium"
+                            placeholder="${isMgr ? 'Escreva feedback...' : ''}" 
+                            onchange="salvar(this, '${diaStr}', 'observacao_gestora')" ${disableFeed}>
+                    </td>
+                </tr>`;
+            }
+
+            document.getElementById('log-body').innerHTML = html;
+            
+            // Atualiza KPIs
+            document.getElementById('kpi-sys').innerText = totalSys.toLocaleString();
+            document.getElementById('kpi-man').innerText = totalMan.toLocaleString();
+            document.getElementById('kpi-hit').innerText = diasUteis > 0 ? Math.round((diasMeta/diasUteis)*100) + '%' : '0%';
+
+            // Atualiza Gráfico
+            renderChart(labels, dataSys, dataMeta);
+        }
+
+        async function salvar(input, dataRef, campo) {
+            const val = campo === 'quantidade_manual' ? (input.value ? parseInt(input.value) : null) : input.value;
+            
+            // Efeito visual de salvando
+            input.classList.add('bg-blue-50');
+
+            try {
+                // Verifica se já existe registro nesse dia
+                const { data: existing } = await _supabase.from('producao')
+                    .select('id')
+                    .eq('usuario_id', currentUserTarget)
+                    .eq('data_referencia', dataRef)
+                    .maybeSingle();
+
+                if (existing) {
+                    await _supabase.from('producao').update({ [campo]: val }).eq('id', existing.id);
+                } else {
+                    // Cria novo registro se não existir (ex: digitou manual num dia sem importação)
+                    await _supabase.from('producao').insert({
+                        usuario_id: currentUserTarget,
+                        data_referencia: dataRef,
+                        quantidade: 0, // Sistema é 0
+                        [campo]: val
+                    });
+                }
+
+                // Sucesso visual
+                input.classList.remove('bg-blue-50');
+                input.classList.add('bg-emerald-50', 'text-emerald-700');
+                setTimeout(() => input.classList.remove('bg-emerald-50', 'text-emerald-700'), 1000);
+                
+                // Se foi a gestora dando feedback, recarrega para travar o campo do assistente visualmente
+                if(campo === 'observacao_gestora') carregarDados();
+                // Se mudou valor manual, recarrega para atualizar gráfico e totais
+                if(campo === 'quantidade_manual') carregarDados();
+
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao salvar.");
+                input.classList.add('bg-red-100');
+            }
+        }
+
+        function renderChart(labels, dataSys, dataMeta) {
+            const ctx = document.getElementById('productionChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Produção',
+                            data: dataSys,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Meta',
+                            data: dataMeta,
+                            borderColor: '#ef4444',
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+    </script>
+</body>
+</html>
