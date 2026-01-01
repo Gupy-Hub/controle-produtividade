@@ -13,11 +13,9 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
-        
         .tab-active { background-color: #eff6ff; color: #2563eb; border-color: #2563eb; }
         .tab-inactive { color: #64748b; border-color: transparent; }
         .tab-inactive:hover { color: #334155; border-color: #cbd5e1; }
-        
         .header-select {
             appearance: none; 
             background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
@@ -25,7 +23,6 @@
             background-repeat: no-repeat;
             background-size: 1.5em 1.5em;
         }
-
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -40,7 +37,6 @@
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (!usuario) { window.location.href = 'index.html'; return; }
-
             const navbarHTML = `
             <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
                 <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
@@ -64,101 +60,53 @@
                     </div>
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
                 </div>
-            </nav>
-            <div class="h-20"></div>`;
+            </nav><div class="h-20"></div>`;
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
-        function createNavLink(label, linkUrl) {
-            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-        }
+        function createNavLink(label, linkUrl) { const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white"; return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`; }
         function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
         renderNavbar();
     </script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
         <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Ferramentas & Recursos</h1>
-                <p class="text-slate-500 text-sm">Biblioteca de conhecimento e utilitários.</p>
-            </div>
-            
+            <div><h1 class="text-2xl font-bold text-slate-800">Ferramentas & Recursos</h1><p class="text-slate-500 text-sm">Biblioteca de conhecimento e utilitários.</p></div>
             <div class="bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex">
-                <button onclick="switchTab('lib')" id="btn-lib" class="px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm flex items-center gap-2">
-                    <i class="fas fa-book-open"></i> Biblioteca
-                </button>
-                <button onclick="switchTab('calc')" id="btn-calc" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2">
-                    <i class="fas fa-calculator"></i> Calculadora Datas
-                </button>
-                <button onclick="switchTab('cep')" id="btn-cep" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2">
-                    <i class="fas fa-map-marked-alt"></i> Busca CEP
-                </button>
+                <button onclick="switchTab('lib')" id="btn-lib" class="px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm flex items-center gap-2"><i class="fas fa-book-open"></i> Biblioteca</button>
+                <button onclick="switchTab('calc')" id="btn-calc" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2"><i class="fas fa-calculator"></i> Calculadora Datas</button>
+                <button onclick="switchTab('cep')" id="btn-cep" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Busca CEP</button>
             </div>
         </div>
 
         <div id="tab-lib" class="view-section animate-fade-in space-y-6">
-            
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
-                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2">
-                    <i class="fas fa-filter mr-1"></i> Filtrar por:
-                </span>
-                
-                <select id="filtro-empresa" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40">
-                    <option value="">🏢 Empresas</option>
-                </select>
-                
-                <select id="filtro-motivo" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40">
-                    <option value="">🎯 Motivos</option>
-                </select>
-                
-                <select id="filtro-doc" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40">
-                    <option value="">📄 Documentos</option>
-                </select>
-
-                <div class="relative flex-1 min-w-[200px] ml-auto">
-                    <input type="text" id="lib-search" onkeyup="aplicarFiltros()" placeholder="Pesquisar..." class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 transition">
-                    <i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i>
-                </div>
-
+                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2"><i class="fas fa-filter mr-1"></i> Filtrar por:</span>
+                <select id="filtro-empresa" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🏢 Empresas</option></select>
+                <select id="filtro-motivo" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🎯 Motivos</option></select>
+                <select id="filtro-doc" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">📄 Documentos</option></select>
+                <div class="relative flex-1 min-w-[200px] ml-auto"><input type="text" id="lib-search" onkeyup="aplicarFiltros()" placeholder="Pesquisar..." class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 transition"><i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i></div>
                 <div class="flex gap-2">
                     <input type="file" id="import-excel-frases" accept=".xlsx, .csv" class="hidden" onchange="importarFrasesExcel(this)">
-                    <button onclick="document.getElementById('import-excel-frases').click()" id="btn-import-lib" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-sm flex items-center gap-2 transition shadow-sm" title="Importar Excel">
-                        <i class="fas fa-file-excel"></i> Importar
-                    </button>
-                    <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2 transition shadow-sm">
-                        <i class="fas fa-plus"></i> Nova
-                    </button>
+                    <button onclick="document.getElementById('import-excel-frases').click()" id="btn-import-lib" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-sm flex items-center gap-2 transition shadow-sm" title="Importar Excel"><i class="fas fa-file-excel"></i> Importar</button>
+                    <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2 transition shadow-sm"><i class="fas fa-plus"></i> Nova</button>
                 </div>
             </div>
-
             <div class="bg-gradient-to-r from-slate-50 to-white p-6 rounded-2xl border border-slate-200/60 shadow-sm relative overflow-hidden group">
                 <div class="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full mix-blend-multiply filter blur-3xl opacity-70 group-hover:opacity-100 transition-opacity"></div>
                 <div class="relative z-10">
-                    <h3 class="font-extrabold text-slate-700 text-lg flex items-center gap-2 mb-4">
-                        <i class="fas fa-fire text-orange-500"></i> 
-                        <span id="titulo-top4">Mais Utilizadas (Você)</span>
-                    </h3>
-                    
-                    <div id="grid-top4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso. Comece a copiar frases!</div>
-                    </div>
+                    <h3 class="font-extrabold text-slate-700 text-lg flex items-center gap-2 mb-4"><i class="fas fa-fire text-orange-500"></i> <span id="titulo-top4">Mais Utilizadas (Você)</span></h3>
+                    <div id="grid-top4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4"><div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso.</div></div>
                 </div>
             </div>
-
             <div>
                 <h3 class="font-bold text-slate-500 text-sm uppercase tracking-wide mb-3 ml-1">Biblioteca Geral</h3>
-                <div id="lib-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div class="col-span-full text-center py-10 text-slate-400">Carregando biblioteca...</div>
-                </div>
+                <div id="lib-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"><div class="col-span-full text-center py-10 text-slate-400">Carregando biblioteca...</div></div>
             </div>
         </div>
 
         <div id="tab-calc" class="view-section hidden animate-fade-in">
             <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
-                    <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calculator text-blue-400"></i> Calculadora de Datas</h3>
-                </div>
+                <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg"><h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calculator text-blue-400"></i> Calculadora de Datas</h3></div>
                 <div class="p-8 space-y-8">
                     <div class="flex justify-center"><div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200"><button onclick="mudarModoCalculadora('intervalo')" id="btn-mode-intervalo" class="px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition">Tempo Decorrido</button><button onclick="mudarModoCalculadora('soma')" id="btn-mode-soma" class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition">Somar Dias</button></div></div>
                     <div class="flex flex-col md:flex-row gap-4 items-end"><div class="relative flex-1 w-full group"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider" id="label-data-base">Data Inicial</label><div class="relative"><input id="calc-data-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest"><i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg"></i></div></div><div id="container-input-dias" class="relative w-full md:w-32 hidden"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Dias</label><input id="calc-dias-input" type="number" placeholder="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center"></div><button onclick="processarCalculadora()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button></div>
@@ -174,134 +122,80 @@
                 <div class="p-8"><div class="flex gap-2 mb-6"><input id="cep-input" type="text" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300 text-lg"><button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl"><i class="fas fa-search"></i></button></div><div id="cep-loading" class="hidden text-center py-8 text-blue-500"><i class="fas fa-circle-notch fa-spin text-3xl"></i><p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p></div><div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-4 shadow-inner"><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Localidade</span> <span id="cep-localidade" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-center pt-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">CEP</span> <span id="cep-display-num" class="font-black text-blue-600 text-right text-lg bg-blue-100 px-3 py-1 rounded-lg"></span></div></div></div>
             </div>
         </div>
-
     </div>
 
     <div id="modal-frase" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3>
-                <button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
-            </div>
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3><button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button></div>
             <div class="p-6 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" placeholder="Ex: Gupy" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" placeholder="Ex: Erro" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                </div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label><input type="text" id="form-doc" placeholder="Ex: RG, CNH..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo da Frase</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></textarea></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label><input type="text" id="form-doc" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
             </div>
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button>
-            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end"><button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button></div>
         </div>
     </div>
 
     <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario'));
-        const isMgr = sessao.funcao === 'Gestora';
-
-        function switchTab(tab) {
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-            document.getElementById('tab-' + tab).classList.remove('hidden');
-            ['lib', 'calc', 'cep'].forEach(t => {
-                const btn = document.getElementById('btn-' + t);
-                if (t === tab) btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2';
-                else btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2';
-            });
-        }
-
-        // --- BIBLIOTECA ---
-        let frasesGlobal = [];
-        let frasesUsos = []; 
-
-        document.addEventListener('DOMContentLoaded', () => { 
-            carregarFrases(); 
-            switchTab('lib');
-        });
+        const sessao = JSON.parse(localStorage.getItem('usuario')); const isMgr = sessao.funcao === 'Gestora';
+        function switchTab(tab) { document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); document.getElementById('tab-' + tab).classList.remove('hidden'); ['lib', 'calc', 'cep'].forEach(t => { const btn = document.getElementById('btn-' + t); if (t === tab) btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2'; else btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2'; }); }
+        
+        let frasesGlobal = [], frasesUsos = [];
+        document.addEventListener('DOMContentLoaded', () => { carregarFrases(); switchTab('lib'); });
 
         async function carregarFrases() {
+            // Tenta buscar. Se der erro (RLS), o array fica vazio.
             const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
-            if (error) { console.error(error); return; }
+            if (error) console.log("Possível erro de RLS (Tabela travada):", error);
             frasesGlobal = data || [];
 
-            let query = _supabase.from('frases_usos').select('*');
-            if (!isMgr) query = query.eq('usuario_id', sessao.id);
-            const { data: usos } = await query;
-            frasesUsos = usos || [];
+            let query = _supabase.from('frases_usos').select('*'); if (!isMgr) query = query.eq('usuario_id', sessao.id);
+            const { data: usos } = await query; frasesUsos = usos || [];
 
-            atualizarDropdowns();
-            aplicarFiltros();
-            atualizarTop4();
+            atualizarDropdowns(); aplicarFiltros(); atualizarTop4();
         }
 
         function atualizarDropdowns() {
             const empresas = [...new Set(frasesGlobal.map(f => f.empresa).filter(Boolean))].sort();
             const motivos = [...new Set(frasesGlobal.map(f => f.motivo).filter(Boolean))].sort();
             const docs = [...new Set(frasesGlobal.map(f => f.documento).filter(Boolean))].sort();
-
             document.getElementById('filtro-empresa').innerHTML = '<option value="">🏢 Empresas</option>' + empresas.map(x => `<option value="${x}">${x}</option>`).join('');
             document.getElementById('filtro-motivo').innerHTML = '<option value="">🎯 Motivos</option>' + motivos.map(x => `<option value="${x}">${x}</option>`).join('');
             document.getElementById('filtro-doc').innerHTML = '<option value="">📄 Documentos</option>' + docs.map(x => `<option value="${x}">${x}</option>`).join('');
         }
 
         function aplicarFiltros() {
-            const fEmp = document.getElementById('filtro-empresa').value;
-            const fMot = document.getElementById('filtro-motivo').value;
-            const fDoc = document.getElementById('filtro-doc').value;
-            const term = document.getElementById('lib-search').value.toLowerCase();
-
+            const fEmp = document.getElementById('filtro-empresa').value; const fMot = document.getElementById('filtro-motivo').value; const fDoc = document.getElementById('filtro-doc').value; const term = document.getElementById('lib-search').value.toLowerCase();
             const filtered = frasesGlobal.filter(f => {
-                const matchEmp = !fEmp || f.empresa === fEmp;
-                const matchMot = !fMot || f.motivo === fMot;
-                const matchDoc = !fDoc || f.documento === fDoc;
+                const matchEmp = !fEmp || f.empresa === fEmp; const matchMot = !fMot || f.motivo === fMot; const matchDoc = !fDoc || f.documento === fDoc;
                 const matchText = f.titulo.toLowerCase().includes(term) || f.conteudo.toLowerCase().includes(term);
                 return matchEmp && matchMot && matchDoc && matchText;
             });
-
             renderizarFrases(filtered);
         }
 
         function renderizarFrases(lista) {
             const container = document.getElementById('lib-grid');
-            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada.</div>'; return; }
+            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada (Verifique se a tabela foi destravada no Supabase).</div>'; return; }
             let html = '';
             lista.forEach(item => {
                 const safeContent = item.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-                
-                const badges = [
-                    item.empresa ? `<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.empresa}</span>` : '',
-                    item.motivo ? `<span class="bg-purple-50 text-purple-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.motivo}</span>` : '',
-                    item.documento ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.documento}</span>` : ''
-                ].join('');
-
-                html += `
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full group">
-                    <div class="flex justify-between items-start mb-3">
-                        <h4 class="font-bold text-slate-800 text-sm">${item.titulo}</h4>
-                        <button onclick="copiarTexto(${item.id}, '${safeContent}')" class="text-slate-400 hover:text-blue-600 transition" title="Copiar">
-                            <i class="far fa-copy text-lg"></i>
-                        </button>
-                    </div>
-                    <div class="flex gap-2 mb-3">${badges}</div>
-                    <p class="text-slate-600 text-xs mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 group-hover:border-blue-100 transition">${item.conteudo}</p>
-                </div>`;
+                const badges = [ item.empresa ? `<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.empresa}</span>` : '', item.motivo ? `<span class="bg-purple-50 text-purple-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.motivo}</span>` : '', item.documento ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.documento}</span>` : '' ].join('');
+                html += `<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full group"><div class="flex justify-between items-start mb-3"><h4 class="font-bold text-slate-800 text-sm">${item.titulo}</h4><button onclick="copiarTexto(${item.id}, '${safeContent}')" class="text-slate-400 hover:text-blue-600 transition" title="Copiar"><i class="far fa-copy text-lg"></i></button></div><div class="flex gap-2 mb-3">${badges}</div><p class="text-slate-600 text-xs mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 group-hover:border-blue-100 transition">${item.conteudo}</p></div>`;
             });
             container.innerHTML = html;
         }
 
         function atualizarTop4() {
             document.getElementById('titulo-top4').innerText = isMgr ? "Mais Utilizadas (Visão Gestora)" : "Minhas Mais Utilizadas";
-            const contagem = {};
-            frasesUsos.forEach(u => { contagem[u.frase_id] = (contagem[u.frase_id] || 0) + 1; });
+            const contagem = {}; frasesUsos.forEach(u => { contagem[u.frase_id] = (contagem[u.frase_id] || 0) + 1; });
             const sortedIds = Object.keys(contagem).sort((a, b) => contagem[b] - contagem[a]).slice(0, 4);
             const container = document.getElementById('grid-top4');
-            if (sortedIds.length === 0) { container.innerHTML = '<div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso. Comece a copiar frases!</div>'; return; }
+            if (sortedIds.length === 0) { container.innerHTML = '<div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso.</div>'; return; }
             let html = '';
             sortedIds.forEach(id => {
-                const frase = frasesGlobal.find(f => f.id == id);
-                if (!frase) return;
+                const frase = frasesGlobal.find(f => f.id == id); if (!frase) return;
                 const safeContent = frase.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
                 html += `<div class="bg-white/80 p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition cursor-pointer" onclick="copiarTexto(${frase.id}, '${safeContent}')"><div class="flex justify-between items-center mb-2"><span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded-full">${contagem[id]} usos</span><i class="fas fa-copy text-slate-300"></i></div><h4 class="font-bold text-slate-700 text-xs mb-1 truncate">${frase.titulo}</h4><p class="text-[10px] text-slate-500 truncate font-mono">${frase.conteudo}</p></div>`;
             });
@@ -311,110 +205,58 @@
         async function copiarTexto(id, texto) {
             navigator.clipboard.writeText(texto).then(async () => {
                 await _supabase.from('frases_usos').insert({ frase_id: id, usuario_id: sessao.id });
-                frasesUsos.push({ frase_id: id, usuario_id: sessao.id });
-                atualizarTop4();
-                alert("Copiado com sucesso!");
+                frasesUsos.push({ frase_id: id, usuario_id: sessao.id }); atualizarTop4(); alert("Copiado com sucesso!");
             });
         }
 
-        // --- IMPORTAÇÃO INTELIGENTE (SUPER ROBUSTA) ---
+        // --- IMPORTAÇÃO ROBUSTA ---
         async function importarFrasesExcel(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            const btn = document.getElementById('btn-import-lib');
-            const txtOriginal = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
-            btn.disabled = true;
-
+            const file = input.files[0]; if (!file) return;
+            const btn = document.getElementById('btn-import-lib'); const txtOriginal = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...'; btn.disabled = true;
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(sheet); // Lê bruto
-
-                    let count = 0;
-                    let inserts = [];
-
+                    const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array' }); const sheet = workbook.Sheets[workbook.SheetNames[0]]; const json = XLSX.utils.sheet_to_json(sheet);
+                    let count = 0; let inserts = [];
                     for (let row of json) {
-                        // NORMALIZAÇÃO DE CHAVES (Ignora maiúsculas/espaços)
-                        // Transforma { "Empresa ": "X" } em { "empresa": "X" }
-                        const cleanRow = {};
-                        Object.keys(row).forEach(k => {
-                            cleanRow[k.trim().toLowerCase()] = row[k];
-                        });
-
-                        // Procura conteúdo (obrigatório)
-                        const conteudo = cleanRow['conteudo'] || cleanRow['conteúdo'] || cleanRow['frase'] || cleanRow['mensagem'];
-                        
+                        const cleanRow = {}; Object.keys(row).forEach(k => { cleanRow[k.trim().toLowerCase()] = row[k]; });
+                        // Detector de Colunas (Ignora maiúsculas e acentos)
+                        const conteudo = cleanRow['conteudo'] || cleanRow['conteúdo'] || cleanRow['frase'];
                         if (conteudo) {
-                            // Campos opcionais
-                            const empresa = cleanRow['empresa'] || '';
-                            const motivo = cleanRow['motivo'] || '';
-                            const doc = cleanRow['documento'] || cleanRow['doc'] || '';
-                            const titulo = cleanRow['titulo'] || cleanRow['título'] || motivo || 'Frase Importada';
-
-                            inserts.push({
-                                empresa: empresa,
-                                motivo: motivo,
-                                documento: doc,
-                                titulo: titulo,
-                                conteudo: conteudo,
-                                criado_por: sessao.nome
-                            });
+                            const empresa = cleanRow['empresa'] || ''; const motivo = cleanRow['motivo'] || ''; const doc = cleanRow['documento'] || cleanRow['doc'] || '';
+                            const titulo = cleanRow['titulo'] || motivo || 'Frase Importada';
+                            inserts.push({ empresa, motivo, documento: doc, titulo, conteudo, criado_por: sessao.nome });
                         }
                     }
-
                     if (inserts.length > 0) {
                         btn.innerHTML = `Importando ${inserts.length}...`;
-                        const { error } = await _supabase.from('biblioteca').insert(inserts);
-                        if (error) throw error;
-                        
-                        alert(`${inserts.length} frases importadas com sucesso!`);
-                        carregarFrases();
-                    } else {
-                        // Diagnóstico de erro
-                        const keys = json.length > 0 ? Object.keys(json[0]).join(', ') : 'Arquivo vazio';
-                        alert(`Nenhuma frase encontrada.\nColunas detectadas no arquivo: ${keys}\n\nO sistema procura por: conteudo, empresa, motivo, documento.`);
-                    }
-
-                } catch (err) {
-                    console.error(err);
-                    alert("Erro na importação: " + err.message);
-                } finally {
-                    btn.innerHTML = txtOriginal;
-                    btn.disabled = false;
-                    input.value = '';
-                }
+                        const { error } = await _supabase.from('biblioteca').insert(inserts); if (error) throw error;
+                        alert(`${inserts.length} frases importadas com sucesso!`); carregarFrases();
+                    } else { alert("Nenhuma frase encontrada no arquivo. Verifique se as colunas são: conteudo, empresa, motivo."); }
+                } catch (err) { console.error(err); alert("Erro: " + err.message); } finally { btn.innerHTML = txtOriginal; btn.disabled = false; input.value = ''; }
             };
             reader.readAsArrayBuffer(file);
         }
 
-        // --- CRUD Manual ---
         function abrirModalFrase() { document.getElementById('modal-frase').classList.remove('hidden'); document.getElementById('modal-frase').classList.add('flex'); }
         function fecharModalFrase() { document.getElementById('modal-frase').classList.add('hidden'); document.getElementById('modal-frase').classList.remove('flex'); }
         async function salvarFrase() {
-            const titulo = document.getElementById('form-titulo').value; const conteudo = document.getElementById('form-conteudo').value; 
-            const empresa = document.getElementById('form-empresa').value; const motivo = document.getElementById('form-motivo').value; const doc = document.getElementById('form-doc').value;
-            if (!titulo || !conteudo) return alert("Preencha Título e Conteúdo.");
-            const { error } = await _supabase.from('biblioteca').insert({ titulo, conteudo, empresa, motivo, documento: doc, criado_por: sessao.nome });
+            const t = document.getElementById('form-titulo').value; const c = document.getElementById('form-conteudo').value; const e = document.getElementById('form-empresa').value; const m = document.getElementById('form-motivo').value; const d = document.getElementById('form-doc').value;
+            if (!t || !c) return alert("Preencha Título e Conteúdo.");
+            const { error } = await _supabase.from('biblioteca').insert({ titulo: t, conteudo: c, empresa: e, motivo: m, documento: d, criado_por: sessao.nome });
             if (!error) { fecharModalFrase(); carregarFrases(); } else alert(error.message);
         }
 
         // --- CALCULADORA e CEP ---
         let modoCalculadora = 'intervalo';
         function mudarModoCalculadora(modo) {
-            modoCalculadora = modo;
-            const btnIntervalo = document.getElementById('btn-mode-intervalo'); const btnSoma = document.getElementById('btn-mode-soma');
+            modoCalculadora = modo; const btnIntervalo = document.getElementById('btn-mode-intervalo'); const btnSoma = document.getElementById('btn-mode-soma');
             if (modo === 'intervalo') { btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition"; btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition"; document.getElementById('container-input-dias').classList.add('hidden'); document.getElementById('resultado-soma').classList.add('hidden'); document.getElementById('label-data-base').innerText = "Data Inicial"; }
             else { btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition"; btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition"; document.getElementById('container-input-dias').classList.remove('hidden'); document.getElementById('resultado-intervalo').classList.add('hidden'); document.getElementById('label-data-base').innerText = "Data Base"; }
         }
         function processarCalculadora() {
             const valData = document.getElementById('calc-data-input').value; if(valData.length !== 10) return alert('Data incompleta');
-            const parts = valData.split('/'); const dataBase = new Date(parts[2], parts[1]-1, parts[0]);
-            if (isNaN(dataBase.getTime())) return alert('Data inválida');
+            const parts = valData.split('/'); const dataBase = new Date(parts[2], parts[1]-1, parts[0]); if (isNaN(dataBase.getTime())) return alert('Data inválida');
             if (modoCalculadora === 'intervalo') {
                 const hoje = new Date(); dataBase.setHours(0,0,0,0); hoje.setHours(0,0,0,0); const isFuturo = dataBase > hoje; const diffTime = Math.abs(hoje - dataBase); const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 let d1 = isFuturo ? hoje : dataBase; let d2 = isFuturo ? dataBase : hoje; let anos = d2.getFullYear() - d1.getFullYear(); let meses = d2.getMonth() - d1.getMonth(); let dias = d2.getDate() - d1.getDate(); if (dias < 0) { meses--; dias += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate(); } if (meses < 0) { anos--; meses += 12; } const semanas = Math.floor(totalDias / 7);
