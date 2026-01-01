@@ -18,7 +18,7 @@
         .cursor-pointer { cursor: pointer; }
         .me-row { background-color: #f8fafc; border-left: 4px solid #94a3b8; }
 
-        /* Colunas de destaque */
+        /* Colunas de destaque na Matriz */
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
@@ -222,7 +222,7 @@
             }
         }
 
-        // --- INDIVIDUAL / RANKING ---
+        // --- RANKING ---
         function atualizarOpcoesPeriodo() {
             const tipo = document.getElementById('period-type').value;
             const sel = document.getElementById('period-value');
@@ -278,7 +278,12 @@
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
                     if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
-                    const qtd = (item.quantidade || 0) + (item.quantidade_manual || 0);
+                    
+                    // CORREÇÃO CRÍTICA: Forçando conversão para Número para evitar concatenação de texto
+                    const sys = Number(item.quantidade) || 0;
+                    const man = Number(item.quantidade_manual) || 0;
+                    const qtd = sys + man;
+
                     stats[uid].total += qtd;
                     stats[uid].dias.add(item.data_referencia);
                 });
@@ -308,7 +313,6 @@
                 const isMe = sessao && u.id === sessao.id;
                 let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer ";
                 if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
-
                 let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
                 
                 html += `<tr class="${rowClass}" onclick="toggleUsuario(${u.id})">
@@ -334,9 +338,12 @@
                 document.getElementById('card-label-rank').innerText = "Ranking no Time";
                 document.getElementById('card-rank-content').innerHTML = `<div class="text-3xl font-extrabold text-blue-700">#${userStats.rank}</div><div class="text-xs text-slate-400">de ${dadosCarregados.length} assistentes</div>`;
             } else {
+                // Cálculo Geral
                 const totalGeral = dadosCarregados.reduce((acc, curr) => acc + curr.total, 0);
+                // Soma de dias de todos (headcount * dias trabalhados)
                 const diasGeral = dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0);
                 const metaGeral = 650 * diasGeral;
+                // Média ponderada
                 const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
 
                 document.getElementById('card-label-total').innerText = "Total Produzido (Time)";
@@ -351,7 +358,7 @@
             }
         }
 
-        // --- MATRIZ ANUAL (COMPLETA) ---
+        // --- MATRIZ ANUAL ---
         async function carregarMatriz() {
             const tbody = document.getElementById('matrix-body');
             tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Calculando matriz...</td></tr>';
@@ -364,7 +371,12 @@
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
-                    const qtd = (item.quantidade || 0) + (item.quantidade_manual || 0);
+                    
+                    // CORREÇÃO: Forçando conversão para Número
+                    const sys = Number(item.quantidade) || 0;
+                    const man = Number(item.quantidade_manual) || 0;
+                    const qtd = sys + man;
+
                     if (!map[uid]) map[uid] = { nome: item.usuarios.nome, m: Array(12).fill(0), t: 0 };
                     const mes = new Date(item.data_referencia + 'T12:00:00').getMonth();
                     map[uid].m[mes] += qtd;
@@ -379,15 +391,12 @@
                     const q1 = u.m[0]+u.m[1]+u.m[2];
                     const q2 = u.m[3]+u.m[4]+u.m[5];
                     const s1 = q1 + q2;
-                    
                     const q3 = u.m[6]+u.m[7]+u.m[8];
                     const q4 = u.m[9]+u.m[10]+u.m[11];
                     const s2 = q3 + q4;
 
                     const cell = (v) => v ? v.toLocaleString() : '-';
-                    const cTri = "col-tri";
-                    const cSem = "col-sem";
-                    const cAno = "col-ano";
+                    const cTri = "col-tri"; const cSem = "col-sem"; const cAno = "col-ano";
 
                     html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
                         <td class="px-4 py-3 font-medium sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td>
