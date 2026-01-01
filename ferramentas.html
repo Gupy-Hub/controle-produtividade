@@ -124,9 +124,9 @@
                 </div>
 
                 <div class="flex gap-2">
-                    <input type="file" id="import-excel-frases" accept=".xlsx" class="hidden" onchange="importarFrasesExcel(this)">
+                    <input type="file" id="import-excel-frases" accept=".xlsx, .csv" class="hidden" onchange="importarFrasesExcel(this)">
                     <button onclick="document.getElementById('import-excel-frases').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-sm flex items-center gap-2 transition shadow-sm" title="Importar Excel">
-                        <i class="fas fa-file-excel"></i>
+                        <i class="fas fa-file-excel"></i> Importar
                     </button>
                     <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2 transition shadow-sm">
                         <i class="fas fa-plus"></i> Nova
@@ -143,7 +143,7 @@
                     </h3>
                     
                     <div id="grid-top4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso.</div>
+                        <div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso. Comece a copiar frases!</div>
                     </div>
                 </div>
             </div>
@@ -180,34 +180,19 @@
     </div>
 
     <div id="modal-frase" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
             <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                 <h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3>
                 <button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
             </div>
             <div class="p-6 space-y-4">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label>
-                        <input type="text" id="form-empresa" placeholder="Ex: Gupy" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label>
-                        <input type="text" id="form-motivo" placeholder="Ex: Erro" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500">
-                    </div>
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" placeholder="Ex: Gupy" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" placeholder="Ex: Erro" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label>
-                    <input type="text" id="form-doc" placeholder="Ex: RG, CNH..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label>
-                    <input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo da Frase</label>
-                    <textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                </div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label><input type="text" id="form-doc" placeholder="Ex: RG, CNH..." class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo da Frase</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></textarea></div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
                 <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button>
@@ -219,11 +204,9 @@
         const sessao = JSON.parse(localStorage.getItem('usuario'));
         const isMgr = sessao.funcao === 'Gestora';
 
-        // --- NAVEGAÇÃO DE ABAS ---
         function switchTab(tab) {
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.getElementById('tab-' + tab).classList.remove('hidden');
-            
             ['lib', 'calc', 'cep'].forEach(t => {
                 const btn = document.getElementById('btn-' + t);
                 if (t === tab) btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2';
@@ -233,29 +216,24 @@
 
         // --- BIBLIOTECA ---
         let frasesGlobal = [];
-        let frasesUsos = []; // Cache para ranking
+        let frasesUsos = []; 
 
         document.addEventListener('DOMContentLoaded', () => { 
             carregarFrases(); 
-            // Inicia na aba biblioteca
             switchTab('lib');
         });
 
         async function carregarFrases() {
-            // 1. Busca Frases
             const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
             if (error) { console.error(error); return; }
             frasesGlobal = data || [];
 
-            // 2. Busca Usos (Para Top 4)
-            // Se for Gestora, pega de todo mundo. Se for user, só dele.
+            // Carrega ranking de usos
             let query = _supabase.from('frases_usos').select('*');
             if (!isMgr) query = query.eq('usuario_id', sessao.id);
-            
             const { data: usos } = await query;
             frasesUsos = usos || [];
 
-            // 3. Atualiza Filtros e Grid
             atualizarDropdowns();
             aplicarFiltros();
             atualizarTop4();
@@ -266,13 +244,9 @@
             const motivos = [...new Set(frasesGlobal.map(f => f.motivo).filter(Boolean))].sort();
             const docs = [...new Set(frasesGlobal.map(f => f.documento).filter(Boolean))].sort();
 
-            const selEmp = document.getElementById('filtro-empresa');
-            const selMot = document.getElementById('filtro-motivo');
-            const selDoc = document.getElementById('filtro-doc');
-
-            selEmp.innerHTML = '<option value="">🏢 Empresas</option>' + empresas.map(x => `<option value="${x}">${x}</option>`).join('');
-            selMot.innerHTML = '<option value="">🎯 Motivos</option>' + motivos.map(x => `<option value="${x}">${x}</option>`).join('');
-            selDoc.innerHTML = '<option value="">📄 Documentos</option>' + docs.map(x => `<option value="${x}">${x}</option>`).join('');
+            document.getElementById('filtro-empresa').innerHTML = '<option value="">🏢 Empresas</option>' + empresas.map(x => `<option value="${x}">${x}</option>`).join('');
+            document.getElementById('filtro-motivo').innerHTML = '<option value="">🎯 Motivos</option>' + motivos.map(x => `<option value="${x}">${x}</option>`).join('');
+            document.getElementById('filtro-doc').innerHTML = '<option value="">📄 Documentos</option>' + docs.map(x => `<option value="${x}">${x}</option>`).join('');
         }
 
         function aplicarFiltros() {
@@ -299,7 +273,6 @@
             lista.forEach(item => {
                 const safeContent = item.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
                 
-                // Badges
                 const badges = [
                     item.empresa ? `<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.empresa}</span>` : '',
                     item.motivo ? `<span class="bg-purple-50 text-purple-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.motivo}</span>` : '',
@@ -322,23 +295,14 @@
         }
 
         function atualizarTop4() {
-            // Título dinâmico
             document.getElementById('titulo-top4').innerText = isMgr ? "Mais Utilizadas (Visão Gestora)" : "Minhas Mais Utilizadas";
-
-            // Conta usos
+            
             const contagem = {};
-            frasesUsos.forEach(u => {
-                contagem[u.frase_id] = (contagem[u.frase_id] || 0) + 1;
-            });
-
-            // Ordena
+            frasesUsos.forEach(u => { contagem[u.frase_id] = (contagem[u.frase_id] || 0) + 1; });
             const sortedIds = Object.keys(contagem).sort((a, b) => contagem[b] - contagem[a]).slice(0, 4);
             
             const container = document.getElementById('grid-top4');
-            if (sortedIds.length === 0) {
-                container.innerHTML = '<div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso. Comece a copiar frases!</div>';
-                return;
-            }
+            if (sortedIds.length === 0) { container.innerHTML = '<div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso. Comece a copiar frases!</div>'; return; }
 
             let html = '';
             sortedIds.forEach(id => {
@@ -361,22 +325,15 @@
 
         async function copiarTexto(id, texto) {
             navigator.clipboard.writeText(texto).then(async () => {
-                // Notificação Simples
-                const btn = event.currentTarget;
-                const original = btn.innerHTML;
-                
-                // Registra o uso no banco (silenciosamente)
                 await _supabase.from('frases_usos').insert({ frase_id: id, usuario_id: sessao.id });
-                
-                // Atualiza contadores locais
+                // Atualiza localmente e refresh
                 frasesUsos.push({ frase_id: id, usuario_id: sessao.id });
                 atualizarTop4();
-
                 alert("Copiado com sucesso!");
             });
         }
 
-        // --- IMPORTAÇÃO E CADASTRO ---
+        // --- IMPORTAÇÃO e CRUD ---
         function abrirModalFrase() { document.getElementById('modal-frase').classList.remove('hidden'); document.getElementById('modal-frase').classList.add('flex'); }
         function fecharModalFrase() { document.getElementById('modal-frase').classList.add('hidden'); document.getElementById('modal-frase').classList.remove('flex'); }
         
@@ -389,17 +346,8 @@
 
             if (!titulo || !conteudo) return alert("Preencha Título e Conteúdo.");
 
-            const { error } = await _supabase.from('biblioteca').insert({
-                titulo, conteudo, empresa, motivo, documento: doc, criado_por: sessao.nome
-            });
-
-            if (error) alert(error.message);
-            else {
-                fecharModalFrase();
-                // Limpa campos
-                ['empresa','motivo','doc','titulo','conteudo'].forEach(id => document.getElementById('form-'+id).value = '');
-                carregarFrases();
-            }
+            const { error } = await _supabase.from('biblioteca').insert({ titulo, conteudo, empresa, motivo, documento: doc, criado_por: sessao.nome });
+            if (!error) { fecharModalFrase(); carregarFrases(); } else alert(error.message);
         }
 
         async function importarFrasesExcel(input) {
@@ -414,14 +362,14 @@
 
                 let count = 0;
                 for (let row of json) {
-                    // Mapeia colunas do Excel (Ajuste conforme seu excel: Empresa, Motivo, Documento, Titulo, Conteudo)
-                    if (row.Titulo && row.Conteudo) {
+                    // Mapeia colunas do CSV (minúsculas)
+                    if (row.conteudo) {
                         await _supabase.from('biblioteca').insert({
-                            empresa: row.Empresa || '',
-                            motivo: row.Motivo || '',
-                            documento: row.Documento || '',
-                            titulo: row.Titulo,
-                            conteudo: row.Conteudo,
+                            empresa: row.empresa || '',
+                            motivo: row.motivo || '',
+                            documento: row.documento || '',
+                            titulo: row.motivo || 'Sem Título', // Usa Motivo como Título se não houver
+                            conteudo: row.conteudo,
                             criado_por: sessao.nome
                         });
                         count++;
@@ -429,84 +377,46 @@
                 }
                 alert(`${count} frases importadas com sucesso!`);
                 carregarFrases();
-                input.value = ''; // Reset input
+                input.value = '';
             };
             reader.readAsArrayBuffer(file);
         }
 
-        // --- CALCULADORA e CEP (Mantidos Iguais) ---
+        // --- CALCULADORA e CEP ---
         let modoCalculadora = 'intervalo';
         function mudarModoCalculadora(modo) {
             modoCalculadora = modo;
-            const btnIntervalo = document.getElementById('btn-mode-intervalo');
-            const btnSoma = document.getElementById('btn-mode-soma');
-            if (modo === 'intervalo') {
-                btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
-                btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
-                document.getElementById('container-input-dias').classList.add('hidden');
-                document.getElementById('resultado-soma').classList.add('hidden');
-                document.getElementById('label-data-base').innerText = "Data Inicial";
-            } else {
-                btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
-                btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
-                document.getElementById('container-input-dias').classList.remove('hidden');
-                document.getElementById('resultado-intervalo').classList.add('hidden');
-                document.getElementById('label-data-base').innerText = "Data Base";
-            }
+            const btnIntervalo = document.getElementById('btn-mode-intervalo'); const btnSoma = document.getElementById('btn-mode-soma');
+            if (modo === 'intervalo') { btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition"; btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition"; document.getElementById('container-input-dias').classList.add('hidden'); document.getElementById('resultado-soma').classList.add('hidden'); document.getElementById('label-data-base').innerText = "Data Inicial"; }
+            else { btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition"; btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition"; document.getElementById('container-input-dias').classList.remove('hidden'); document.getElementById('resultado-intervalo').classList.add('hidden'); document.getElementById('label-data-base').innerText = "Data Base"; }
         }
-
         function processarCalculadora() {
-            const valData = document.getElementById('calc-data-input').value;
-            if(valData.length !== 10) return alert('Data incompleta (DD/MM/AAAA)');
+            const valData = document.getElementById('calc-data-input').value; if(valData.length !== 10) return alert('Data incompleta');
             const parts = valData.split('/'); const dataBase = new Date(parts[2], parts[1]-1, parts[0]);
             if (isNaN(dataBase.getTime())) return alert('Data inválida');
-
             if (modoCalculadora === 'intervalo') {
-                const hoje = new Date(); dataBase.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
-                const isFuturo = dataBase > hoje;
-                const diffTime = Math.abs(hoje - dataBase);
-                const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-                let d1 = isFuturo ? hoje : dataBase; let d2 = isFuturo ? dataBase : hoje;
-                let anos = d2.getFullYear() - d1.getFullYear(); let meses = d2.getMonth() - d1.getMonth(); let dias = d2.getDate() - d1.getDate();
-                if (dias < 0) { meses--; dias += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate(); } if (meses < 0) { anos--; meses += 12; }
-                const semanas = Math.floor(totalDias / 7);
-
-                document.getElementById('res-data-base').innerText = valData;
-                document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
-                document.getElementById('res-anos').innerText = anos;
-                document.getElementById('res-meses').innerText = meses;
-                document.getElementById('res-semanas').innerText = semanas;
-                document.getElementById('res-dias').innerText = dias;
-                
-                const boxDestaque = document.getElementById('box-destaque-data'); const labelStatus = document.getElementById('label-status-data');
-                if (isFuturo) { labelStatus.innerHTML = '<i class="fas fa-hourglass-half mr-1"></i>Faltam'; boxDestaque.className = "bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group"; }
-                else { labelStatus.innerHTML = '<i class="fas fa-history mr-1"></i>Passaram'; boxDestaque.className = "bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group"; }
+                const hoje = new Date(); dataBase.setHours(0,0,0,0); hoje.setHours(0,0,0,0); const isFuturo = dataBase > hoje; const diffTime = Math.abs(hoje - dataBase); const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                let d1 = isFuturo ? hoje : dataBase; let d2 = isFuturo ? dataBase : hoje; let anos = d2.getFullYear() - d1.getFullYear(); let meses = d2.getMonth() - d1.getMonth(); let dias = d2.getDate() - d1.getDate(); if (dias < 0) { meses--; dias += new Date(d2.getFullYear(), d2.getMonth(), 0).getDate(); } if (meses < 0) { anos--; meses += 12; } const semanas = Math.floor(totalDias / 7);
+                document.getElementById('res-data-base').innerText = valData; document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR'); document.getElementById('res-anos').innerText = anos; document.getElementById('res-meses').innerText = meses; document.getElementById('res-semanas').innerText = semanas; document.getElementById('res-dias').innerText = dias;
+                const box = document.getElementById('box-destaque-data'); const label = document.getElementById('label-status-data');
+                if (isFuturo) { label.innerHTML = '<i class="fas fa-hourglass-half mr-1"></i>Faltam'; box.className = "bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group"; }
+                else { label.innerHTML = '<i class="fas fa-history mr-1"></i>Passaram'; box.className = "bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group"; }
                 document.getElementById('resultado-intervalo').classList.remove('hidden');
             } else {
-                const diasParaSomar = parseInt(document.getElementById('calc-dias-input').value);
-                if (isNaN(diasParaSomar)) return alert('Digite os dias');
-                const dataFutura = new Date(dataBase); dataFutura.setDate(dataFutura.getDate() + diasParaSomar);
-                const dia = String(dataFutura.getDate()).padStart(2, '0'); const mes = String(dataFutura.getMonth() + 1).padStart(2, '0'); const ano = dataFutura.getFullYear();
-                const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
-                const diaSemanaTexto = diasSemana[dataFutura.getDay()];
+                const diasParaSomar = parseInt(document.getElementById('calc-dias-input').value); if (isNaN(diasParaSomar)) return alert('Digite os dias');
+                const dataFutura = new Date(dataBase); dataFutura.setDate(dataFutura.getDate() + diasParaSomar); const dia = String(dataFutura.getDate()).padStart(2, '0'); const mes = String(dataFutura.getMonth() + 1).padStart(2, '0'); const ano = dataFutura.getFullYear(); const diaSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][dataFutura.getDay()];
                 const box = document.getElementById('box-resultado-soma'); const label = document.getElementById('label-resultado-soma'); const textoData = document.getElementById('res-data-futura'); const textoSemana = document.getElementById('res-dia-semana');
                 box.className = "border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300 bg-white";
                 const hoje = new Date(); hoje.setHours(0,0,0,0);
                 if (dataFutura < hoje) { box.classList.add('bg-red-50', 'border-red-100'); label.innerText = "⚠️ Boleto Vencido"; label.className = "text-xs font-bold uppercase tracking-widest mb-2 text-red-500"; textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono text-red-700"; textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg text-red-600 bg-red-100"; }
                 else { box.classList.add('bg-emerald-50', 'border-emerald-100'); label.innerText = "A data futura será"; label.className = "text-xs font-bold uppercase tracking-widest mb-2 text-emerald-500"; textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono text-emerald-700"; textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg text-emerald-600 bg-emerald-100"; }
-                textoData.innerText = `${dia}/${mes}/${ano}`; textoSemana.innerText = diaSemanaTexto; document.getElementById('resultado-soma').classList.remove('hidden');
+                textoData.innerText = `${dia}/${mes}/${ano}`; textoSemana.innerText = diaSemana + "-feira"; document.getElementById('resultado-soma').classList.remove('hidden');
             }
         }
-
-        // --- BUSCA CEP ---
         async function buscarCEP() {
             const cep = document.getElementById('cep-input').value.replace(/\D/g, ''); if(cep.length !== 8) return alert('CEP inválido');
             document.getElementById('cep-loading').classList.remove('hidden'); document.getElementById('cep-resultado').classList.add('hidden');
-            try {
-                const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); const data = await res.json(); if(data.erro) throw new Error('Não encontrado');
-                document.getElementById('cep-logradouro').innerText = data.logradouro || '---'; document.getElementById('cep-bairro').innerText = data.bairro || '---'; document.getElementById('cep-localidade').innerText = `${data.localidade} - ${data.uf}`; document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
-                document.getElementById('cep-loading').classList.add('hidden'); document.getElementById('cep-resultado').classList.remove('hidden');
-            } catch (e) { document.getElementById('cep-loading').classList.add('hidden'); alert('Erro ao buscar CEP: ' + e.message); }
+            try { const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); const data = await res.json(); if(data.erro) throw new Error('Não encontrado'); document.getElementById('cep-logradouro').innerText = data.logradouro || '---'; document.getElementById('cep-bairro').innerText = data.bairro || '---'; document.getElementById('cep-localidade').innerText = `${data.localidade} - ${data.uf}`; document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2"); document.getElementById('cep-loading').classList.add('hidden'); document.getElementById('cep-resultado').classList.remove('hidden'); } catch (e) { document.getElementById('cep-loading').classList.add('hidden'); alert('Erro ao buscar CEP: ' + e.message); }
         }
         function mascaraData(input) { let v = input.value.replace(/\D/g, '').slice(0, 8); if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3'); else if (v.length >= 3) v = v.replace(/(\d{2})(\d{1,2})/, '$1/$2'); input.value = v; }
         function mascaraCEP(input) { let v = input.value.replace(/\D/g, '').slice(0, 8); if (v.length >= 6) v = v.replace(/(\d{5})(\d{1,3})/, '$1-$2'); input.value = v; }
