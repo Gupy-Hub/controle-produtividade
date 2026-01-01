@@ -12,15 +12,16 @@
     <style> 
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
         
-        /* Linha selecionada */
+        /* Estilos da Tabela */
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .selected-row td { color: #1e40af; font-weight: 700; }
-        
-        /* Cursor interativo */
         .cursor-pointer { cursor: pointer; }
-        
-        /* Linha do próprio usuário (quando não selecionada) */
         .me-row { background-color: #f8fafc; border-left: 4px solid #94a3b8; }
+
+        /* Colunas de destaque */
+        .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
+        .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
+        .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
     </style>
 </head>
 <body class="text-slate-800">
@@ -105,7 +106,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-total">Total Produzido (Time)</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-total">Total Produzido</p>
                     <p class="text-3xl font-extrabold text-blue-700" id="card-total">0</p>
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
@@ -118,17 +119,14 @@
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white">
                     <p class="text-xs font-bold text-slate-400 uppercase mb-1" id="card-label-rank">Destaques</p>
-                    <div id="card-rank-content" class="text-sm font-medium text-slate-700">
-                        </div>
+                    <div id="card-rank-content" class="text-sm font-medium text-slate-700"></div>
                 </div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
-                    <button onclick="limparSelecaoECarregar()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="btn-limpar">
-                        ✕ Limpar Seleção
-                    </button>
+                    <button onclick="limparSelecaoECarregar()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="btn-limpar">✕ Limpar Seleção</button>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-slate-600">
@@ -158,7 +156,7 @@
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
-                    <h3 class="font-bold text-slate-700">Visão Panorâmica</h3>
+                    <h3 class="font-bold text-slate-700">Visão Panorâmica (Matriz Completa)</h3>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
@@ -166,14 +164,16 @@
                             <tr>
                                 <th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Nome</th>
                                 <th class="px-2 py-3 text-center">Jan</th><th class="px-2 py-3 text-center">Fev</th><th class="px-2 py-3 text-center">Mar</th>
-                                <th class="px-2 py-3 text-center font-bold bg-blue-50 text-blue-700">Q1</th>
+                                <th class="px-2 py-3 col-tri">TRI 1</th>
                                 <th class="px-2 py-3 text-center">Abr</th><th class="px-2 py-3 text-center">Mai</th><th class="px-2 py-3 text-center">Jun</th>
-                                <th class="px-2 py-3 text-center font-bold bg-blue-50 text-blue-700">Q2</th>
+                                <th class="px-2 py-3 col-tri">TRI 2</th>
+                                <th class="px-2 py-3 col-sem">SEM 1</th>
                                 <th class="px-2 py-3 text-center">Jul</th><th class="px-2 py-3 text-center">Ago</th><th class="px-2 py-3 text-center">Set</th>
-                                <th class="px-2 py-3 text-center font-bold bg-blue-50 text-blue-700">Q3</th>
+                                <th class="px-2 py-3 col-tri">TRI 3</th>
                                 <th class="px-2 py-3 text-center">Out</th><th class="px-2 py-3 text-center">Nov</th><th class="px-2 py-3 text-center">Dez</th>
-                                <th class="px-2 py-3 text-center font-bold bg-blue-50 text-blue-700">Q4</th>
-                                <th class="px-4 py-3 text-center font-extrabold bg-slate-100">TOTAL</th>
+                                <th class="px-2 py-3 col-tri">TRI 4</th>
+                                <th class="px-2 py-3 col-sem">SEM 2</th>
+                                <th class="px-4 py-3 col-ano">ANUAL</th>
                             </tr>
                         </thead>
                         <tbody id="matrix-body" class="divide-y divide-slate-100"></tbody>
@@ -186,8 +186,8 @@
 
     <script>
         const sessao = JSON.parse(localStorage.getItem('usuario'));
-        let selectedUserId = null; // Variável para controlar a seleção
-        let dadosCarregados = []; // Cache dos dados atuais
+        let selectedUserId = null; 
+        let dadosCarregados = []; 
 
         document.addEventListener('DOMContentLoaded', init);
 
@@ -199,11 +199,10 @@
                 sel.innerHTML = '';
                 for(let y=cy; y>=2024; y--) sel.innerHTML+=`<option value="${y}">${y}</option>`;
             });
-
             atualizarOpcoesPeriodo(); 
         }
 
-        // --- SISTEMA DE ABAS ---
+        // --- ABAS ---
         function switchMode(mode) {
             const v1 = document.getElementById('view-individual');
             const v2 = document.getElementById('view-matrix');
@@ -223,24 +222,20 @@
             }
         }
 
-        // --- CONTROLES ---
+        // --- INDIVIDUAL / RANKING ---
         function atualizarOpcoesPeriodo() {
             const tipo = document.getElementById('period-type').value;
             const sel = document.getElementById('period-value');
             sel.innerHTML = '';
-
             if (tipo === 'mes') {
                 ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => {
-                    const isNow = i === new Date().getMonth();
-                    sel.innerHTML += `<option value="${i+1}" ${isNow ? 'selected' : ''}>${m}</option>`;
+                    sel.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`;
                 });
             } else if (tipo === 'trimestre') {
                 sel.innerHTML = '<option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>';
             } else if (tipo === 'semestre') {
                 sel.innerHTML = '<option value="1">1º Semestre</option><option value="2">2º Semestre</option>';
-            } else {
-                sel.innerHTML = '<option value="1">Ano Completo</option>';
-            }
+            } else { sel.innerHTML = '<option value="1">Ano Completo</option>'; }
             limparSelecaoECarregar();
         }
 
@@ -258,82 +253,48 @@
                 selectedUserId = id;
                 document.getElementById('btn-limpar').classList.remove('hidden');
             }
-            renderizarTelaRanking(); // Não precisa buscar no banco de novo, só redesenhar
+            renderizarTelaRanking();
         }
 
-        function getDatas() {
-            const tipo = document.getElementById('period-type').value;
-            const val = parseInt(document.getElementById('period-value').value);
-            const ano = document.getElementById('year-selector').value;
-            
-            let s, e;
-            if (tipo === 'mes') {
-                s = `${ano}-${String(val).padStart(2,'0')}-01`;
-                e = `${ano}-${String(val).padStart(2,'0')}-${new Date(ano, val, 0).getDate()}`;
-            } else if (tipo === 'trimestre') {
-                const mStart = ((val-1)*3)+1;
-                const mEnd = mStart+2;
-                s = `${ano}-${String(mStart).padStart(2,'0')}-01`;
-                e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`;
-            } else if (tipo === 'semestre') {
-                s = val === 1 ? `${ano}-01-01` : `${ano}-07-01`;
-                e = val === 1 ? `${ano}-06-30` : `${ano}-12-31`;
-            } else {
-                s = `${ano}-01-01`; e = `${ano}-12-31`;
-            }
-            return { s, e };
-        }
-
-        // --- CARREGAR DADOS ---
         async function carregarRanking() {
             const tbody = document.getElementById('ranking-body');
             tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
-            
             try {
-                const { s, e } = getDatas();
-                
-                const { data: prods, error: ep } = await _supabase.from('producao')
-                    .select('*, usuarios(nome, funcao)')
-                    .gte('data_referencia', s).lte('data_referencia', e);
-                
+                // Datas
+                const tipo = document.getElementById('period-type').value;
+                const val = parseInt(document.getElementById('period-value').value);
+                const ano = document.getElementById('year-selector').value;
+                let s, e;
+                if (tipo === 'mes') { s = `${ano}-${String(val).padStart(2,'0')}-01`; e = `${ano}-${String(val).padStart(2,'0')}-${new Date(ano, val, 0).getDate()}`; }
+                else if (tipo === 'trimestre') { const mStart = ((val-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
+                else if (tipo === 'semestre') { s = val === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = val === 1 ? `${ano}-06-30` : `${ano}-12-31`; }
+                else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
+
+                const { data: prods, error: ep } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', s).lte('data_referencia', e);
                 if (ep) throw ep;
 
-                // Processa dados brutos
                 let stats = {};
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
                     if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
-                    
                     const qtd = (item.quantidade || 0) + (item.quantidade_manual || 0);
                     stats[uid].total += qtd;
                     stats[uid].dias.add(item.data_referencia);
                 });
 
-                // Transforma em lista ordenada e salva no cache global
                 dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
-                
                 renderizarTelaRanking();
 
-            } catch (err) {
-                console.error(err);
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-red-500">Erro ao carregar dados.</td></tr>';
-            }
+            } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-red-500">Erro ao carregar dados.</td></tr>'; }
         }
 
         function renderizarTelaRanking() {
             const tbody = document.getElementById('ranking-body');
-            
-            if (!dadosCarregados.length) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado neste período.</td></tr>';
-                atualizarCards(null);
-                return;
-            }
+            if (!dadosCarregados.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado neste período.</td></tr>'; atualizarCards(null); return; }
 
-            // 1. Atualizar Tabela
             let html = '';
             let userStats = null;
-            let userRank = 0;
 
             dadosCarregados.forEach((u, idx) => {
                 const dias = u.dias.size || 1;
@@ -341,87 +302,64 @@
                 const meta = 650 * dias;
                 const pct = Math.round((u.total / meta) * 100);
                 
-                // Verifica seleção
                 const isSelected = selectedUserId === u.id;
-                const isMe = sessao && u.id === sessao.id;
-
-                if (isSelected) {
-                    userStats = { ...u, media, meta, rank: idx + 1 };
-                }
+                if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
                 
+                const isMe = sessao && u.id === sessao.id;
                 let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer ";
-                if (isSelected) rowClass += "selected-row";
-                else if (isMe) rowClass += "me-row";
+                if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
 
                 let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
                 
-                html += `
-                <tr class="${rowClass}" onclick="toggleUsuario(${u.id})">
+                html += `<tr class="${rowClass}" onclick="toggleUsuario(${u.id})">
                     <td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td>
                     <td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td>
                     <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
                     <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
                     <td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td>
                     <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center">
-                        <span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span>
-                    </td>
+                    <td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td>
                 </tr>`;
             });
             tbody.innerHTML = html;
-
-            // 2. Atualizar Cards
             atualizarCards(userStats);
         }
 
         function atualizarCards(userStats) {
             if (userStats) {
-                // MODO: Usuário Selecionado
                 document.getElementById('card-label-total').innerText = "Total Produzido (" + userStats.nome.split(' ')[0] + ")";
                 document.getElementById('card-total').innerText = userStats.total.toLocaleString();
                 document.getElementById('card-media').innerText = userStats.media.toLocaleString();
                 document.getElementById('card-meta').innerText = userStats.meta.toLocaleString();
-                
-                // Card Ranking: Posição
                 document.getElementById('card-label-rank').innerText = "Ranking no Time";
-                document.getElementById('card-rank-content').innerHTML = `
-                    <div class="text-3xl font-extrabold text-blue-700">#${userStats.rank}</div>
-                    <div class="text-xs text-slate-400">de ${dadosCarregados.length} assistentes</div>
-                `;
+                document.getElementById('card-rank-content').innerHTML = `<div class="text-3xl font-extrabold text-blue-700">#${userStats.rank}</div><div class="text-xs text-slate-400">de ${dadosCarregados.length} assistentes</div>`;
             } else {
-                // MODO: Visão Geral (Sem seleção)
-                // Calcula totais do time
                 const totalGeral = dadosCarregados.reduce((acc, curr) => acc + curr.total, 0);
                 const diasGeral = dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0);
-                const metaGeral = 650 * diasGeral; // Soma das metas de todos os dias trabalhados
-                const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0; // Média ponderada real
+                const metaGeral = 650 * diasGeral;
+                const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
 
                 document.getElementById('card-label-total').innerText = "Total Produzido (Time)";
                 document.getElementById('card-total').innerText = totalGeral.toLocaleString();
-                document.getElementById('card-media').innerText = mediaGeral.toLocaleString(); // Média do time
-                document.getElementById('card-meta').innerText = metaGeral.toLocaleString(); // Meta somada
-                
-                // Card Ranking: Top 5
+                document.getElementById('card-media').innerText = mediaGeral.toLocaleString();
+                document.getElementById('card-meta').innerText = metaGeral.toLocaleString();
                 document.getElementById('card-label-rank').innerText = "Melhores do Período";
                 let top5Html = '<div class="flex flex-col gap-1">';
-                dadosCarregados.slice(0, 5).forEach((u, i) => {
-                    top5Html += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600">${u.total.toLocaleString()}</span></div>`;
-                });
+                dadosCarregados.slice(0, 5).forEach((u, i) => { top5Html += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600">${u.total.toLocaleString()}</span></div>`; });
                 top5Html += '</div>';
                 document.getElementById('card-rank-content').innerHTML = top5Html;
             }
         }
 
-        // --- MATRIZ ANUAL (Mantida igual) ---
+        // --- MATRIZ ANUAL (COMPLETA) ---
         async function carregarMatriz() {
             const tbody = document.getElementById('matrix-body');
-            tbody.innerHTML = '<tr><td colspan="18" class="text-center py-8 text-slate-400">Carregando matriz...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Calculando matriz...</td></tr>';
             try {
                 const ano = document.getElementById('matrix-year').value;
-                const { data: prods, error } = await _supabase.from('producao')
-                    .select('*, usuarios(nome, funcao)')
-                    .gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
+                const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
                 if (error) throw error;
+
                 let map = {};
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
@@ -432,25 +370,38 @@
                     map[uid].m[mes] += qtd;
                     map[uid].t += qtd;
                 });
+
                 const lista = Object.values(map).sort((a, b) => b.t - a.t);
-                if (!lista.length) { tbody.innerHTML = '<tr><td colspan="18" class="text-center py-8 text-slate-400">Sem dados.</td></tr>'; return; }
+                if (!lista.length) { tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Sem dados.</td></tr>'; return; }
+
                 let html = '';
                 lista.forEach(u => {
-                    const q1 = u.m[0]+u.m[1]+u.m[2]; const q2 = u.m[3]+u.m[4]+u.m[5];
-                    const q3 = u.m[6]+u.m[7]+u.m[8]; const q4 = u.m[9]+u.m[10]+u.m[11];
+                    const q1 = u.m[0]+u.m[1]+u.m[2];
+                    const q2 = u.m[3]+u.m[4]+u.m[5];
+                    const s1 = q1 + q2;
+                    
+                    const q3 = u.m[6]+u.m[7]+u.m[8];
+                    const q4 = u.m[9]+u.m[10]+u.m[11];
+                    const s2 = q3 + q4;
+
                     const cell = (v) => v ? v.toLocaleString() : '-';
-                    const hl = "bg-blue-50 font-bold text-blue-800 text-center";
+                    const cTri = "col-tri";
+                    const cSem = "col-sem";
+                    const cAno = "col-ano";
+
                     html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
                         <td class="px-4 py-3 font-medium sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="${hl}">${cell(q1)}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="${hl}">${cell(q2)}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="${hl}">${cell(q3)}</td>
-                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="${hl}">${cell(q4)}</td>
-                        <td class="px-4 py-3 text-center font-extrabold text-slate-900 bg-slate-50 border-l border-slate-200">${u.t.toLocaleString()}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="${cTri}">${cell(q1)}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="${cTri}">${cell(q2)}</td>
+                        <td class="${cSem}">${cell(s1)}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="${cTri}">${cell(q3)}</td>
+                        <td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="${cTri}">${cell(q4)}</td>
+                        <td class="${cSem}">${cell(s2)}</td>
+                        <td class="${cAno}">${u.t.toLocaleString()}</td>
                     </tr>`;
                 });
                 tbody.innerHTML = html;
-            } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="18" class="text-center py-4 text-red-500">Erro.</td></tr>'; }
+            } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-4 text-red-500">Erro.</td></tr>'; }
         }
     </script>
 </body>
