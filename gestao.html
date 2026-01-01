@@ -4,457 +4,99 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão Administrativa</title>
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
     <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
-
     <script>
-        // Configuração Supabase
         const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-        
-        // Verificação de Segurança da Biblioteca
         const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
-
         function renderNavbar() {
-            // Verifica se o Supabase carregou
-            if (!_supabase) {
-                document.body.innerHTML = '<div class="p-10 text-center text-red-600 font-bold">Erro Crítico: A biblioteca do Supabase não carregou. Verifique sua conexão ou bloqueadores de anúncio.</div>';
-                return;
-            }
-
+            if (!_supabase) { document.body.innerHTML = '<div class="p-10 text-center text-red-600 font-bold">Erro Crítico: Supabase não carregou.</div>'; return; }
             const usuario = JSON.parse(localStorage.getItem('usuario'));
-            
-            // Validação de Acesso (Gestora)
-            if (!usuario || usuario.funcao !== 'Gestora') {
-                alert('Acesso restrito à gestão. Redirecionando...');
-                window.location.href = 'produtividade.html';
-                return;
-            }
-
-            const navbarHTML = `
-            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
-                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
-                    </div>
-                </div>
-                <div class="hidden md:flex items-center gap-1 h-full">
-                    ${createNavLink('Gestão', 'gestao.html')}
-                    ${createNavLink('Produtividade', 'produtividade.html')}
-                    ${createNavLink('Performance', 'performance.html')}
-                    ${createNavLink('Consolidado', 'consolidado.html')}
-                    ${createNavLink('Minha Área', 'minha_area.html')}
-                    ${createNavLink('Ferramentas', 'ferramentas.html')}
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="text-right hidden sm:block">
-                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
-                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
-                    </div>
-                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
-                </div>
-            </nav>
-            <div class="h-20"></div>`;
+            if (!usuario || usuario.funcao !== 'Gestora') { alert('Acesso restrito.'); window.location.href = 'produtividade.html'; return; }
+            const navbarHTML = `<nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6"><div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'"><div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div></div><div class="hidden md:flex items-center gap-1 h-full">${createNavLink('Gestão', 'gestao.html')}${createNavLink('Produtividade', 'produtividade.html')}${createNavLink('Performance', 'performance.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Minha Área', 'minha_area.html')}${createNavLink('Ferramentas', 'ferramentas.html')}</div><div class="flex items-center gap-4"><div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div><button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button></div></nav><div class="h-20"></div>`;
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
-
-        function createNavLink(label, linkUrl) {
-            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-        }
+        function createNavLink(label, linkUrl) { const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white"; return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`; }
         function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        
-        // Inicia
         renderNavbar();
     </script>
-
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">Painel de Gestão</h1>
-            <p class="text-slate-500">Gerencie colaboradores e defina as metas do time.</p>
-        </div>
-
+        <div class="mb-8"><h1 class="text-2xl font-bold text-slate-800">Painel de Gestão</h1><p class="text-slate-500">Gerencie colaboradores e defina as metas do time.</p></div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
-                <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                        👥 Equipe <span id="total-users" class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">...</span>
-                    </h3>
-                    <button onclick="abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm">
-                        + Novo Colaborador
-                    </button>
-                </div>
-                
-                <div class="p-4 border-b border-slate-100">
-                    <input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar por nome ou ID..." class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-blue-500">
-                </div>
-
-                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative" id="user-list">
-                    <div class="absolute inset-0 flex items-center justify-center text-slate-400">
-                        <div class="text-center">
-                            <span class="block text-2xl mb-2">⏳</span>
-                            Carregando equipe...
-                        </div>
-                    </div>
-                </div>
+                <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700 flex items-center gap-2">👥 Equipe <span id="total-users" class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">...</span></h3><button onclick="abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm">+ Novo Colaborador</button></div>
+                <div class="p-4 border-b border-slate-100"><input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar por nome ou ID..." class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-blue-500"></div>
+                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative" id="user-list"><div class="absolute inset-0 flex items-center justify-center text-slate-400"><div class="text-center"><span class="block text-2xl mb-2">⏳</span>Carregando equipe...</div></div></div>
             </div>
-
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-fit">
-                <div class="p-5 border-b border-slate-100 bg-slate-50">
-                    <h3 class="font-bold text-slate-700">🎯 Configuração de Metas</h3>
-                </div>
-                
+                <div class="p-5 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700">🎯 Configuração de Metas</h3></div>
                 <div class="p-6 space-y-4">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="col-span-2">
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Aplicar Para</label>
-                            <select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-medium">
-                                <option>Carregando...</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label>
-                            <input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Diário</label>
-                            <input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm">
-                        </div>
-                    </div>
-
-                    <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">
-                        Gravar Meta
-                    </button>
-
-                    <div class="pt-6 border-t border-slate-100">
-                        <h4 class="text-sm font-bold text-slate-700 mb-3">Metas Vigentes (Assistentes)</h4>
-                        <div class="max-h-64 overflow-y-auto space-y-2" id="meta-list">
-                            <div class="text-xs text-slate-400 italic">Carregando metas...</div>
-                        </div>
-                    </div>
+                    <div class="grid grid-cols-2 gap-4"><div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Aplicar Para</label><select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-medium"><option>Carregando...</option></select></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label><input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Diário</label><input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></div></div>
+                    <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">Gravar Meta</button>
+                    <div class="pt-6 border-t border-slate-100"><h4 class="text-sm font-bold text-slate-700 mb-3">Metas Vigentes (Assistentes)</h4><div class="max-h-64 overflow-y-auto space-y-2" id="meta-list"><div class="text-xs text-slate-400 italic">Carregando metas...</div></div></div>
                 </div>
             </div>
         </div>
     </div>
-
     <div id="modal-user" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden transform transition-all">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 class="font-bold text-slate-800" id="modal-title">Novo Colaborador</h3>
-                <button onclick="fecharModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
-            </div>
-            
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-bold text-slate-800" id="modal-title">Novo Colaborador</h3><button onclick="fecharModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button></div>
             <div class="p-6 space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Login)</label>
-                    <input type="number" id="form-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label>
-                    <input type="text" id="form-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha</label>
-                    <input type="text" id="form-senha" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500">
-                </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função</label>
-                        <select id="form-funcao" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5">
-                            <option value="Assistente">Assistente</option>
-                            <option value="Gestora">Gestora</option>
-                            <option value="Auditora">Auditora</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label>
-                        <select id="form-contrato" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5">
-                            <option value="PJ">PJ</option>
-                            <option value="CLT">CLT</option>
-                        </select>
-                    </div>
-                </div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Login)</label><input type="number" id="form-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label><input type="text" id="form-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha</label><input type="text" id="form-senha" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500"></div>
+                <div class="grid grid-cols-2 gap-4"><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função</label><select id="form-funcao" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"><option value="Assistente">Assistente</option><option value="Gestora">Gestora</option><option value="Auditora">Auditora</option></select></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label><select id="form-contrato" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"><option value="PJ">PJ</option><option value="CLT">CLT</option></select></div></div>
             </div>
-
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onclick="salvarUsuario()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Salvar</button>
-                <button onclick="excluirUsuario()" id="btn-delete" class="hidden bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
-            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3"><button onclick="salvarUsuario()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Salvar</button><button onclick="excluirUsuario()" id="btn-delete" class="hidden bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 px-4 rounded-lg transition">Excluir</button></div>
         </div>
     </div>
-
     <script>
         let allUsers = [];
-
         document.addEventListener('DOMContentLoaded', init);
-
-        async function init() {
-            try {
-                // Data de hoje no input
-                const today = new Date();
-                document.getElementById('meta-date').value = today.toISOString().substring(0, 10);
-                
-                // Carrega Dados
-                await loadUsers();
-                await loadMetasAtuais();
-            } catch (e) {
-                console.error("Erro no INIT:", e);
-                alert("Ocorreu um erro ao inicializar a página: " + e.message);
-            }
-        }
-
-        // --- CARREGAMENTO DE USUÁRIOS ---
+        async function init() { try { const today = new Date(); document.getElementById('meta-date').value = today.toISOString().substring(0, 10); await loadUsers(); await loadMetasAtuais(); } catch (e) { console.error("Erro no INIT:", e); alert("Ocorreu um erro ao inicializar a página: " + e.message); } }
         async function loadUsers() {
-            try {
-                const { data, error } = await _supabase.from('usuarios').select('*').order('nome');
-                
-                if (error) throw error;
-                
-                allUsers = data || [];
-                renderUsers(allUsers);
-                populateSelect(allUsers);
-                
-            } catch (err) {
-                console.error("Erro ao carregar usuários:", err);
-                document.getElementById('user-list').innerHTML = `
-                    <div class="text-center p-4 text-red-500 text-sm">
-                        Erro ao carregar equipe.<br>
-                        <small>${err.message}</small>
-                    </div>`;
-            }
+            try { const { data, error } = await _supabase.from('usuarios').select('*').order('nome'); if (error) throw error; allUsers = data || []; renderUsers(allUsers); populateSelect(allUsers); } catch (err) { console.error("Erro ao carregar usuários:", err); document.getElementById('user-list').innerHTML = `<div class="text-center p-4 text-red-500 text-sm">Erro ao carregar equipe.<br><small>${err.message}</small></div>`; }
         }
-
         function renderUsers(lista) {
-            const container = document.getElementById('user-list');
-            document.getElementById('total-users').innerText = lista.length;
-
-            if(!lista || lista.length === 0) {
-                container.innerHTML = '<div class="text-center p-4 text-slate-400 text-sm">Nenhum usuário encontrado.</div>';
-                return;
-            }
-
+            const container = document.getElementById('user-list'); document.getElementById('total-users').innerText = lista.length;
+            if(!lista || lista.length === 0) { container.innerHTML = '<div class="text-center p-4 text-slate-400 text-sm">Nenhum usuário encontrado.</div>'; return; }
             let html = '';
-            lista.forEach(u => {
-                const userJson = JSON.stringify(u).replace(/"/g, '&quot;');
-                html += `
-                <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition group">
-                    <div class="flex items-center gap-3">
-                        <div class="bg-slate-200 text-slate-600 font-bold text-xs px-2 py-1 rounded">#${u.id}</div>
-                        <div>
-                            <div class="font-bold text-sm text-slate-700">${u.nome}</div>
-                            <div class="text-xs text-slate-500">${u.funcao} • ${u.contrato || 'PJ'}</div>
-                        </div>
-                    </div>
-                    <button onclick="abrirModal(${userJson})" class="text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition px-3 py-1 text-sm font-medium">Editar</button>
-                </div>`;
-            });
+            lista.forEach(u => { const userJson = JSON.stringify(u).replace(/"/g, '&quot;'); html += `<div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition group"><div class="flex items-center gap-3"><div class="bg-slate-200 text-slate-600 font-bold text-xs px-2 py-1 rounded">#${u.id}</div><div><div class="font-bold text-sm text-slate-700">${u.nome}</div><div class="text-xs text-slate-500">${u.funcao} • ${u.contrato || 'PJ'}</div></div></div><button onclick="abrirModal(${userJson})" class="text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition px-3 py-1 text-sm font-medium">Editar</button></div>`; });
             container.innerHTML = html;
         }
-
-        function populateSelect(lista) {
-            const sel = document.getElementById('meta-user');
-            sel.innerHTML = '<option value="">Selecione...</option>';
-            sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>';
-            
-            const assistentes = lista.filter(u => u.funcao === 'Assistente');
-            assistentes.forEach(u => {
-                sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`;
-            });
-        }
-
-        function filtrarUsuarios() {
-            const term = document.getElementById('search-user').value.toLowerCase();
-            const filtered = allUsers.filter(u => 
-                u.nome.toLowerCase().includes(term) || 
-                String(u.id).includes(term)
-            );
-            renderUsers(filtered);
-        }
-
-        // --- CARREGAMENTO DE METAS ---
+        function populateSelect(lista) { const sel = document.getElementById('meta-user'); sel.innerHTML = '<option value="">Selecione...</option>'; sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>'; const assistentes = lista.filter(u => u.funcao === 'Assistente'); assistentes.forEach(u => { sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`; }); }
+        function filtrarUsuarios() { const term = document.getElementById('search-user').value.toLowerCase(); const filtered = allUsers.filter(u => u.nome.toLowerCase().includes(term) || String(u.id).includes(term)); renderUsers(filtered); }
         async function loadMetasAtuais() {
             const container = document.getElementById('meta-list');
-            
-            try {
-                const { data: assistentes } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').order('nome');
-                const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false });
-
-                if (!assistentes || !assistentes.length) {
-                    container.innerHTML = '<div class="p-2 text-xs text-slate-400">Nenhum assistente para mostrar metas.</div>';
-                    return;
-                }
-
-                let html = '';
-                const hoje = new Date().toISOString().split('T')[0];
-
-                assistentes.forEach(assistente => {
-                    const metaAtual = metas ? metas.find(m => m.usuario_id === assistente.id && m.data_inicio <= hoje) : null;
-                    const valor = metaAtual ? metaAtual.valor_meta : 0;
-                    const dataVigencia = metaAtual ? metaAtual.data_inicio.split('-').reverse().join('/') : '-';
-                    const corValor = metaAtual ? 'text-slate-800' : 'text-slate-300';
-
-                    html += `
-                    <div class="flex justify-between items-center text-sm border-b border-slate-50 py-2 last:border-0">
-                        <div>
-                            <div class="font-medium text-slate-700">${assistente.nome}</div>
-                            <div class="text-[10px] text-slate-400">Desde: ${dataVigencia}</div>
-                        </div>
-                        <div class="font-bold ${corValor}">${valor}</div>
-                    </div>`;
-                });
-                container.innerHTML = html;
-
-            } catch (err) {
-                console.error("Erro metas:", err);
-                container.innerHTML = '<div class="text-xs text-red-400">Erro ao carregar metas.</div>';
-            }
+            try { const { data: assistentes } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').order('nome'); const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false }); if (!assistentes || !assistentes.length) { container.innerHTML = '<div class="p-2 text-xs text-slate-400">Nenhum assistente para mostrar metas.</div>'; return; } let html = ''; const hoje = new Date().toISOString().split('T')[0]; assistentes.forEach(assistente => { const metaAtual = metas ? metas.find(m => m.usuario_id === assistente.id && m.data_inicio <= hoje) : null; const valor = metaAtual ? metaAtual.valor_meta : 0; const dataVigencia = metaAtual ? metaAtual.data_inicio.split('-').reverse().join('/') : '-'; const corValor = metaAtual ? 'text-slate-800' : 'text-slate-300'; html += `<div class="flex justify-between items-center text-sm border-b border-slate-50 py-2 last:border-0"><div><div class="font-medium text-slate-700">${assistente.nome}</div><div class="text-[10px] text-slate-400">Desde: ${dataVigencia}</div></div><div class="font-bold ${corValor}">${valor}</div></div>`; }); container.innerHTML = html; } catch (err) { console.error("Erro metas:", err); container.innerHTML = '<div class="text-xs text-red-400">Erro ao carregar metas.</div>'; }
         }
-
-        // --- FUNÇÕES DE MODAL E SALVAMENTO ---
         function abrirModal(user = null) {
-            const modal = document.getElementById('modal-user');
-            const title = document.getElementById('modal-title');
-            const btnDel = document.getElementById('btn-delete');
-            const idInput = document.getElementById('form-id');
-
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-
-            if (user) {
-                title.innerText = "Editar Colaborador";
-                idInput.value = user.id;
-                idInput.disabled = true;
-                idInput.classList.add('bg-slate-100', 'text-slate-500');
-                
-                document.getElementById('form-nome').value = user.nome;
-                document.getElementById('form-senha').value = user.senha;
-                document.getElementById('form-funcao').value = user.funcao;
-                document.getElementById('form-contrato').value = user.contrato || 'PJ';
-                btnDel.classList.remove('hidden');
-            } else {
-                title.innerText = "Novo Colaborador";
-                idInput.value = "";
-                idInput.disabled = false;
-                idInput.classList.remove('bg-slate-100', 'text-slate-500');
-                
-                document.getElementById('form-nome').value = "";
-                document.getElementById('form-senha').value = "";
-                document.getElementById('form-funcao').value = "Assistente";
-                document.getElementById('form-contrato').value = "PJ";
-                btnDel.classList.add('hidden');
-            }
+            const modal = document.getElementById('modal-user'); const title = document.getElementById('modal-title'); const btnDel = document.getElementById('btn-delete'); const idInput = document.getElementById('form-id');
+            modal.classList.remove('hidden'); modal.classList.add('flex');
+            if (user) { title.innerText = "Editar Colaborador"; idInput.value = user.id; idInput.disabled = true; idInput.classList.add('bg-slate-100', 'text-slate-500'); document.getElementById('form-nome').value = user.nome; document.getElementById('form-senha').value = user.senha; document.getElementById('form-funcao').value = user.funcao; document.getElementById('form-contrato').value = user.contrato || 'PJ'; btnDel.classList.remove('hidden'); }
+            else { title.innerText = "Novo Colaborador"; idInput.value = ""; idInput.disabled = false; idInput.classList.remove('bg-slate-100', 'text-slate-500'); document.getElementById('form-nome').value = ""; document.getElementById('form-senha').value = ""; document.getElementById('form-funcao').value = "Assistente"; document.getElementById('form-contrato').value = "PJ"; btnDel.classList.add('hidden'); }
         }
-
-        function fecharModal() {
-            document.getElementById('modal-user').classList.add('hidden');
-            document.getElementById('modal-user').classList.remove('flex');
-        }
-
+        function fecharModal() { document.getElementById('modal-user').classList.add('hidden'); document.getElementById('modal-user').classList.remove('flex'); }
         async function salvarUsuario() {
-            const id = document.getElementById('form-id').value;
-            const nome = document.getElementById('form-nome').value;
-            const senha = document.getElementById('form-senha').value;
-            const funcao = document.getElementById('form-funcao').value;
-            const contrato = document.getElementById('form-contrato').value;
-
+            const id = document.getElementById('form-id').value; const nome = document.getElementById('form-nome').value; const senha = document.getElementById('form-senha').value; const funcao = document.getElementById('form-funcao').value; const contrato = document.getElementById('form-contrato').value;
             if(!id || !nome || !senha) return alert("Preencha todos os campos obrigatórios.");
-
-            const payload = { id: parseInt(id), nome, senha, funcao, contrato };
-            let error = null;
-
-            // Feedback visual
-            const btns = document.querySelectorAll('#modal-user button');
-            btns.forEach(b => b.disabled = true);
-
-            try {
-                if(document.getElementById('form-id').disabled) {
-                    const res = await _supabase.from('usuarios').update(payload).eq('id', id);
-                    error = res.error;
-                } else {
-                    const res = await _supabase.from('usuarios').insert(payload);
-                    error = res.error;
-                }
-
-                if(error) throw error;
-                
-                fecharModal();
-                await loadUsers();
-                await loadMetasAtuais();
-
-            } catch (err) {
-                alert("Erro ao salvar: " + err.message);
-            } finally {
-                btns.forEach(b => b.disabled = false);
-            }
+            const payload = { id: parseInt(id), nome, senha, funcao, contrato }; let error = null; const btns = document.querySelectorAll('#modal-user button'); btns.forEach(b => b.disabled = true);
+            try { if(document.getElementById('form-id').disabled) { const res = await _supabase.from('usuarios').update(payload).eq('id', id); error = res.error; } else { const res = await _supabase.from('usuarios').insert(payload); error = res.error; } if(error) throw error; fecharModal(); await loadUsers(); await loadMetasAtuais(); } catch (err) { alert("Erro ao salvar: " + err.message); } finally { btns.forEach(b => b.disabled = false); }
         }
-
         async function excluirUsuario() {
-            const id = document.getElementById('form-id').value;
-            if(!confirm('Tem certeza absoluta que deseja excluir este usuário?')) return;
-
-            try {
-                const { error } = await _supabase.from('usuarios').delete().eq('id', id);
-                if(error) throw error;
-                
-                fecharModal();
-                await loadUsers();
-                await loadMetasAtuais();
-            } catch(err) {
-                alert("Erro ao excluir: " + err.message);
-            }
+            const id = document.getElementById('form-id').value; if(!confirm('Tem certeza absoluta que deseja excluir este usuário?')) return;
+            try { const { error } = await _supabase.from('usuarios').delete().eq('id', id); if(error) throw error; fecharModal(); await loadUsers(); await loadMetasAtuais(); } catch(err) { alert("Erro ao excluir: " + err.message); }
         }
-
         async function salvarMeta() {
-            const uid = document.getElementById('meta-user').value;
-            const data = document.getElementById('meta-date').value;
-            const valor = document.getElementById('meta-value').value;
-
+            const uid = document.getElementById('meta-user').value; const data = document.getElementById('meta-date').value; const valor = document.getElementById('meta-value').value;
             if(!uid || !data || !valor) return alert("Preencha todos os campos da meta.");
-
-            const btn = document.getElementById('btn-meta');
-            const txt = btn.innerText;
-            btn.innerText = "Salvando...";
-            btn.disabled = true;
-
-            try {
-                let error = null;
-
-                if (uid === 'all') {
-                    if(!confirm(`Confirma definir meta de ${valor} para TODOS os assistentes?`)) {
-                        btn.innerText = txt; btn.disabled = false; return;
-                    }
-                    const assistentes = allUsers.filter(u => u.funcao === 'Assistente');
-                    if(assistentes.length === 0) throw new Error("Não há assistentes para aplicar a meta.");
-
-                    const inserts = assistentes.map(u => ({ usuario_id: u.id, data_inicio: data, valor_meta: parseInt(valor) }));
-                    const res = await _supabase.from('metas').insert(inserts);
-                    error = res.error;
-                } else {
-                    const res = await _supabase.from('metas').insert({ usuario_id: uid, data_inicio: data, valor_meta: parseInt(valor) });
-                    error = res.error;
-                }
-
-                if(error) throw error;
-
-                document.getElementById('meta-value').value = '';
-                await loadMetasAtuais();
-                alert('Meta salva com sucesso!');
-
-            } catch (err) {
-                alert('Erro ao salvar meta: ' + err.message);
-            } finally {
-                btn.innerText = txt;
-                btn.disabled = false;
-            }
+            const btn = document.getElementById('btn-meta'); const txt = btn.innerText; btn.innerText = "Salvando..."; btn.disabled = true;
+            try { let error = null; if (uid === 'all') { if(!confirm(`Confirma definir meta de ${valor} para TODOS os assistentes?`)) { btn.innerText = txt; btn.disabled = false; return; } const assistentes = allUsers.filter(u => u.funcao === 'Assistente'); if(assistentes.length === 0) throw new Error("Não há assistentes para aplicar a meta."); const inserts = assistentes.map(u => ({ usuario_id: u.id, data_inicio: data, valor_meta: parseInt(valor) })); const res = await _supabase.from('metas').insert(inserts); error = res.error; } else { const res = await _supabase.from('metas').insert({ usuario_id: uid, data_inicio: data, valor_meta: parseInt(valor) }); error = res.error; } if(error) throw error; document.getElementById('meta-value').value = ''; await loadMetasAtuais(); alert('Meta salva com sucesso!'); } catch (err) { alert('Erro ao salvar meta: ' + err.message); } finally { btn.innerText = txt; btn.disabled = false; }
         }
     </script>
 </body>

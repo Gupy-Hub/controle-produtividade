@@ -25,7 +25,7 @@
         const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario')); if (!usuario) { window.location.href = 'index.html'; return; }
-            const navbarHTML = `<nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6"><div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'"><div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div></div><div class="hidden md:flex items-center gap-1 h-full">${createNavLink('Gestão', 'gestao.html')}${createNavLink('Produtividade', 'produtividade.html')}${createNavLink('Performance', 'performance.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Ferramentas', 'ferramentas.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Minha Área', 'minha_area.html')}</div><div class="flex items-center gap-4"><div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div><button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button></div></nav><div class="h-20"></div>`;
+            const navbarHTML = `<nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6"><div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'"><div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div></div><div class="hidden md:flex items-center gap-1 h-full">${createNavLink('Gestão', 'gestao.html')}${createNavLink('Produtividade', 'produtividade.html')}${createNavLink('Performance', 'performance.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Minha Área', 'minha_area.html')}${createNavLink('Ferramentas', 'ferramentas.html')}</div><div class="flex items-center gap-4"><div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div><button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button></div></nav><div class="h-20"></div>`;
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
         function createNavLink(label, linkUrl) { const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white"; return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`; }
@@ -85,7 +85,7 @@
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
                     if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
-                    // CORREÇÃO: Usar apenas SYSTEM
+                    // CORREÇÃO: Apenas dados do sistema
                     const qtd = Number(item.quantidade) || 0;
                     stats[uid].total += qtd;
                     stats[uid].dias.add(item.data_referencia);
@@ -102,7 +102,7 @@
                 const isSelected = selectedUserId === u.id; if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
                 const isMe = sessao && u.id === sessao.id; let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
                 let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-                html += `<tr class="${rowClass}" onclick="toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td><td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
+                html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer ${isSelected?'selected-row':(isMe?'me-row':'')}" onclick="toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td><td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
             });
             tbody.innerHTML = html; atualizarCards(userStats);
         }
@@ -123,7 +123,7 @@
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
-                    // CORREÇÃO: Usar apenas SYSTEM
+                    // CORREÇÃO: Apenas dados do sistema
                     const qtd = Number(item.quantidade) || 0;
                     if (!map[uid]) map[uid] = { nome: item.usuarios.nome, m: Array(12).fill(0), t: 0 };
                     const mes = new Date(item.data_referencia + 'T12:00:00').getMonth(); map[uid].m[mes] += qtd; map[uid].t += qtd;

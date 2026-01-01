@@ -120,8 +120,8 @@
             dadosGlobais.forEach(item => {
                 if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                 const uid = item.usuario_id;
-                // CORREÇÃO: Usar APENAS a quantidade do sistema
-                const qtdTotal = (item.quantidade || 0); 
+                // REGRA DE NEGÓCIO: Usar apenas dados importados do sistema
+                const qtdTotal = (item.quantidade || 0);
 
                 if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
                 stats[uid].total += qtdTotal;
