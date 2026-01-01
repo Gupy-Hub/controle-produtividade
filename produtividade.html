@@ -7,6 +7,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
@@ -19,25 +20,19 @@
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
         const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
-        // --- LÓGICA DA NAVBAR ---
+        // --- RENDERIZA O MENU (NAVBAR) ---
         function renderNavbar() {
-            // Verifica Login
             const usuario = JSON.parse(localStorage.getItem('usuario'));
-            if (!usuario) {
-                window.location.href = 'index.html';
-                return;
-            }
+            if (!usuario) { window.location.href = 'index.html'; return; }
 
-            // HTML da Navbar
             const navbarHTML = `
             <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-                <div class="flex items-center gap-3 select-none cursor-pointer" onclick="window.location.href='produtividade.html'">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
                     <div class="flex flex-col leading-tight">
                         <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
                         <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
                     </div>
                 </div>
-                
                 <div class="hidden md:flex items-center gap-1 h-full">
                     ${createNavLink('Gestão', 'gestao.html')}
                     ${createNavLink('Produtividade', 'produtividade.html')}
@@ -45,7 +40,6 @@
                     ${createNavLink('Consolidado', 'consolidado.html')}
                     ${createNavLink('Minha Área', 'minha_area.html')}
                 </div>
-
                 <div class="flex items-center gap-4">
                     <div class="text-right hidden sm:block">
                         <span class="block text-sm font-bold text-white">${usuario.nome}</span>
@@ -54,8 +48,7 @@
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
                 </div>
             </nav>
-            <div class="h-20"></div>
-            `;
+            <div class="h-20"></div>`; // Espaçador
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
 
@@ -64,13 +57,9 @@
             const activeClass = isActive ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
             return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
         }
-
-        function logout() {
-            localStorage.removeItem('usuario');
-            window.location.href = 'index.html';
-        }
-
-        // Executa a criação do menu imediatamente
+        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
+        
+        // Inicia o menu
         renderNavbar();
     </script>
 
@@ -85,15 +74,15 @@
             </div>
 
             <div class="flex flex-wrap gap-3 items-center">
-                <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5 font-medium">
+                <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
                     <option value="dia">📅 Dia Específico</option>
                     <option value="mes">📊 Mês Completo</option>
                 </select>
+                <input type="date" id="select-dia" onchange="carregarDados()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
 
-                <input type="date" id="select-dia" onchange="carregarDados()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5">
-                <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2.5">
-
-                <button onclick="alert('Funcionalidade de importar será implementada na Fase 3!')" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm">
+                <input type="file" id="excel-files" accept=".xlsx" multiple class="hidden" onchange="importarArquivos()">
+                <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">
                     📂 Importar Excel
                 </button>
             </div>
@@ -123,13 +112,13 @@
                 <table class="w-full text-sm text-left text-slate-600">
                     <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
                         <tr>
-                            <th scope="col" class="px-6 py-3">Assistente</th>
-                            <th scope="col" class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th>
-                            <th scope="col" class="px-6 py-3 text-center">FIFO</th>
-                            <th scope="col" class="px-6 py-3 text-center">G. Total</th>
-                            <th scope="col" class="px-6 py-3 text-center">G. Parcial</th>
-                            <th scope="col" class="px-6 py-3 text-center">Meta</th>
-                            <th scope="col" class="px-6 py-3 text-center">Status</th>
+                            <th class="px-6 py-3">Assistente</th>
+                            <th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th>
+                            <th class="px-6 py-3 text-center">FIFO</th>
+                            <th class="px-6 py-3 text-center">G. Total</th>
+                            <th class="px-6 py-3 text-center">G. Parcial</th>
+                            <th class="px-6 py-3 text-center">Meta</th>
+                            <th class="px-6 py-3 text-center">Status</th>
                         </tr>
                     </thead>
                     <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
@@ -139,136 +128,160 @@
     </div>
 
     <script>
-        let dadosGlobais = [];
-        let metasGlobais = [];
+        let dadosGlobais = [], metasGlobais = [];
 
         document.addEventListener('DOMContentLoaded', () => {
-            const ontem = new Date();
-            ontem.setDate(ontem.getDate() - 1);
+            const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
             document.getElementById('select-dia').value = ontem.toISOString().split('T')[0];
             document.getElementById('select-mes').value = ontem.toISOString().substring(0, 7);
-            ajustarSeletores(); 
+            ajustarSeletores();
         });
 
         function ajustarSeletores() {
             const view = document.getElementById('view-selector').value;
-            const inputDia = document.getElementById('select-dia');
-            const inputMes = document.getElementById('select-mes');
-
-            if (view === 'dia') {
-                inputDia.classList.remove('hidden');
-                inputMes.classList.add('hidden');
-            } else {
-                inputDia.classList.add('hidden');
-                inputMes.classList.remove('hidden');
-                if(inputDia.value) inputMes.value = inputDia.value.substring(0, 7);
-            }
+            const d = document.getElementById('select-dia'), m = document.getElementById('select-mes');
+            if (view === 'dia') { d.classList.remove('hidden'); m.classList.add('hidden'); }
+            else { d.classList.add('hidden'); m.classList.remove('hidden'); if(d.value) m.value = d.value.substring(0, 7); }
             carregarDados();
         }
 
+        // --- CARREGAR DADOS DO SUPABASE ---
         async function carregarDados() {
             const view = document.getElementById('view-selector').value;
-            let dataInicio, dataFim, titulo;
+            let s, e, titulo;
             
             if (view === 'dia') {
-                const dia = document.getElementById('select-dia').value;
-                if (!dia) return;
-                dataInicio = dia; dataFim = dia;
-                titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
+                const dia = document.getElementById('select-dia').value; if(!dia) return;
+                s = dia; e = dia; titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
             } else {
-                const mes = document.getElementById('select-mes').value;
-                if (!mes) return;
-                dataInicio = `${mes}-01`;
-                const [ano, m] = mes.split('-');
-                const ultimoDia = new Date(ano, m, 0).getDate();
-                dataFim = `${mes}-${ultimoDia}`;
+                const mes = document.getElementById('select-mes').value; if(!mes) return;
+                s = `${mes}-01`; e = `${mes}-${new Date(mes.split('-')[0], mes.split('-')[1], 0).getDate()}`;
                 titulo = `Visão Mensal: ${mes}`;
             }
 
-            document.getElementById('panel-titulo').innerText = "Carregando dados...";
-            document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando...</td></tr>';
+            document.getElementById('panel-titulo').innerText = "Carregando...";
+            document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando dados...</td></tr>';
 
             try {
-                if(!_supabase) throw new Error("Supabase não iniciado");
+                const { data: p, error: eP } = await _supabase.from('producao').select('*, usuarios(*)').gte('data_referencia', s).lte('data_referencia', e);
+                if (eP) throw eP;
+                const { data: m, error: eM } = await _supabase.from('metas').select('*');
+                if (eM) throw eM;
 
-                const { data: producao, error: errP } = await _supabase
-                    .from('producao')
-                    .select('*, usuarios(*)')
-                    .gte('data_referencia', dataInicio)
-                    .lte('data_referencia', dataFim);
-
-                if (errP) throw errP;
-
-                const { data: metas, error: errM } = await _supabase.from('metas').select('*');
-                if (errM) throw errM;
-
-                dadosGlobais = producao || [];
-                metasGlobais = metas || [];
+                dadosGlobais = p || []; metasGlobais = m || [];
                 renderizarTabela(titulo);
-
-            } catch (erro) {
-                console.error(erro);
-                document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8 text-red-500">Erro ao carregar dados. Tente recarregar a página.</td></tr>';
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao carregar dados.");
             }
         }
 
-        function renderizarTabela(tituloPainel) {
-            document.getElementById('panel-titulo').innerText = tituloPainel;
+        // --- RENDERIZAR TABELA ---
+        function renderizarTabela(titulo) {
+            document.getElementById('panel-titulo').innerText = titulo;
             let stats = {};
 
             dadosGlobais.forEach(item => {
                 if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                 const uid = item.usuario_id;
-                if (!stats[uid]) {
-                    stats[uid] = {
-                        id: uid, nome: item.usuarios.nome,
-                        total: 0, fifo: 0, gt: 0, gp: 0,
-                        diasTrabalhados: new Set()
-                    };
-                }
+                if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
+                
                 stats[uid].total += (item.quantidade || 0);
                 stats[uid].fifo += (item.fifo || 0);
                 stats[uid].gt += (item.gradual_total || 0);
                 stats[uid].gp += (item.gradual_parcial || 0);
-                stats[uid].diasTrabalhados.add(item.data_referencia);
+                stats[uid].dias.add(item.data_referencia);
             });
 
             const lista = Object.values(stats).sort((a, b) => b.total - a.total);
-            const somaTotal = lista.reduce((acc, curr) => acc + curr.total, 0);
-            const media = lista.length ? Math.round(somaTotal / lista.length) : 0;
-
-            document.getElementById('p-total').innerText = somaTotal.toLocaleString();
-            document.getElementById('p-media').innerText = media.toLocaleString();
+            const total = lista.reduce((a, b) => a + b.total, 0);
+            
+            document.getElementById('p-total').innerText = total.toLocaleString();
+            document.getElementById('p-media').innerText = lista.length ? Math.round(total / lista.length).toLocaleString() : 0;
             document.getElementById('p-headcount').innerText = lista.length;
 
             const tbody = document.getElementById('tabela-corpo');
-            if (lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum dado encontrado para este período.</td></tr>';
-                return;
-            }
+            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado.</td></tr>'; return; }
 
             let html = '';
-            lista.forEach(user => {
-                const diasCount = user.diasTrabalhados.size || 1;
-                const metaCalculada = 650 * diasCount;
-                const atingiuMeta = user.total >= metaCalculada;
-                const corBadge = atingiuMeta ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-                const textoBadge = atingiuMeta ? 'Atingida' : 'Abaixo';
-
-                html += `
-                <tr class="hover:bg-slate-50 transition duration-150">
-                    <td class="px-6 py-4 font-medium text-slate-900">${user.nome}</td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-700">${user.total.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center">${user.fifo}</td>
-                    <td class="px-6 py-4 text-center">${user.gt}</td>
-                    <td class="px-6 py-4 text-center">${user.gp}</td>
-                    <td class="px-6 py-4 text-center text-slate-400">${metaCalculada.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center">
-                        <span class="${corBadge} text-xs font-bold px-2.5 py-0.5 rounded-full border border-opacity-20">${textoBadge}</span>
-                    </td>
+            lista.forEach(u => {
+                const meta = 650 * (u.dias.size || 1);
+                const atingiu = u.total >= meta;
+                const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+                
+                html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100">
+                    <td class="px-6 py-4 font-medium text-slate-900">${u.nome}</td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center">${u.fifo}</td>
+                    <td class="px-6 py-4 text-center">${u.gt}</td>
+                    <td class="px-6 py-4 text-center">${u.gp}</td>
+                    <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center"><span class="${badge} text-xs font-bold px-2 py-1 rounded-full">${atingiu ? 'Atingida' : 'Abaixo'}</span></td>
                 </tr>`;
             });
             tbody.innerHTML = html;
+        }
+
+        // --- FUNÇÃO DE IMPORTAÇÃO (SHEETJS) ---
+        async function importarArquivos() {
+            const files = document.getElementById('excel-files').files;
+            if (files.length === 0) return;
+
+            const btn = document.getElementById('btn-import');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Processando...';
+            btn.disabled = true;
+
+            let log = { ok: 0, dup: 0, err: 0 };
+
+            for (let f of files) {
+                try {
+                    // Validação do nome: AAAAMMDD.xlsx (Ex: 20251001.xlsx)
+                    const name = f.name.replace('.xlsx', '');
+                    if (!/^\d{8}$/.test(name)) {
+                        alert(`Arquivo "${f.name}" pulado!\nNome deve ser a data: AAAAMMDD.xlsx`);
+                        log.err++; continue;
+                    }
+                    
+                    const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
+                    
+                    // Ler Arquivo
+                    const buffer = await f.arrayBuffer();
+                    const wb = XLSX.read(buffer, { type: 'array' });
+                    const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+                    // Enviar para Supabase
+                    for (let row of json) {
+                        if (!row.id_assistente) continue;
+
+                        // Verifica duplicidade
+                        const { data: exists } = await _supabase.from('producao')
+                            .select('id').eq('usuario_id', row.id_assistente).eq('data_referencia', dataRef).maybeSingle();
+                        
+                        if (exists) {
+                            log.dup++;
+                        } else {
+                            await _supabase.from('producao').insert({
+                                usuario_id: row.id_assistente,
+                                data_referencia: dataRef,
+                                fifo: row.documentos_validados_fifo || 0,
+                                gradual_total: row.documentos_validados_gradual_total || 0,
+                                gradual_parcial: row.documentos_validados_gradual_parcial || 0,
+                                perfil_fc: row.documentos_validados_perfil_fc || 0,
+                                quantidade: row.documentos_validados || 0
+                            });
+                            log.ok++;
+                        }
+                    }
+                } catch (e) { console.error(e); log.err++; }
+            }
+
+            alert(`Fim da Importação!\n✅ Sucesso: ${log.ok}\n⚠️ Duplicados: ${log.dup}\n❌ Erros: ${log.err}`);
+            
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            document.getElementById('excel-files').value = ""; // Limpa input
+            carregarDados(); // Atualiza a tela
         }
     </script>
 </body>
