@@ -234,12 +234,18 @@
                     
                     if(b > numCols) b = numCols;
 
+                    // CORREÇÃO: Somar System + Manual (tratando nulos)
+                    const sys = Number(r.quantidade) || 0;
+                    const man = Number(r.quantidade_manual) || 0;
+                    const totalRow = sys + man;
+
                     [b, 99].forEach(k => {
                         if(!st[k]) return;
                         const x = st[k];
                         x.users.add(r.usuario_id);
                         x.dates.add(r.data_referencia);
-                        x.qty += r.quantidade;
+                        
+                        x.qty += totalRow;
                         x.fifo += r.fifo;
                         x.gt += r.gradual_total;
                         x.gp += r.gradual_parcial;
@@ -247,10 +253,10 @@
                         
                         if (r.usuarios.contrato && r.usuarios.contrato.includes('CLT')) {
                             x.clt_users.add(r.usuario_id);
-                            x.clt_qty += r.quantidade;
+                            x.clt_qty += totalRow;
                         } else {
                             x.pj_users.add(r.usuario_id);
-                            x.pj_qty += r.quantidade;
+                            x.pj_qty += totalRow;
                         }
                     });
                 });
@@ -280,7 +286,6 @@
                         let val = 0;
                         if (!isCalc) {
                             val = getter(s);
-                            // CORREÇÃO: Verifica se é um Set (Conjunto) e pega o tamanho
                             if (val instanceof Set) val = val.size;
                         } else {
                             val = getter(s, dias, ativos, ativosCLT, ativosPJ);
