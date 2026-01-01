@@ -14,15 +14,12 @@
 <body class="text-slate-800">
 
     <script>
-        // Configuração Supabase
         const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
         const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
-        // Renderiza Menu
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
-            // SEGURANÇA: Se não for Gestora, expulsa
             if (!usuario || usuario.funcao !== 'Gestora') {
                 alert('Acesso restrito à gestão.');
                 window.location.href = 'produtividade.html';
@@ -72,7 +69,6 @@
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
                 <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <h3 class="font-bold text-slate-700 flex items-center gap-2">
@@ -82,20 +78,16 @@
                         + Novo Colaborador
                     </button>
                 </div>
-                
                 <div class="p-4 border-b border-slate-100">
                     <input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar por nome ou ID..." class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500">
                 </div>
-
-                <div class="overflow-y-auto flex-1 p-2 space-y-2" id="user-list">
-                    </div>
+                <div class="overflow-y-auto flex-1 p-2 space-y-2" id="user-list"></div>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-fit">
                 <div class="p-5 border-b border-slate-100 bg-slate-50">
                     <h3 class="font-bold text-slate-700">🎯 Configuração de Metas</h3>
                 </div>
-                
                 <div class="p-6 space-y-4">
                     <div class="grid grid-cols-2 gap-4">
                         <div class="col-span-2">
@@ -111,11 +103,7 @@
                             <input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm">
                         </div>
                     </div>
-
-                    <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">
-                        Gravar Meta
-                    </button>
-
+                    <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">Gravar Meta</button>
                     <div class="pt-6 border-t border-slate-100">
                         <h4 class="text-sm font-bold text-slate-700 mb-3">Metas Vigentes (Assistentes)</h4>
                         <div class="max-h-64 overflow-y-auto space-y-2" id="meta-list"></div>
@@ -162,11 +150,7 @@
                         </select>
                     </div>
                 </div>
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">E-mail (Opcional)</label>
-                    <input type="email" id="form-email" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500">
                 </div>
-            </div>
 
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
                 <button onclick="salvarUsuario()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition">Salvar</button>
@@ -181,13 +165,11 @@
         document.addEventListener('DOMContentLoaded', init);
 
         async function init() {
-            // Data padrão na meta
             document.getElementById('meta-date').value = new Date().toISOString().substring(0, 10);
             await loadUsers();
             await loadMetasAtuais();
         }
 
-        // --- CRUD USUÁRIOS ---
         async function loadUsers() {
             const { data, error } = await _supabase.from('usuarios').select('*').order('nome');
             if (error) return console.error(error);
@@ -199,15 +181,12 @@
         function renderUsers(lista) {
             const container = document.getElementById('user-list');
             document.getElementById('total-users').innerText = lista.length;
-            
             if(!lista.length) {
                 container.innerHTML = '<div class="text-center p-4 text-slate-400 text-sm">Nenhum usuário encontrado.</div>';
                 return;
             }
-
             let html = '';
             lista.forEach(u => {
-                // Prepara objeto para passar na função
                 const userJson = JSON.stringify(u).replace(/"/g, '&quot;');
                 html += `
                 <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition group">
@@ -230,7 +209,6 @@
             renderUsers(filtered);
         }
 
-        // --- MODAL ---
         function abrirModal(user = null) {
             const modal = document.getElementById('modal-user');
             const title = document.getElementById('modal-title');
@@ -250,19 +228,16 @@
                 document.getElementById('form-senha').value = user.senha;
                 document.getElementById('form-funcao').value = user.funcao;
                 document.getElementById('form-contrato').value = user.contrato || 'PJ';
-                document.getElementById('form-email').value = user.email || '';
                 btnDel.classList.remove('hidden');
             } else {
                 title.innerText = "Novo Colaborador";
                 idInput.value = "";
                 idInput.disabled = false;
                 idInput.classList.remove('bg-slate-100', 'text-slate-500');
-                
                 document.getElementById('form-nome').value = "";
                 document.getElementById('form-senha').value = "";
                 document.getElementById('form-funcao').value = "Assistente";
                 document.getElementById('form-contrato').value = "PJ";
-                document.getElementById('form-email').value = "";
                 btnDel.classList.add('hidden');
             }
         }
@@ -279,121 +254,9 @@
             const senha = document.getElementById('form-senha').value;
             const funcao = document.getElementById('form-funcao').value;
             const contrato = document.getElementById('form-contrato').value;
-            const email = document.getElementById('form-email').value;
 
             if(!id || !nome || !senha) return alert("Preencha ID, Nome e Senha.");
 
-            const payload = { id: parseInt(id), nome, senha, funcao, contrato, email };
+            // CORREÇÃO: Removemos 'email' do payload pois a coluna não existe no banco
+            const payload = { id: parseInt(id), nome, senha, funcao, contrato };
             let error = null;
-
-            if(document.getElementById('form-id').disabled) {
-                // Update
-                const res = await _supabase.from('usuarios').update(payload).eq('id', id);
-                error = res.error;
-            } else {
-                // Insert
-                const res = await _supabase.from('usuarios').insert(payload);
-                error = res.error;
-            }
-
-            if(error) alert("Erro: " + error.message);
-            else {
-                fecharModal();
-                loadUsers();
-                loadMetasAtuais(); // Recarrega metas pois a lista de users mudou
-            }
-        }
-
-        async function excluirUsuario() {
-            const id = document.getElementById('form-id').value;
-            if(confirm('Tem certeza que deseja excluir este usuário?')) {
-                const { error } = await _supabase.from('usuarios').delete().eq('id', id);
-                if(error) alert(error.message);
-                else {
-                    fecharModal();
-                    loadUsers();
-                }
-            }
-        }
-
-        // --- METAS ---
-        function populateSelect(lista) {
-            const sel = document.getElementById('meta-user');
-            sel.innerHTML = '<option value="">Selecione...</option>';
-            sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>';
-            lista.filter(u => u.funcao === 'Assistente').forEach(u => {
-                sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`;
-            });
-        }
-
-        async function loadMetasAtuais() {
-            const container = document.getElementById('meta-list');
-            container.innerHTML = '<div class="text-xs text-slate-400">Carregando...</div>';
-
-            const { data: assistentes } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').order('nome');
-            const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false });
-
-            if (!assistentes || !assistentes.length) return;
-
-            let html = '';
-            const hoje = new Date().toISOString().split('T')[0];
-
-            assistentes.forEach(assistente => {
-                // Pega a meta mais recente válida para hoje
-                const metaAtual = metas.find(m => m.usuario_id === assistente.id && m.data_inicio <= hoje);
-                const valor = metaAtual ? metaAtual.valor_meta : 0;
-                const dataVigencia = metaAtual ? metaAtual.data_inicio.split('-').reverse().join('/') : '-';
-                const corValor = metaAtual ? 'text-slate-800' : 'text-slate-300';
-
-                html += `
-                <div class="flex justify-between items-center text-sm border-b border-slate-50 py-2 last:border-0">
-                    <div>
-                        <div class="font-medium text-slate-700">${assistente.nome}</div>
-                        <div class="text-[10px] text-slate-400">Desde: ${dataVigencia}</div>
-                    </div>
-                    <div class="font-bold ${corValor}">${valor}</div>
-                </div>`;
-            });
-            container.innerHTML = html;
-        }
-
-        async function salvarMeta() {
-            const uid = document.getElementById('meta-user').value;
-            const data = document.getElementById('meta-date').value;
-            const valor = document.getElementById('meta-value').value;
-
-            if(!uid || !data || !valor) return alert("Preencha todos os campos da meta.");
-
-            const btn = document.getElementById('btn-meta');
-            const originalText = btn.innerText;
-            btn.innerText = "Salvando...";
-            btn.disabled = true;
-
-            let error = null;
-
-            if (uid === 'all') {
-                if(!confirm(`Confirma definir a meta de ${valor} para TODOS os assistentes a partir de ${data}?`)) {
-                    btn.innerText = originalText; btn.disabled = false; return;
-                }
-                const assistentes = allUsers.filter(u => u.funcao === 'Assistente');
-                const inserts = assistentes.map(u => ({ usuario_id: u.id, data_inicio: data, valor_meta: parseInt(valor) }));
-                const res = await _supabase.from('metas').insert(inserts);
-                error = res.error;
-            } else {
-                const res = await _supabase.from('metas').insert({ usuario_id: uid, data_inicio: data, valor_meta: parseInt(valor) });
-                error = res.error;
-            }
-
-            btn.innerText = originalText;
-            btn.disabled = false;
-
-            if(error) alert('Erro: ' + error.message);
-            else {
-                document.getElementById('meta-value').value = '';
-                loadMetasAtuais();
-                alert('Meta salva com sucesso!');
-            }
-        }
-    </script>
-</body>
-</html>
