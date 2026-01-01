@@ -15,12 +15,10 @@
 <body class="text-slate-800">
 
     <script>
-        // --- CONFIGURAÇÃO SUPABASE ---
         const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
         const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
         const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
-        // --- RENDERIZA O MENU (NAVBAR) ---
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (!usuario) { window.location.href = 'index.html'; return; }
@@ -48,18 +46,14 @@
                     <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
                 </div>
             </nav>
-            <div class="h-20"></div>`; // Espaçador
+            <div class="h-20"></div>`;
             document.body.insertAdjacentHTML('afterbegin', navbarHTML);
         }
-
         function createNavLink(label, linkUrl) {
-            const isActive = window.location.href.includes(linkUrl);
-            const activeClass = isActive ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
             return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
         }
         function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        
-        // Inicia o menu
         renderNavbar();
     </script>
 
@@ -76,10 +70,21 @@
             <div class="flex flex-wrap gap-3 items-center">
                 <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
                     <option value="dia">📅 Dia Específico</option>
+                    <option value="semana">📅 Por Semana</option>
                     <option value="mes">📊 Mês Completo</option>
                 </select>
+
                 <input type="date" id="select-dia" onchange="carregarDados()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                
                 <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                
+                <select id="select-semana" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                    <option value="1">Semana 1</option>
+                    <option value="2">Semana 2</option>
+                    <option value="3">Semana 3</option>
+                    <option value="4">Semana 4</option>
+                    <option value="5">Semana 5</option>
+                </select>
 
                 <input type="file" id="excel-files" accept=".xlsx" multiple class="hidden" onchange="importarArquivos()">
                 <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">
@@ -131,62 +136,125 @@
         let dadosGlobais = [], metasGlobais = [];
 
         document.addEventListener('DOMContentLoaded', () => {
-            const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+            const ontem = new Date(); 
+            ontem.setDate(ontem.getDate() - 1);
             document.getElementById('select-dia').value = ontem.toISOString().split('T')[0];
             document.getElementById('select-mes').value = ontem.toISOString().substring(0, 7);
-            ajustarSeletores();
+            ajustarSeletores(); 
         });
 
+        // Controla quais inputs aparecem
         function ajustarSeletores() {
             const view = document.getElementById('view-selector').value;
-            const d = document.getElementById('select-dia'), m = document.getElementById('select-mes');
-            if (view === 'dia') { d.classList.remove('hidden'); m.classList.add('hidden'); }
-            else { d.classList.add('hidden'); m.classList.remove('hidden'); if(d.value) m.value = d.value.substring(0, 7); }
+            const d = document.getElementById('select-dia');
+            const m = document.getElementById('select-mes');
+            const s = document.getElementById('select-semana');
+
+            d.classList.add('hidden');
+            m.classList.add('hidden');
+            s.classList.add('hidden');
+
+            if (view === 'dia') {
+                d.classList.remove('hidden');
+            } else if (view === 'semana') {
+                // Para ver semana, precisa escolher o mês e o número da semana
+                m.classList.remove('hidden');
+                s.classList.remove('hidden');
+                // Sincroniza mês se necessário
+                if(d.value && !m.value) m.value = d.value.substring(0, 7);
+            } else {
+                // Visão Mês
+                m.classList.remove('hidden');
+                if(d.value && !m.value) m.value = d.value.substring(0, 7);
+            }
             carregarDados();
         }
 
-        // --- CARREGAR DADOS DO SUPABASE ---
+        // Função auxiliar para calcular a semana do mês
+        function getWeek(dateString) {
+            const date = new Date(dateString + 'T12:00:00');
+            const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+            // Fórmula: (Dia do mês + Dia da semana do 1º dia) / 7
+            return Math.ceil((date.getDate() + firstDay) / 7);
+        }
+
         async function carregarDados() {
             const view = document.getElementById('view-selector').value;
-            let s, e, titulo;
-            
+            let dataInicio, dataFim, titulo, semanaSel;
+
             if (view === 'dia') {
-                const dia = document.getElementById('select-dia').value; if(!dia) return;
-                s = dia; e = dia; titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
+                const dia = document.getElementById('select-dia').value; 
+                if(!dia) return;
+                dataInicio = dia; dataFim = dia;
+                titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
             } else {
-                const mes = document.getElementById('select-mes').value; if(!mes) return;
-                s = `${mes}-01`; e = `${mes}-${new Date(mes.split('-')[0], mes.split('-')[1], 0).getDate()}`;
-                titulo = `Visão Mensal: ${mes}`;
+                // Tanto para 'mes' quanto 'semana', buscamos o mês inteiro no banco
+                // e filtramos localmente se for semana
+                const mes = document.getElementById('select-mes').value; 
+                if(!mes) return;
+                
+                dataInicio = `${mes}-01`;
+                const [ano, m] = mes.split('-');
+                const ultimoDia = new Date(ano, m, 0).getDate();
+                dataFim = `${mes}-${ultimoDia}`;
+                
+                if (view === 'semana') {
+                    semanaSel = parseInt(document.getElementById('select-semana').value);
+                    titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`;
+                } else {
+                    titulo = `Visão Mensal: ${mes}`;
+                }
             }
 
             document.getElementById('panel-titulo').innerText = "Carregando...";
             document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando dados...</td></tr>';
 
             try {
-                const { data: p, error: eP } = await _supabase.from('producao').select('*, usuarios(*)').gte('data_referencia', s).lte('data_referencia', e);
+                // Busca dados do Supabase
+                const { data: p, error: eP } = await _supabase
+                    .from('producao')
+                    .select('*, usuarios(*)')
+                    .gte('data_referencia', dataInicio)
+                    .lte('data_referencia', dataFim);
+
                 if (eP) throw eP;
+                
                 const { data: m, error: eM } = await _supabase.from('metas').select('*');
                 if (eM) throw eM;
 
-                dadosGlobais = p || []; metasGlobais = m || [];
-                renderizarTabela(titulo);
+                dadosGlobais = p || [];
+                metasGlobais = m || [];
+
+                // Se for visão semanal, filtra os dados aqui
+                if (view === 'semana') {
+                    dadosGlobais = dadosGlobais.filter(d => getWeek(d.data_referencia) === semanaSel);
+                }
+
+                renderizarTabela(titulo, view === 'semana' ? 5 : (view === 'dia' ? 1 : 20)); // Base de dias aproximada para meta
+
             } catch (err) {
                 console.error(err);
                 alert("Erro ao carregar dados.");
             }
         }
 
-        // --- RENDERIZAR TABELA ---
-        function renderizarTabela(titulo) {
+        function renderizarTabela(titulo, diasEstimados) {
             document.getElementById('panel-titulo').innerText = titulo;
             let stats = {};
 
             dadosGlobais.forEach(item => {
                 if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                 const uid = item.usuario_id;
-                if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
                 
-                stats[uid].total += (item.quantidade || 0);
+                // Soma também o valor manual se houver
+                const qtdTotal = (item.quantidade || 0) + (item.quantidade_manual || 0);
+
+                if (!stats[uid]) stats[uid] = { 
+                    id: uid, nome: item.usuarios.nome, 
+                    total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() 
+                };
+                
+                stats[uid].total += qtdTotal;
                 stats[uid].fifo += (item.fifo || 0);
                 stats[uid].gt += (item.gradual_total || 0);
                 stats[uid].gp += (item.gradual_parcial || 0);
@@ -201,11 +269,17 @@
             document.getElementById('p-headcount').innerText = lista.length;
 
             const tbody = document.getElementById('tabela-corpo');
-            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado.</td></tr>'; return; }
+            if (!lista.length) { 
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado para este período.</td></tr>'; 
+                return; 
+            }
 
             let html = '';
             lista.forEach(u => {
-                const meta = 650 * (u.dias.size || 1);
+                // Meta dinâmica baseada nos dias trabalhados no período
+                const diasTrab = u.dias.size || 1;
+                const meta = 650 * diasTrab; 
+                
                 const atingiu = u.total >= meta;
                 const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
                 
@@ -222,7 +296,7 @@
             tbody.innerHTML = html;
         }
 
-        // --- FUNÇÃO DE IMPORTAÇÃO (SHEETJS) ---
+        // --- IMPORTAÇÃO ---
         async function importarArquivos() {
             const files = document.getElementById('excel-files').files;
             if (files.length === 0) return;
@@ -236,25 +310,17 @@
 
             for (let f of files) {
                 try {
-                    // Validação do nome: AAAAMMDD.xlsx (Ex: 20251001.xlsx)
                     const name = f.name.replace('.xlsx', '');
-                    if (!/^\d{8}$/.test(name)) {
-                        alert(`Arquivo "${f.name}" pulado!\nNome deve ser a data: AAAAMMDD.xlsx`);
-                        log.err++; continue;
-                    }
+                    if (!/^\d{8}$/.test(name)) { log.err++; continue; }
                     
                     const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
-                    
-                    // Ler Arquivo
                     const buffer = await f.arrayBuffer();
                     const wb = XLSX.read(buffer, { type: 'array' });
                     const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
 
-                    // Enviar para Supabase
                     for (let row of json) {
                         if (!row.id_assistente) continue;
 
-                        // Verifica duplicidade
                         const { data: exists } = await _supabase.from('producao')
                             .select('id').eq('usuario_id', row.id_assistente).eq('data_referencia', dataRef).maybeSingle();
                         
@@ -277,11 +343,10 @@
             }
 
             alert(`Fim da Importação!\n✅ Sucesso: ${log.ok}\n⚠️ Duplicados: ${log.dup}\n❌ Erros: ${log.err}`);
-            
             btn.innerHTML = originalText;
             btn.disabled = false;
-            document.getElementById('excel-files').value = ""; // Limpa input
-            carregarDados(); // Atualiza a tela
+            document.getElementById('excel-files').value = ""; 
+            carregarDados(); 
         }
     </script>
 </body>
