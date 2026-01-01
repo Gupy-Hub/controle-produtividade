@@ -3,54 +3,100 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ferramentas</title>
+    <title>Ferramentas e Recursos</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style> 
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
+        
+        /* Estilos de Abas */
         .tab-active { background-color: #eff6ff; color: #1d4ed8; border-color: #2563eb; }
         .tab-inactive { color: #64748b; border-color: transparent; }
         .tab-inactive:hover { color: #334155; border-color: #cbd5e1; }
         
-        /* Animação suave */
+        /* Animações */
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="text-slate-800">
 
+    <script>
+        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
+        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+
+        function renderNavbar() {
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) { window.location.href = 'index.html'; return; }
+
+            const navbarHTML = `
+            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
+                    <div class="flex flex-col leading-tight">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
+                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
+                    </div>
+                </div>
+                <div class="hidden md:flex items-center gap-1 h-full">
+                    ${createNavLink('Gestão', 'gestao.html')}
+                    ${createNavLink('Produtividade', 'produtividade.html')}
+                    ${createNavLink('Performance', 'performance.html')}
+                    ${createNavLink('Consolidado', 'consolidado.html')}
+                    ${createNavLink('Minha Área', 'minha_area.html')}
+                    ${createNavLink('Ferramentas', 'ferramentas.html')}
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right hidden sm:block">
+                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
+                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
+                    </div>
+                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
+                </div>
+            </nav>
+            <div class="h-20"></div>`; // Espaçador para não cobrir conteúdo
+            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
+        }
+        function createNavLink(label, linkUrl) {
+            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+        }
+        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
+        renderNavbar();
+    </script>
+
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div>
                 <h1 class="text-2xl font-bold text-slate-800">Ferramentas & Recursos</h1>
-                <p class="text-slate-500 text-sm">Biblioteca e utilitários do dia a dia.</p>
+                <p class="text-slate-500 text-sm">Biblioteca de conhecimento e utilitários.</p>
             </div>
             
-            <div class="flex border-b border-slate-200 bg-white rounded-t-xl overflow-hidden shadow-sm">
-                <button onclick="switchTab('lib')" id="btn-lib" class="px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2">
+            <div class="bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex">
+                <button onclick="switchTab('lib')" id="btn-lib" class="px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm flex items-center gap-2">
                     <i class="fas fa-book-open"></i> Biblioteca
                 </button>
-                <button onclick="switchTab('calc')" id="btn-calc" class="px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2">
+                <button onclick="switchTab('calc')" id="btn-calc" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2">
                     <i class="fas fa-calculator"></i> Calculadora Datas
                 </button>
-                <button onclick="switchTab('cep')" id="btn-cep" class="px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2">
+                <button onclick="switchTab('cep')" id="btn-cep" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2">
                     <i class="fas fa-map-marked-alt"></i> Busca CEP
                 </button>
             </div>
         </div>
 
         <div id="tab-lib" class="view-section animate-fade-in space-y-6">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-4 justify-between items-center">
-                <div class="relative flex-1 max-w-lg">
-                    <input type="text" id="lib-search" onkeyup="filtrarFrases()" placeholder="Buscar frase ou tag..." class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 transition">
-                    <i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 justify-between items-center">
+                <div class="relative flex-1 min-w-[200px]">
+                    <input type="text" id="lib-search" onkeyup="filtrarFrases()" placeholder="Buscar frase ou tag..." class="w-full bg-slate-50 border border-slate-300 rounded-lg pl-10 pr-4 py-2.5 text-sm outline-none focus:border-blue-500 transition">
+                    <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
                 </div>
-                <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2 transition shadow-md">
+                <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded-lg text-sm flex items-center gap-2 transition shadow-md">
                     <i class="fas fa-plus"></i> Nova Frase
                 </button>
             </div>
@@ -61,10 +107,10 @@
         </div>
 
         <div id="tab-calc" class="view-section hidden animate-fade-in">
-            <div class="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
-                <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
-                    <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2">
-                        <i class="fas fa-calculator text-blue-400"></i> Calculadora de Datas
+            <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2">
+                        <i class="fas fa-calendar-alt text-blue-500"></i> Calculadora de Datas
                     </h3>
                 </div>
                 
@@ -80,49 +126,51 @@
                         <div class="relative flex-1 w-full group">
                             <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider" id="label-data-base">Data Inicial</label>
                             <div class="relative">
-                                <input id="calc-data-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
-                                <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg"></i>
+                                <input id="calc-data-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-xl text-lg font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition text-center">
+                                <i class="fas fa-calendar-day absolute left-3 top-4 text-slate-400"></i>
                             </div>
                         </div>
 
                         <div id="container-input-dias" class="relative w-full md:w-32 hidden">
                             <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Dias</label>
-                            <input id="calc-dias-input" type="number" placeholder="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center">
+                            <input id="calc-dias-input" type="number" placeholder="0" class="w-full px-4 py-3 border border-slate-300 rounded-xl text-lg font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition text-center">
                         </div>
 
-                        <button onclick="processarCalculadora()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">
+                        <button onclick="processarCalculadora()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">
                             Calcular
                         </button>
                     </div>
 
                     <div id="resultado-intervalo" class="hidden animate-fade-in space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center">
+                            <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-center items-center">
                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span>
-                                <span id="res-data-base" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span>
+                                <span id="res-data-base" class="text-xl font-black text-slate-700 font-mono">--/--/----</span>
                             </div>
-                            <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden">
-                                <i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10"></i>
-                                <span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias</span>
+                            
+                            <div id="box-destaque-data" class="bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group">
+                                <i class="fas fa-history absolute -right-2 -bottom-2 text-6xl text-white/10"></i>
+                                <span id="label-status-data" class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias</span>
                                 <div class="flex items-baseline gap-1">
                                     <span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span>
                                     <span class="text-sm font-bold text-blue-200">dias</span>
                                 </div>
                             </div>
                         </div>
+                        
                         <div class="grid grid-cols-4 gap-3">
-                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-anos" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div>
-                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-meses" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div>
-                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-semanas" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div>
-                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-dias" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-anos" class="text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-meses" class="text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-semanas" class="text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div>
+                            <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-dias" class="text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div>
                         </div>
                     </div>
 
                     <div id="resultado-soma" class="hidden animate-fade-in">
-                        <div id="box-resultado-soma" class="border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300">
-                            <p id="label-resultado-soma" class="text-xs font-bold uppercase tracking-widest mb-2">A data futura será</p>
-                            <h2 id="res-data-futura" class="text-4xl md:text-5xl font-black mb-2 font-mono">--/--/----</h2>
-                            <p id="res-dia-semana" class="text-sm font-bold px-3 py-1 rounded-lg">Segunda-feira</p>
+                        <div id="box-resultado-soma" class="border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300 bg-white">
+                            <p id="label-resultado-soma" class="text-xs font-bold uppercase tracking-widest mb-2 text-slate-400">A data futura será</p>
+                            <h2 id="res-data-futura" class="text-4xl font-black mb-2 font-mono text-slate-800">--/--/----</h2>
+                            <p id="res-dia-semana" class="text-sm font-bold px-3 py-1 rounded-lg bg-slate-100 text-slate-600">---</p>
                         </div>
                     </div>
                 </div>
@@ -130,14 +178,16 @@
         </div>
 
         <div id="tab-cep" class="view-section hidden animate-fade-in">
-            <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-white/20 overflow-hidden">
-                <div class="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
-                    <h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Consulta CEP</h3>
+            <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50">
+                    <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2">
+                        <i class="fas fa-map-marked-alt text-blue-500"></i> Consulta CEP
+                    </h3>
                 </div>
                 <div class="p-8">
                     <div class="flex gap-2 mb-6">
-                        <input id="cep-input" type="text" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300 text-lg">
-                        <button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl">
+                        <input id="cep-input" type="text" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" class="flex-1 p-3.5 border border-slate-300 rounded-xl text-center font-bold text-slate-700 outline-none focus:ring-2 focus:ring-blue-500 transition placeholder-slate-300 text-lg">
+                        <button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-md transition-transform active:scale-95 text-xl">
                             <i class="fas fa-search"></i>
                         </button>
                     </div>
@@ -147,22 +197,22 @@
                         <p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p>
                     </div>
                     
-                    <div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-4 shadow-inner">
+                    <div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-200 space-y-4 shadow-inner">
                         <div class="flex justify-between items-baseline border-b border-slate-200 pb-2">
-                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> 
+                            <span class="text-blue-500 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> 
                             <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span>
                         </div>
                         <div class="flex justify-between items-baseline border-b border-slate-200 pb-2">
-                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> 
+                            <span class="text-blue-500 font-bold uppercase text-[10px] tracking-wider">Bairro</span> 
                             <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span>
                         </div>
                         <div class="flex justify-between items-baseline border-b border-slate-200 pb-2">
-                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Localidade</span> 
+                            <span class="text-blue-500 font-bold uppercase text-[10px] tracking-wider">Localidade</span> 
                             <span id="cep-localidade" class="font-bold text-slate-700 text-right text-sm"></span>
                         </div>
                         <div class="flex justify-between items-center pt-2">
-                            <span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">CEP</span> 
-                            <span id="cep-display-num" class="font-black text-blue-600 text-right text-lg bg-blue-100 px-3 py-1 rounded-lg"></span>
+                            <span class="text-blue-500 font-bold uppercase text-[10px] tracking-wider">CEP</span> 
+                            <span id="cep-display-num" class="font-black text-blue-700 text-right text-lg bg-blue-100 px-3 py-1 rounded-lg"></span>
                         </div>
                     </div>
                 </div>
@@ -172,35 +222,34 @@
     </div>
 
     <div id="modal-frase" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
             <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                 <h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3>
                 <button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
             </div>
             <div class="p-6 space-y-4">
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tags</label><input type="text" id="form-tags" placeholder="Ex: saudação, erro" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></textarea></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tags</label><input type="text" id="form-tags" placeholder="Ex: saudação, erro" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 outline-none focus:ring-2 focus:ring-blue-500"></div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end">
-                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition">Salvar</button>
+                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button>
             </div>
         </div>
     </div>
 
-    <script src="js/config.js"></script>
-    <script src="js/layout.js"></script>
     <script>
         // --- NAVEGAÇÃO DE ABAS ---
         function switchTab(tab) {
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.getElementById('tab-' + tab).classList.remove('hidden');
             
-            ['lib', 'calc', 'cep'].forEach(t => {
-                const btn = document.getElementById('btn-' + t);
-                if (t === tab) btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2';
-                else btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2';
-            });
+            // Atualiza botões
+            document.getElementById('btn-lib').className = 'px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2';
+            document.getElementById('btn-calc').className = 'px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2';
+            document.getElementById('btn-cep').className = 'px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2';
+            
+            document.getElementById('btn-' + tab).className = 'px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm flex items-center gap-2';
         }
 
         // --- BIBLIOTECA ---
@@ -226,7 +275,7 @@
 
         function filtrarFrases() {
             const term = document.getElementById('lib-search').value.toLowerCase();
-            renderizarFrases(frasesGlobal.filter(f => f.titulo.toLowerCase().includes(term) || f.conteudo.toLowerCase().includes(term)));
+            renderizarFrases(frasesGlobal.filter(f => f.titulo.toLowerCase().includes(term) || f.conteudo.toLowerCase().includes(term) || (f.tags && f.tags.toLowerCase().includes(term))));
         }
         function copiarTexto(texto) { navigator.clipboard.writeText(texto).then(() => alert("Copiado!")); }
         function abrirModalFrase() { document.getElementById('modal-frase').classList.remove('hidden'); document.getElementById('modal-frase').classList.add('flex'); }
@@ -263,7 +312,7 @@
                 btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
                 document.getElementById('container-input-dias').classList.add('hidden');
                 document.getElementById('resultado-soma').classList.add('hidden');
-                document.getElementById('label-data-base').innerText = "Data Inicial";
+                document.getElementById('label-data-base').innerText = "Data Inicial / Nasc.";
             } else {
                 btnSoma.className = "px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
                 btnIntervalo.className = "px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
@@ -281,13 +330,13 @@
 
             if (modoCalculadora === 'intervalo') {
                 const hoje = new Date(); dataBase.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
-                // Permite datas futuras
+                
+                const isFuturo = dataBase > hoje;
                 const diffTime = Math.abs(hoje - dataBase);
                 const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                 
-                // Lógica de Anos/Meses
-                let d1 = (dataBase < hoje) ? dataBase : hoje;
-                let d2 = (dataBase < hoje) ? hoje : dataBase;
+                let d1 = isFuturo ? hoje : dataBase;
+                let d2 = isFuturo ? dataBase : hoje;
                 let anos = d2.getFullYear() - d1.getFullYear();
                 let meses = d2.getMonth() - d1.getMonth();
                 let dias = d2.getDate() - d1.getDate();
@@ -301,6 +350,19 @@
                 document.getElementById('res-meses').innerText = meses;
                 document.getElementById('res-semanas').innerText = semanas;
                 document.getElementById('res-dias').innerText = dias;
+                
+                // Muda a cor e texto dependendo se é futuro ou passado
+                const boxDestaque = document.getElementById('box-destaque-data');
+                const labelStatus = document.getElementById('label-status-data');
+                
+                if (isFuturo) {
+                    labelStatus.innerHTML = '<i class="fas fa-hourglass-half mr-1"></i>Faltam';
+                    boxDestaque.className = "bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group";
+                } else {
+                    labelStatus.innerHTML = '<i class="fas fa-history mr-1"></i>Passaram';
+                    boxDestaque.className = "bg-gradient-to-br from-blue-600 to-blue-800 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg relative overflow-hidden group";
+                }
+
                 document.getElementById('resultado-intervalo').classList.remove('hidden');
             } else {
                 const diasParaSomar = parseInt(document.getElementById('calc-dias-input').value);
@@ -310,20 +372,21 @@
                 const dia = String(dataFutura.getDate()).padStart(2, '0');
                 const mes = String(dataFutura.getMonth() + 1).padStart(2, '0');
                 const ano = dataFutura.getFullYear();
-                const diaSemana = dataFutura.toLocaleDateString('pt-BR', { weekday: 'long' });
+                const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+                const diaSemanaTexto = diasSemana[dataFutura.getDay()];
                 
                 const box = document.getElementById('box-resultado-soma');
                 const label = document.getElementById('label-resultado-soma');
                 const textoData = document.getElementById('res-data-futura');
                 const textoSemana = document.getElementById('res-dia-semana');
                 
-                // Reset classes
-                box.className = "border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300";
+                box.className = "border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300 bg-white";
                 
                 const hoje = new Date(); hoje.setHours(0,0,0,0);
+                // Data futura é menor que hoje? (Vencido)
                 if (dataFutura < hoje) {
                     box.classList.add('bg-red-50', 'border-red-100');
-                    label.innerText = "Data Passada"; label.className = "text-xs font-bold uppercase tracking-widest mb-2 text-red-500";
+                    label.innerText = "⚠️ Boleto Vencido"; label.className = "text-xs font-bold uppercase tracking-widest mb-2 text-red-500";
                     textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono text-red-700";
                     textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg text-red-600 bg-red-100";
                 } else {
@@ -334,7 +397,7 @@
                 }
 
                 textoData.innerText = `${dia}/${mes}/${ano}`;
-                textoSemana.innerText = diaSemana.charAt(0).toUpperCase() + diaSemana.slice(1);
+                textoSemana.innerText = diaSemanaTexto;
                 document.getElementById('resultado-soma').classList.remove('hidden');
             }
         }
