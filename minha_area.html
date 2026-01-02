@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Área - Performance & Feedback</title>
+    <title>Minha Área - Performance Pro</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -12,220 +12,227 @@
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
-        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
+        .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .btn-tab.active { background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
-        .btn-tab { color: #64748b; border: 1px solid transparent; }
-        .btn-tab:hover:not(.active) { background-color: #f8fafc; color: #334155; }
-        .filter-select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem; -webkit-appearance: none; appearance: none; }
+        
+        .btn-tab { @apply px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border border-transparent; }
+        .btn-tab.active { @apply bg-white text-blue-600 shadow-sm border-slate-100; }
+        .btn-tab:not(.active) { @apply text-slate-500 hover:bg-white/60 hover:text-slate-700; }
+
+        .btn-chart { @apply px-4 py-1.5 rounded-lg text-xs font-bold transition-all; }
+        .btn-chart.active { @apply bg-blue-600 text-white shadow-md shadow-blue-200; }
+        .btn-chart:not(.active) { @apply bg-white text-slate-500 hover:bg-slate-50 border border-slate-100; }
+        
+        /* Input Data Customizado */
+        .custom-date-input { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 1rem; }
     </style>
 </head>
-<body class="text-slate-800">
+<body class="bg-slate-50">
 
     <script src="js/config.js"></script>
     <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-8">
+        <div class="flex flex-col lg:flex-row justify-between items-end gap-6 mb-8">
             <div>
-                <h1 class="text-2xl font-black text-slate-800">Minha Área</h1>
-                <p class="text-slate-500 text-sm">Dashboard de performance individual e comparativa.</p>
+                <h1 class="text-3xl font-black text-slate-800 tracking-tight">Minha Área</h1>
+                <p class="text-slate-500 font-medium mt-1">Painel de controle e evolução de performance.</p>
             </div>
             
-            <div class="flex flex-wrap gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm items-end">
+            <div class="flex flex-wrap gap-3 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm items-center">
                 
-                <div class="relative">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-0.5">Data de Referência</label>
-                    <div class="relative">
-                        <input type="text" id="filtro-data-manual" 
-                               onclick="this.select()" 
-                               placeholder="DD/MM/AAAA" maxlength="10" 
-                               oninput="mascaraData(this)" 
-                               onblur="aplicarDataManual()" 
-                               onkeypress="verificarEnter(event)" 
-                               class="bg-slate-50 border border-slate-200 text-slate-700 text-center text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-32 p-2.5 font-bold outline-none tracking-widest placeholder-slate-300 transition hover:bg-white focus:bg-white">
-                        <i class="fas fa-calendar-alt absolute right-3 top-3 text-slate-400 pointer-events-none"></i>
-                    </div>
+                <div class="relative group">
+                    <div class="absolute -top-2.5 left-2 bg-white px-1 text-[10px] font-bold text-blue-500 uppercase tracking-wider">Data Ref.</div>
+                    <input type="text" id="filtro-data-manual" 
+                           onclick="this.select()" 
+                           placeholder="DD/MM/AAAA" maxlength="10" 
+                           oninput="mascaraData(this)" 
+                           onblur="aplicarDataManual()" 
+                           onkeypress="verificarEnter(event)" 
+                           class="custom-date-input bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 block w-36 py-2.5 pl-3 pr-8 font-bold outline-none tracking-wide transition-all hover:border-blue-300">
                 </div>
 
-                <div id="container-filtro-user" class="relative hidden">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-0.5">Visão do Gestor</label>
-                    <select id="filtro-user" onchange="atualizarDashboard()" class="filter-select bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-48 p-2.5 font-bold outline-none cursor-pointer h-[42px]">
-                        <option value="me">👤 Minha Visão</option>
-                        <option value="time">👥 Time Todo (Média)</option>
+                <div id="container-filtro-user" class="relative hidden group border-l border-slate-100 pl-3">
+                    <div class="absolute -top-2.5 left-4 bg-white px-1 text-[10px] font-bold text-purple-500 uppercase tracking-wider">Visão Gestora</div>
+                    <select id="filtro-user" onchange="atualizarDashboard()" class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-purple-100 focus:border-purple-500 block w-48 py-2.5 pl-3 pr-8 font-bold outline-none cursor-pointer h-[42px] transition-all hover:border-purple-300">
+                        <option value="me">👤 Minha Visão (Admin)</option>
+                        <option value="time">👥 Time (Média Geral)</option>
                         <option disabled>──────────</option>
-                        </select>
+                    </select>
                 </div>
                 
-                <button onclick="aplicarDataManual()" class="bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 transition shadow-sm h-[42px] w-[42px] flex items-center justify-center" title="Atualizar">
-                    <i class="fas fa-sync-alt"></i>
+                <button onclick="aplicarDataManual()" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-blue-600 transition shadow-md h-[42px] w-[42px] flex items-center justify-center group" title="Atualizar Dados">
+                    <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
                 </button>
             </div>
         </div>
 
-        <div id="aviso-gestora-view" class="hidden mb-6 bg-blue-50 border border-blue-100 p-6 rounded-2xl text-center animate-fade-in">
-            <i class="fas fa-user-tie text-4xl text-blue-300 mb-2"></i>
-            <h3 class="font-bold text-blue-800">Modo Gestão Ativo</h3>
-            <p class="text-sm text-blue-600">Selecione "Time Todo" ou uma Assistente específica acima para ver dados de produção.</p>
+        <div id="aviso-gestora-view" class="hidden mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-8 rounded-3xl text-center shadow-sm animate-fade-in">
+            <div class="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm text-blue-500 text-2xl"><i class="fas fa-user-shield"></i></div>
+            <h3 class="font-black text-xl text-slate-800 mb-1">Modo Administrativo</h3>
+            <p class="text-slate-500 max-w-md mx-auto">Para visualizar dados de produção, selecione "Time Todo" ou uma Assistente específica no menu superior.</p>
         </div>
 
-        <div id="conteudo-principal">
+        <div id="conteudo-principal" class="space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in">
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition">
-                    <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produção Total</span>
-                        <div class="flex items-baseline gap-2 mt-1">
-                            <h2 class="text-3xl font-black text-blue-600" id="kpi-total">--</h2>
-                            <span class="text-xs text-slate-400 font-medium">docs</span>
-                        </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
+                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-layer-group text-6xl text-blue-600"></i></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Produção Total</p>
+                    <div class="flex items-baseline gap-2">
+                        <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2>
+                        <span class="text-sm font-bold text-slate-400">docs</span>
                     </div>
-                    <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                        <span class="text-xs font-bold text-slate-500">Meta do Período:</span>
-                        <span class="text-sm font-bold text-slate-700" id="kpi-meta-total">--</span>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition">
-                    <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Atingimento</span>
-                        <div class="flex items-baseline gap-2 mt-1">
-                            <h2 class="text-3xl font-black text-slate-700" id="kpi-porcentagem">--%</h2>
-                            <i id="icon-status" class="fas fa-circle text-[10px] text-gray-300"></i>
-                        </div>
-                    </div>
-                    <div class="w-full bg-slate-100 rounded-full h-1.5 mt-4">
-                        <div id="bar-progress" class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    <div class="mt-4 flex items-center justify-between text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <span class="text-slate-500">Meta Período</span>
+                        <span class="text-slate-800" id="kpi-meta-total">--</span>
                     </div>
                 </div>
 
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition">
-                    <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Média Diária</span>
-                        <div class="flex items-baseline gap-2 mt-1">
-                            <h2 class="text-3xl font-black text-purple-600" id="kpi-media-real">--</h2>
-                            <span class="text-xs text-slate-400">/ dia</span>
-                        </div>
+                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-chart-pie text-6xl text-emerald-600"></i></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Atingimento</p>
+                    <div class="flex items-baseline gap-2">
+                        <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2>
+                        <i id="icon-status" class="fas fa-check-circle text-emerald-500"></i>
                     </div>
-                    <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                        <span class="text-xs font-bold text-slate-500">Ideal:</span>
-                        <span class="text-sm font-bold text-emerald-600" id="kpi-media-ideal">650</span>
+                    <div class="w-full bg-slate-100 rounded-full h-2 mt-4 overflow-hidden">
+                        <div id="bar-progress" class="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-1000 shadow-sm" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-stopwatch text-6xl text-purple-600"></i></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média Diária</p>
+                    <div class="flex items-baseline gap-2">
+                        <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2>
+                        <span class="text-sm font-bold text-slate-400">/ dia</span>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
+                        <span class="text-slate-500">Ideal</span>
+                        <span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded" id="kpi-media-ideal">650</span>
                     </div>
                 </div>
             </div>
 
-            <div class="bg-white p-1 rounded-xl border border-slate-200 shadow-sm inline-flex mb-6 flex-wrap gap-1">
-                <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-calendar-alt"></i> Diário</button>
-                <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-chart-line"></i> Evolução</button>
-                <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-trophy"></i> Comparativo</button>
-                <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-comments"></i> Feedback</button>
+            <div class="flex gap-2 bg-slate-200/50 p-1 rounded-2xl w-fit mx-auto sm:mx-0">
+                <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active"><i class="fas fa-calendar-alt mr-2"></i>Diário</button>
+                <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="btn-tab"><i class="fas fa-chart-line mr-2"></i>Evolução</button>
+                <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab"><i class="fas fa-trophy mr-2"></i>Comparativo</button>
+                <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab"><i class="fas fa-comments mr-2"></i>Feedback</button>
             </div>
 
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[500px] relative overflow-hidden">
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[500px] relative overflow-hidden">
                 
-                <div id="tab-diario" class="view-tab p-6 animate-fade-in">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-bold text-slate-700">Detalhe Diário</h3>
-                        <div id="aviso-edicao" class="hidden text-xs text-orange-600 font-bold bg-orange-100 border border-orange-200 px-2 py-1 rounded"><i class="fas fa-pen mr-1"></i> Modo Edição</div>
+                <div id="tab-diario" class="view-tab p-8 animate-fade-in">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="font-bold text-slate-800 text-lg">Histórico Detalhado</h3>
+                        <div id="aviso-edicao" class="hidden flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full">
+                            <span class="relative flex h-2 w-2">
+                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+                              <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
+                            </span>
+                            Modo de Edição
+                        </div>
                     </div>
-                    <div class="overflow-x-auto">
+                    <div class="overflow-hidden rounded-xl border border-slate-100">
                         <table class="w-full text-sm text-left">
-                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider">
                                 <tr>
-                                    <th class="px-4 py-3 rounded-l-lg">Data</th>
-                                    <th class="px-4 py-3 text-center">Produção</th>
-                                    <th class="px-4 py-3 text-center">Meta</th>
-                                    <th class="px-4 py-3 text-center">Status</th>
-                                    <th class="px-4 py-3 rounded-r-lg">Observação / Histórico</th>
+                                    <th class="px-6 py-4">Data</th>
+                                    <th class="px-6 py-4 text-center">Produção</th>
+                                    <th class="px-6 py-4 text-center">Meta</th>
+                                    <th class="px-6 py-4 text-center">Status</th>
+                                    <th class="px-6 py-4">Obs / Histórico</th>
                                 </tr>
                             </thead>
-                            <tbody id="tabela-diario" class="divide-y divide-slate-100">
-                                <tr><td colspan="5" class="text-center py-10 text-slate-400">A carregar...</td></tr>
+                            <tbody id="tabela-diario" class="divide-y divide-slate-100 bg-white">
+                                <tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Carregando dados...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <div id="tab-evolucao" class="view-tab hidden p-6 animate-fade-in">
-                    <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <div id="tab-evolucao" class="view-tab hidden p-8 animate-fade-in">
+                    <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
                         <div>
-                            <h3 class="font-bold text-slate-800 text-lg">Curva de Performance</h3>
-                            <p class="text-xs text-slate-500">Acompanhamento de tendência e consistência.</p>
+                            <h3 class="font-bold text-slate-800 text-lg">Análise de Tendência</h3>
+                            <p class="text-sm text-slate-500">Baseado na data de referência selecionada.</p>
                         </div>
-                        <div class="flex gap-1 bg-slate-100 p-1 rounded-lg">
-                            <button onclick="renderizarGraficos('mes')" class="btn-chart px-4 py-1.5 bg-white shadow-sm text-blue-700 rounded-md text-xs font-bold">Mês</button>
-                            <button onclick="renderizarGraficos('trimestre')" class="btn-chart px-4 py-1.5 text-slate-500 rounded-md text-xs font-bold hover:bg-white hover:shadow-sm">90 Dias</button>
-                            <button onclick="renderizarGraficos('ano')" class="btn-chart px-4 py-1.5 text-slate-500 rounded-md text-xs font-bold hover:bg-white hover:shadow-sm">Anual</button>
+                        <div class="flex bg-slate-100 p-1 rounded-xl">
+                            <button onclick="renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
+                            <button onclick="renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
+                            <button onclick="renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Anual</button>
                         </div>
                     </div>
 
-                    <div class="bg-white p-2 rounded-xl h-[300px] w-full mb-8 relative">
+                    <div class="relative h-[320px] w-full bg-gradient-to-b from-white to-slate-50/50 rounded-2xl border border-slate-100 p-4 mb-8">
                         <canvas id="chartPrincipal"></canvas>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6 border-t border-slate-100">
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-calendar-check"></i></div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                        <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="fas fa-calendar-check"></i></div>
                             <div>
-                                <span class="block text-xs font-bold text-slate-400 uppercase">Dias Trabalhados</span>
-                                <span id="evo-dias" class="text-lg font-black text-slate-700">--</span>
+                                <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Atividade</span>
+                                <span id="evo-dias" class="text-xl font-black text-slate-800">--</span> <span class="text-xs font-bold text-slate-400">dias</span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600"><i class="fas fa-bullseye"></i></div>
+                        <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl"><i class="fas fa-crosshairs"></i></div>
                             <div>
-                                <span class="block text-xs font-bold text-slate-400 uppercase">Taxa de Sucesso</span>
-                                <span id="evo-taxa" class="text-lg font-black text-slate-700">--%</span>
-                                <span class="text-[10px] text-slate-400 ml-1">batimento de meta</span>
+                                <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Consistência</span>
+                                <span id="evo-taxa" class="text-xl font-black text-slate-800">--%</span> <span class="text-xs font-bold text-slate-400">na meta</span>
                             </div>
                         </div>
-                        <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center text-purple-600"><i class="fas fa-trophy"></i></div>
+                        <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                            <div class="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xl"><i class="fas fa-crown"></i></div>
                             <div>
-                                <span class="block text-xs font-bold text-slate-400 uppercase">Melhor Registo</span>
-                                <span id="evo-best" class="text-lg font-black text-slate-700">--</span>
+                                <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Recorde</span>
+                                <span id="evo-best" class="text-xl font-black text-slate-800">--</span> <span class="text-xs font-bold text-slate-400">docs</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <div id="tab-comparativo" class="view-tab hidden p-6 animate-fade-in">
-                    <div class="text-center py-10">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center justify-center max-w-2xl mx-auto">
-                            <div class="bg-blue-50 rounded-2xl p-8 text-center border border-blue-100 transition-all transform hover:scale-105 duration-300">
-                                <span id="label-media-selecionada" class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Média</span>
-                                <h2 id="comp-media-user" class="text-5xl font-black text-blue-700">--</h2>
-                                <span class="text-sm text-blue-500 font-medium mt-2 block">docs / dia</span>
-                            </div>
-                            <div class="bg-slate-50 rounded-2xl p-8 text-center border border-slate-200">
-                                <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média Geral (Time)</span>
-                                <h2 id="comp-media-time" class="text-5xl font-black text-slate-600">--</h2>
-                                <span class="text-sm text-slate-400 font-medium mt-2 block">docs / dia</span>
-                            </div>
+                <div id="tab-comparativo" class="view-tab hidden p-8 animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
+                    <div class="flex flex-col md:flex-row gap-8 items-center justify-center w-full max-w-4xl">
+                        <div class="flex-1 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 text-center text-white shadow-xl shadow-blue-200 relative overflow-hidden group">
+                            <div class="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition"><i class="fas fa-user text-8xl"></i></div>
+                            <span id="label-media-selecionada" class="block text-xs font-bold text-blue-200 uppercase tracking-widest mb-4">Sua Média</span>
+                            <h2 id="comp-media-user" class="text-6xl font-black tracking-tighter mb-2">--</h2>
+                            <span class="text-sm font-medium text-blue-100 opacity-80">documentos / dia</span>
                         </div>
-                        <p id="comp-mensagem" class="mt-8 font-bold text-slate-500">Comparação baseada no mês de referência.</p>
+                        
+                        <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-black text-xs shadow-inner shrink-0">VS</div>
+
+                        <div class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden">
+                            <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Média da Equipa</span>
+                            <h2 id="comp-media-time" class="text-6xl font-black text-slate-700 tracking-tighter mb-2">--</h2>
+                            <span class="text-sm font-medium text-slate-400">documentos / dia</span>
+                        </div>
                     </div>
+                    <div id="comp-mensagem" class="mt-10 text-center font-bold text-slate-500 text-lg">Carregando comparativo...</div>
                 </div>
 
-                <div id="tab-feedback" class="view-tab hidden flex flex-col h-[500px]">
-                    <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
-                        <div class="text-center text-slate-400 py-10">Carregando feedbacks...</div>
-                    </div>
-                    <div class="p-4 bg-white border-t border-slate-200">
-                        <div class="flex flex-col gap-2">
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs font-bold text-slate-500 uppercase">Para:</span>
-                                <select id="feedback-destinatario" class="text-sm border border-slate-300 rounded px-2 py-1 bg-white focus:border-blue-500 outline-none">
-                                    <option value="time">📢 Time (Todos)</option>
-                                    <option disabled>──────────</option>
-                                </select>
-                            </div>
-                            <div class="flex gap-2">
-                                <input type="text" id="input-feedback" placeholder="Escreva uma mensagem..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition">
-                                <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 font-bold transition"><i class="fas fa-paper-plane"></i></button>
-                            </div>
+                <div id="tab-feedback" class="view-tab hidden flex flex-col h-[550px]">
+                    <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50 scroll-smooth">
+                        </div>
+                    <div class="p-6 bg-white border-t border-slate-100 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] z-10">
+                        <div class="flex items-center gap-3 mb-3">
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Destinatário:</span>
+                            <select id="feedback-destinatario" class="text-sm font-bold text-slate-700 border-none bg-slate-100 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 cursor-pointer hover:bg-slate-200 transition">
+                                <option value="time">📢 Time (Todos)</option>
+                                <option disabled>──────────</option>
+                            </select>
+                        </div>
+                        <div class="flex gap-3">
+                            <input type="text" id="input-feedback" placeholder="Escreva uma mensagem de feedback..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition font-medium text-slate-700 placeholder-slate-400">
+                            <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 font-bold transition shadow-lg shadow-blue-200 flex items-center gap-2">
+                                <span>Enviar</span> <i class="fas fa-paper-plane"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -238,19 +245,16 @@
         const sessao = JSON.parse(localStorage.getItem('usuario'));
         const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
         
-        let myChart = null; // Apenas um gráfico grande agora
+        let myChart = null;
         let usersMap = {}; 
         let nameToIdsMap = {}; 
         
         document.addEventListener('DOMContentLoaded', async () => {
-            // PERSISTÊNCIA DE DATA
-            // Verifica se há data salva no localStorage
+            // 1. DATA PERSISTENTE
             const savedDate = localStorage.getItem('dash_date_ref');
-            
             if (savedDate && savedDate.length === 10) {
                 document.getElementById('filtro-data-manual').value = savedDate;
             } else {
-                // Padrão: Hoje
                 const hoje = new Date();
                 const dia = String(hoje.getDate()).padStart(2, '0');
                 const mes = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -258,8 +262,10 @@
                 document.getElementById('filtro-data-manual').value = `${dia}/${mes}/${ano}`;
             }
 
+            // 2. CARREGAR UTILIZADORES
             await carregarUsuarios(); 
 
+            // 3. UI GESTORA
             if (isMgr) {
                 document.getElementById('container-filtro-user').classList.remove('hidden');
                 document.getElementById('aviso-edicao').classList.remove('hidden');
@@ -268,22 +274,26 @@
             atualizarDashboard();
         });
 
+        // --- DATA E MASCARA ---
         function mascaraData(input) {
             let v = input.value.replace(/\D/g, '').slice(0, 8);
             if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
             else if (v.length >= 3) v = v.replace(/(\d{2})(\d{1,2})/, '$1/$2');
             input.value = v;
         }
-
         function verificarEnter(e) { if(e.key === 'Enter') aplicarDataManual(); }
-        
         function aplicarDataManual() { 
             const val = document.getElementById('filtro-data-manual').value;
             if(val.length === 10) {
-                // Salva no LocalStorage
-                localStorage.setItem('dash_date_ref', val);
+                localStorage.setItem('dash_date_ref', val); // Salva preferência
                 atualizarDashboard(); 
             }
+        }
+        // Helper para converter "DD/MM/AAAA" -> Date Object
+        function getDateFromInput() {
+            const val = document.getElementById('filtro-data-manual').value;
+            const parts = val.split('/');
+            return new Date(parts[2], parts[1]-1, parts[0]);
         }
 
         async function carregarUsuarios() {
@@ -326,20 +336,22 @@
                     };
                 }
                 agrupado[data][nome].quantidade += item.quantidade;
-                if (item.observacao && agrupado[data][nome].observacao !== item.observacao) {
-                    agrupado[data][nome].observacao += ` | ${item.observacao}`;
-                }
+                if (item.observacao && agrupado[data][nome].observacao !== item.observacao) agrupado[data][nome].observacao += ` | ${item.observacao}`;
             });
             return agrupado;
         }
 
         async function atualizarDashboard() {
-            const dataInput = document.getElementById('filtro-data-manual').value;
-            if(dataInput.length !== 10) return;
+            const refDate = getDateFromInput();
+            if (isNaN(refDate.getTime())) return;
 
-            const parts = dataInput.split('/');
-            const mesAno = `${parts[2]}-${parts[1]}`;
-            
+            // Define período MENSAL para a tabela (Sempre mostra o mês da data selecionada)
+            const ano = refDate.getFullYear();
+            const mes = refDate.getMonth();
+            const dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+            const dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+
+            // Define Alvo
             let targetName = usersMap[sessao.id];
             let viewingTime = false;
             let isGestoraViewSelf = false;
@@ -351,6 +363,7 @@
                 else targetName = usersMap[val];
             }
 
+            // Visibilidade
             if (isGestoraViewSelf) {
                 document.getElementById('conteudo-principal').classList.add('hidden');
                 document.getElementById('aviso-gestora-view').classList.remove('hidden');
@@ -360,32 +373,28 @@
                 document.getElementById('aviso-gestora-view').classList.add('hidden');
             }
 
-            const [ano, mes] = mesAno.split('-');
-            const dataInicio = `${mesAno}-01`;
-            const ultimoDia = new Date(ano, mes, 0).getDate();
-            const dataFim = `${mesAno}-${ultimoDia}`;
-
+            // Busca e Processamento
             const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
             const dadosNormalizados = normalizarDadosPorNome(rawData || []);
             let dadosFinais = [];
 
             if (viewingTime) {
                 Object.keys(dadosNormalizados).sort().forEach(dia => {
-                    const prodsDoDia = Object.values(dadosNormalizados[dia]);
-                    const totalDia = prodsDoDia.reduce((acc, curr) => acc + curr.quantidade, 0);
-                    const headcount = prodsDoDia.length;
+                    const prods = Object.values(dadosNormalizados[dia]);
+                    const total = prods.reduce((a, b) => a + b.quantidade, 0);
+                    const count = prods.length;
                     dadosFinais.push({
-                        data_referencia: dia, quantidade: headcount ? Math.round(totalDia / headcount) : 0,
-                        meta_diaria: 650, observacao: `Média de ${headcount} assistentes`
+                        data_referencia: dia, quantidade: count ? Math.round(total / count) : 0,
+                        meta_diaria: 650, observacao: `Média de ${count} assistentes`
                     });
                 });
             } else {
                 Object.keys(dadosNormalizados).sort().forEach(dia => {
-                    const dadosPessoa = dadosNormalizados[dia][targetName];
-                    if (dadosPessoa) {
+                    const dPessoa = dadosNormalizados[dia][targetName];
+                    if (dPessoa) {
                         dadosFinais.push({
-                            id: dadosPessoa.id_ref, data_referencia: dia, quantidade: dadosPessoa.quantidade,
-                            meta_diaria: dadosPessoa.meta_diaria, observacao: dadosPessoa.observacao, observacao_gestora: dadosPessoa.observacao_gestora
+                            id: dPessoa.id_ref, data_referencia: dia, quantidade: dPessoa.quantidade,
+                            meta_diaria: dPessoa.meta_diaria, observacao: dPessoa.observacao, observacao_gestora: dPessoa.observacao_gestora
                         });
                     }
                 });
@@ -394,74 +403,43 @@
             atualizarKPIs(dadosFinais);
             atualizarTabelaDiaria(dadosFinais, viewingTime);
             
-            if (!document.getElementById('tab-evolucao').classList.contains('hidden')) renderizarGraficos('mes'); 
+            // Renderiza Gráfico (Se a aba estiver visível)
+            if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
+                // Recupera o botão ativo para manter a persistência visual do período do gráfico
+                const btnAtivo = document.querySelector('.btn-chart.active');
+                const periodo = btnAtivo ? (btnAtivo.id.replace('chart-btn-', '')) : 'mes';
+                renderizarGraficos(periodo);
+            }
             
-            atualizarComparativoRapido(dadosFinais, mesAno, viewingTime, targetName);
+            atualizarComparativoRapido(dadosFinais, viewingTime, targetName, dataInicio, dataFim);
             carregarFeedbacks(); 
         }
 
-        function atualizarKPIs(dados) {
-            const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-            const dias = dados.length || 1;
-            let metaTotal = 0;
-            dados.forEach(d => metaTotal += (d.meta_diaria || 650));
-            if (metaTotal === 0) metaTotal = 650 * 22;
-            const media = Math.round(total / dias);
-            const atingimento = Math.round((total / metaTotal) * 100);
-
-            document.getElementById('kpi-total').innerText = total.toLocaleString();
-            document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
-            document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
-            document.getElementById('kpi-media-real').innerText = media.toLocaleString();
-            document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
-            const bar = document.getElementById('bar-progress');
-            if(atingimento >= 100) bar.className = "bg-emerald-500 h-1.5 rounded-full transition-all";
-            else if(atingimento >= 80) bar.className = "bg-yellow-400 h-1.5 rounded-full transition-all";
-            else bar.className = "bg-red-500 h-1.5 rounded-full transition-all";
-        }
-
-        function atualizarTabelaDiaria(dados, viewingTime) {
-            const tbody = document.getElementById('tabela-diario');
-            if (dados.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Sem registos.</td></tr>'; return; }
-            let html = '';
-            dados.forEach(item => {
-                const meta = item.meta_diaria || 650;
-                const atingiu = item.quantidade >= meta;
-                const corBadge = atingiu ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
-                const textoBadge = atingiu ? 'Atingida' : 'Abaixo';
-                const dataFmt = item.data_referencia.split('-').reverse().join('/');
-                let celulaMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
-                if (isMgr && !viewingTime && item.id) celulaMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-300 rounded px-1 outline-none">`;
-                let obsHtml = item.observacao || '-';
-                if (item.observacao_gestora) obsHtml += `<div class="mt-1 text-[10px] text-blue-600 font-bold bg-blue-50 p-1 rounded border border-blue-100"><i class="fas fa-history mr-1"></i>Gestão: ${item.observacao_gestora}</div>`;
-                html += `<tr class="hover:bg-slate-50 border-b border-slate-100 transition"><td class="px-4 py-3 font-medium text-slate-700">${dataFmt}</td><td class="px-4 py-3 text-center font-bold text-blue-600">${item.quantidade}</td><td class="px-4 py-3 text-center">${celulaMeta}</td><td class="px-4 py-3 text-center"><span class="${corBadge} px-2 py-0.5 rounded text-[10px] font-bold uppercase">${textoBadge}</span></td><td class="px-4 py-3 text-sm text-slate-500 max-w-xs break-words">${obsHtml}</td></tr>`;
-            });
-            tbody.innerHTML = html;
-        }
-
-        async function atualizarMeta(id, novoValor, valorAntigo) {
-            if (novoValor == valorAntigo) return;
-            const motivo = prompt("⚠️ Motivo da alteração de meta:");
-            if (!motivo || !motivo.trim()) { alert("Motivo obrigatório."); atualizarDashboard(); return; }
-            const novaObs = `${new Date().toLocaleDateString()} - Meta alterada de ${valorAntigo} para ${novoValor}. Motivo: ${motivo}`;
-            const { error } = await _supabase.from('producao').update({ meta_diaria: parseInt(novoValor), observacao_gestora: novaObs }).eq('id', id);
-            if (!error) atualizarDashboard(); else alert(error.message);
-        }
-
-        // --- GRÁFICO EVOLUÇÃO REDESENHADO ---
+        // --- RENDERIZAR GRÁFICOS (SUPERIOR) ---
         async function renderizarGraficos(periodo) {
-            document.querySelectorAll('.btn-chart').forEach(b => {
-                b.className = "btn-chart px-4 py-1.5 text-slate-500 rounded-md text-xs font-bold hover:bg-white hover:shadow-sm";
-                if(b.innerText.toLowerCase().includes(periodo) || (periodo==='mes' && b.innerText.includes('Mês'))) b.className = "btn-chart px-4 py-1.5 bg-white shadow-sm text-blue-700 rounded-md text-xs font-bold";
-            });
+            // UI Botões
+            document.querySelectorAll('.btn-chart').forEach(b => b.classList.remove('active'));
+            document.getElementById(`chart-btn-${periodo}`).classList.add('active');
 
-            const hoje = new Date();
-            let dataInicio, dataFim = hoje.toISOString().split('T')[0];
-            
-            if (periodo === 'mes') { dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0]; dataFim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0]; } 
-            else if (periodo === 'trimestre') { const d = new Date(); d.setDate(d.getDate() - 90); dataInicio = d.toISOString().split('T')[0]; }
-            else if (periodo === 'ano') { dataInicio = `${hoje.getFullYear()}-01-01`; dataFim = `${hoje.getFullYear()}-12-31`; }
+            // Define Range baseado na DATA REF
+            const refDate = getDateFromInput();
+            let dInicio, dFim;
+            const strRef = refDate.toISOString().split('T')[0];
 
+            if (periodo === 'mes') {
+                dInicio = new Date(refDate.getFullYear(), refDate.getMonth(), 1).toISOString().split('T')[0];
+                dFim = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).toISOString().split('T')[0];
+            } else if (periodo === 'trimestre') {
+                // 90 dias ANTES da data ref
+                const d = new Date(refDate); d.setDate(d.getDate() - 90);
+                dInicio = d.toISOString().split('T')[0];
+                dFim = strRef;
+            } else if (periodo === 'ano') {
+                dInicio = `${refDate.getFullYear()}-01-01`;
+                dFim = `${refDate.getFullYear()}-12-31`;
+            }
+
+            // Quem?
             let targetName = usersMap[sessao.id];
             let viewingTime = false;
             if(isMgr) {
@@ -469,66 +447,60 @@
                 if(val === 'time') viewingTime = true; else if(val !== 'me') targetName = usersMap[val];
             }
 
-            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim).order('data_referencia');
-            const groupedData = normalizarDadosPorNome(rawData || []);
+            // Busca
+            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dInicio).lte('data_referencia', dFim).order('data_referencia');
+            const grouped = normalizarDadosPorNome(rawData || []);
             const agruparPorMes = (periodo === 'ano');
-            
-            const processedTime = {}; 
-            const processedMain = {}; 
-            const metaMap = {};
 
-            Object.keys(groupedData).sort().forEach(date => {
+            // Processamento Arrays
+            const processedTime = {}, processedMain = {}, metaMap = {};
+            Object.keys(grouped).sort().forEach(date => {
                 let label = agruparPorMes ? date.substring(0, 7) : date;
-                
-                // 1. Time Avg
-                const prods = Object.values(groupedData[date]);
-                const total = prods.reduce((a, b) => a + b.quantidade, 0);
-                const count = prods.length;
-                const avg = count ? Math.round(total / count) : 0;
-                
-                if(!processedTime[label]) { processedTime[label] = {sum:0, count:0}; processedMain[label] = 0; metaMap[label] = 0; }
-                processedTime[label].sum += avg; processedTime[label].count++;
-                
-                // 2. Main
+                const prods = Object.values(grouped[date]);
+                const total = prods.reduce((a,b)=>a+b.quantidade,0); const count = prods.length;
+                const avg = count ? Math.round(total/count) : 0;
+
+                if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; metaMap[label] = 0; }
+                processedTime[label].sum += avg; processedTime[label].cnt++;
+
                 let valUser = 0; let metaUser = 650;
-                if(groupedData[date][targetName]) { 
-                    valUser = groupedData[date][targetName].quantidade; 
-                    metaUser = groupedData[date][targetName].meta_diaria || 650;
-                }
-                processedMain[label] += valUser;
-                metaMap[label] = metaUser;
+                if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; metaUser = grouped[date][targetName].meta_diaria || 650; }
+                processedMain[label] += valUser; metaMap[label] = metaUser;
             });
 
             const labels = Object.keys(processedTime).sort();
-            const dataMain = [], dataBenchmark = [];
-            let statsDias = 0, statsBatida = 0, statsBest = 0;
+            const dataMain = [], dataBench = [];
+            let statsDias = 0, statsBest = 0, statsBatida = 0;
 
             labels.forEach(k => {
-                const display = agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/');
-                // Se for mes, tiramos a media dos dias do mes? Ou soma? Grafico de evolucao geralmente é SOMA se for longo prazo?
-                // Vamos manter média diaria para consistencia visual com a meta de 650.
-                const valTime = Math.round(processedTime[k].sum / processedTime[k].count);
+                // Cálculo Valor (Se ano, média dos dias do mês)
+                const valTime = Math.round(processedTime[k].sum / processedTime[k].cnt);
                 const valMain = viewingTime ? valTime : processedMain[k]; // Se vê time, Main é Time.
                 
                 dataMain.push(valMain);
-                dataBenchmark.push(viewingTime ? 650 : valTime); // Se vê time, benchmark é meta. Se vê user, benchmark é time.
+                // Benchmark: Se vê time -> Meta. Se vê user -> Time.
+                dataBench.push(viewingTime ? 650 : valTime);
 
-                // Stats
                 if(valMain > 0) {
                     statsDias++;
                     if(valMain > statsBest) statsBest = valMain;
-                    if(valMain >= (viewingTime ? 650 : metaMap[k])) statsBatida++;
+                    if(valMain >= (viewingTime ? 650 : metaMap[k] || 650)) statsBatida++;
                 }
             });
-            
-            // Atualiza Cards
-            document.getElementById('evo-dias').innerText = statsDias;
-            document.getElementById('evo-best').innerText = statsBest;
-            document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%';
 
-            // Cria Gráfico
+            // Update Cards Stats
+            document.getElementById('evo-dias').innerText = statsDias;
+            document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%';
+            document.getElementById('evo-best').innerText = statsBest;
+
+            // Chart
             const ctx = document.getElementById('chartPrincipal').getContext('2d');
             if(myChart) myChart.destroy();
+            
+            // Gradiente
+            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
+            gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)'); // Blue
+            gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
 
             myChart = new Chart(ctx, {
                 type: 'line',
@@ -536,99 +508,118 @@
                     labels: labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/')),
                     datasets: [
                         {
-                            label: viewingTime ? 'Média da Equipa' : targetName,
+                            label: viewingTime ? 'Média Equipa' : targetName,
                             data: dataMain,
-                            borderColor: '#2563eb', // Azul forte
-                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                            borderWidth: 3,
-                            tension: 0.4,
-                            fill: true,
-                            pointBackgroundColor: '#ffffff',
-                            pointBorderColor: '#2563eb',
-                            pointRadius: 4
+                            borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderColor: '#2563eb', pointHoverRadius: 6
                         },
                         {
-                            label: viewingTime ? 'Meta (650)' : 'Média da Equipa',
-                            data: dataBenchmark,
-                            borderColor: viewingTime ? '#10b981' : '#94a3b8', // Verde se meta, Cinza se time
-                            borderWidth: 2,
-                            borderDash: [5, 5],
-                            tension: 0.4,
-                            pointRadius: 0,
-                            fill: false
+                            label: viewingTime ? 'Meta (650)' : 'Média Equipa',
+                            data: dataBench,
+                            borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, pointRadius: 0, fill: false
                         }
                     ]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8 } } },
-                    scales: { y: { beginAtZero: true, grid: { borderDash: [2, 2] } }, x: { grid: { display: false } } }
+                    responsive: true, maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8, font: { weight: 'bold' } } }, tooltip: { backgroundColor: '#1e293b', titleFont: { size: 13 }, bodyFont: { size: 13 }, padding: 10, cornerRadius: 8, displayColors: true } },
+                    scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4], color: '#e2e8f0' } }, x: { grid: { display: false } } }
                 }
             });
         }
 
-        async function atualizarComparativoRapido(dadosFinais, mesAno, viewingTime, targetName) {
-            const labelTitulo = document.getElementById('label-media-selecionada');
-            if (viewingTime) labelTitulo.innerText = "Média do Time"; else labelTitulo.innerText = `Média ${targetName}`;
-
-            const [ano, mes] = mesAno.split('-'); const inicio = `${mesAno}-01`; const fim = `${mesAno}-${new Date(ano, mes, 0).getDate()}`;
-            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+        function atualizarKPIs(dados) {
+            const total = dados.reduce((a, b) => a + b.quantidade, 0);
+            const dias = dados.length || 1;
+            let metaT = 0; dados.forEach(d => metaT += (d.meta_diaria || 650)); if(!metaT) metaT = 650*22;
+            const ating = Math.round((total/metaT)*100);
             
-            const normalized = normalizarDadosPorNome(rawData || []);
-            let somaMedias = 0; let countDias = 0;
-            Object.values(normalized).forEach(diaObj => {
-                const arr = Object.values(diaObj);
-                const tot = arr.reduce((a,b)=>a+b.quantidade,0);
-                if(arr.length) { somaMedias += (tot/arr.length); countDias++; }
+            document.getElementById('kpi-total').innerText = total.toLocaleString();
+            document.getElementById('kpi-meta-total').innerText = metaT.toLocaleString();
+            document.getElementById('kpi-porcentagem').innerText = ating + '%';
+            document.getElementById('kpi-media-real').innerText = Math.round(total/dias).toLocaleString();
+            document.getElementById('bar-progress').style.width = Math.min(ating, 100) + '%';
+            
+            // Cores dinâmicas barra
+            const bar = document.getElementById('bar-progress');
+            const icon = document.getElementById('icon-status');
+            if(ating>=100) { bar.className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full"; icon.className="fas fa-check-circle text-emerald-500"; }
+            else if(ating>=80) { bar.className="bg-gradient-to-r from-yellow-400 to-orange-400 h-full rounded-full"; icon.className="fas fa-exclamation-circle text-yellow-500"; }
+            else { bar.className="bg-gradient-to-r from-red-500 to-rose-600 h-full rounded-full"; icon.className="fas fa-times-circle text-red-500"; }
+        }
+
+        function atualizarTabelaDiaria(dados, viewingTime) {
+            const tbody = document.getElementById('tabela-diario');
+            if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registo encontrado.</td></tr>'; return; }
+            let html = '';
+            dados.forEach(item => {
+                const meta = item.meta_diaria || 650; const atingiu = item.quantidade >= meta;
+                const badge = atingiu ? '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold uppercase">Meta Batida</span>' : '<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs font-bold uppercase">Abaixo</span>';
+                const dFmt = item.data_referencia.split('-').reverse().join('/');
+                let inputMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
+                if(isMgr && !viewingTime && item.id) inputMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-200 rounded px-1 py-1 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">`;
+                let obs = item.observacao || '<span class="text-slate-300">-</span>';
+                if(item.observacao_gestora) obs += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100"><i class="fas fa-user-shield mr-1"></i>${item.observacao_gestora}</div>`;
+                html += `<tr class="hover:bg-slate-50 border-b border-slate-50 transition"><td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td><td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade}</td><td class="px-6 py-4 text-center">${inputMeta}</td><td class="px-6 py-4 text-center">${badge}</td><td class="px-6 py-4 text-xs text-slate-500 max-w-xs break-words">${obs}</td></tr>`;
             });
-            const mediaGeralMes = countDias ? Math.round(somaMedias / countDias) : 0;
+            tbody.innerHTML = html;
+        }
 
-            const totalUser = dadosFinais.reduce((acc, curr) => acc + curr.quantidade, 0);
-            const mediaUser = dadosFinais.length ? Math.round(totalUser / dadosFinais.length) : 0;
+        async function atualizarMeta(id, nv, av) { if(nv==av) return; const m = prompt("Motivo:"); if(!m){ atualizarDashboard(); return;} const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); atualizarDashboard(); }
 
-            document.getElementById('comp-media-user').innerText = mediaUser;
-            document.getElementById('comp-media-time').innerText = mediaGeralMes;
+        async function atualizarComparativoRapido(dados, viewingTime, targetName, inicio, fim) {
+            const labelT = document.getElementById('label-media-selecionada');
+            labelT.innerText = viewingTime ? "Média Consolidada" : `Média ${targetName}`;
             
-            const diff = mediaUser - mediaGeralMes;
-            const elMsg = document.getElementById('comp-mensagem');
-            if (viewingTime) elMsg.innerHTML = `<span class="text-blue-500">Visualizando dados consolidados.</span>`;
-            else if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600"><i class="fas fa-arrow-up"></i> ${diff} acima da média!</span>`;
-            else if (diff < 0) elMsg.innerHTML = `<span class="text-orange-600"><i class="fas fa-arrow-down"></i> ${Math.abs(diff)} abaixo da média.</span>`;
-            else elMsg.innerHTML = `<span class="text-blue-600">Exatamente na média.</span>`;
+            // Média Global do Período
+            const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+            const norm = normalizarDadosPorNome(all||[]);
+            let sum=0, cnt=0;
+            Object.values(norm).forEach(d => { const arr=Object.values(d); const tot=arr.reduce((a,b)=>a+b.quantidade,0); if(arr.length){sum+=tot/arr.length; cnt++;} });
+            const mediaGeral = cnt ? Math.round(sum/cnt) : 0;
+            
+            const totUser = dados.reduce((a,b)=>a+b.quantidade,0);
+            const mediaUser = dados.length ? Math.round(totUser/dados.length) : 0;
+            
+            document.getElementById('comp-media-user').innerText = mediaUser;
+            document.getElementById('comp-media-time').innerText = mediaGeral;
+            const diff = mediaUser - mediaGeral;
+            const msg = document.getElementById('comp-mensagem');
+            if(viewingTime) msg.innerHTML = '<span class="text-blue-500">Visualização de Média Geral</span>';
+            else if(diff>0) msg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima da média</span>`;
+            else if(diff<0) msg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo da média</span>`;
+            else msg.innerHTML = `<span class="text-slate-500">Na média exata</span>`;
         }
 
         function mudarAba(aba) {
             document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden')); document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
             document.getElementById(`tab-${aba}`).classList.remove('hidden'); document.getElementById(`btn-${aba}`).classList.add('active');
-            if(aba === 'evolucao') renderizarGraficos('mes');
+            if(aba==='evolucao') renderizarGraficos('mes');
         }
 
         async function carregarFeedbacks() {
-            const container = document.getElementById('lista-feedbacks');
-            const { data } = await _supabase.from('feedbacks').select('*').order('created_at', { ascending: true });
-            if (!data || !data.length) { container.innerHTML = '<div class="text-center text-slate-400 py-10">Sem feedbacks.</div>'; return; }
-            let html = ''; let count = 0;
-            data.forEach(msg => {
-                const isPublic = msg.usuario_alvo_id === null; const isForMe = msg.usuario_alvo_id == sessao.id; const isMine = msg.autor_nome === sessao.nome;
-                if (isPublic || isForMe || isMine) {
-                    count++;
-                    const align = isMine ? 'ml-auto bg-blue-100 border-blue-200' : 'mr-auto bg-white border-slate-200';
-                    const dateObj = new Date(msg.created_at);
-                    let badge = isPublic ? '<span class="text-[9px] bg-purple-100 text-purple-700 px-1 rounded ml-2 font-bold">📢 TIME</span>' : (isMine && msg.usuario_alvo_id ? `<span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded ml-2">🔒 ${usersMap[msg.usuario_alvo_id]}</span>` : '<span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded ml-2">🔒 PRIVADO</span>');
-                    html += `<div class="max-w-[85%] w-fit mb-3 p-3 rounded-xl shadow-sm border text-sm text-slate-700 ${align}"><div class="flex justify-between items-center gap-4 mb-1 border-b border-black/5 pb-1"><span class="font-bold text-xs text-slate-800">${msg.autor_nome} ${badge}</span><span class="text-[10px] text-slate-400">${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div><p class="whitespace-pre-wrap">${msg.mensagem}</p></div>`;
+            const el = document.getElementById('lista-feedbacks');
+            const { data } = await _supabase.from('feedbacks').select('*').order('created_at', {ascending:true});
+            if(!data || !data.length) { el.innerHTML = '<div class="text-center text-slate-300 py-12">Nenhum feedback encontrado.</div>'; return; }
+            let html='';
+            data.forEach(m => {
+                const isPub = m.usuario_alvo_id===null; const isMe=m.usuario_alvo_id==sessao.id; const isMine=m.autor_nome===sessao.nome;
+                if(isPub || isMe || isMine) {
+                    const align = isMine ? 'ml-auto bg-blue-600 text-white rounded-tr-none' : 'mr-auto bg-white text-slate-700 border border-slate-100 rounded-tl-none';
+                    const subColor = isMine ? 'text-blue-200' : 'text-slate-400';
+                    const badge = isPub ? '📢 TIME' : (isMine && m.usuario_alvo_id ? `🔒 ${usersMap[m.usuario_alvo_id]}` : '🔒 PRIVADO');
+                    html += `<div class="max-w-[80%] p-4 rounded-2xl shadow-sm mb-4 ${align}"><div class="flex justify-between items-center mb-2 text-xs font-bold uppercase tracking-wide opacity-90"><span>${m.autor_nome} <span class="opacity-70 ml-1 scale-75 inline-block border border-current px-1 rounded">${badge}</span></span><span class="${subColor}">${new Date(m.created_at).toLocaleDateString()}</span></div><p class="leading-relaxed whitespace-pre-wrap font-medium">${m.mensagem}</p></div>`;
                 }
             });
-            container.innerHTML = count ? html : '<div class="text-center text-slate-400 py-10">Nenhuma mensagem para exibir.</div>';
-            container.scrollTop = container.scrollHeight;
+            el.innerHTML = html; el.scrollTop = el.scrollHeight;
         }
 
         async function enviarFeedback() {
-            const txt = document.getElementById('input-feedback').value; const destino = document.getElementById('feedback-destinatario').value;
+            const txt = document.getElementById('input-feedback').value; const dest = document.getElementById('feedback-destinatario').value;
             if(!txt.trim()) return;
-            const alvoId = destino !== 'time' ? parseInt(destino) : null;
-            const { error } = await _supabase.from('feedbacks').insert({ usuario_alvo_id: alvoId, autor_nome: sessao.nome, autor_funcao: sessao.funcao, mensagem: txt });
-            if (!error) { document.getElementById('input-feedback').value = ''; carregarFeedbacks(); } else alert(error.message);
+            const aid = dest!=='time' ? parseInt(dest) : null;
+            await _supabase.from('feedbacks').insert({ usuario_alvo_id: aid, autor_nome: sessao.nome, autor_funcao: sessao.funcao, mensagem: txt });
+            document.getElementById('input-feedback').value=''; carregarFeedbacks();
         }
     </script>
 </body>
