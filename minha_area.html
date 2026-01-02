@@ -1,110 +1,415 @@
 <!DOCTYPE html>
-<html lang="pt-pt">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Área</title>
+    <title>Minha Área - Performance</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
     <style> 
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
-        .input-manual { text-align: center; font-weight: 600; transition: all 0.2s; }
-        .input-manual:focus { ring: 2px; ring-color: #2563eb; outline: none; background: white; }
-        .bg-lock { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
+        .animate-fade-in { animation: fadeIn 0.4s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Estilo para Tabs */
+        .btn-tab.active { background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+        .btn-tab { color: #64748b; border: 1px solid transparent; }
+        .btn-tab:hover:not(.active) { background-color: #f8fafc; color: #334155; }
     </style>
 </head>
 <body class="text-slate-800">
-    
+
     <script src="js/config.js"></script>
     <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <div><h1 class="text-2xl font-bold text-slate-800 flex items-center gap-2">Minha Área <span id="welcome-name" class="text-blue-600"></span></h1></div>
-            <div class="flex flex-wrap gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
-                <div id="manager-control" class="hidden border-r border-slate-200 pr-3 mr-1"><label class="block text-[10px] font-bold text-slate-400 uppercase">Visão Gestora</label><select id="user-selector" onchange="carregarDados()" class="text-sm font-bold text-blue-700 bg-transparent outline-none cursor-pointer"></select></div>
-                <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Ano</label><select id="year-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none"></select></div>
-                <div><label class="block text-[10px] font-bold text-slate-400 uppercase">Mês</label><select id="month-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none text-slate-700 w-24"></select></div>
+        
+        <div class="mb-8">
+            <h1 class="text-2xl font-black text-slate-800">Minha Área</h1>
+            <p class="text-slate-500 text-sm">Acompanhamento detalhado de performance e desenvolvimento.</p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produção Mensal</span>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <h2 class="text-3xl font-black text-blue-600" id="kpi-total">--</h2>
+                        <span class="text-xs text-slate-400 font-medium">docs</span>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                    <span class="text-xs font-bold text-slate-500">Projeção/Meta:</span>
+                    <span class="text-sm font-bold text-slate-700" id="kpi-meta-total">--</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Atingimento da Meta</span>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <h2 class="text-3xl font-black text-slate-700" id="kpi-porcentagem">--%</h2>
+                        <i id="icon-status" class="fas fa-circle text-[10px] text-gray-300"></i>
+                    </div>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-1.5 mt-4">
+                    <div id="bar-progress" class="bg-blue-600 h-1.5 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
+                <div>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Média Diária</span>
+                    <div class="flex items-baseline gap-2 mt-1">
+                        <h2 class="text-3xl font-black text-purple-600" id="kpi-media-real">--</h2>
+                        <span class="text-xs text-slate-400">/ dia</span>
+                    </div>
+                </div>
+                <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                    <span class="text-xs font-bold text-slate-500">Média Ideal:</span>
+                    <span class="text-sm font-bold text-emerald-600" id="kpi-media-ideal">650</span>
+                </div>
             </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Sistema (Automático)</p><p class="text-3xl font-extrabold text-blue-700" id="kpi-sys">0</p></div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Manual (Ajustes)</p><p class="text-3xl font-extrabold text-amber-600" id="kpi-man">0</p></div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">% Meta Atingida (Dias)</p><p class="text-3xl font-extrabold text-emerald-600" id="kpi-hit">0%</p></div>
+
+        <div class="bg-white p-1 rounded-xl border border-slate-200 shadow-sm inline-flex mb-6">
+            <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                <i class="fas fa-calendar-alt"></i> Diário de Produção
+            </button>
+            <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                <i class="fas fa-comments"></i> Feedback
+            </button>
+            <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                <i class="fas fa-chart-line"></i> Comparativo
+            </button>
         </div>
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-8 h-80 relative"><canvas id="productionChart"></canvas></div>
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Diário de Produção</h3><span class="text-xs text-slate-400 flex items-center gap-1">🔒 = Validado</span></div>
-            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-4 py-3 text-center">Data</th><th class="px-4 py-3 text-center text-blue-700">Sis</th><th class="px-4 py-3 text-center text-amber-600">Manual</th><th class="px-4 py-3 text-center">Meta</th><th class="px-4 py-3 text-center">Status</th><th class="px-4 py-3 w-1/4">Anotações</th><th class="px-4 py-3 w-1/4 text-blue-800">Feedback</th></tr></thead><tbody id="log-body" class="divide-y divide-slate-100"></tbody></table></div>
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[400px] relative overflow-hidden">
+            
+            <div id="tab-diario" class="view-tab p-6 animate-fade-in">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-slate-700">Produção Recente</h3>
+                    <div class="text-xs text-slate-400 italic">
+                        <i class="fas fa-info-circle mr-1"></i> Apenas gestoras podem alterar a meta diária.
+                    </div>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                            <tr>
+                                <th class="px-4 py-3 rounded-l-lg">Data</th>
+                                <th class="px-4 py-3 text-center">Produção</th>
+                                <th class="px-4 py-3 text-center">Meta do Dia</th>
+                                <th class="px-4 py-3 text-center">Status</th>
+                                <th class="px-4 py-3 rounded-r-lg">Observação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-diario" class="divide-y divide-slate-100">
+                            <tr><td colspan="5" class="text-center py-10 text-slate-400">A carregar registos...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tab-feedback" class="view-tab hidden flex flex-col h-[500px]">
+                <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
+                    <div class="text-center text-slate-400 py-10">Sem feedbacks registados.</div>
+                </div>
+                <div class="p-4 bg-white border-t border-slate-200 flex gap-2">
+                    <input type="text" id="input-feedback" placeholder="Escreva uma mensagem ou anotação..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition">
+                    <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 font-bold transition shadow-md shadow-blue-200">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="tab-comparativo" class="view-tab hidden p-6 animate-fade-in">
+                <div class="flex gap-2 mb-6 justify-center">
+                    <button onclick="carregarComparativo('mes')" class="px-3 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold hover:bg-blue-200">Mês Atual</button>
+                    <button onclick="carregarComparativo('trimestre')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200">Últimos 3 Meses</button>
+                    <button onclick="carregarComparativo('semestre')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200">Últimos 6 Meses</button>
+                    <button onclick="carregarComparativo('ano')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200">Ano Atual</button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center justify-center">
+                    <div class="bg-blue-50 rounded-2xl p-8 text-center border border-blue-100">
+                        <span class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Sua Média Diária</span>
+                        <h2 id="comp-media-user" class="text-5xl font-black text-blue-700">0</h2>
+                        <span class="text-sm text-blue-500 font-medium mt-2 block">docs / dia</span>
+                    </div>
+
+                    <div class="bg-slate-50 rounded-2xl p-8 text-center border border-slate-200">
+                        <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média da Equipa</span>
+                        <h2 id="comp-media-time" class="text-5xl font-black text-slate-600">0</h2>
+                        <span class="text-sm text-slate-400 font-medium mt-2 block">docs / dia</span>
+                    </div>
+                </div>
+                
+                <div id="comp-mensagem" class="text-center mt-8 font-bold text-slate-500">
+                    Selecione um período acima.
+                </div>
+            </div>
+
         </div>
     </div>
+
     <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario')); const isMgr = sessao.funcao === 'Gestora'; let chartInstance = null; let currentUserTarget = sessao.id;
-        document.addEventListener('DOMContentLoaded', init);
-        async function init() {
-            document.getElementById('welcome-name').innerText = isMgr ? "(Visão Geral)" : `Olá, ${sessao.nome.split(' ')[0]}`;
-            const cy = new Date().getFullYear(); const ys = document.getElementById('year-selector'); const ms = document.getElementById('month-selector');
-            for(let y=cy; y>=2024; y--) ys.innerHTML += `<option value="${y}">${y}</option>`;
-            ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => { ms.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`; });
-            if (isMgr) {
-                document.getElementById('manager-control').classList.remove('hidden'); const { data } = await _supabase.from('usuarios').select('*').eq('funcao', 'Assistente').order('nome'); const us = document.getElementById('user-selector');
-                if(data && data.length) { data.forEach(u => us.innerHTML += `<option value="${u.id}">${u.nome}</option>`); currentUserTarget = data[0].id; }
+        const sessao = JSON.parse(localStorage.getItem('usuario'));
+        const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            carregarKPIs();
+            carregarDiario();
+            carregarFeedbacks();
+        });
+
+        function mudarAba(aba) {
+            document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`tab-${aba}`).classList.remove('hidden');
+            document.getElementById(`btn-${aba}`).classList.add('active');
+            
+            if (aba === 'comparativo') carregarComparativo('mes');
+        }
+
+        // --- 1. LÓGICA DE KPIS E DIÁRIO ---
+        async function carregarKPIs() {
+            if(!_supabase || !sessao) return;
+            
+            const hoje = new Date();
+            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+            const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+
+            // Busca produção do mês atual
+            const { data: prod } = await _supabase
+                .from('producao')
+                .select('*')
+                .eq('usuario_id', sessao.id)
+                .gte('data_referencia', inicioMes)
+                .lte('data_referencia', fimMes);
+
+            const dados = prod || [];
+            
+            // Cálculos
+            const totalProduzido = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+            const diasTrabalhados = dados.length || 1; // Evita divisão por zero
+            
+            // Meta: Soma das metas diárias (se existirem) ou 650 padrão
+            let metaTotalAcumulada = 0;
+            dados.forEach(d => {
+                const metaDia = d.meta_diaria !== null ? d.meta_diaria : 650;
+                metaTotalAcumulada += metaDia;
+            });
+            // Se não houver dados, projeta meta padrão para dias úteis (simplificado para 22)
+            if (metaTotalAcumulada === 0) metaTotalAcumulada = 650 * 22;
+
+            const mediaReal = Math.round(totalProduzido / diasTrabalhados);
+            const atingimento = Math.round((totalProduzido / metaTotalAcumulada) * 100);
+
+            // Atualiza UI
+            document.getElementById('kpi-total').innerText = totalProduzido.toLocaleString();
+            document.getElementById('kpi-meta-total').innerText = metaTotalAcumulada.toLocaleString();
+            document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
+            document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
+            
+            // Cor da barra e ícone
+            const bar = document.getElementById('bar-progress');
+            const icon = document.getElementById('icon-status');
+            if (atingimento >= 100) {
+                bar.className = "bg-emerald-500 h-1.5 rounded-full transition-all duration-1000";
+                icon.className = "fas fa-check-circle text-[10px] text-emerald-500";
+            } else if (atingimento >= 80) {
+                bar.className = "bg-yellow-400 h-1.5 rounded-full transition-all duration-1000";
+                icon.className = "fas fa-circle text-[10px] text-yellow-400";
+            } else {
+                bar.className = "bg-red-500 h-1.5 rounded-full transition-all duration-1000";
+                icon.className = "fas fa-exclamation-circle text-[10px] text-red-500";
             }
-            carregarDados();
+
+            document.getElementById('kpi-media-real').innerText = mediaReal.toLocaleString();
         }
-        async function carregarDados() {
-            if (isMgr) currentUserTarget = document.getElementById('user-selector').value;
-            const ano = document.getElementById('year-selector').value; const mes = document.getElementById('month-selector').value;
-            const startStr = `${ano}-${mes.toString().padStart(2,'0')}-01`; const endObj = new Date(ano, mes, 0); const endStr = `${ano}-${mes.toString().padStart(2,'0')}-${endObj.getDate()}`;
-            document.getElementById('log-body').innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">A carregar dados...</td></tr>';
-            try {
-                const { data: prods } = await _supabase.from('producao').select('*').eq('usuario_id', currentUserTarget).gte('data_referencia', startStr).lte('data_referencia', endStr).order('data_referencia');
-                const { data: metas } = await _supabase.from('metas').select('*').eq('usuario_id', currentUserTarget).order('data_inicio', { ascending: false });
-                const metaVigente = metas.find(m => m.data_inicio <= endStr)?.valor_meta || 650;
-                renderizarTela(prods || [], metaVigente, startStr, endStr);
-            } catch (err) { console.error(err); alert("Erro ao carregar dados."); }
-        }
-        function renderizarTela(dados, meta, sDate, eDate) {
-            const map = {}; dados.forEach(d => map[d.data_referencia] = d);
-            let html = ''; let s = new Date(sDate + 'T12:00:00'); let e = new Date(eDate + 'T12:00:00');
-            let totalSys = 0, totalMan = 0, diasMeta = 0, diasUteis = 0; let labels = [], dataSys = [], dataMeta = [];
-            for (let dt = new Date(s); dt <= e; dt.setDate(dt.getDate() + 1)) {
-                const diaStr = dt.toISOString().split('T')[0]; const diaSemana = dt.getDay(); const isFds = diaSemana === 0 || diaSemana === 6;
-                const row = map[diaStr] || {};
-                const qSys = Number(row.quantidade) || 0; const qMan = row.quantidade_manual !== null ? Number(row.quantidade_manual) : null; const qManVal = qMan || 0;
-                const obs = row.observacao || ''; const feed = row.observacao_gestora || '';
-                if (!isFds || qSys > 0) {
-                    labels.push(dt.getDate()); dataSys.push(qSys + qManVal); dataMeta.push(meta); diasUteis++;
-                    if ((qSys + qManVal) >= meta) diasMeta++;
+
+        async function carregarDiario() {
+            const { data } = await _supabase
+                .from('producao')
+                .select('*')
+                .eq('usuario_id', sessao.id)
+                .order('data_referencia', { ascending: false })
+                .limit(31); // Último mês
+
+            const tbody = document.getElementById('tabela-diario');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Nenhum registo recente.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(item => {
+                const meta = item.meta_diaria !== null ? item.meta_diaria : 650;
+                const atingiu = item.quantidade >= meta;
+                const corBadge = atingiu ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
+                const textoBadge = atingiu ? 'Atingida' : 'Abaixo';
+                const dataFmt = item.data_referencia.split('-').reverse().join('/');
+
+                // Lógica de Edição da Meta (Só Gestora)
+                let celulaMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
+                if (isMgr) {
+                    celulaMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value)" class="w-20 text-center border border-slate-300 rounded px-1 py-1 text-sm focus:border-blue-500 outline-none">`;
                 }
-                totalSys += qSys; if (qMan !== null) totalMan += qMan;
-                const isLocked = !isMgr && (feed && feed.trim() !== ''); const lockClass = isLocked ? 'bg-lock' : 'bg-white'; const lockIcon = isLocked ? '🔒' : '';
-                const disableMan = isMgr || isLocked ? 'disabled' : ''; const disableObs = isMgr || isLocked ? 'disabled' : ''; const disableFeed = !isMgr ? 'disabled' : '';
-                const valMan = (qMan !== null) ? qMan : '';
-                const statusBadge = (qSys + qManVal) >= meta ? '<span class="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full">Sim</span>' : '<span class="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-1 rounded-full">Não</span>';
-                const rowClass = isFds ? 'bg-slate-50' : 'hover:bg-slate-50';
-                html += `<tr class="${rowClass} transition border-b border-slate-100"><td class="px-2 py-3 text-center font-medium text-slate-500">${diaStr.split('-').reverse().join('/').substring(0,5)}</td><td class="px-2 py-3 text-center font-bold text-blue-700">${qSys || '-'}</td><td class="px-2 py-3 text-center"><input type="number" value="${valMan}" class="input-manual w-16 p-1 border border-slate-200 rounded text-amber-600 ${lockClass}" placeholder="-" onchange="salvar(this, '${diaStr}', 'quantidade_manual')" ${disableMan}></td><td class="px-2 py-3 text-center text-slate-400 text-xs">${meta}</td><td class="px-2 py-3 text-center">${(qSys||valMan)?statusBadge:'-'}</td><td class="px-2 py-3"><div class="flex items-center gap-2"><input type="text" value="${obs}" class="w-full text-xs p-1 border border-slate-200 rounded ${lockClass}" placeholder="..." onchange="salvar(this, '${diaStr}', 'observacao')" ${disableObs}>${lockIcon}</div></td><td class="px-2 py-3"><input type="text" value="${feed}" class="w-full text-xs p-1 border border-amber-100 bg-amber-50 rounded text-blue-800 font-medium" placeholder="${isMgr ? 'Escreva feedback...' : ''}" onchange="salvar(this, '${diaStr}', 'observacao_gestora')" ${disableFeed}></td></tr>`;
+
+                html += `
+                <tr class="hover:bg-slate-50 border-b border-slate-100 transition">
+                    <td class="px-4 py-3 font-medium text-slate-700">${dataFmt}</td>
+                    <td class="px-4 py-3 text-center font-bold text-blue-600">${item.quantidade}</td>
+                    <td class="px-4 py-3 text-center">${celulaMeta}</td>
+                    <td class="px-4 py-3 text-center"><span class="${corBadge} px-2 py-0.5 rounded text-[10px] font-bold uppercase">${textoBadge}</span></td>
+                    <td class="px-4 py-3 text-sm text-slate-500 truncate max-w-xs" title="${item.observacao || ''}">${item.observacao || '-'}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+
+        async function atualizarMeta(id, novaMeta) {
+            if (!confirm('Deseja alterar a meta deste dia?')) return;
+            const val = parseInt(novaMeta);
+            if (isNaN(val)) return alert('Valor inválido');
+
+            const { error } = await _supabase.from('producao').update({ meta_diaria: val }).eq('id', id);
+            if (error) alert('Erro ao atualizar: ' + error.message);
+            else {
+                carregarKPIs(); // Recalcula os totais
+                // Feedback visual leve (toast) poderia ser adicionado aqui
             }
-            document.getElementById('log-body').innerHTML = html;
-            document.getElementById('kpi-sys').innerText = totalSys.toLocaleString(); document.getElementById('kpi-man').innerText = totalMan.toLocaleString(); document.getElementById('kpi-hit').innerText = diasUteis > 0 ? Math.round((diasMeta/diasUteis)*100) + '%' : '0%';
-            renderChart(labels, dataSys, dataMeta);
         }
-        async function salvar(input, dataRef, campo) {
-            const val = campo === 'quantidade_manual' ? (input.value ? parseInt(input.value) : null) : input.value; input.classList.add('bg-blue-50');
-            try {
-                const { data: existing } = await _supabase.from('producao').select('id').eq('usuario_id', currentUserTarget).eq('data_referencia', dataRef).maybeSingle();
-                if (existing) { await _supabase.from('producao').update({ [campo]: val }).eq('id', existing.id); } 
-                else { await _supabase.from('producao').insert({ usuario_id: currentUserTarget, data_referencia: dataRef, quantidade: 0, [campo]: val }); }
-                input.classList.remove('bg-blue-50'); input.classList.add('bg-emerald-50', 'text-emerald-700'); setTimeout(() => input.classList.remove('bg-emerald-50', 'text-emerald-700'), 1000);
-                if(campo === 'observacao_gestora' || campo === 'quantidade_manual') carregarDados();
-            } catch (err) { console.error(err); alert("Erro ao salvar."); input.classList.add('bg-red-100'); }
+
+        // --- 2. LÓGICA DE FEEDBACK ---
+        async function carregarFeedbacks() {
+            const container = document.getElementById('lista-feedbacks');
+            
+            const { data, error } = await _supabase
+                .from('feedbacks')
+                .select('*')
+                .eq('usuario_alvo_id', sessao.id)
+                .order('created_at', { ascending: true });
+
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-400 py-10 flex flex-col items-center"><i class="far fa-comments text-4xl mb-3 opacity-20"></i><span>Nenhum feedback registado.</span></div>';
+                return;
+            }
+
+            let html = '';
+            data.forEach(msg => {
+                const isMe = msg.autor_nome === sessao.nome;
+                const align = isMe ? 'ml-auto bg-blue-100 text-blue-900' : 'mr-auto bg-white border border-slate-200 text-slate-700';
+                const date = new Date(msg.created_at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day:'2-digit', month:'2-digit' });
+
+                html += `
+                <div class="max-w-[80%] w-fit mb-4 p-4 rounded-xl shadow-sm ${align}">
+                    <div class="flex justify-between items-baseline gap-4 mb-1 border-b border-black/5 pb-1">
+                        <span class="text-xs font-bold uppercase tracking-wide opacity-70">${msg.autor_nome}</span>
+                        <span class="text-[10px] opacity-50">${date}</span>
+                    </div>
+                    <p class="text-sm whitespace-pre-wrap leading-relaxed">${msg.mensagem}</p>
+                </div>`;
+            });
+            container.innerHTML = html;
+            // Rolar para baixo
+            container.scrollTop = container.scrollHeight;
         }
-        function renderChart(labels, dataSys, dataMeta) {
-            const ctx = document.getElementById('productionChart').getContext('2d'); if (chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: 'Produção Total (Sis + Man)', data: dataSys, borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', fill: true, tension: 0.3 }, { label: 'Meta', data: dataMeta, borderColor: '#ef4444', borderDash: [5, 5], pointRadius: 0, borderWidth: 2 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' } }, scales: { y: { beginAtZero: true } } } });
+
+        async function enviarFeedback() {
+            const input = document.getElementById('input-feedback');
+            const texto = input.value.trim();
+            if (!texto) return;
+
+            const { error } = await _supabase.from('feedbacks').insert({
+                usuario_alvo_id: sessao.id,
+                autor_nome: sessao.nome,
+                autor_funcao: sessao.funcao,
+                mensagem: texto
+            });
+
+            if (error) alert('Erro ao enviar');
+            else {
+                input.value = '';
+                carregarFeedbacks();
+            }
         }
+
+        // --- 3. LÓGICA DE COMPARATIVO ---
+        async function carregarComparativo(periodo) {
+            const elUser = document.getElementById('comp-media-user');
+            const elTime = document.getElementById('comp-media-time');
+            const elMsg = document.getElementById('comp-mensagem');
+
+            elUser.innerText = '...';
+            elTime.innerText = '...';
+            
+            const hoje = new Date();
+            let dataInicio;
+            
+            if (periodo === 'mes') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            else if (periodo === 'trimestre') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1);
+            else if (periodo === 'semestre') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1);
+            else dataInicio = new Date(hoje.getFullYear(), 0, 1); // Ano
+
+            const strInicio = dataInicio.toISOString().split('T')[0];
+
+            // Busca TODOS os dados do período para calcular médias
+            const { data } = await _supabase
+                .from('producao')
+                .select('quantidade, usuario_id')
+                .gte('data_referencia', strInicio);
+
+            if (!data || data.length === 0) {
+                elUser.innerText = '0';
+                elTime.innerText = '0';
+                elMsg.innerText = "Sem dados neste período.";
+                return;
+            }
+
+            // 1. Calcular Minha Média
+            const meusDados = data.filter(d => d.usuario_id === sessao.id);
+            const minhaSoma = meusDados.reduce((a, b) => a + (b.quantidade || 0), 0);
+            const minhaMedia = meusDados.length ? Math.round(minhaSoma / meusDados.length) : 0;
+
+            // 2. Calcular Média Time (Geral)
+            // Agrupa por utilizador para ser justo (Média das Médias ou Média Global?)
+            // Vamos fazer Média Global de Produção Diária (Soma Tudo / Total Dias Registados por Todos)
+            const timeSoma = data.reduce((a, b) => a + (b.quantidade || 0), 0);
+            const timeMedia = Math.round(timeSoma / data.length);
+
+            // Atualiza UI com animação
+            animateValue(elUser, 0, minhaMedia, 500);
+            animateValue(elTime, 0, timeMedia, 500);
+
+            // Mensagem de Feedback
+            const diff = minhaMedia - timeMedia;
+            if (diff > 0) {
+                elMsg.innerHTML = `<span class="text-emerald-500"><i class="fas fa-arrow-up"></i> Estás ${diff} docs acima da média da equipa! Parabéns!</span>`;
+            } else if (diff < 0) {
+                elMsg.innerHTML = `<span class="text-orange-500"><i class="fas fa-arrow-down"></i> Estás ${Math.abs(diff)} docs abaixo da média. Vamos recuperar?</span>`;
+            } else {
+                elMsg.innerHTML = `<span class="text-blue-500">Estás exatamente na média da equipa.</span>`;
+            }
+        }
+
+        function animateValue(obj, start, end, duration) {
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                obj.innerHTML = Math.floor(progress * (end - start) + start).toLocaleString();
+                if (progress < 1) window.requestAnimationFrame(step);
+            };
+            window.requestAnimationFrame(step);
+        }
+
     </script>
 </body>
 </html>
