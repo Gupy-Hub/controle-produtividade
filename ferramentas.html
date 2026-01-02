@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Biblioteca de Conhecimento</title> <script src="https://cdn.tailwindcss.com"></script>
+    <title>Biblioteca de Conhecimento</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -38,37 +40,54 @@
         </div>
 
         <div id="tab-lib" class="view-section animate-fade-in space-y-6">
-             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
-                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2"><i class="fas fa-filter mr-1"></i> Filtrar:</span>
-                <select id="filtro-empresa" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🏢 Empresas</option></select>
-                <select id="filtro-motivo" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🎯 Motivos</option></select>
-                <select id="filtro-doc" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">📄 Documentos</option></select>
-                <div class="relative flex-1 min-w-[200px] ml-auto"><input type="text" id="lib-search" onkeyup="aplicarFiltros()" placeholder="Pesquisar..." class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 transition"><i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i></div>
-                <div class="flex gap-2">
-                    <input type="file" id="import-excel-frases" accept=".xlsx, .csv" class="hidden" onchange="importarFrasesExcel(this)">
-                    <button onclick="document.getElementById('import-excel-frases').click()" id="btn-import-lib" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-3 rounded-lg text-sm flex items-center gap-2 transition shadow-sm" title="Importar Excel"><i class="fas fa-file-excel"></i> Importar</button>
-                    <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg text-sm flex items-center gap-2 transition shadow-sm"><i class="fas fa-plus"></i> Nova</button>
-                </div>
-            </div>
             
             <div class="bg-gradient-to-r from-slate-50 to-white p-6 rounded-2xl border border-slate-200/60 shadow-sm relative overflow-hidden group">
                 <div class="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full mix-blend-multiply filter blur-3xl opacity-70 group-hover:opacity-100 transition-opacity"></div>
                 <div class="relative z-10">
-                    <h3 class="font-extrabold text-slate-700 text-lg flex items-center gap-2 mb-4">
-                        <i class="fas fa-fire text-orange-500"></i> 
-                        <span id="titulo-top4">Mais Utilizadas</span> </h3>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-extrabold text-slate-700 text-lg flex items-center gap-2">
+                            <i class="fas fa-fire text-orange-500"></i> 
+                            <span id="titulo-top4">Mais Utilizadas</span>
+                        </h3>
+                        <div class="flex gap-2">
+                            <input type="file" id="import-excel-frases" accept=".xlsx, .csv" class="hidden" onchange="importarFrasesExcel(this)">
+                            <button onclick="document.getElementById('import-excel-frases').click()" id="btn-import-lib" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs flex items-center gap-2 transition shadow-sm"><i class="fas fa-file-excel"></i> Importar</button>
+                            <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1.5 px-3 rounded-lg text-xs flex items-center gap-2 transition shadow-sm"><i class="fas fa-plus"></i> Nova</button>
+                        </div>
+                    </div>
+                    
                     <div id="grid-top4" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                         <div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso.</div>
                     </div>
                 </div>
             </div>
 
-            <div>
-                <h3 class="font-bold text-slate-500 text-sm uppercase tracking-wide mb-3 ml-1">Acervo Geral</h3>
-                <div id="lib-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
+                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2"><i class="fas fa-filter mr-1"></i> Pesquisar:</span>
+                
+                <select id="filtro-empresa" onchange="aplicarFiltros(true)" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🏢 Empresas</option></select>
+                <select id="filtro-motivo" onchange="aplicarFiltros(true)" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🎯 Motivos</option></select>
+                <select id="filtro-doc" onchange="aplicarFiltros(true)" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">📄 Documentos</option></select>
+                
+                <div class="relative flex-1 min-w-[200px] ml-auto">
+                    <input type="text" id="lib-search" onkeyup="aplicarFiltros(true)" placeholder="Pesquisar por conteúdo..." class="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 transition">
+                    <i class="fas fa-search absolute left-3 top-2.5 text-slate-400"></i>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                <h3 class="font-bold text-slate-500 text-sm uppercase tracking-wide ml-1">Acervo Geral</h3>
+                <button id="btn-toggle-acervo" onclick="toggleAcervo()" class="text-blue-600 hover:text-blue-800 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1">
+                    <span>Mostrar Lista Completa</span> <i class="fas fa-chevron-down"></i>
+                </button>
+            </div>
+
+            <div id="container-acervo" class="hidden">
+                <div id="lib-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
                     <div class="col-span-full text-center py-10 text-slate-400">Carregando biblioteca...</div>
                 </div>
             </div>
+
         </div>
         
         <div id="tab-calc" class="view-section hidden animate-fade-in">
@@ -103,77 +122,148 @@
         function switchTab(tab) { document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); document.getElementById('tab-' + tab).classList.remove('hidden'); ['lib', 'calc', 'cep'].forEach(t => { const btn = document.getElementById('btn-' + t); if (t === tab) btn.className = 'px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm flex items-center gap-2'; else btn.className = 'px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700 flex items-center gap-2'; }); }
         
         let frasesGlobal = [], frasesUsos = [];
-        document.addEventListener('DOMContentLoaded', () => { carregarFrases(); switchTab('lib'); });
+        
+        document.addEventListener('DOMContentLoaded', () => { 
+            carregarFrases(); 
+            switchTab('lib'); 
+        });
+
+        // Toggle do Acervo
+        function toggleAcervo(forceOpen = false) {
+            const container = document.getElementById('container-acervo');
+            const btn = document.getElementById('btn-toggle-acervo');
+            
+            if (forceOpen || container.classList.contains('hidden')) {
+                container.classList.remove('hidden');
+                btn.innerHTML = '<span>Ocultar Lista</span> <i class="fas fa-chevron-up"></i>';
+            } else {
+                container.classList.add('hidden');
+                btn.innerHTML = '<span>Mostrar Lista Completa</span> <i class="fas fa-chevron-down"></i>';
+            }
+        }
 
         async function carregarFrases() {
             if(!_supabase) return; 
             
-            // 1. Carrega todas as frases da biblioteca
             const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
             if (error) console.log("Erro API:", error);
             frasesGlobal = data || [];
 
-            // 2. Carrega os "USOS" das frases
-            // SE for Gestora -> Carrega TUDO (Para saber o top global)
-            // SE for Assistente -> Carrega SÓ OS SEUS (Para saber o top pessoal)
+            // Carrega usos (Logica Top 4)
             let query = _supabase.from('frases_usos').select('*'); 
-            
-            if (!isMgr) {
-                // Assistente só vê os seus usos
-                query = query.eq('usuario_id', sessao.id);
-            }
-            
+            if (!isMgr) query = query.eq('usuario_id', sessao.id);
             const { data: usos } = await query; 
             frasesUsos = usos || [];
 
-            atualizarDropdowns(); 
-            aplicarFiltros(); 
+            // Inicializa dropdowns com TUDO disponível inicialmente
+            atualizarOpcoesInteligentes([], [], []);
+            
+            aplicarFiltros(false); // Carrega grade mas não força abertura
             atualizarTop4();
         }
-        
-        function atualizarDropdowns() {
-            const empresas = [...new Set(frasesGlobal.map(f => f.empresa).filter(Boolean))].sort();
-            const motivos = [...new Set(frasesGlobal.map(f => f.motivo).filter(Boolean))].sort();
-            const docs = [...new Set(frasesGlobal.map(f => f.documento).filter(Boolean))].sort();
-            document.getElementById('filtro-empresa').innerHTML = '<option value="">🏢 Empresas</option>' + empresas.map(x => `<option value="${x}">${x}</option>`).join('');
-            document.getElementById('filtro-motivo').innerHTML = '<option value="">🎯 Motivos</option>' + motivos.map(x => `<option value="${x}">${x}</option>`).join('');
-            document.getElementById('filtro-doc').innerHTML = '<option value="">📄 Documentos</option>' + docs.map(x => `<option value="${x}">${x}</option>`).join('');
+
+        // --- LÓGICA DE FILTROS INTELIGENTES ---
+        function atualizarOpcoesInteligentes(listaEmp, listaMot, listaDoc) {
+            // Helper para preencher um select
+            const preencher = (id, lista, label) => {
+                const select = document.getElementById(id);
+                const valorAtual = select.value;
+                const unicos = [...new Set(lista)].filter(Boolean).sort();
+                
+                let html = `<option value="">${label}</option>`;
+                html += unicos.map(x => `<option value="${x}" ${x === valorAtual ? 'selected' : ''}>${x}</option>`).join('');
+                select.innerHTML = html;
+            };
+
+            // Se as listas estiverem vazias (ex: inicio), usa o global
+            const fonte = frasesGlobal;
+            
+            // Aqui fazemos o "Cruzamento":
+            // 1. Opções de Empresas: Baseado no Motivo e Doc selecionados atualmente?
+            // Para simplificar e evitar loops infinitos, vamos filtrar a lista baseada nos filtros ATIVOS dos OUTROS campos.
+            
+            const selEmp = document.getElementById('filtro-empresa').value;
+            const selMot = document.getElementById('filtro-motivo').value;
+            const selDoc = document.getElementById('filtro-doc').value;
+
+            // Filtro para saber quais EMPRESAS mostrar (Baseado em Motivo e Doc)
+            const opcoesEmpresa = fonte.filter(f => (!selMot || f.motivo === selMot) && (!selDoc || f.documento === selDoc)).map(f => f.empresa);
+            
+            // Filtro para saber quais MOTIVOS mostrar (Baseado em Empresa e Doc)
+            const opcoesMotivo = fonte.filter(f => (!selEmp || f.empresa === selEmp) && (!selDoc || f.documento === selDoc)).map(f => f.motivo);
+
+            // Filtro para saber quais DOCS mostrar (Baseado em Empresa e Motivo)
+            const opcoesDoc = fonte.filter(f => (!selEmp || f.empresa === selEmp) && (!selMot || f.motivo === selMot)).map(f => f.documento);
+
+            preencher('filtro-empresa', opcoesEmpresa, '🏢 Empresas');
+            preencher('filtro-motivo', opcoesMotivo, '🎯 Motivos');
+            preencher('filtro-doc', opcoesDoc, '📄 Documentos');
         }
 
-        function aplicarFiltros() {
-            const fEmp = document.getElementById('filtro-empresa').value; const fMot = document.getElementById('filtro-motivo').value; const fDoc = document.getElementById('filtro-doc').value; const term = document.getElementById('lib-search').value.toLowerCase();
+        function aplicarFiltros(autoOpen = false) {
+            const fEmp = document.getElementById('filtro-empresa').value;
+            const fMot = document.getElementById('filtro-motivo').value;
+            const fDoc = document.getElementById('filtro-doc').value;
+            const term = document.getElementById('lib-search').value.toLowerCase();
+
+            // 1. Filtra a lista principal para exibição
             const filtered = frasesGlobal.filter(f => {
-                const matchEmp = !fEmp || f.empresa === fEmp; const matchMot = !fMot || f.motivo === fMot; const matchDoc = !fDoc || f.documento === fDoc;
+                const matchEmp = !fEmp || f.empresa === fEmp;
+                const matchMot = !fMot || f.motivo === fMot;
+                const matchDoc = !fDoc || f.documento === fDoc;
                 const matchText = (f.titulo||'').toLowerCase().includes(term) || (f.conteudo||'').toLowerCase().includes(term);
                 return matchEmp && matchMot && matchDoc && matchText;
             });
+
+            // 2. Atualiza os dropdowns para ficarem "Inteligentes" baseados na seleção atual
+            atualizarOpcoesInteligentes();
+
+            // 3. Renderiza
             renderizarFrases(filtered);
+
+            // 4. Se o usuário estiver a pesquisar ativamente, abre a lista
+            if (autoOpen && (fEmp || fMot || fDoc || term)) {
+                toggleAcervo(true);
+            }
         }
 
         function renderizarFrases(lista) {
             const container = document.getElementById('lib-grid');
-            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada.</div>'; return; }
+            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada para estes filtros.</div>'; return; }
+            
             let html = '';
             lista.forEach(item => {
                 const safeContent = item.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-                const badges = [ item.empresa ? `<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.empresa}</span>` : '', item.motivo ? `<span class="bg-purple-50 text-purple-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.motivo}</span>` : '', item.documento ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.documento}</span>` : '' ].join('');
-                html += `<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full group"><div class="flex justify-between items-start mb-3"><h4 class="font-bold text-slate-800 text-sm">${item.titulo || item.motivo || 'Sem Título'}</h4><button onclick="copiarTexto(${item.id}, '${safeContent}')" class="text-slate-400 hover:text-blue-600 transition" title="Copiar"><i class="far fa-copy text-lg"></i></button></div><div class="flex gap-2 mb-3">${badges}</div><p class="text-slate-600 text-xs mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 group-hover:border-blue-100 transition">${item.conteudo}</p></div>`;
+                const badges = [ 
+                    item.empresa ? `<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.empresa}</span>` : '', 
+                    item.motivo ? `<span class="bg-purple-50 text-purple-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.motivo}</span>` : '', 
+                    item.documento ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.documento}</span>` : '' 
+                ].join('');
+                
+                html += `
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full group">
+                    <div class="flex justify-between items-start mb-3">
+                        <h4 class="font-bold text-slate-800 text-sm">${item.titulo || item.motivo || 'Sem Título'}</h4>
+                        <button onclick="copiarTexto(${item.id}, '${safeContent}')" class="text-slate-400 hover:text-blue-600 transition" title="Copiar">
+                            <i class="far fa-copy text-lg"></i>
+                        </button>
+                    </div>
+                    <div class="flex gap-2 mb-3">${badges}</div>
+                    <p class="text-slate-600 text-xs mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 group-hover:border-blue-100 transition">${item.conteudo}</p>
+                </div>`;
             });
             container.innerHTML = html;
         }
 
         function atualizarTop4() {
-            // Ajusta o título conforme o perfil
             document.getElementById('titulo-top4').innerText = isMgr ? "Top 4 - Global (Todos)" : "Top 4 - Pessoais";
             
-            // Faz a contagem de usos
             const contagem = {}; 
             frasesUsos.forEach(u => { contagem[u.frase_id] = (contagem[u.frase_id] || 0) + 1; });
             
-            // Pega os 4 IDs com maior número de usos
             const sortedIds = Object.keys(contagem).sort((a, b) => contagem[b] - contagem[a]).slice(0, 4);
-            
             const container = document.getElementById('grid-top4');
+            
             if (sortedIds.length === 0) { container.innerHTML = '<div class="col-span-4 text-center text-sm text-slate-400 py-4 italic">Ainda não há dados suficientes de uso.</div>'; return; }
             
             let html = '';
@@ -187,13 +277,8 @@
 
         async function copiarTexto(id, texto) {
             navigator.clipboard.writeText(texto).then(async () => {
-                // Registra o uso no banco
                 await _supabase.from('frases_usos').insert({ frase_id: id, usuario_id: sessao.id });
-                
-                // Adiciona localmente para atualizar a tela sem recarregar tudo
-                // Se for gestora, adicionamos sempre. Se for assistente, também (é o próprio uso)
                 frasesUsos.push({ frase_id: id, usuario_id: sessao.id }); 
-                
                 atualizarTop4(); 
                 alert("Copiado com sucesso!");
             });
@@ -206,7 +291,7 @@
             reader.onload = async (e) => {
                 try {
                     const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array' }); const sheet = workbook.Sheets[workbook.SheetNames[0]]; const json = XLSX.utils.sheet_to_json(sheet);
-                    let count = 0; let inserts = [];
+                    let inserts = [];
                     for (let row of json) {
                         const cleanRow = {}; Object.keys(row).forEach(k => { cleanRow[k.trim().toLowerCase()] = row[k]; });
                         const conteudo = cleanRow['conteudo'] || cleanRow['conteúdo'] || cleanRow['frase'];
@@ -235,13 +320,12 @@
             const m = document.getElementById('form-motivo').value; 
             const d = document.getElementById('form-doc').value;
             const t = m || "Nova Frase";
-
             if (!c) return alert("Preencha o Conteúdo.");
             const { error } = await _supabase.from('biblioteca').insert({ titulo: t, conteudo: c, empresa: e, motivo: m, documento: d, criado_por: sessao.nome });
             if (!error) { fecharModalFrase(); carregarFrases(); } else alert(error.message);
         }
 
-        // --- CALCULADORA e CEP ---
+        // --- CALCULADORA e CEP (Mantido) ---
         let modoCalculadora = 'intervalo';
         function mudarModoCalculadora(modo) {
             modoCalculadora = modo; const btnIntervalo = document.getElementById('btn-mode-intervalo'); const btnSoma = document.getElementById('btn-mode-soma');
