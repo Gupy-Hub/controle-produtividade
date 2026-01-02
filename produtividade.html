@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Produtividade</title>
+    <title>Produtividade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -11,26 +11,27 @@
     <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
-    
     <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script> <script src="js/layout.js"></script>
+    <script src="js/sistema.js"></script>
+    <script src="js/layout.js"></script>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-8 flex flex-col md:flex-row gap-4 justify-between items-center">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Controle Diário</h1>
-                <p class="text-slate-500 text-sm">Visão consolidada da operação.</p>
+                <h1 class="text-2xl font-bold text-slate-800">Painel de Produtividade</h1>
+                <p class="text-sm text-slate-500" id="titulo-dinamico">--</p>
             </div>
             
-            <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                <label class="text-xs font-bold text-slate-400 uppercase">Data Ref:</label>
-                <input type="text" id="data-input" class="w-32 bg-white border border-slate-300 rounded px-2 py-1 text-center font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
-                
-                <div class="h-6 w-px bg-slate-300 mx-2"></div>
-                
-                <select id="view-mode" onchange="carregarDados()" class="bg-white border border-slate-300 rounded px-2 py-1 text-sm font-bold text-slate-600 outline-none">
-                    <option value="dia">Visão do Dia</option>
-                    <option value="mes">Acumulado Mês</option>
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
+                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
+                </div>
+
+                <select id="view-mode" onchange="carregarTela()" class="py-2 px-4 border-2 border-slate-200 rounded-lg font-bold text-slate-600 outline-none bg-white">
+                    <option value="dia">Dia</option>
+                    <option value="semana">Semana</option>
+                    <option value="mes">Mês</option>
                 </select>
             </div>
         </div>
@@ -45,20 +46,21 @@
                 <p class="text-3xl font-extrabold text-slate-800" id="kpi-media">--</p>
             </div>
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase">Equipa Ativa</p>
+                <p class="text-xs font-bold text-slate-400 uppercase">Assistentes Ativas</p>
                 <p class="text-3xl font-extrabold text-slate-800" id="kpi-hc">--</p>
             </div>
         </div>
 
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left text-slate-600">
-                    <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
                         <tr>
                             <th class="px-6 py-4">Nome</th>
                             <th class="px-6 py-4 text-center">Dias Trab.</th>
                             <th class="px-6 py-4 text-center text-blue-700 font-bold">Produção</th>
-                            <th class="px-6 py-4 text-center">Meta</th>
+                            <th class="px-6 py-4 text-center">Meta Calc.</th>
+                            <th class="px-6 py-4 text-center">Média/Dia</th>
                             <th class="px-6 py-4 text-center">Status</th>
                         </tr>
                     </thead>
@@ -69,87 +71,64 @@
     </div>
 
     <script>
-        // Lógica Simplificada usando Sistema.js
         document.addEventListener('DOMContentLoaded', async () => {
-            // 1. Configura Input de Data com a regra global
-            Sistema.Datas.configurarInput('data-input', 'produtividade_data', carregarDados);
-            
-            // 2. Carrega usuários (necessário para normalizar)
+            // 1. Inicia Data Global e Cache
+            Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
             await Sistema.Dados.carregarUsuarios();
-            
-            // 3. Carrega
-            carregarDados();
+            carregarTela();
         });
 
-        async function carregarDados() {
-            const dataStr = document.getElementById('data-input').value;
+        async function carregarTela() {
             const modo = document.getElementById('view-mode').value;
-            const dateObj = Sistema.Datas.obterDataObjeto(dataStr);
+            // Pega o intervalo usando a lógica centralizada (incluindo semana)
+            const intervalo = Sistema.Datas.getIntervalo(modo);
             
-            let inicio, fim;
-
-            if (modo === 'dia') {
-                const iso = dateObj.toISOString().split('T')[0];
-                inicio = iso;
-                fim = iso;
-            } else {
-                // Mês
-                const ano = dateObj.getFullYear();
-                const mes = dateObj.getMonth();
-                inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-                fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-            }
-
+            document.getElementById('titulo-dinamico').innerText = intervalo.titulo;
             const tbody = document.getElementById('tabela-corpo');
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8">Carregando...</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10">Carregando...</td></tr>';
 
-            try {
-                const { data: rawData } = await _supabase.from('producao')
-                    .select('*')
-                    .gte('data_referencia', inicio)
-                    .lte('data_referencia', fim);
+            const { data } = await _supabase.from('producao')
+                .select('*')
+                .gte('data_referencia', intervalo.inicio)
+                .lte('data_referencia', intervalo.fim);
 
-                // USA O CÉREBRO PARA NORMALIZAR (Aqui está a correção do erro)
-                const dadosNormalizados = Sistema.Dados.normalizarProducao(rawData || []);
+            // NORMALIZAÇÃO CENTRAL (Resolve duplicidade e regras de meta)
+            const lista = Sistema.Dados.normalizar(data || []);
 
-                // Atualiza KPIs
-                const totalGeral = dadosNormalizados.reduce((acc, curr) => acc + curr.producao, 0);
-                const hc = dadosNormalizados.length;
-                // Média: Soma Total / Soma de Dias Trabalhados de todos (Média Ponderada Real)
-                const diasTotais = dadosNormalizados.reduce((acc, curr) => acc + curr.dias, 0);
-                const mediaGeral = diasTotais ? Math.round(totalGeral / diasTotais) : 0;
-
-                document.getElementById('kpi-total').innerText = totalGeral.toLocaleString();
-                document.getElementById('kpi-media').innerText = mediaGeral.toLocaleString(); // Media por dia trabalhado global
-                document.getElementById('kpi-hc').innerText = hc;
-
-                // Renderiza Tabela
-                if (dadosNormalizados.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Sem dados.</td></tr>';
-                    return;
-                }
-
-                let html = '';
-                dadosNormalizados.forEach(u => {
-                    const badge = u.producao >= u.meta 
-                        ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full text-xs font-bold">Atingida</span>'
-                        : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded-full text-xs font-bold">Abaixo</span>';
-
-                    html += `
-                    <tr class="hover:bg-slate-50">
-                        <td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td>
-                        <td class="px-6 py-4 text-center">${u.dias}</td>
-                        <td class="px-6 py-4 text-center font-bold text-blue-700 text-lg">${u.producao.toLocaleString()}</td>
-                        <td class="px-6 py-4 text-center text-slate-500">${u.meta.toLocaleString()}</td>
-                        <td class="px-6 py-4 text-center">${badge}</td>
-                    </tr>`;
-                });
-                tbody.innerHTML = html;
-
-            } catch (error) {
-                console.error(error);
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-red-500">Erro ao carregar dados.</td></tr>';
+            if (lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-slate-400">Sem dados.</td></tr>';
+                document.getElementById('kpi-total').innerText = '0';
+                document.getElementById('kpi-media').innerText = '0';
+                document.getElementById('kpi-hc').innerText = '0';
+                return;
             }
+
+            // KPIs
+            const totalGeral = lista.reduce((acc, curr) => acc + curr.total, 0);
+            const totalDias = lista.reduce((acc, curr) => acc + curr.dias, 0); // Soma de dias trabalhados
+            const mediaGeral = totalDias ? Math.round(totalGeral / totalDias) : 0;
+
+            document.getElementById('kpi-total').innerText = totalGeral.toLocaleString();
+            document.getElementById('kpi-media').innerText = mediaGeral.toLocaleString();
+            document.getElementById('kpi-hc').innerText = lista.length;
+
+            let html = '';
+            lista.forEach(u => {
+                const badge = u.atingiu 
+                    ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full text-xs font-bold">Atingida</span>'
+                    : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded-full text-xs font-bold">Abaixo</span>';
+
+                html += `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td>
+                    <td class="px-6 py-4 text-center">${u.dias}</td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-700 text-lg">${u.total.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center text-slate-500">${u.meta.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center text-slate-500">${u.media.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center">${badge}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
         }
     </script>
 </body>

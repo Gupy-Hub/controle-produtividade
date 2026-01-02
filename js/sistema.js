@@ -1,25 +1,27 @@
 // js/sistema.js
-// NÚCLEO DO SISTEMA - Todas as regras de negócio e utilitários globais
-
 const Sistema = {
-    // --- 1. GESTÃO DE DATAS E INPUTS ---
+    // --- MÓDULO DE DATAS GLOBAIS ---
     Datas: {
-        // Aplica a máscara e comportamento ao input de data manual
-        configurarInput: (inputId, storageKey, callbackOnChange) => {
+        // Chave para guardar a data no navegador
+        STORAGE_KEY: 'APP_GLOBAL_DATE',
+
+        // Configura o input para funcionar igual em todas as telas
+        configurarInputGlobal: (inputId, callbackAtualizacao) => {
             const input = document.getElementById(inputId);
             if (!input) return;
 
-            // 1. Carrega valor salvo ou define Hoje
-            const salvo = localStorage.getItem(storageKey);
-            if (salvo && salvo.length === 10) {
-                input.value = salvo;
+            // 1. Carrega data salva ou define Hoje
+            const salva = localStorage.getItem(Sistema.Datas.STORAGE_KEY);
+            if (salva && salva.length === 10) {
+                input.value = salva;
             } else {
                 const hoje = new Date();
                 input.value = Sistema.Datas.formatarDataPt(hoje);
+                localStorage.setItem(Sistema.Datas.STORAGE_KEY, input.value);
             }
 
-            // 2. Eventos
-            input.onclick = function() { this.select(); }; // Seleciona tudo ao clicar
+            // 2. Comportamentos de UX
+            input.onclick = function() { this.select(); }; // Clicou, selecionou tudo
             
             input.oninput = function() {
                 let v = this.value.replace(/\D/g, '').slice(0, 8);
@@ -28,22 +30,22 @@ const Sistema = {
                 this.value = v;
             };
 
-            input.onblur = function() {
-                if (this.value.length === 10) {
-                    localStorage.setItem(storageKey, this.value); // Salva
-                    if (callbackOnChange) callbackOnChange(); // Atualiza tela
+            // Ao sair ou dar Enter, salva e atualiza a tela
+            const confirmar = () => {
+                if (input.value.length === 10) {
+                    localStorage.setItem(Sistema.Datas.STORAGE_KEY, input.value);
+                    if (callbackAtualizacao) callbackAtualizacao();
                 }
             };
 
-            input.onkeypress = function(e) {
-                if (e.key === 'Enter') this.blur();
-            };
+            input.onblur = confirmar;
+            input.onkeypress = (e) => { if (e.key === 'Enter') { input.blur(); } };
         },
 
-        // Converte string DD/MM/AAAA para objeto Date
-        obterDataObjeto: (dataStr) => {
-            if (!dataStr || dataStr.length !== 10) return new Date();
-            const parts = dataStr.split('/');
+        // Retorna Objeto Date da string "DD/MM/AAAA"
+        obterDataObjeto: () => {
+            const str = localStorage.getItem(Sistema.Datas.STORAGE_KEY) || Sistema.Datas.formatarDataPt(new Date());
+            const parts = str.split('/');
             return new Date(parts[2], parts[1] - 1, parts[0]);
         },
 
@@ -52,89 +54,131 @@ const Sistema = {
             const m = String(date.getMonth() + 1).padStart(2, '0');
             const a = date.getFullYear();
             return `${d}/${m}/${a}`;
+        },
+
+        // Retorna inicio e fim baseado no modo (dia, semana, mes, ano)
+        getIntervalo: (modo) => {
+            const ref = Sistema.Datas.obterDataObjeto();
+            const ano = ref.getFullYear();
+            const mes = ref.getMonth();
+            const dia = ref.getDate();
+
+            if (modo === 'dia') {
+                const iso = ref.toISOString().split('T')[0];
+                return { inicio: iso, fim: iso, titulo: `Dia ${dia}/${mes+1}` };
+            }
+            
+            if (modo === 'semana') {
+                // Calcula domingo e sábado da semana da data escolhida
+                const diaSemana = ref.getDay(); // 0 = Dom
+                const diffDom = ref.getDate() - diaSemana;
+                const inicio = new Date(ref); inicio.setDate(diffDom);
+                const fim = new Date(ref); fim.setDate(diffDom + 6);
+                return { 
+                    inicio: inicio.toISOString().split('T')[0], 
+                    fim: fim.toISOString().split('T')[0],
+                    titulo: `Semana de ${inicio.getDate()}/${inicio.getMonth()+1}`
+                };
+            }
+
+            if (modo === 'mes') {
+                const inicio = new Date(ano, mes, 1);
+                const fim = new Date(ano, mes + 1, 0);
+                return { 
+                    inicio: inicio.toISOString().split('T')[0], 
+                    fim: fim.toISOString().split('T')[0],
+                    titulo: `Mês de ${mes+1}/${ano}`
+                };
+            }
+
+            if (modo === 'ano') {
+                return { inicio: `${ano}-01-01`, fim: `${ano}-12-31`, titulo: `Ano ${ano}` };
+            }
         }
     },
 
-    // --- 2. REGRAS DE NEGÓCIO E DADOS ---
+    // --- MÓDULO DE DADOS E NORMALIZAÇÃO ---
     Dados: {
-        // Mapa de Usuários em Cache (para não consultar o banco toda hora)
-        mapaUsuarios: {},
-        
+        mapaUsuarios: {}, // Cache de ID -> Nome/Função
+
         carregarUsuarios: async () => {
-            if (Object.keys(Sistema.Dados.mapaUsuarios).length > 0) return; // Já carregou
-            
+            if (Object.keys(Sistema.Dados.mapaUsuarios).length > 0) return;
             const { data } = await _supabase.from('usuarios').select('id, nome, funcao');
             if (data) {
                 data.forEach(u => {
-                    Sistema.Dados.mapaUsuarios[u.id] = { 
-                        nome: u.nome, 
-                        funcao: u.funcao 
-                    };
+                    Sistema.Dados.mapaUsuarios[u.id] = { nome: u.nome, funcao: u.funcao };
                 });
             }
         },
 
-        // ALGORITMO DE NORMALIZAÇÃO (O SEGREDO)
-        // Recebe dados brutos e retorna dados agrupados por Nome Único
-        normalizarProducao: (dadosBrutos) => {
+        // RECEBE DADOS BRUTOS -> RETORNA DADOS UNIFICADOS POR NOME
+        // Aplica todas as tuas regras: 
+        // 1. Ignora quem não é Assistente. 
+        // 2. Soma IDs duplicados. 
+        // 3. Meta única por dia por pessoa.
+        normalizar: (dadosBrutos) => {
             const agrupado = {};
 
             dadosBrutos.forEach(item => {
-                const usuario = Sistema.Dados.mapaUsuarios[item.usuario_id];
-                
-                // REGRA 1: Ignora se não for Assistente
-                if (!usuario || usuario.funcao !== 'Assistente') return;
+                const u = Sistema.Dados.mapaUsuarios[item.usuario_id];
+                // REGRA DE OURO: Só processa Assistentes
+                if (!u || u.funcao !== 'Assistente') return;
 
-                const nome = usuario.nome;
-                const dataRef = item.data_referencia;
+                const nome = u.nome;
+                const dia = item.data_referencia;
 
-                // Cria estrutura se não existir
                 if (!agrupado[nome]) {
                     agrupado[nome] = {
                         nome: nome,
-                        diasTrabalhados: new Set(), // Set garante dias únicos
-                        totalProducao: 0,
-                        metaAcumulada: 0,
-                        metasPorDia: {} // Guarda a meta de cada dia para não somar duplicado
+                        diasTrabalhados: new Set(),
+                        producaoTotal: 0,
+                        metasPorDia: {}, // { "2023-01-01": 650 }
+                        fifo: 0, gt: 0, gp: 0
                     };
                 }
 
-                // Soma Produção (Sempre soma, pois pode ter produzido em IDs diferentes)
-                agrupado[nome].totalProducao += (item.quantidade || 0);
+                // Soma produção (IDs duplicados somam produção)
+                agrupado[nome].producaoTotal += (item.quantidade || 0);
+                agrupado[nome].fifo += (item.fifo || 0);
+                agrupado[nome].gt += (item.gradual_total || 0);
+                agrupado[nome].gp += (item.gradual_parcial || 0);
 
-                // Conta Dia Trabalhado (Se produziu > 0)
+                // Regra de Dias e Metas
                 if (item.quantidade > 0) {
-                    agrupado[nome].diasTrabalhados.add(dataRef);
+                    agrupado[nome].diasTrabalhados.add(dia);
                     
-                    // REGRA 2: Meta Unificada por Dia
-                    // Se já definimos uma meta para este dia para esta pessoa, mantemos a maior/personalizada
-                    const metaAtualNoDia = agrupado[nome].metasPorDia[dataRef] || 650;
-                    const metaDestaLinha = item.meta_diaria || 650;
+                    // Define a meta para este dia (Prioriza a meta personalizada se existir)
+                    const metaExistente = agrupado[nome].metasPorDia[dia] || 650;
+                    const metaNova = item.meta_diaria || 650;
                     
-                    // Prioriza meta personalizada
+                    // Se este registro tem uma meta alterada pela gestora, ela prevalece
                     if (item.meta_diaria) {
-                        agrupado[nome].metasPorDia[dataRef] = item.meta_diaria;
-                    } else if (!agrupado[nome].metasPorDia[dataRef]) {
-                        agrupado[nome].metasPorDia[dataRef] = 650;
+                        agrupado[nome].metasPorDia[dia] = item.meta_diaria;
+                    } else {
+                        agrupado[nome].metasPorDia[dia] = metaExistente;
                     }
                 }
             });
 
-            // Converte para Array Final e calcula totais de meta
-            return Object.values(agrupado).map(pessoa => {
-                // Soma as metas de cada dia único trabalhado
-                let metaTotal = 0;
-                Object.values(pessoa.metasPorDia).forEach(m => metaTotal += m);
+            // Transforma em Lista Final Pronta para Uso
+            return Object.values(agrupado).map(p => {
+                // Soma as metas dos dias únicos
+                let metaConsolidada = 0;
+                Object.values(p.metasPorDia).forEach(m => metaConsolidada += m);
                 
+                const diasCount = p.diasTrabalhados.size;
+
                 return {
-                    nome: pessoa.nome,
-                    dias: pessoa.diasTrabalhados.size,
-                    producao: pessoa.totalProducao,
-                    meta: metaTotal,
-                    atingimento: metaTotal ? Math.round((pessoa.totalProducao / metaTotal) * 100) : 0,
-                    mediaDiaria: pessoa.diasTrabalhados.size ? Math.round(pessoa.totalProducao / pessoa.diasTrabalhados.size) : 0
+                    nome: p.nome,
+                    dias: diasCount,
+                    total: p.producaoTotal,
+                    meta: metaConsolidada,
+                    atingiu: p.producaoTotal >= metaConsolidada,
+                    fifo: p.fifo, gt: p.gt, gp: p.gp,
+                    // Média: Total / Dias Trabalhados (Regra Pedida)
+                    media: diasCount ? Math.round(p.producaoTotal / diasCount) : 0
                 };
-            }).sort((a, b) => b.producao - a.producao); // Ordena pelo total
+            }).sort((a, b) => b.total - a.total);
         }
     }
 };

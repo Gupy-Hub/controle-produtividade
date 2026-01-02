@@ -1,113 +1,164 @@
-<script src="js/config.js"></script>
-<script src="js/sistema.js"></script> <script src="js/layout.js"></script>
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Área</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style> 
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
+        .btn-tab.active { @apply bg-white text-blue-600 shadow-sm border-slate-100; }
+        .btn-chart.active { @apply bg-blue-600 text-white shadow-md; }
+    </style>
+</head>
+<body class="bg-slate-50">
 
-<script>
-    const sessao = JSON.parse(localStorage.getItem('usuario'));
-    const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
-    let myChart = null;
-    // Mapas agora vêm de Sistema.Dados.mapaUsuarios
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script> <script src="js/layout.js"></script>
 
-    document.addEventListener('DOMContentLoaded', async () => {
-        // 1. Configura Data com o Cérebro
-        Sistema.Datas.configurarInput('filtro-data-manual', 'dash_date_ref', atualizarDashboard);
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-black text-slate-800">Minha Área</h1>
+            <div class="flex items-center gap-2">
+               <div id="container-filtro-user" class="hidden">
+                   <select id="filtro-user" onchange="atualizarDashboard()" class="bg-white border border-slate-200 rounded-lg p-2">
+                       <option value="me">Minha Visão</option>
+                       <option value="time">Time</option>
+                   </select>
+               </div>
+               <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold" placeholder="DD/MM/AAAA">
+            </div>
+        </div>
         
-        // 2. Carrega Usuários
-        await Sistema.Dados.carregarUsuarios();
-        
-        // 3. Configura UI Gestora
-        if (isMgr) {
-            document.getElementById('container-filtro-user').classList.remove('hidden');
-            carregarOpcoesGestor();
-        }
+        <div id="conteudo-principal">...</div>
+        <div id="aviso-gestora-view" class="hidden">...</div>
+    </div>
 
-        atualizarDashboard();
-    });
+    <script>
+        const sessao = JSON.parse(localStorage.getItem('usuario'));
+        const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
+        let myChart = null;
 
-    function carregarOpcoesGestor() {
-        const sel = document.getElementById('filtro-user');
-        // Limpa exceto os primeiros
-        while (sel.options.length > 3) sel.remove(3);
-        
-        // Usa o mapa global do Sistema
-        const users = Object.entries(Sistema.Dados.mapaUsuarios)
-            .filter(([id, u]) => u.funcao === 'Assistente')
-            .sort((a, b) => a[1].nome.localeCompare(b[1].nome));
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Usa o Cérebro
+            Sistema.Datas.configurarInputGlobal('data-global', atualizarDashboard);
+            await Sistema.Dados.carregarUsuarios();
 
-        users.forEach(([id, u]) => {
-            const opt = document.createElement('option');
-            opt.value = id; // Aqui usamos ID para selecionar no dropdown
-            opt.text = u.nome;
-            sel.appendChild(opt);
-        });
-    }
+            // Popula filtro gestor
+            if (isMgr) {
+                document.getElementById('container-filtro-user').classList.remove('hidden');
+                document.getElementById('aviso-gestora-view').classList.remove('hidden');
+                
+                const sel = document.getElementById('filtro-user');
+                // Adiciona assistentes ao select
+                Object.values(Sistema.Dados.mapaUsuarios).forEach(u => {
+                    if (u.funcao === 'Assistente') {
+                        const opt = document.createElement('option');
+                        // Precisamos achar o ID pelo nome ou o contrário. 
+                        // O mapa é ID->Obj. Vamos iterar as keys.
+                        // Melhor fazer um loop nas entries.
+                    }
+                });
+                
+                // Re-populando com ID correto
+                const entries = Object.entries(Sistema.Dados.mapaUsuarios);
+                entries.sort((a,b) => a[1].nome.localeCompare(b[1].nome));
+                entries.forEach(([id, u]) => {
+                    if(u.funcao === 'Assistente') {
+                        const opt = document.createElement('option');
+                        opt.value = id; opt.text = u.nome;
+                        sel.appendChild(opt);
+                    }
+                });
+            } else {
+                document.getElementById('conteudo-principal').classList.remove('hidden');
+            }
 
-    async function atualizarDashboard() {
-        const dataStr = document.getElementById('filtro-data-manual').value;
-        const dateObj = Sistema.Datas.obterDataObjeto(dataStr);
-        
-        // ... (Lógica de datas igual, usando dateObj) ...
-        const ano = dateObj.getFullYear();
-        const mes = dateObj.getMonth();
-        const dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-        const dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-
-        // Definição de Target
-        let targetName = Sistema.Dados.mapaUsuarios[sessao.id]?.nome;
-        let viewingTime = false;
-        
-        if (isMgr) {
-            const val = document.getElementById('filtro-user').value;
-            if (val === 'time') viewingTime = true;
-            else if (val !== 'me') targetName = Sistema.Dados.mapaUsuarios[val]?.nome;
-        }
-
-        // Busca
-        const { data: rawData } = await _supabase.from('producao')
-            .select('*')
-            .gte('data_referencia', dataInicio)
-            .lte('data_referencia', dataFim);
-
-        // USANDO O CÉREBRO PARA NORMALIZAR
-        // Mas atenção: o dashboard precisa de dados diários para o gráfico, 
-        // e o normalizarProducao do Sistema retorna o RESUMO acumulado.
-        // Para o Dashboard, precisamos da lógica temporal.
-        // Vamos manter a lógica de gráfico aqui, MAS usando o mapaUsuarios do Sistema.js
-        
-        // ... (Restante do código de gráficos mantido, mas usando Sistema.Dados.mapaUsuarios) ...
-        // Vou resumir a função principal de processamento do gráfico para usar o Sistema:
-        
-        processarDadosGrafico(rawData || [], viewingTime, targetName);
-    }
-
-    function processarDadosGrafico(rawData, viewingTime, targetName) {
-        // Agrupa por Dia -> Nome (Normalização Temporal)
-        const porDia = {};
-        
-        rawData.forEach(item => {
-            const u = Sistema.Dados.mapaUsuarios[item.usuario_id];
-            if (!u || u.funcao !== 'Assistente') return; // Regra global
-            
-            const dia = item.data_referencia;
-            const nome = u.nome;
-            
-            if(!porDia[dia]) porDia[dia] = {};
-            if(!porDia[dia][nome]) porDia[dia][nome] = { qtd: 0, meta: item.meta_diaria || 650 };
-            
-            porDia[dia][nome].qtd += item.quantidade;
+            atualizarDashboard();
         });
 
-        // Agora gera os arrays para o ChartJS
-        // ... (Lógica de arrays igual à anterior, iterando porDia) ...
-        // ... Atualiza KPIs, Tabela e Gráfico com estes dados ...
+        async function atualizarDashboard() {
+            // Lógica de Datas
+            const refDate = Sistema.Datas.obterDataObjeto();
+            const ano = refDate.getFullYear();
+            const mes = refDate.getMonth();
+            const inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+            const fim = new Date(ano, mes+1, 0).toISOString().split('T')[0];
+
+            // Quem ver?
+            let targetId = sessao.id;
+            let viewingTime = false;
+            
+            if (isMgr) {
+                const val = document.getElementById('filtro-user').value;
+                if (val === 'me') {
+                    document.getElementById('conteudo-principal').classList.add('hidden');
+                    document.getElementById('aviso-gestora-view').classList.remove('hidden');
+                    return;
+                }
+                document.getElementById('conteudo-principal').classList.remove('hidden');
+                document.getElementById('aviso-gestora-view').classList.add('hidden');
+                
+                if (val === 'time') viewingTime = true;
+                else targetId = val;
+            }
+
+            // Busca Dados
+            const { data } = await _supabase.from('producao')
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+
+            // Normaliza com o Sistema
+            const lista = Sistema.Dados.normalizar(data || []);
+            
+            // Filtra o alvo
+            let dadosAlvo = null;
+            if (viewingTime) {
+                // Cria objeto falso representando a média do time
+                const total = lista.reduce((acc,c)=>acc+c.total,0);
+                const dias = lista.reduce((acc,c)=>acc+c.dias,0); // Soma dias trabalhados de todos
+                // Média Time = Produção Total / Dias Totais Trabalhados
+                // Ex: A (1000 em 2 dias), B (500 em 1 dia). Total 1500. Dias 3. Média 500/dia.
+                const mediaTime = dias ? Math.round(total/dias) : 0;
+                
+                // Média de Meta
+                const metaTotal = lista.reduce((acc,c)=>acc+c.meta,0);
+                const metaMedia = dias ? Math.round(metaTotal/dias) : 650;
+
+                dadosAlvo = {
+                    total: total, // Total absoluto do time (se quiser mostrar volume) ou média?
+                    // KPI pede Total. Vamos mostrar Total do Time.
+                    producaoDisplay: total, 
+                    metaDisplay: metaTotal,
+                    mediaDiaria: mediaTime,
+                    atingiu: total >= metaTotal
+                };
+            } else {
+                const nomeAlvo = Sistema.Dados.mapaUsuarios[targetId]?.nome;
+                const encontrado = lista.find(u => u.nome === nomeAlvo);
+                if (encontrado) {
+                    dadosAlvo = {
+                        producaoDisplay: encontrado.total,
+                        metaDisplay: encontrado.meta,
+                        mediaDiaria: encontrado.media,
+                        atingiu: encontrado.atingiu
+                    };
+                }
+            }
+
+            // Renderiza KPIs
+            if (dadosAlvo) {
+                document.getElementById('kpi-total').innerText = dadosAlvo.producaoDisplay.toLocaleString();
+                // ... outros KPIs ...
+            }
+            
+            // ... (Restante da lógica de gráficos igual ao anterior) ...
+        }
         
-        // Nota: Por brevidade, mantive a estrutura lógica, 
-        // mas a chave é que agora 'u' vem de Sistema.Dados.mapaUsuarios
-        // garantindo que se o ID mudar mas o nome for igual, o sistema reconhece.
-        
-        atualizarInterfaceComDadosProcessados(porDia, viewingTime, targetName);
-    }
-    
-    // ... (Funções de renderização visual chart/tabela mantidas do passo anterior) ...
-    // Basta colar a função renderizarGraficos/Tabela do passo anterior aqui, 
-    // certificando-se de que elas recebem os dados já processados.
-</script>
+        // ... Copie as funções auxiliares mudarAba, etc ...
+    </script>
+</body>
+</html>
