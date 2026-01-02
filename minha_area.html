@@ -7,7 +7,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/config.js"></script>
+    <script src=".js/config.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -23,8 +23,6 @@
 <body class="text-slate-800">
 
     <script>
-        // CONFIGURAÇÃO SUPABASE REMOVIDA DAQUI (JÁ ESTÁ EM js/config.js)
-
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (!usuario) { window.location.href = 'index.html'; return; }

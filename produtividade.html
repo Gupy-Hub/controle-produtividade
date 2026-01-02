@@ -6,7 +6,8 @@
     <title>Painel de Produtividade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/config.js"></script>
+    
+    <script src=".js/config.js"></script>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -14,7 +15,8 @@
 </head>
 <body class="text-slate-800">
     <script>
-        // CONFIGURAÇÃO SUPABASE REMOVIDA DAQUI (JÁ ESTÁ EM js/config.js)
+        // O _supabase agora vem do arquivo .js/config.js
+        // Se ainda der erro, verifique se o arquivo config.js está dentro da pasta .js
 
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
@@ -93,7 +95,7 @@
         }
         function getWeek(dateString) { const date = new Date(dateString + 'T12:00:00'); const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); return Math.ceil((date.getDate() + firstDay) / 7); }
         async function carregarDados() {
-            if (!_supabase) return; // Garante que o supabase carregou
+            if (!_supabase) return; 
             const view = document.getElementById('view-selector').value;
             let dataInicio, dataFim, titulo, semanaSel;
             if (view === 'dia') {
