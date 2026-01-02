@@ -1,18 +1,20 @@
 // js/layout.js
 
-const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+// NÃO declaramos mais SB_URL ou _supabase aqui. 
+// Eles já existem globalmente porque carregamos o config.js antes deste arquivo no HTML.
 
 function renderNavbar() {
     const usuario = JSON.parse(localStorage.getItem('usuario'));
     
     const path = window.location.pathname;
+    
+    // Se não estiver logado e não for a tela de login, manda para o login
     if (!usuario && !path.includes('index.html')) {
         window.location.href = 'index.html';
         return;
     }
 
+    // Se for a tela de login, não desenha a navbar
     if (path.includes('index.html')) return;
 
     const navbarHTML = `

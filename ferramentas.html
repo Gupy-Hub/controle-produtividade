@@ -7,6 +7,8 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -16,13 +18,7 @@
         .tab-active { background-color: #eff6ff; color: #2563eb; border-color: #2563eb; }
         .tab-inactive { color: #64748b; border-color: transparent; }
         .tab-inactive:hover { color: #334155; border-color: #cbd5e1; }
-        .header-select {
-            appearance: none; 
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-            background-position: right 0.5rem center;
-            background-repeat: no-repeat;
-            background-size: 1.5em 1.5em;
-        }
+        .header-select { appearance: none; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -30,10 +26,8 @@
 <body class="text-slate-800">
 
     <script>
-        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
-
+        // CONFIGURAÇÃO REMOVIDA DAQUI - JÁ ESTÁ EM js/config.js
+        
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
             if (!usuario) { window.location.href = 'index.html'; return; }
@@ -67,7 +61,7 @@
         function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
         renderNavbar();
     </script>
-
+    
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
             <div><h1 class="text-2xl font-bold text-slate-800">Ferramentas & Recursos</h1><p class="text-slate-500 text-sm">Biblioteca de conhecimento e utilitários.</p></div>
@@ -79,7 +73,7 @@
         </div>
 
         <div id="tab-lib" class="view-section animate-fade-in space-y-6">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
+             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2"><i class="fas fa-filter mr-1"></i> Filtrar por:</span>
                 <select id="filtro-empresa" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🏢 Empresas</option></select>
                 <select id="filtro-motivo" onchange="aplicarFiltros()" class="header-select py-2 pl-3 pr-8 rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-white transition w-40"><option value="">🎯 Motivos</option></select>
@@ -103,50 +97,45 @@
                 <div id="lib-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"><div class="col-span-full text-center py-10 text-slate-400">Carregando biblioteca...</div></div>
             </div>
         </div>
-
+        
         <div id="tab-calc" class="view-section hidden animate-fade-in">
-            <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg"><h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calculator text-blue-400"></i> Calculadora de Datas</h3></div>
-                <div class="p-8 space-y-8">
-                    <div class="flex justify-center"><div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200"><button onclick="mudarModoCalculadora('intervalo')" id="btn-mode-intervalo" class="px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition">Tempo Decorrido</button><button onclick="mudarModoCalculadora('soma')" id="btn-mode-soma" class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition">Somar Dias</button></div></div>
-                    <div class="flex flex-col md:flex-row gap-4 items-end"><div class="relative flex-1 w-full group"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider" id="label-data-base">Data Inicial</label><div class="relative"><input id="calc-data-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest"><i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg"></i></div></div><div id="container-input-dias" class="relative w-full md:w-32 hidden"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Dias</label><input id="calc-dias-input" type="number" placeholder="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center"></div><button onclick="processarCalculadora()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button></div>
-                    <div id="resultado-intervalo" class="hidden animate-fade-in space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span><span id="res-data-base" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span></div><div id="box-destaque-data" class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden"><span id="label-status-data" class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias</span><div class="flex items-baseline gap-1"><span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span><span class="text-sm font-bold text-blue-200">dias</span></div></div></div><div class="grid grid-cols-4 gap-3"><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-anos" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-meses" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-semanas" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-dias" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div></div></div>
-                    <div id="resultado-soma" class="hidden animate-fade-in"><div id="box-resultado-soma" class="border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300"><p id="label-resultado-soma" class="text-xs font-bold uppercase tracking-widest mb-2">A data futura será</p><h2 id="res-data-futura" class="text-4xl md:text-5xl font-black mb-2 font-mono">--/--/----</h2><p id="res-dia-semana" class="text-sm font-bold px-3 py-1 rounded-lg">---</p></div></div>
-                </div>
-            </div>
+             <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg"><h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calculator text-blue-400"></i> Calculadora de Datas</h3></div><div class="p-8 space-y-8"><div class="flex justify-center"><div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200"><button onclick="mudarModoCalculadora('intervalo')" id="btn-mode-intervalo" class="px-6 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition">Tempo Decorrido</button><button onclick="mudarModoCalculadora('soma')" id="btn-mode-soma" class="px-6 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition">Somar Dias</button></div></div><div class="flex flex-col md:flex-row gap-4 items-end"><div class="relative flex-1 w-full group"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider" id="label-data-base">Data Inicial</label><div class="relative"><input id="calc-data-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest"><i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg"></i></div></div><div id="container-input-dias" class="relative w-full md:w-32 hidden"><label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Dias</label><input id="calc-dias-input" type="number" placeholder="0" class="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center"></div><button onclick="processarCalculadora()" class="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button></div><div id="resultado-intervalo" class="hidden animate-fade-in space-y-6"><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span><span id="res-data-base" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span></div><div id="box-destaque-data" class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden"><span id="label-status-data" class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias</span><div class="flex items-baseline gap-1"><span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span><span class="text-sm font-bold text-blue-200">dias</span></div></div></div><div class="grid grid-cols-4 gap-3"><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-anos" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-meses" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-semanas" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div><div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm"><span id="res-dias" class="text-2xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div></div></div><div id="resultado-soma" class="hidden animate-fade-in"><div id="box-resultado-soma" class="border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300"><p id="label-resultado-soma" class="text-xs font-bold uppercase tracking-widest mb-2">A data futura será</p><h2 id="res-data-futura" class="text-4xl md:text-5xl font-black mb-2 font-mono">--/--/----</h2><p id="res-dia-semana" class="text-sm font-bold px-3 py-1 rounded-lg">---</p></div></div></div></div>
         </div>
-
         <div id="tab-cep" class="view-section hidden animate-fade-in">
-            <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-white/20 overflow-hidden">
-                <div class="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg"><h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Consulta CEP</h3></div>
-                <div class="p-8"><div class="flex gap-2 mb-6"><input id="cep-input" type="text" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300 text-lg"><button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl"><i class="fas fa-search"></i></button></div><div id="cep-loading" class="hidden text-center py-8 text-blue-500"><i class="fas fa-circle-notch fa-spin text-3xl"></i><p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p></div><div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-4 shadow-inner"><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Localidade</span> <span id="cep-localidade" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-center pt-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">CEP</span> <span id="cep-display-num" class="font-black text-blue-600 text-right text-lg bg-blue-100 px-3 py-1 rounded-lg"></span></div></div></div>
-            </div>
+            <div class="max-w-md mx-auto bg-white rounded-2xl shadow-xl border border-white/20 overflow-hidden"><div class="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg"><h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Consulta CEP</h3></div><div class="p-8"><div class="flex gap-2 mb-6"><input id="cep-input" type="text" placeholder="00000-000" maxlength="9" oninput="mascaraCEP(this)" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300 text-lg"><button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95 text-xl"><i class="fas fa-search"></i></button></div><div id="cep-loading" class="hidden text-center py-8 text-blue-500"><i class="fas fa-circle-notch fa-spin text-3xl"></i><p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p></div><div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-4 shadow-inner"><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Localidade</span> <span id="cep-localidade" class="font-bold text-slate-700 text-right text-sm"></span></div><div class="flex justify-between items-center pt-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">CEP</span> <span id="cep-display-num" class="font-black text-blue-600 text-right text-lg bg-blue-100 px-3 py-1 rounded-lg"></span></div></div></div></div>
         </div>
-    </div>
-
-    <div id="modal-frase" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3><button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button></div>
-            <div class="p-6 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+        
+        <div id="modal-frase" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
+                <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3><button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button></div>
+                <div class="p-6 space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                        <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                    </div>
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label><input type="text" id="form-doc" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo da Frase</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
                 </div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label><input type="text" id="form-doc" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo da Frase</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
+                <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end"><button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button></div>
             </div>
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end"><button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button></div>
         </div>
+
     </div>
 
     <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario')); const isMgr = sessao.funcao === 'Gestora';
+        // MANTENHA O SCRIPT DE FUNCIONALIDADES (ABRIR MODAL, FILTRAR, ETC) IGUAL AO ORIGINAL
+        // APENAS GARANTA QUE _supabase JÁ ESTÁ SENDO USADO GLOBALMENTE (não declare de novo)
+        
+        const sessao = JSON.parse(localStorage.getItem('usuario')); 
+        const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
+
         function switchTab(tab) { document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); document.getElementById('tab-' + tab).classList.remove('hidden'); ['lib', 'calc', 'cep'].forEach(t => { const btn = document.getElementById('btn-' + t); if (t === tab) btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-active transition flex items-center gap-2'; else btn.className = 'px-6 py-3 text-sm font-bold border-b-2 tab-inactive transition flex items-center gap-2'; }); }
         
         let frasesGlobal = [], frasesUsos = [];
         document.addEventListener('DOMContentLoaded', () => { carregarFrases(); switchTab('lib'); });
 
         async function carregarFrases() {
+            if(!_supabase) return; // Segurança caso falhe carregamento
             const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
             if (error) console.log("Erro API:", error);
             frasesGlobal = data || [];
@@ -156,7 +145,10 @@
 
             atualizarDropdowns(); aplicarFiltros(); atualizarTop4();
         }
-
+        
+        // ... RESTANTE DAS FUNÇÕES (atualizarDropdowns, aplicarFiltros, salvarFrase, Calculadora, etc) CONTINUA EXATAMENTE IGUAL ...
+        // Vou omitir aqui para economizar espaço, mas você deve copiar do arquivo original.
+        
         function atualizarDropdowns() {
             const empresas = [...new Set(frasesGlobal.map(f => f.empresa).filter(Boolean))].sort();
             const motivos = [...new Set(frasesGlobal.map(f => f.motivo).filter(Boolean))].sort();
@@ -209,8 +201,7 @@
                 frasesUsos.push({ frase_id: id, usuario_id: sessao.id }); atualizarTop4(); alert("Copiado com sucesso!");
             });
         }
-
-        // --- IMPORTAÇÃO ROBUSTA ---
+        
         async function importarFrasesExcel(input) {
             const file = input.files[0]; if (!file) return;
             const btn = document.getElementById('btn-import-lib'); const txtOriginal = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...'; btn.disabled = true;
@@ -246,7 +237,6 @@
             const e = document.getElementById('form-empresa').value; 
             const m = document.getElementById('form-motivo').value; 
             const d = document.getElementById('form-doc').value;
-            // Título vira Motivo se não especificado (que agora sempre será Motivo pois removemos o input)
             const t = m || "Nova Frase";
 
             if (!c) return alert("Preencha o Conteúdo.");
