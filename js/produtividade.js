@@ -1,280 +1,163 @@
-// js/produtividade.js
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Produtividade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
+</head>
+<body class="text-slate-800">
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
+    <script src="js/layout.js"></script>
 
-// Variáveis globais
-let dadosGlobais = [];
-let metasGlobais = [];
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Configura datas iniciais para 'Ontem'
-    const ontem = new Date();
-    ontem.setDate(ontem.getDate() - 1);
-    
-    // Define valores iniciais nos inputs
-    const strHoje = ontem.toISOString().split('T')[0];
-    const strMes = ontem.toISOString().substring(0, 7);
-
-    document.getElementById('select-dia').value = strHoje;
-    document.getElementById('select-mes').value = strMes;
-    
-    // Inicia a lógica
-    ajustarSeletores(); 
-});
-
-// Controla visualização dos inputs (Dia/Semana/Mês)
-function ajustarSeletores() {
-    const view = document.getElementById('view-selector').value;
-    const inputDia = document.getElementById('select-dia');
-    const inputMes = document.getElementById('select-mes');
-    const inputSemana = document.getElementById('select-semana');
-
-    // Reset visual
-    inputDia.classList.add('hidden');
-    inputMes.classList.add('hidden');
-    inputSemana.classList.add('hidden');
-
-    if (view === 'dia') {
-        inputDia.classList.remove('hidden');
-    } else if (view === 'semana') {
-        inputMes.classList.remove('hidden');
-        inputSemana.classList.remove('hidden');
-        if(inputDia.value) inputMes.value = inputDia.value.substring(0, 7);
-    } else {
-        inputMes.classList.remove('hidden');
-        if(inputDia.value) inputMes.value = inputDia.value.substring(0, 7);
-    }
-
-    carregarDados();
-}
-
-// Função auxiliar para calcular o número da semana no mês
-function getWeekNumber(dateString) { 
-    const date = new Date(dateString + 'T12:00:00'); 
-    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); 
-    return Math.ceil((date.getDate() + firstDay) / 7); 
-}
-
-// CARREGAMENTO OTIMIZADO (Promise.all)
-async function carregarDados() {
-    const view = document.getElementById('view-selector').value;
-    
-    let dataInicio, dataFim, titulo, semanaSel;
-    
-    // 1. Definir o intervalo de datas
-    if (view === 'dia') {
-        const dia = document.getElementById('select-dia').value;
-        if (!dia) return;
-        dataInicio = dia;
-        dataFim = dia;
-        titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
-    } else {
-        const mes = document.getElementById('select-mes').value;
-        if (!mes) return;
-        
-        dataInicio = `${mes}-01`;
-        // Pega último dia do mês automaticamente
-        const [ano, m] = mes.split('-');
-        const ultimoDia = new Date(ano, m, 0).getDate();
-        dataFim = `${mes}-${ultimoDia}`;
-
-        if (view === 'semana') {
-            semanaSel = parseInt(document.getElementById('select-semana').value);
-            titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`;
-        } else {
-            titulo = `Visão Mensal: ${mes}`;
-        }
-    }
-
-    // Feedback visual
-    document.getElementById('panel-titulo').innerText = "A carregar dados...";
-    const tbody = document.getElementById('tabela-corpo');
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 animate-pulse text-blue-600">A carregar informações...</td></tr>';
-
-    try {
-        // --- MELHORIA DE PERFORMANCE AQUI ---
-        // Fazemos os dois pedidos ao banco de dados AO MESMO TEMPO
-        const [resProducao, resMetas] = await Promise.all([
-            _supabase
-                .from('producao')
-                .select('*, usuarios(id, nome, funcao)')
-                .gte('data_referencia', dataInicio)
-                .lte('data_referencia', dataFim),
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Controle de Produção</h1>
+                <p class="text-sm text-slate-500" id="titulo-dinamico">Visão Geral</p>
+            </div>
             
-            _supabase
-                .from('metas')
-                .select('*')
-        ]);
+            <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg">
+                <div class="relative">
+                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
+                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
+                </div>
 
-        if (resProducao.error) throw resProducao.error;
-        if (resMetas.error) throw resMetas.error;
+                <select id="view-mode" onchange="toggleSemana()" class="py-2 px-4 border-2 border-slate-200 rounded-lg font-bold text-slate-600 outline-none bg-white">
+                    <option value="dia">Dia Específico</option>
+                    <option value="mes">Mês Completo</option>
+                    <option value="semana">Por Semana</option>
+                </select>
 
-        dadosGlobais = resProducao.data || [];
-        metasGlobais = resMetas.data || [];
+                <select id="select-semana" onchange="carregarTela()" class="hidden py-2 px-4 border-2 border-blue-200 bg-blue-50 text-blue-800 rounded-lg font-bold outline-none">
+                    <option value="1">Semana 1</option>
+                    <option value="2">Semana 2</option>
+                    <option value="3">Semana 3</option>
+                    <option value="4">Semana 4</option>
+                    <option value="5">Semana 5</option>
+                </select>
+            </div>
+        </div>
 
-        // Filtro de semana (feito no JS pois é mais complexo fazer no SQL simples)
-        if (view === 'semana') {
-            dadosGlobais = dadosGlobais.filter(d => getWeekNumber(d.data_referencia) === semanaSel);
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                <p class="text-xs font-bold text-slate-400 uppercase">Produção Total</p>
+                <p class="text-4xl font-extrabold text-blue-700" id="kpi-total">--</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                <p class="text-xs font-bold text-slate-400 uppercase">Média Geral</p>
+                <p class="text-4xl font-extrabold text-slate-800" id="kpi-media">--</p>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                <p class="text-xs font-bold text-slate-400 uppercase">Headcount</p>
+                <p class="text-4xl font-extrabold text-slate-800" id="kpi-hc">--</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                        <tr>
+                            <th class="px-6 py-4">Nome</th>
+                            <th class="px-6 py-4 text-center">Total</th>
+                            <th class="px-6 py-4 text-center">FIFO</th>
+                            <th class="px-6 py-4 text-center">Grad. Total</th>
+                            <th class="px-6 py-4 text-center">Grad. Parcial</th>
+                            <th class="px-6 py-4 text-center">Meta Calc.</th>
+                            <th class="px-6 py-4 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
+            await Sistema.Dados.carregarUsuarios();
+            carregarTela();
+        });
+
+        function toggleSemana() {
+            const mode = document.getElementById('view-mode').value;
+            const selSemana = document.getElementById('select-semana');
+            if (mode === 'semana') selSemana.classList.remove('hidden');
+            else selSemana.classList.add('hidden');
+            carregarTela();
         }
 
-        renderizarTabela(titulo);
+        async function carregarTela() {
+            const modo = document.getElementById('view-mode').value;
+            const refDate = Sistema.Datas.obterDataObjeto();
+            
+            let inicio, fim, titulo;
 
-    } catch (erro) {
-        console.error(erro);
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-red-500 font-bold">Erro ao carregar dados. Verifique a conexão.</td></tr>';
-    }
-}
-
-function renderizarTabela(tituloPainel) {
-    document.getElementById('panel-titulo').innerText = tituloPainel;
-    
-    // Processamento dos dados
-    let stats = {};
-
-    dadosGlobais.forEach(item => {
-        // Ignora quem não tem utilizador associado ou não é assistente
-        if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
-
-        const uid = item.usuario_id;
-        
-        if (!stats[uid]) {
-            stats[uid] = {
-                id: uid,
-                nome: item.usuarios.nome,
-                total: 0,
-                fifo: 0,
-                gt: 0,
-                gp: 0,
-                diasTrabalhados: new Set() // Set guarda apenas valores únicos (datas únicas)
-            };
-        }
-
-        // Soma os valores
-        stats[uid].total += (item.quantidade || 0);
-        stats[uid].fifo += (item.fifo || 0);
-        stats[uid].gt += (item.gradual_total || 0);
-        stats[uid].gp += (item.gradual_parcial || 0);
-        stats[uid].diasTrabalhados.add(item.data_referencia);
-    });
-
-    // Transforma objeto em array e ordena (Maior produção primeiro)
-    const lista = Object.values(stats).sort((a, b) => b.total - a.total);
-
-    // Atualiza KPIs do topo
-    const somaTotal = lista.reduce((acc, curr) => acc + curr.total, 0);
-    const media = lista.length ? Math.round(somaTotal / lista.length) : 0;
-
-    document.getElementById('p-total').innerText = somaTotal.toLocaleString();
-    document.getElementById('p-media').innerText = media.toLocaleString();
-    document.getElementById('p-headcount').innerText = lista.length;
-
-    // Gera HTML
-    const tbody = document.getElementById('tabela-corpo');
-    
-    if (lista.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum registo encontrado para este período.</td></tr>';
-        return;
-    }
-
-    // Criamos o HTML todo de uma vez (mais rápido que criar elementos um a um)
-    let html = '';
-    lista.forEach(user => {
-        const diasCount = user.diasTrabalhados.size || 1;
-        // Meta simples: 650 por dia. (Futuramente podes cruzar com metasGlobais se quiseres algo exato)
-        const metaCalculada = 650 * diasCount;
-        
-        const atingiuMeta = user.total >= metaCalculada;
-        
-        // Classes condicionais (Tailwind)
-        const corBadge = atingiuMeta ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
-        const textoBadge = atingiuMeta ? 'Atingida' : 'Abaixo';
-
-        html += `
-        <tr class="hover:bg-slate-50 transition duration-150 border-b border-slate-100">
-            <td class="px-6 py-4 font-medium text-slate-900">${user.nome}</td>
-            <td class="px-6 py-4 text-center font-bold text-blue-700 text-lg">${user.total.toLocaleString()}</td>
-            <td class="px-6 py-4 text-center text-slate-600">${user.fifo}</td>
-            <td class="px-6 py-4 text-center text-slate-600">${user.gt}</td>
-            <td class="px-6 py-4 text-center text-slate-600">${user.gp}</td>
-            <td class="px-6 py-4 text-center text-slate-400">${metaCalculada.toLocaleString()}</td>
-            <td class="px-6 py-4 text-center">
-                <span class="${corBadge} text-xs font-bold px-3 py-1 rounded-full border">
-                    ${textoBadge}
-                </span>
-            </td>
-        </tr>
-        `;
-    });
-
-    tbody.innerHTML = html;
-}
-
-// Função de Importação de Excel (Mantida similar, apenas limpa)
-async function importarArquivos() {
-    const files = document.getElementById('excel-files').files;
-    if (files.length === 0) return;
-
-    const btn = document.getElementById('btn-import');
-    const originalText = btn.innerHTML;
-    
-    btn.innerHTML = '⏳ Processando...';
-    btn.disabled = true;
-
-    let log = { ok: 0, dup: 0, err: 0 };
-
-    for (let f of files) {
-        try {
-            // Valida nome do ficheiro (Espera formato AAAAMMDD.xlsx)
-            const name = f.name.replace('.xlsx', '');
-            if (!/^\d{8}$/.test(name)) { 
-                console.warn(`Arquivo ignorado (nome inválido): ${f.name}`);
-                log.err++; 
-                continue; 
+            if (modo === 'dia') {
+                const iso = refDate.toISOString().split('T')[0];
+                inicio = iso; fim = iso;
+                titulo = "Visão do Dia: " + iso.split('-').reverse().join('/');
+            } else {
+                // Mês base para "Mes" e "Semana"
+                const ano = refDate.getFullYear();
+                const mes = refDate.getMonth();
+                inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+                fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+                titulo = `Mês de ${mes+1}/${ano}`;
             }
 
-            const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
-            
-            const buffer = await f.arrayBuffer();
-            const wb = XLSX.read(buffer, { type: 'array' });
-            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+            const { data } = await _supabase.from('producao')
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            for (let row of json) {
-                if (!row.id_assistente) continue;
+            let dadosFiltrados = data || [];
 
-                // Verifica duplicidade antes de inserir
-                const { data: exists } = await _supabase
-                    .from('producao')
-                    .select('id')
-                    .eq('usuario_id', row.id_assistente)
-                    .eq('data_referencia', dataRef)
-                    .maybeSingle();
-
-                if (exists) {
-                    log.dup++;
-                } else {
-                    await _supabase.from('producao').insert({
-                        usuario_id: row.id_assistente,
-                        data_referencia: dataRef,
-                        fifo: row.documentos_validados_fifo || 0,
-                        gradual_total: row.documentos_validados_gradual_total || 0,
-                        gradual_parcial: row.documentos_validados_gradual_parcial || 0,
-                        perfil_fc: row.documentos_validados_perfil_fc || 0,
-                        quantidade: row.documentos_validados || 0
-                    });
-                    log.ok++;
-                }
+            // Filtro de Semana (Feito via JS pois a semana é relativa ao mês)
+            if (modo === 'semana') {
+                const numSemana = parseInt(document.getElementById('select-semana').value);
+                dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
+                titulo += ` - Semana ${numSemana}`;
             }
-        } catch (e) {
-            console.error(e);
-            log.err++;
-        }
-    }
 
-    alert(`Fim da Importação!\n✅ Sucesso: ${log.ok}\n⚠️ Duplicados: ${log.dup}\n❌ Erros: ${log.err}`);
-    
-    // Reseta estado
-    btn.innerHTML = originalText;
-    btn.disabled = false;
-    document.getElementById('excel-files').value = "";
-    
-    // Recarrega a tabela para mostrar os novos dados
-    carregarDados();
-}
+            document.getElementById('titulo-dinamico').innerText = titulo;
+
+            const lista = Sistema.Dados.normalizar(dadosFiltrados);
+            
+            const total = lista.reduce((a, b) => a + b.total, 0);
+            const diasTotais = lista.reduce((a, b) => a + b.dias, 0);
+            const media = diasTotais ? Math.round(total/diasTotais) : 0;
+
+            document.getElementById('kpi-total').innerText = total.toLocaleString();
+            document.getElementById('kpi-media').innerText = media.toLocaleString();
+            document.getElementById('kpi-hc').innerText = lista.length;
+
+            const tbody = document.getElementById('tabela-corpo');
+            tbody.innerHTML = '';
+            
+            if(lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400">Sem dados.</td></tr>';
+                return;
+            }
+
+            lista.forEach(u => {
+                const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
+                tbody.innerHTML += `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome} <span class="text-[10px] text-slate-400">(${u.dias} dias)</span></td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total}</td>
+                    <td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td>
+                    <td class="px-6 py-4 text-center text-slate-600">${u.gt}</td>
+                    <td class="px-6 py-4 text-center text-slate-600">${u.gp}</td>
+                    <td class="px-6 py-4 text-center text-slate-400">${u.meta}</td>
+                    <td class="px-6 py-4 text-center">${badge}</td>
+                </tr>`;
+            });
+        }
+    </script>
+</body>
+</html>

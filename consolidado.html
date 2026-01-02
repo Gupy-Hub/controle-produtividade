@@ -15,7 +15,7 @@
 
     <div class="max-w-7xl mx-auto px-6 py-8">
         <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-black text-slate-800">Consolidado Mensal</h1>
+            <h1 class="text-3xl font-black text-slate-800">Consolidado</h1>
             <div class="relative">
                 <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">MÊS REF</span>
                 <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
@@ -24,27 +24,45 @@
 
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total</span>
-                <h2 class="text-4xl font-black text-blue-600 mt-2" id="c-total">--</h2>
+                <span class="text-xs font-bold text-slate-400 uppercase">Total Validado / Deveria</span>
+                <div class="flex items-baseline gap-2 mt-2">
+                    <h2 class="text-2xl font-black text-blue-600" id="card-validado">--</h2>
+                    <span class="text-sm text-slate-400">/</span>
+                    <span class="text-lg font-bold text-slate-500" id="card-deveria">--</span>
+                </div>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Meta (Soma)</span>
-                <h2 class="text-4xl font-black text-slate-700 mt-2" id="c-meta">--</h2>
+                <span class="text-xs font-bold text-slate-400 uppercase">Meta Validada / Deveria</span>
+                <div class="flex items-baseline gap-2 mt-2">
+                    <h2 class="text-2xl font-black text-slate-700" id="card-meta-validada">--</h2>
+                    <span class="text-sm text-slate-400">/</span>
+                    <span class="text-lg font-bold text-slate-500" id="card-meta-deveria">--</span>
+                </div>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Atingimento</span>
-                <h2 class="text-4xl font-black text-emerald-600 mt-2" id="c-ating">--</h2>
+                <span class="text-xs font-bold text-slate-400 uppercase">% Atingiu / Deveria</span>
+                <div class="flex items-baseline gap-2 mt-2">
+                    <h2 class="text-2xl font-black text-emerald-600" id="card-pct-real">--%</h2>
+                    <span class="text-sm text-slate-400">/</span>
+                    <span class="text-lg font-bold text-slate-500">100%</span>
+                </div>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Headcount</span>
-                <h2 class="text-4xl font-black text-purple-600 mt-2" id="c-hc">--</h2>
+                <span class="text-xs font-bold text-slate-400 uppercase">Total de Assistentes</span>
+                <h2 class="text-4xl font-black text-purple-600 mt-2" id="card-hc">--</h2>
             </div>
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <table class="w-full text-sm text-left">
                 <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                    <tr><th class="px-6 py-4">Nome</th><th class="px-6 py-4 text-center">Dias</th><th class="px-6 py-4 text-center">Produção</th><th class="px-6 py-4 text-center">Meta</th><th class="px-6 py-4 text-center">Diferença</th></tr>
+                    <tr>
+                        <th class="px-6 py-4">Nome</th>
+                        <th class="px-6 py-4 text-center">Dias</th>
+                        <th class="px-6 py-4 text-center">Total Validado</th>
+                        <th class="px-6 py-4 text-center">Meta Calc.</th>
+                        <th class="px-6 py-4 text-center">Diferença</th>
+                    </tr>
                 </thead>
                 <tbody id="lista-consolidada" class="divide-y divide-slate-50"></tbody>
             </table>
@@ -59,33 +77,41 @@
         });
 
         async function carregarConsolidado() {
-            const intervalo = Sistema.Datas.getIntervalo('mes');
+            const ref = Sistema.Datas.obterDataObjeto();
+            const ano = ref.getFullYear();
+            const mes = ref.getMonth();
+            const inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+            const fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+
             const { data } = await _supabase.from('producao')
-                .select('*').gte('data_referencia', intervalo.inicio).lte('data_referencia', intervalo.fim);
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
             const lista = Sistema.Dados.normalizar(data || []);
 
-            const total = lista.reduce((acc, c) => acc + c.total, 0);
-            const meta = lista.reduce((acc, c) => acc + c.meta, 0);
+            // Cálculos dos Cards
+            const totalValidado = lista.reduce((acc, c) => acc + c.total, 0);
+            const metaValidada = lista.reduce((acc, c) => acc + c.meta, 0); // Meta referente aos dias trabalhados
             
-            document.getElementById('c-total').innerText = total.toLocaleString();
-            document.getElementById('c-meta').innerText = meta.toLocaleString();
-            document.getElementById('c-ating').innerText = meta ? Math.round((total/meta)*100) + '%' : '0%';
-            document.getElementById('c-hc').innerText = lista.length;
+            // "Deveria" - Assumindo dias úteis ou dias totais?
+            // "Total que deveria ser validado" = Soma das metas
+            const totalDeveria = metaValidada; 
+            
+            document.getElementById('card-validado').innerText = totalValidado.toLocaleString();
+            document.getElementById('card-deveria').innerText = totalDeveria.toLocaleString();
+            
+            document.getElementById('card-meta-validada').innerText = metaValidada.toLocaleString();
+            document.getElementById('card-meta-deveria').innerText = totalDeveria.toLocaleString(); // Meta validada = Meta Deveria neste contexto
+            
+            const pct = totalDeveria ? Math.round((totalValidado/totalDeveria)*100) : 0;
+            document.getElementById('card-pct-real').innerText = pct + '%';
+            document.getElementById('card-hc').innerText = lista.length;
 
             const tbody = document.getElementById('lista-consolidada');
             tbody.innerHTML = '';
             lista.forEach(u => {
                 const diff = u.total - u.meta;
                 const color = diff >= 0 ? 'text-emerald-600' : 'text-red-600';
-                tbody.innerHTML += `
-                <tr class="hover:bg-slate-50">
-                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td>
-                    <td class="px-6 py-4 text-center">${u.dias}</td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-600">${u.total.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center font-bold ${color}">${diff > 0 ? '+' : ''}${diff.toLocaleString()}</td>
-                </tr>`;
+                tbody.innerHTML += `<tr class="hover:bg-slate-50"><td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td><td class="px-6 py-4 text-center">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-600">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center font-bold ${color}">${diff > 0 ? '+' : ''}${diff.toLocaleString()}</td></tr>`;
             });
         }
     </script>

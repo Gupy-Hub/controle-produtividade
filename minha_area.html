@@ -2,40 +2,61 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minha Área</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
-        .btn-tab.active { @apply bg-white text-blue-600 shadow-sm border-slate-100; }
-        .btn-chart.active { @apply bg-blue-600 text-white shadow-md; }
-    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; } .btn-tab.active { @apply bg-white text-blue-600 shadow-sm border-slate-100; } </style>
 </head>
 <body class="bg-slate-50">
-
     <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script> <script src="js/layout.js"></script>
+    <script src="js/sistema.js"></script>
+    <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-4 py-8">
-        <div class="flex justify-between items-center mb-8">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
             <h1 class="text-3xl font-black text-slate-800">Minha Área</h1>
-            <div class="flex items-center gap-2">
-               <div id="container-filtro-user" class="hidden">
-                   <select id="filtro-user" onchange="atualizarDashboard()" class="bg-white border border-slate-200 rounded-lg p-2">
-                       <option value="me">Minha Visão</option>
-                       <option value="time">Time</option>
-                   </select>
-               </div>
-               <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold" placeholder="DD/MM/AAAA">
+            <div class="flex items-center gap-3">
+                <div id="container-filtro-user" class="hidden">
+                    <select id="filtro-user" onchange="atualizarDashboard()" class="bg-white border border-slate-200 rounded-lg p-2 font-bold text-slate-600 outline-none">
+                        <option value="me">Minha Visão</option>
+                        <option value="time">Time Todo</option>
+                    </select>
+                </div>
+                <div class="relative">
+                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
+                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
+                </div>
             </div>
         </div>
-        
-        <div id="conteudo-principal">...</div>
-        <div id="aviso-gestora-view" class="hidden">...</div>
+
+        <div id="aviso-gestora-view" class="hidden bg-blue-50 p-8 rounded-xl text-center text-blue-800 font-bold mb-8">
+            Modo Gestão: Selecione "Time Todo" ou uma Assistente para ver dados.
+        </div>
+
+        <div id="conteudo-principal">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Produção (Mês)</span>
+                    <h2 class="text-4xl font-black text-blue-600 mt-2" id="kpi-total">--</h2>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Atingimento</span>
+                    <h2 class="text-4xl font-black text-emerald-600 mt-2" id="kpi-ating">--%</h2>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Média Diária</span>
+                    <h2 class="text-4xl font-black text-purple-600 mt-2" id="kpi-media">--</h2>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 min-h-[400px]">
+                <h3 class="font-bold text-slate-700 mb-4">Evolução Mensal</h3>
+                <canvas id="chartPrincipal"></canvas>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -44,55 +65,33 @@
         let myChart = null;
 
         document.addEventListener('DOMContentLoaded', async () => {
-            // Usa o Cérebro
             Sistema.Datas.configurarInputGlobal('data-global', atualizarDashboard);
             await Sistema.Dados.carregarUsuarios();
 
-            // Popula filtro gestor
             if (isMgr) {
                 document.getElementById('container-filtro-user').classList.remove('hidden');
-                document.getElementById('aviso-gestora-view').classList.remove('hidden');
-                
                 const sel = document.getElementById('filtro-user');
-                // Adiciona assistentes ao select
-                Object.values(Sistema.Dados.mapaUsuarios).forEach(u => {
+                Object.entries(Sistema.Dados.mapaUsuarios).forEach(([id, u]) => {
                     if (u.funcao === 'Assistente') {
-                        const opt = document.createElement('option');
-                        // Precisamos achar o ID pelo nome ou o contrário. 
-                        // O mapa é ID->Obj. Vamos iterar as keys.
-                        // Melhor fazer um loop nas entries.
-                    }
-                });
-                
-                // Re-populando com ID correto
-                const entries = Object.entries(Sistema.Dados.mapaUsuarios);
-                entries.sort((a,b) => a[1].nome.localeCompare(b[1].nome));
-                entries.forEach(([id, u]) => {
-                    if(u.funcao === 'Assistente') {
                         const opt = document.createElement('option');
                         opt.value = id; opt.text = u.nome;
                         sel.appendChild(opt);
                     }
                 });
-            } else {
-                document.getElementById('conteudo-principal').classList.remove('hidden');
             }
-
             atualizarDashboard();
         });
 
         async function atualizarDashboard() {
-            // Lógica de Datas
-            const refDate = Sistema.Datas.obterDataObjeto();
-            const ano = refDate.getFullYear();
-            const mes = refDate.getMonth();
+            const ref = Sistema.Datas.obterDataObjeto();
+            const ano = ref.getFullYear();
+            const mes = ref.getMonth();
             const inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-            const fim = new Date(ano, mes+1, 0).toISOString().split('T')[0];
+            const fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
 
-            // Quem ver?
-            let targetId = sessao.id;
+            let targetName = Sistema.Dados.mapaUsuarios[sessao.id]?.nome;
             let viewingTime = false;
-            
+
             if (isMgr) {
                 const val = document.getElementById('filtro-user').value;
                 if (val === 'me') {
@@ -104,61 +103,47 @@
                 document.getElementById('aviso-gestora-view').classList.add('hidden');
                 
                 if (val === 'time') viewingTime = true;
-                else targetId = val;
+                else targetName = Sistema.Dados.mapaUsuarios[val]?.nome;
             }
 
-            // Busca Dados
-            const { data } = await _supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-
-            // Normaliza com o Sistema
+            const { data } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
             const lista = Sistema.Dados.normalizar(data || []);
-            
-            // Filtra o alvo
-            let dadosAlvo = null;
+
+            let dadosAlvo = { total: 0, meta: 0, dias: 0 };
+
             if (viewingTime) {
-                // Cria objeto falso representando a média do time
-                const total = lista.reduce((acc,c)=>acc+c.total,0);
-                const dias = lista.reduce((acc,c)=>acc+c.dias,0); // Soma dias trabalhados de todos
-                // Média Time = Produção Total / Dias Totais Trabalhados
-                // Ex: A (1000 em 2 dias), B (500 em 1 dia). Total 1500. Dias 3. Média 500/dia.
-                const mediaTime = dias ? Math.round(total/dias) : 0;
-                
-                // Média de Meta
-                const metaTotal = lista.reduce((acc,c)=>acc+c.meta,0);
-                const metaMedia = dias ? Math.round(metaTotal/dias) : 650;
-
-                dadosAlvo = {
-                    total: total, // Total absoluto do time (se quiser mostrar volume) ou média?
-                    // KPI pede Total. Vamos mostrar Total do Time.
-                    producaoDisplay: total, 
-                    metaDisplay: metaTotal,
-                    mediaDiaria: mediaTime,
-                    atingiu: total >= metaTotal
-                };
+                // Soma do Time todo
+                dadosAlvo.total = lista.reduce((a,b)=>a+b.total,0);
+                dadosAlvo.meta = lista.reduce((a,b)=>a+b.meta,0);
+                const diasTotal = lista.reduce((a,b)=>a+b.dias,0); // Soma de dias trabalhados
+                dadosAlvo.dias = diasTotal;
             } else {
-                const nomeAlvo = Sistema.Dados.mapaUsuarios[targetId]?.nome;
-                const encontrado = lista.find(u => u.nome === nomeAlvo);
-                if (encontrado) {
-                    dadosAlvo = {
-                        producaoDisplay: encontrado.total,
-                        metaDisplay: encontrado.meta,
-                        mediaDiaria: encontrado.media,
-                        atingiu: encontrado.atingiu
-                    };
-                }
+                const u = lista.find(p => p.nome === targetName);
+                if (u) dadosAlvo = u;
             }
 
-            // Renderiza KPIs
-            if (dadosAlvo) {
-                document.getElementById('kpi-total').innerText = dadosAlvo.producaoDisplay.toLocaleString();
-                // ... outros KPIs ...
-            }
-            
-            // ... (Restante da lógica de gráficos igual ao anterior) ...
+            const media = dadosAlvo.dias ? Math.round(dadosAlvo.total / dadosAlvo.dias) : 0;
+            const ating = dadosAlvo.meta ? Math.round((dadosAlvo.total/dadosAlvo.meta)*100) : 0;
+
+            document.getElementById('kpi-total').innerText = dadosAlvo.total.toLocaleString();
+            document.getElementById('kpi-media').innerText = media.toLocaleString();
+            document.getElementById('kpi-ating').innerText = ating + '%';
+
+            // Chart Simples
+            const ctx = document.getElementById('chartPrincipal').getContext('2d');
+            if(myChart) myChart.destroy();
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: viewingTime ? lista.map(u=>u.nome) : ['Total', 'Meta'], // Simplificação para garantir visualização
+                    datasets: [{
+                        label: 'Produção',
+                        data: viewingTime ? lista.map(u=>u.total) : [dadosAlvo.total, dadosAlvo.meta],
+                        borderColor: '#3b82f6', tension: 0.3
+                    }]
+                }
+            });
         }
-        
-        // ... Copie as funções auxiliares mudarAba, etc ...
     </script>
 </body>
 </html>

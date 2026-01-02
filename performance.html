@@ -2,13 +2,11 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Performance</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
@@ -18,29 +16,37 @@
 
     <div class="max-w-7xl mx-auto px-6 py-8">
         <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-black text-slate-800">Ranking (Top 10)</h1>
+            <h1 class="text-3xl font-black text-slate-800">Ranking & Performance</h1>
             <div class="relative">
                 <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">MÊS REF</span>
                 <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
             </div>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-1 space-y-4">
-                <div class="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
-                    <div class="relative z-10">
-                        <span class="text-xs font-bold uppercase tracking-widest opacity-80">1º Lugar</span>
-                        <h2 class="text-3xl font-black mt-1" id="rank-1-nome">--</h2>
-                        <p class="text-xl font-medium opacity-90 mt-1" id="rank-1-valor">--</p>
-                    </div>
-                    <i class="fas fa-trophy absolute -bottom-4 -right-4 text-8xl opacity-20 rotate-12"></i>
-                </div>
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-500 text-sm uppercase">Ranking Mensal</div>
-                    <div id="lista-ranking" class="divide-y divide-slate-50"></div>
-                </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <span class="text-xs font-bold text-slate-400 uppercase">Total Validado</span>
+                <h2 class="text-2xl font-black text-blue-600 mt-1" id="perf-total">--</h2>
             </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <span class="text-xs font-bold text-slate-400 uppercase">Total FIFO</span>
+                <h2 class="text-2xl font-black text-slate-700 mt-1" id="perf-fifo">--</h2>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <span class="text-xs font-bold text-slate-400 uppercase">Total Gradual</span>
+                <h2 class="text-2xl font-black text-slate-700 mt-1" id="perf-gt">--</h2>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <span class="text-xs font-bold text-slate-400 uppercase">Total Parcial</span>
+                <h2 class="text-2xl font-black text-slate-700 mt-1" id="perf-gp">--</h2>
+            </div>
+        </div>
 
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 bg-slate-50 border-b font-bold text-slate-500 uppercase">Top 10</div>
+                <div id="lista-ranking" class="divide-y divide-slate-50"></div>
+            </div>
             <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <canvas id="chartRanking"></canvas>
             </div>
@@ -56,47 +62,42 @@
         });
 
         async function carregarRanking() {
-            // Ranking é sempre mensal baseado na data global
-            const intervalo = Sistema.Datas.getIntervalo('mes');
-            
-            const { data } = await _supabase.from('producao')
-                .select('*')
-                .gte('data_referencia', intervalo.inicio)
-                .lte('data_referencia', intervalo.fim);
+            // Performance é baseada no MÊS da data selecionada
+            const ref = Sistema.Datas.obterDataObjeto();
+            const ano = ref.getFullYear();
+            const mes = ref.getMonth();
+            const inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+            const fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
 
-            // Normaliza para garantir que é por nome e apenas assistentes
+            const { data } = await _supabase.from('producao')
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+
             const lista = Sistema.Dados.normalizar(data || []);
             const top10 = lista.slice(0, 10);
 
-            // Update Top 1
-            if(top10.length > 0) {
-                document.getElementById('rank-1-nome').innerText = top10[0].nome;
-                document.getElementById('rank-1-valor').innerText = top10[0].total.toLocaleString();
-            } else {
-                document.getElementById('rank-1-nome').innerText = "Sem dados";
-            }
+            // Atualiza Cards
+            const total = lista.reduce((a,b)=>a+b.total,0);
+            const fifo = lista.reduce((a,b)=>a+b.fifo,0);
+            const gt = lista.reduce((a,b)=>a+b.gt,0);
+            const gp = lista.reduce((a,b)=>a+b.gp,0);
 
-            // Lista
+            document.getElementById('perf-total').innerText = total.toLocaleString();
+            document.getElementById('perf-fifo').innerText = fifo.toLocaleString();
+            document.getElementById('perf-gt').innerText = gt.toLocaleString();
+            document.getElementById('perf-gp').innerText = gp.toLocaleString();
+
             const container = document.getElementById('lista-ranking');
             container.innerHTML = '';
             top10.forEach((r, i) => {
                 const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
-                container.innerHTML += `
-                <div class="p-4 flex justify-between items-center hover:bg-slate-50">
-                    <div class="flex items-center gap-3"><span class="w-6">${medal}</span><span class="font-bold text-sm">${r.nome}</span></div>
-                    <span class="font-bold text-blue-600 bg-blue-50 px-2 rounded">${r.total.toLocaleString()}</span>
-                </div>`;
+                container.innerHTML += `<div class="p-4 flex justify-between hover:bg-slate-50"><div class="flex gap-2"><span class="w-6">${medal}</span><span class="font-bold text-sm">${r.nome}</span></div><span class="font-bold text-blue-600">${r.total}</span></div>`;
             });
 
-            // Chart
             const ctx = document.getElementById('chartRanking').getContext('2d');
             if(myChart) myChart.destroy();
             myChart = new Chart(ctx, {
                 type: 'bar',
-                data: {
-                    labels: top10.map(r => r.nome),
-                    datasets: [{ label: 'Produção', data: top10.map(r => r.total), backgroundColor: '#3b82f6', borderRadius: 6 }]
-                },
+                data: { labels: top10.map(r=>r.nome), datasets: [{ label: 'Total', data: top10.map(r=>r.total), backgroundColor: '#3b82f6', borderRadius: 6 }] },
                 options: { responsive: true, plugins: { legend: { display: false } } }
             });
         }
