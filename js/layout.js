@@ -1,25 +1,43 @@
 // js/layout.js
 
+// 1. Funções Auxiliares (Globais)
+function createNavLink(label, linkUrl) {
+    // Verifica se a página atual corresponde a este link
+    const isActive = window.location.href.includes(linkUrl);
+    const activeClass = isActive ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+    return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+}
+
+// Função de Logout Global
+window.logout = function() {
+    localStorage.removeItem('usuario');
+    window.location.href = 'index.html';
+}
+
+// 2. Função Principal de Renderização
 function renderNavbar() {
-    // Verifica se _supabase existe (carregado pelo config.js)
+    console.log("Tentando renderizar navbar...");
+
+    // Verificação de Segurança: O config.js carregou?
     if (!window._supabase) {
-        console.error("Supabase não encontrado no layout.");
+        console.error("ERRO: _supabase não encontrado. Verifique se js/config.js foi carregado antes de js/layout.js");
+        // Opcional: alert("Erro de sistema: Configuração não carregada.");
         return;
     }
 
     const usuario = JSON.parse(localStorage.getItem('usuario'));
     const path = window.location.pathname;
 
-    // Regra de Redirecionamento:
-    // Se não tiver usuário logado E não estiver na tela de login (index.html ou raiz /)
+    // Regra de Redirecionamento (Segurança Frontend)
     if (!usuario && !path.endsWith('index.html') && !path.endsWith('/')) {
         window.location.href = 'index.html';
         return;
     }
 
-    // Se estiver na tela de login, não desenha a navbar
+    // Não desenha menu na tela de login
     if (path.endsWith('index.html') || path.endsWith('/')) return;
 
+    // HTML do Menu
     const navbarHTML = `
     <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
         <div class="flex items-center gap-3 select-none cursor-pointer" onclick="window.location.href='produtividade.html'">
@@ -44,21 +62,17 @@ function renderNavbar() {
             <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
         </div>
     </nav>
-    <div class="h-20"></div>`; // Espaçador para o conteúdo não ficar atrás da navbar
+    <div class="h-20"></div>`; // Espaçador
 
+    // Insere no topo do corpo da página
     document.body.insertAdjacentHTML('afterbegin', navbarHTML);
+    console.log("Navbar renderizada com sucesso.");
 }
 
-function createNavLink(label, linkUrl) {
-    const isActive = window.location.href.includes(linkUrl);
-    const activeClass = isActive ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-    return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+// 3. Inicialização Segura
+// Aguarda o HTML carregar completamente antes de tentar desenhar o menu
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', renderNavbar);
+} else {
+    renderNavbar();
 }
-
-function logout() {
-    localStorage.removeItem('usuario');
-    window.location.href = 'index.html';
-}
-
-// Executa a função automaticamente ao carregar o arquivo
-renderNavbar();
