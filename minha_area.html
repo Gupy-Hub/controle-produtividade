@@ -85,7 +85,7 @@
                         <span class="text-sm font-bold text-slate-400">docs</span>
                     </div>
                     <div class="mt-4 flex items-center justify-between text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span class="text-slate-500">Meta</span>
+                        <span class="text-slate-500">Meta Período</span>
                         <span class="text-slate-800" id="kpi-meta-total">--</span>
                     </div>
                 </div>
@@ -177,8 +177,7 @@
                             <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="fas fa-calendar-check"></i></div>
                             <div>
                                 <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Dias Trabalhados</span>
-                                <span id="evo-dias" class="text-xl font-black text-slate-800">--</span> 
-                                <span id="evo-label-dias" class="text-xs text-slate-400 ml-1">no período</span>
+                                <span id="evo-dias" class="text-xl font-black text-slate-800">--</span> <span id="evo-label-dias" class="text-xs text-slate-400 ml-1">no período</span>
                             </div>
                         </div>
                         <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
@@ -199,21 +198,22 @@
                 </div>
 
                 <div id="tab-comparativo" class="view-tab hidden p-8 animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
-                    <div class="flex flex-col md:flex-row gap-8 items-center justify-center w-full max-w-4xl">
-                        <div class="flex-1 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-8 text-center text-white shadow-xl shadow-blue-200 relative overflow-hidden group">
-                            <div class="absolute top-0 right-0 p-8 opacity-10 group-hover:scale-110 transition"><i class="fas fa-user text-8xl"></i></div>
-                            <span id="label-media-selecionada" class="block text-xs font-bold text-blue-200 uppercase tracking-widest mb-4">Sua Média</span>
+                    <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl">
+                        
+                        <div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
+                            <span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span>
                             <h2 id="comp-media-user" class="text-6xl font-black tracking-tighter mb-2">--</h2>
-                            <span class="text-sm font-medium text-blue-100 opacity-80">documentos / dia trabalhado</span>
+                            <span class="text-sm font-medium opacity-60">documentos / dia</span>
                         </div>
                         
-                        <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-black text-xs shadow-inner shrink-0">VS</div>
+                        <div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div>
 
-                        <div class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden">
-                            <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Média da Equipa</span>
-                            <h2 id="comp-media-time" class="text-6xl font-black text-slate-700 tracking-tighter mb-2">--</h2>
-                            <span class="text-sm font-medium text-slate-400">documentos / dia trabalhado</span>
+                        <div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
+                            <span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span>
+                            <h2 id="comp-media-time" class="text-6xl font-black tracking-tighter mb-2">--</h2>
+                            <span class="text-sm font-medium opacity-60">documentos / dia</span>
                         </div>
+
                     </div>
                     <div id="comp-mensagem" class="mt-10 text-center font-bold text-slate-500 text-lg">Carregando comparativo...</div>
                 </div>
@@ -248,11 +248,10 @@
         
         let myChart = null;
         let usersMap = {}; 
-        let userRoles = {}; // Para validar função (Regra 1)
+        let userRoles = {};
         let nameToIdsMap = {}; 
         
         document.addEventListener('DOMContentLoaded', async () => {
-            // 1. DATA PERSISTENTE
             const savedDate = localStorage.getItem('dash_date_ref');
             if (savedDate && savedDate.length === 10) {
                 document.getElementById('filtro-data-manual').value = savedDate;
@@ -264,10 +263,8 @@
                 document.getElementById('filtro-data-manual').value = `${dia}/${mes}/${ano}`;
             }
 
-            // 2. CARREGAR UTILIZADORES E PAPEIS
             await carregarUsuarios(); 
 
-            // 3. UI GESTORA
             if (isMgr) {
                 document.getElementById('container-filtro-user').classList.remove('hidden');
                 document.getElementById('aviso-edicao').classList.remove('hidden');
@@ -305,7 +302,7 @@
                 
                 data.forEach(u => {
                     usersMap[u.id] = u.nome;
-                    userRoles[u.id] = u.funcao; // IMPORTANTE: Guarda a função para filtrar depois
+                    userRoles[u.id] = u.funcao; 
 
                     if(!nameToIdsMap[u.nome]) nameToIdsMap[u.nome] = [];
                     nameToIdsMap[u.nome].push(u.id);
@@ -326,33 +323,22 @@
             }
         }
 
-        // --- NORMALIZAÇÃO (APLICA AS REGRAS) ---
+        // --- NORMALIZAÇÃO ---
         function normalizarDadosPorNome(rawData) {
             const agrupado = {};
             rawData.forEach(item => {
-                // REGRA: Ignora se não for Assistente
                 if (userRoles[item.usuario_id] !== 'Assistente') return;
-
                 const nome = usersMap[item.usuario_id] || 'Desconhecido';
                 const data = item.data_referencia;
-                
                 if (!agrupado[data]) agrupado[data] = {};
                 if (!agrupado[data][nome]) {
                     agrupado[data][nome] = {
-                        id_ref: item.id, 
-                        quantidade: 0, 
-                        meta_diaria: item.meta_diaria || 650,
-                        observacao: item.observacao || '', 
-                        observacao_gestora: item.observacao_gestora || ''
+                        id_ref: item.id, quantidade: 0, meta_diaria: item.meta_diaria || 650,
+                        observacao: item.observacao || '', observacao_gestora: item.observacao_gestora || ''
                     };
                 }
-                
-                // Unificação de IDs (Soma produção)
                 agrupado[data][nome].quantidade += item.quantidade;
-                
-                if (item.observacao && !agrupado[data][nome].observacao.includes(item.observacao)) {
-                    agrupado[data][nome].observacao += ` | ${item.observacao}`;
-                }
+                if (item.observacao && !agrupado[data][nome].observacao.includes(item.observacao)) agrupado[data][nome].observacao += ` | ${item.observacao}`;
             });
             return agrupado;
         }
@@ -361,7 +347,6 @@
             const refDate = getDateFromInput();
             if (isNaN(refDate.getTime())) return;
 
-            // PARA OS KPIS e TABELA: SEMPRE MÊS DA DATA SELECIONADA
             const ano = refDate.getFullYear();
             const mes = refDate.getMonth();
             const dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
@@ -392,30 +377,22 @@
             let dadosFinais = [];
 
             if (viewingTime) {
-                // Média Geral do Time
                 Object.keys(dadosNormalizados).sort().forEach(dia => {
                     const prods = Object.values(dadosNormalizados[dia]);
                     const total = prods.reduce((a, b) => a + b.quantidade, 0);
                     const headcount = prods.length;
                     dadosFinais.push({
-                        data_referencia: dia, 
-                        quantidade: headcount ? Math.round(total / headcount) : 0,
-                        meta_diaria: 650, 
-                        observacao: `Média de ${headcount} assistentes`
+                        data_referencia: dia, quantidade: headcount ? Math.round(total / headcount) : 0,
+                        meta_diaria: 650, observacao: `Média de ${headcount} assistentes`
                     });
                 });
             } else {
-                // Assistente Específico
                 Object.keys(dadosNormalizados).sort().forEach(dia => {
                     const dPessoa = dadosNormalizados[dia][targetName];
                     if (dPessoa) {
                         dadosFinais.push({
-                            id: dPessoa.id_ref, 
-                            data_referencia: dia, 
-                            quantidade: dPessoa.quantidade,
-                            meta_diaria: dPessoa.meta_diaria, 
-                            observacao: dPessoa.observacao, 
-                            observacao_gestora: dPessoa.observacao_gestora
+                            id: dPessoa.id_ref, data_referencia: dia, quantidade: dPessoa.quantidade,
+                            meta_diaria: dPessoa.meta_diaria, observacao: dPessoa.observacao, observacao_gestora: dPessoa.observacao_gestora
                         });
                     }
                 });
@@ -434,16 +411,12 @@
             carregarFeedbacks(); 
         }
 
-        // --- KPIS ---
         function atualizarKPIs(dados) {
             const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-            // REGRA: Dias Trabalhados = Dias onde produção > 0
             const diasTrabalhados = dados.filter(d => d.quantidade > 0).length || 1; 
             
             let metaTotal = 0;
-            // Soma meta apenas dos dias que houve registo ou usa padrão 22 dias se vazio
-            if(dados.length > 0) dados.forEach(d => metaTotal += (d.meta_diaria || 650));
-            else metaTotal = 650 * 22;
+            if(dados.length > 0) dados.forEach(d => metaTotal += (d.meta_diaria || 650)); else metaTotal = 650 * 22;
 
             const media = Math.round(total / diasTrabalhados);
             const atingimento = Math.round((total / metaTotal) * 100);
@@ -480,27 +453,20 @@
 
         async function atualizarMeta(id, nv, av) { if(nv==av) return; const m = prompt("Motivo:"); if(!m){ atualizarDashboard(); return;} const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); atualizarDashboard(); }
 
-        // --- GRÁFICOS (REGRAS DE DATA DO UTILIZADOR) ---
+        // --- GRÁFICOS ---
         async function renderizarGraficos(periodo) {
-            // UI
             document.querySelectorAll('.btn-chart').forEach(b => b.classList.remove('active'));
             document.getElementById(`chart-btn-${periodo}`).classList.add('active');
 
             const refDate = getDateFromInput();
             const ano = refDate.getFullYear();
             const mes = refDate.getMonth();
-            const dia = refDate.getDate(); // não usado para range, mas referência
-
             let dInicio, dFim;
 
-            // REGRA: DATAS RELATIVAS À DATA SELECIONADA
             if (periodo === 'mes') {
                 dInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
                 dFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
             } else if (periodo === 'trimestre') {
-                // Trimestre do Ano Escolhido (Jan-Mar, Abr-Jun, etc) OU 3 meses anteriores?
-                // Pedido: "Referente ao ano escolhido".
-                // Vamos usar Trimestres Civis com base no mês selecionado.
                 const trimStart = Math.floor(mes / 3) * 3;
                 dInicio = new Date(ano, trimStart, 1).toISOString().split('T')[0];
                 dFim = new Date(ano, trimStart + 3, 0).toISOString().split('T')[0];
@@ -522,25 +488,20 @@
 
             const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dInicio).lte('data_referencia', dFim).order('data_referencia');
             const grouped = normalizarDadosPorNome(rawData || []);
-            const agruparPorMes = (periodo === 'ano'); // Se ano, mostra meses no eixo X
+            const agruparPorMes = (periodo === 'ano');
 
-            // Prepara Dados
             const processedTime = {}, processedMain = {}, metaMap = {};
             Object.keys(grouped).sort().forEach(date => {
-                let label = agruparPorMes ? date.substring(0, 7) : date; // YYYY-MM ou YYYY-MM-DD
-                
+                let label = agruparPorMes ? date.substring(0, 7) : date;
                 const prods = Object.values(grouped[date]);
                 const total = prods.reduce((a,b)=>a+b.quantidade,0); const count = prods.length;
                 const avg = count ? Math.round(total/count) : 0;
 
                 if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; metaMap[label] = 0; }
-                processedTime[label].sum += avg; processedTime[label].cnt++; // Soma das médias diárias
+                processedTime[label].sum += avg; processedTime[label].cnt++;
 
                 let valUser = 0; let metaUser = 650;
-                if(grouped[date][targetName]) { 
-                    valUser = grouped[date][targetName].quantidade; 
-                    metaUser = grouped[date][targetName].meta_diaria || 650;
-                }
+                if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; metaUser = grouped[date][targetName].meta_diaria || 650; }
                 processedMain[label] += valUser; metaMap[label] = metaUser;
             });
 
@@ -549,45 +510,28 @@
             let statsDias = 0, statsBest = 0, statsBatida = 0;
 
             labels.forEach(k => {
-                // Cálculo de valor para o gráfico
-                // Se for Mês, count é 1 (dia). Se for ano, count é ~30 (dias do mes).
-                // Média do Time: (Soma das Médias Diárias / Dias com Registro)
                 const valTime = Math.round(processedTime[k].sum / processedTime[k].cnt);
-                
-                // Média do User: (Soma Produção / Dias com Registro) -> Para ano, soma produção total ou média mensal?
-                // Gráfico de evolução anual geralmente mostra PRODUÇÃO TOTAL MENSAL ou MÉDIA MENSAL?
-                // Para performance, MÉDIA DIÁRIA MENSAL é melhor comparativo.
-                // Mas processedMain[label] está somando a produção total do mês.
-                // Precisamos dividir pelo número de dias trabalhados naquele mês para ser justo com a "Média 650".
-                
+                // Ajuste para Anual: Soma total do mes ou Média Diária do Mês?
+                // Para consistencia com meta de 650, vamos usar média diária aproximada
                 let valMainFinal = processedMain[k];
-                if (agruparPorMes) {
-                    // Para anual, vamos converter o total mensal em média diária aproximada para ficar na escala de 650
-                    // Ou mantemos total e subimos a meta? Melhor média diária.
-                    valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); // Aproximação pelos dias úteis do time
-                }
-
+                if (agruparPorMes) valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); 
+                
                 const displayMain = viewingTime ? valTime : valMainFinal;
                 dataMain.push(displayMain);
-                
-                const displayBench = viewingTime ? 650 : valTime;
-                dataBench.push(displayBench);
+                dataBench.push(viewingTime ? 650 : valTime);
 
                 if(displayMain > 0) {
-                    statsDias++; // Conta meses ou dias dependendo da visão
+                    statsDias++;
                     if(displayMain > statsBest) statsBest = displayMain;
-                    if(displayMain >= (viewingTime ? 650 : 650)) statsBatida++; // Meta fixa visual
+                    if(displayMain >= (viewingTime ? 650 : 650)) statsBatida++;
                 }
             });
 
-            // Update Cards Stats (Dentro do Render para reagir ao clique)
-            const labelTempo = agruparPorMes ? "meses ativos" : "dias trabalhados";
             document.getElementById('evo-dias').innerText = statsDias;
-            document.getElementById('evo-label-dias').innerText = labelTempo;
+            document.getElementById('evo-label-dias').innerText = agruparPorMes ? "meses ativos" : "dias trabalhados";
             document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%';
             document.getElementById('evo-best').innerText = statsBest;
 
-            // Chart
             const ctx = document.getElementById('chartPrincipal').getContext('2d');
             if(myChart) myChart.destroy();
             
@@ -600,70 +544,79 @@
                 data: {
                     labels: labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/')),
                     datasets: [
-                        {
-                            label: viewingTime ? 'Média Equipa' : targetName,
-                            data: dataMain,
-                            borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderColor: '#2563eb', pointHoverRadius: 6
-                        },
-                        {
-                            label: viewingTime ? 'Meta (650)' : 'Média Equipa',
-                            data: dataBench,
-                            borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, pointRadius: 0, fill: false
-                        }
+                        { label: viewingTime ? 'Média Equipa' : targetName, data: dataMain, borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderColor: '#2563eb' },
+                        { label: viewingTime ? 'Meta (650)' : 'Média Equipa', data: dataBench, borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, pointRadius: 0, fill: false }
                     ]
                 },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    layout: { padding: { bottom: 30 } }, // Espaço para evitar sobreposição
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { 
-                        legend: { position: 'bottom', align: 'center', labels: { usePointStyle: true, boxWidth: 8, font: { weight: 'bold' }, padding: 20 } }, 
-                        title: { display: false },
-                        tooltip: { backgroundColor: '#1e293b', titleFont: { size: 13 }, bodyFont: { size: 13 }, padding: 10, cornerRadius: 8, displayColors: true } 
-                    },
-                    scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4], color: '#e2e8f0' } }, x: { grid: { display: false } } }
-                }
+                options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { weight: 'bold' }, padding: 20 } } }, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } } }
             });
         }
 
+        // --- COMPARATIVO (CORES DE ALERTA) ---
         async function atualizarComparativoRapido(dadosFinais, viewingTime, targetName, inicio, fim) {
-            const labelT = document.getElementById('label-media-selecionada');
-            labelT.innerText = viewingTime ? "Média Consolidada" : `Média ${targetName}`;
-            
-            // Média Global do Período (Todos os assistentes)
+            const cardL = document.getElementById('card-comp-left');
+            const cardR = document.getElementById('card-comp-right');
+            const labelL = document.getElementById('label-media-selecionada');
+            const labelR = document.getElementById('label-media-benchmark');
+            const valL = document.getElementById('comp-media-user');
+            const valR = document.getElementById('comp-media-time');
+
+            // 1. Calcular Média Time Global (Referência)
             const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
             const norm = normalizarDadosPorNome(all||[]);
-            
             let sumMedias=0, cntDias=0;
-            // Percorre dias
             Object.values(norm).forEach(diaObj => {
-                const arr = Object.values(diaObj); // Pessoas naquele dia
-                // Soma produção do dia
-                const totDia = arr.reduce((a,b)=>a+b.quantidade,0);
-                // Conta quantas pessoas produziram > 0
+                const arr = Object.values(diaObj);
+                const tot = arr.reduce((a,b)=>a+b.quantidade,0);
                 const headCount = arr.filter(p => p.quantidade > 0).length;
-                
-                if(headCount > 0) {
-                    sumMedias += (totDia / headCount); // Média do dia
-                    cntDias++;
-                }
+                if(headCount > 0) { sumMedias += (tot/headCount); cntDias++; }
             });
             const mediaGeral = cntDias ? Math.round(sumMedias/cntDias) : 0;
             
-            // Média do User (Filtra dias > 0)
+            // 2. Calcular Média Selecionada (Esquerda)
+            // Filtra apenas dias trabalhados (>0)
             const diasTrabUser = dadosFinais.filter(d => d.quantidade > 0);
             const totUser = diasTrabUser.reduce((a,b)=>a+b.quantidade,0);
             const mediaUser = diasTrabUser.length ? Math.round(totUser/diasTrabUser.length) : 0;
-            
-            document.getElementById('comp-media-user').innerText = mediaUser;
-            document.getElementById('comp-media-time').innerText = mediaGeral;
-            const diff = mediaUser - mediaGeral;
-            const msg = document.getElementById('comp-mensagem');
-            
-            if(viewingTime) msg.innerHTML = '<span class="text-blue-500">Visualização de Média Geral</span>';
-            else if(diff>0) msg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima da média</span>`;
-            else if(diff<0) msg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo da média</span>`;
-            else msg.innerHTML = `<span class="text-slate-500">Na média exata</span>`;
+
+            // 3. Atualizar UI
+            valL.innerText = mediaUser;
+            valR.innerText = viewingTime ? 650 : mediaGeral; // Se vê Time, benchmark é meta. Se vê User, benchmark é Time.
+
+            // Títulos
+            labelL.innerText = viewingTime ? "Média da Equipa" : `Média ${targetName}`;
+            labelR.innerText = viewingTime ? "Meta Esperada" : "Média Geral da Equipa";
+
+            // LÓGICA DE CORES (CRÍTICO)
+            // Esquerda (User/Time)
+            if (mediaUser < 650) {
+                cardL.className = "flex-1 bg-red-500 border border-red-600 rounded-3xl p-8 text-center shadow-lg relative overflow-hidden transition-colors duration-300 text-white";
+                labelL.className = "block text-xs font-bold text-red-200 uppercase tracking-widest mb-4";
+            } else {
+                cardL.className = "flex-1 bg-gradient-to-br from-blue-600 to-indigo-700 border border-transparent rounded-3xl p-8 text-center shadow-xl relative overflow-hidden transition-colors duration-300 text-white";
+                labelL.className = "block text-xs font-bold text-blue-200 uppercase tracking-widest mb-4";
+            }
+
+            // Direita (Benchmark)
+            const valRight = viewingTime ? 650 : mediaGeral;
+            // Se o benchmark for Time, e o Time estiver abaixo da meta, deve ficar vermelho?
+            // User disse: "se a assistente ou a média do time estiver abaixo da média que deveria ser (650)... card deve ficar vermelho"
+            if (valRight < 650) {
+                cardR.className = "flex-1 bg-red-50 border border-red-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
+                labelR.className = "block text-xs font-bold text-red-400 uppercase tracking-widest mb-4";
+                valR.className = "text-6xl font-black text-red-600 tracking-tighter mb-2";
+            } else {
+                cardR.className = "flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
+                labelR.className = "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4";
+                valR.className = "text-6xl font-black text-slate-700 tracking-tighter mb-2";
+            }
+
+            // Mensagem
+            const diff = mediaUser - valRight;
+            const elMsg = document.getElementById('comp-mensagem');
+            if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`;
+            else if (diff < 0) elMsg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo do esperado</span>`;
+            else elMsg.innerHTML = `<span class="text-slate-500">Exatamente na média.</span>`;
         }
 
         function mudarAba(aba) {
