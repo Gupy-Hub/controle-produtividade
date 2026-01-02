@@ -1,162 +1,137 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
-    <title>Produtividade</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Produtividade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
+    
     <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Controle de Produção</h1>
-                <p class="text-sm text-slate-500" id="titulo-dinamico">Visão Geral</p>
-            </div>
-            
-            <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg">
-                <div class="relative">
-                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
-                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
-                </div>
-
-                <select id="view-mode" onchange="toggleSemana()" class="py-2 px-4 border-2 border-slate-200 rounded-lg font-bold text-slate-600 outline-none bg-white">
-                    <option value="dia">Dia Específico</option>
-                    <option value="mes">Mês Completo</option>
-                    <option value="semana">Por Semana</option>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-8 flex flex-wrap gap-4 items-center justify-between">
+            <div class="flex items-center gap-3"><div class="p-2 bg-blue-100 text-blue-700 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><h1 class="text-xl font-bold text-slate-800">Controlo de Produção</h1></div>
+            <div class="flex flex-wrap gap-3 items-center">
+                <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
+                    <option value="dia">📅 Dia Específico</option><option value="semana">📅 Por Semana</option><option value="mes">📊 Mês Completo</option>
                 </select>
-
-                <select id="select-semana" onchange="carregarTela()" class="hidden py-2 px-4 border-2 border-blue-200 bg-blue-50 text-blue-800 rounded-lg font-bold outline-none">
-                    <option value="1">Semana 1</option>
-                    <option value="2">Semana 2</option>
-                    <option value="3">Semana 3</option>
-                    <option value="4">Semana 4</option>
-                    <option value="5">Semana 5</option>
+                <input type="date" id="select-dia" onchange="carregarDados()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                <select id="select-semana" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                    <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
                 </select>
+                <input type="file" id="excel-files" accept=".xlsx" multiple class="hidden" onchange="importarArquivos()">
+                <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">📂 Importar Excel</button>
             </div>
         </div>
-
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase">Produção Total</p>
-                <p class="text-4xl font-extrabold text-blue-700" id="kpi-total">--</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase">Média Geral</p>
-                <p class="text-4xl font-extrabold text-slate-800" id="kpi-media">--</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase">Headcount</p>
-                <p class="text-4xl font-extrabold text-slate-800" id="kpi-hc">--</p>
-            </div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total (Sistema)</p><p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média do Time</p><p class="text-3xl font-extrabold text-slate-800" id="p-media">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assistentes Ativos</p><p class="text-3xl font-extrabold text-slate-800" id="p-headcount">0</p></div>
         </div>
-
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                        <tr>
-                            <th class="px-6 py-4">Nome</th>
-                            <th class="px-6 py-4 text-center">Total</th>
-                            <th class="px-6 py-4 text-center">FIFO</th>
-                            <th class="px-6 py-4 text-center">Grad. Total</th>
-                            <th class="px-6 py-4 text-center">Grad. Parcial</th>
-                            <th class="px-6 py-4 text-center">Meta Calc.</th>
-                            <th class="px-6 py-4 text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3><span id="panel-titulo" class="text-sm font-medium text-slate-500">A carregar...</span></div>
+            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th><th class="px-6 py-3 text-center">FIFO</th><th class="px-6 py-3 text-center">G. Total</th><th class="px-6 py-3 text-center">G. Parcial</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Estado</th></tr></thead><tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody></table></div>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
-            await Sistema.Dados.carregarUsuarios();
-            carregarTela();
+        let dadosGlobais = [], metasGlobais = [];
+        document.addEventListener('DOMContentLoaded', () => {
+            const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+            document.getElementById('select-dia').value = ontem.toISOString().split('T')[0];
+            document.getElementById('select-mes').value = ontem.toISOString().substring(0, 7);
+            ajustarSeletores(); 
         });
-
-        function toggleSemana() {
-            const mode = document.getElementById('view-mode').value;
-            const selSemana = document.getElementById('select-semana');
-            if (mode === 'semana') selSemana.classList.remove('hidden');
-            else selSemana.classList.add('hidden');
-            carregarTela();
+        function ajustarSeletores() {
+            const view = document.getElementById('view-selector').value;
+            const d = document.getElementById('select-dia'), m = document.getElementById('select-mes'), s = document.getElementById('select-semana');
+            d.classList.add('hidden'); m.classList.add('hidden'); s.classList.add('hidden');
+            if (view === 'dia') d.classList.remove('hidden');
+            else if (view === 'semana') { m.classList.remove('hidden'); s.classList.remove('hidden'); if(d.value && !m.value) m.value = d.value.substring(0, 7); }
+            else { m.classList.remove('hidden'); if(d.value && !m.value) m.value = d.value.substring(0, 7); }
+            carregarDados();
         }
-
-        async function carregarTela() {
-            const modo = document.getElementById('view-mode').value;
-            const refDate = Sistema.Datas.obterDataObjeto();
-            
-            let inicio, fim, titulo;
-
-            if (modo === 'dia') {
-                const iso = refDate.toISOString().split('T')[0];
-                inicio = iso; fim = iso;
-                titulo = "Visão do Dia: " + iso.split('-').reverse().join('/');
+        function getWeek(dateString) { const date = new Date(dateString + 'T12:00:00'); const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); return Math.ceil((date.getDate() + firstDay) / 7); }
+        async function carregarDados() {
+            const view = document.getElementById('view-selector').value;
+            let dataInicio, dataFim, titulo, semanaSel;
+            if (view === 'dia') {
+                const dia = document.getElementById('select-dia').value; if(!dia) return;
+                dataInicio = dia; dataFim = dia; titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
             } else {
-                // Mês base para "Mes" e "Semana"
-                const ano = refDate.getFullYear();
-                const mes = refDate.getMonth();
-                inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-                fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-                titulo = `Mês de ${mes+1}/${ano}`;
+                const mes = document.getElementById('select-mes').value; if(!mes) return;
+                dataInicio = `${mes}-01`; const [ano, m] = mes.split('-'); const ultimoDia = new Date(ano, m, 0).getDate(); dataFim = `${mes}-${ultimoDia}`;
+                if (view === 'semana') { semanaSel = parseInt(document.getElementById('select-semana').value); titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`; }
+                else { titulo = `Visão Mensal: ${mes}`; }
             }
+            document.getElementById('panel-titulo').innerText = "A carregar..."; document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">A carregar dados...</td></tr>';
+            try {
+                const { data: p, error: eP } = await _supabase.from('producao').select('*, usuarios(*)').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
+                if (eP) throw eP;
+                const { data: m, error: eM } = await _supabase.from('metas').select('*'); if (eM) throw eM;
+                dadosGlobais = p || []; metasGlobais = m || [];
+                if (view === 'semana') dadosGlobais = dadosGlobais.filter(d => getWeek(d.data_referencia) === semanaSel);
+                renderizarTabela(titulo);
+            } catch (err) { console.error(err); alert("Erro ao carregar dados."); }
+        }
+        function renderizarTabela(titulo) {
+            document.getElementById('panel-titulo').innerText = titulo;
+            let stats = {};
+            dadosGlobais.forEach(item => {
+                if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
+                const uid = item.usuario_id;
+                // APENAS SISTEMA
+                const qtdTotal = (item.quantidade || 0); 
 
-            const { data } = await _supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-
-            let dadosFiltrados = data || [];
-
-            // Filtro de Semana (Feito via JS pois a semana é relativa ao mês)
-            if (modo === 'semana') {
-                const numSemana = parseInt(document.getElementById('select-semana').value);
-                dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
-                titulo += ` - Semana ${numSemana}`;
-            }
-
-            document.getElementById('titulo-dinamico').innerText = titulo;
-
-            const lista = Sistema.Dados.normalizar(dadosFiltrados);
-            
-            const total = lista.reduce((a, b) => a + b.total, 0);
-            const diasTotais = lista.reduce((a, b) => a + b.dias, 0);
-            const media = diasTotais ? Math.round(total/diasTotais) : 0;
-
-            document.getElementById('kpi-total').innerText = total.toLocaleString();
-            document.getElementById('kpi-media').innerText = media.toLocaleString();
-            document.getElementById('kpi-hc').innerText = lista.length;
-
-            const tbody = document.getElementById('tabela-corpo');
-            tbody.innerHTML = '';
-            
-            if(lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400">Sem dados.</td></tr>';
-                return;
-            }
-
-            lista.forEach(u => {
-                const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
-                tbody.innerHTML += `
-                <tr class="hover:bg-slate-50">
-                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome} <span class="text-[10px] text-slate-400">(${u.dias} dias)</span></td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total}</td>
-                    <td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td>
-                    <td class="px-6 py-4 text-center text-slate-600">${u.gt}</td>
-                    <td class="px-6 py-4 text-center text-slate-600">${u.gp}</td>
-                    <td class="px-6 py-4 text-center text-slate-400">${u.meta}</td>
-                    <td class="px-6 py-4 text-center">${badge}</td>
-                </tr>`;
+                if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
+                stats[uid].total += qtdTotal;
+                stats[uid].fifo += (item.fifo || 0);
+                stats[uid].gt += (item.gradual_total || 0);
+                stats[uid].gp += (item.gradual_parcial || 0);
+                stats[uid].dias.add(item.data_referencia);
             });
+            const lista = Object.values(stats).sort((a, b) => b.total - a.total);
+            const total = lista.reduce((a, b) => a + b.total, 0);
+            document.getElementById('p-total').innerText = total.toLocaleString();
+            document.getElementById('p-media').innerText = lista.length ? Math.round(total / lista.length).toLocaleString() : 0;
+            document.getElementById('p-headcount').innerText = lista.length;
+            const tbody = document.getElementById('tabela-corpo');
+            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registo encontrado.</td></tr>'; return; }
+            let html = '';
+            lista.forEach(u => {
+                const diasTrab = u.dias.size || 1; const meta = 650 * diasTrab; const atingiu = u.total >= meta; const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+                html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100"><td class="px-6 py-4 font-medium text-slate-900">${u.nome}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center">${u.fifo}</td><td class="px-6 py-4 text-center">${u.gt}</td><td class="px-6 py-4 text-center">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badge} text-xs font-bold px-2 py-1 rounded-full">${atingiu ? 'Atingida' : 'Abaixo'}</span></td></tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+        async function importarArquivos() {
+            const files = document.getElementById('excel-files').files; if (files.length === 0) return;
+            const btn = document.getElementById('btn-import'); const originalText = btn.innerHTML; btn.innerHTML = '⏳ Processando...'; btn.disabled = true;
+            let log = { ok: 0, dup: 0, err: 0 };
+            for (let f of files) {
+                try {
+                    const name = f.name.replace('.xlsx', ''); if (!/^\d{8}$/.test(name)) { log.err++; continue; }
+                    const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
+                    const buffer = await f.arrayBuffer(); const wb = XLSX.read(buffer, { type: 'array' }); const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                    for (let row of json) {
+                        if (!row.id_assistente) continue;
+                        const { data: exists } = await _supabase.from('producao').select('id').eq('usuario_id', row.id_assistente).eq('data_referencia', dataRef).maybeSingle();
+                        if (exists) { log.dup++; } else {
+                            await _supabase.from('producao').insert({ usuario_id: row.id_assistente, data_referencia: dataRef, fifo: row.documentos_validados_fifo || 0, gradual_total: row.documentos_validados_gradual_total || 0, gradual_parcial: row.documentos_validados_gradual_parcial || 0, perfil_fc: row.documentos_validados_perfil_fc || 0, quantidade: row.documentos_validados || 0 }); log.ok++;
+                        }
+                    }
+                } catch (e) { console.error(e); log.err++; }
+            }
+            alert(`Fim da Importação!\n✅ Sucesso: ${log.ok}\n⚠️ Duplicados: ${log.dup}\n❌ Erros: ${log.err}`);
+            btn.innerHTML = originalText; btn.disabled = false; document.getElementById('excel-files').value = ""; carregarDados();
         }
     </script>
 </body>
