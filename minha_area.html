@@ -23,8 +23,6 @@
         .btn-chart { @apply px-4 py-1.5 rounded-lg text-xs font-bold transition-all; }
         .btn-chart.active { @apply bg-blue-600 text-white shadow-md shadow-blue-200; }
         .btn-chart:not(.active) { @apply bg-white text-slate-500 hover:bg-slate-50 border border-slate-100; }
-        
-        .custom-date-input { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3e%3cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'/%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 1rem; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -47,10 +45,11 @@
                     <input type="text" id="filtro-data-manual" 
                            onclick="this.select()" 
                            placeholder="DD/MM/AAAA" maxlength="10" 
-                           oninput="mascaraData(this)" 
+                           data-sync="true"
+                           oninput="mascaraDataGlobal(this)" 
                            onblur="aplicarDataManual()" 
                            onkeypress="verificarEnter(event)" 
-                           class="custom-date-input bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 block w-36 py-2.5 pl-3 pr-8 font-bold outline-none tracking-wide transition-all hover:border-blue-300">
+                           class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 block w-36 py-2.5 px-3 font-bold outline-none tracking-wide transition-all hover:border-blue-300 text-center">
                 </div>
 
                 <div id="container-filtro-user" class="relative hidden group border-l border-slate-100 pl-3">
@@ -167,11 +166,9 @@
                             <button onclick="renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
                         </div>
                     </div>
-
                     <div class="relative h-[320px] w-full bg-gradient-to-b from-white to-slate-50/50 rounded-2xl border border-slate-100 p-4 mb-8">
                         <canvas id="chartPrincipal"></canvas>
                     </div>
-
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
                         <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
                             <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="fas fa-calendar-check"></i></div>
@@ -198,29 +195,24 @@
                 </div>
 
                 <div id="tab-comparativo" class="view-tab hidden p-8 animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
-                    <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl">
-                        
+                     <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl">
                         <div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
                             <span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span>
                             <h2 id="comp-media-user" class="text-6xl font-black tracking-tighter mb-2">--</h2>
                             <span class="text-sm font-medium opacity-60">documentos / dia</span>
                         </div>
-                        
                         <div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div>
-
                         <div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
                             <span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span>
                             <h2 id="comp-media-time" class="text-6xl font-black tracking-tighter mb-2">--</h2>
                             <span class="text-sm font-medium opacity-60">documentos / dia</span>
                         </div>
-
                     </div>
                     <div id="comp-mensagem" class="mt-10 text-center font-bold text-slate-500 text-lg">Carregando comparativo...</div>
                 </div>
 
                 <div id="tab-feedback" class="view-tab hidden flex flex-col h-[550px]">
-                    <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50 scroll-smooth">
-                        </div>
+                     <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50 scroll-smooth"></div>
                     <div class="p-6 bg-white border-t border-slate-100 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] z-10">
                         <div class="flex items-center gap-3 mb-3">
                             <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Destinatário:</span>
@@ -252,16 +244,9 @@
         let nameToIdsMap = {}; 
         
         document.addEventListener('DOMContentLoaded', async () => {
-            const savedDate = localStorage.getItem('dash_date_ref');
-            if (savedDate && savedDate.length === 10) {
-                document.getElementById('filtro-data-manual').value = savedDate;
-            } else {
-                const hoje = new Date();
-                const dia = String(hoje.getDate()).padStart(2, '0');
-                const mes = String(hoje.getMonth() + 1).padStart(2, '0');
-                const ano = hoje.getFullYear();
-                document.getElementById('filtro-data-manual').value = `${dia}/${mes}/${ano}`;
-            }
+            // USANDO DATA GLOBAL
+            const dataSalva = DataGlobal.obter();
+            document.getElementById('filtro-data-manual').value = dataSalva;
 
             await carregarUsuarios(); 
 
@@ -273,23 +258,20 @@
             atualizarDashboard();
         });
 
-        // --- DATA E MASCARA ---
-        function mascaraData(input) {
-            let v = input.value.replace(/\D/g, '').slice(0, 8);
-            if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
-            else if (v.length >= 3) v = v.replace(/(\d{2})(\d{1,2})/, '$1/$2');
-            input.value = v;
-        }
         function verificarEnter(e) { if(e.key === 'Enter') aplicarDataManual(); }
+        
         function aplicarDataManual() { 
             const val = document.getElementById('filtro-data-manual').value;
             if(val.length === 10) {
-                localStorage.setItem('dash_date_ref', val);
+                // Sincroniza via DataGlobal
+                DataGlobal.definir(val);
                 atualizarDashboard(); 
             }
         }
+        
         function getDateFromInput() {
             const val = document.getElementById('filtro-data-manual').value;
+            // Parse manual porque o Date(string) as vezes falha com DD/MM/AAAA
             const parts = val.split('/');
             return new Date(parts[2], parts[1]-1, parts[0]);
         }
@@ -323,7 +305,6 @@
             }
         }
 
-        // --- NORMALIZAÇÃO ---
         function normalizarDadosPorNome(rawData) {
             const agrupado = {};
             rawData.forEach(item => {
@@ -453,7 +434,6 @@
 
         async function atualizarMeta(id, nv, av) { if(nv==av) return; const m = prompt("Motivo:"); if(!m){ atualizarDashboard(); return;} const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); atualizarDashboard(); }
 
-        // --- GRÁFICOS ---
         async function renderizarGraficos(periodo) {
             document.querySelectorAll('.btn-chart').forEach(b => b.classList.remove('active'));
             document.getElementById(`chart-btn-${periodo}`).classList.add('active');
@@ -511,8 +491,6 @@
 
             labels.forEach(k => {
                 const valTime = Math.round(processedTime[k].sum / processedTime[k].cnt);
-                // Ajuste para Anual: Soma total do mes ou Média Diária do Mês?
-                // Para consistencia com meta de 650, vamos usar média diária aproximada
                 let valMainFinal = processedMain[k];
                 if (agruparPorMes) valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); 
                 
@@ -552,7 +530,6 @@
             });
         }
 
-        // --- COMPARATIVO (CORES DE ALERTA) ---
         async function atualizarComparativoRapido(dadosFinais, viewingTime, targetName, inicio, fim) {
             const cardL = document.getElementById('card-comp-left');
             const cardR = document.getElementById('card-comp-right');
@@ -561,7 +538,6 @@
             const valL = document.getElementById('comp-media-user');
             const valR = document.getElementById('comp-media-time');
 
-            // 1. Calcular Média Time Global (Referência)
             const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
             const norm = normalizarDadosPorNome(all||[]);
             let sumMedias=0, cntDias=0;
@@ -573,22 +549,16 @@
             });
             const mediaGeral = cntDias ? Math.round(sumMedias/cntDias) : 0;
             
-            // 2. Calcular Média Selecionada (Esquerda)
-            // Filtra apenas dias trabalhados (>0)
             const diasTrabUser = dadosFinais.filter(d => d.quantidade > 0);
             const totUser = diasTrabUser.reduce((a,b)=>a+b.quantidade,0);
             const mediaUser = diasTrabUser.length ? Math.round(totUser/diasTrabUser.length) : 0;
 
-            // 3. Atualizar UI
             valL.innerText = mediaUser;
-            valR.innerText = viewingTime ? 650 : mediaGeral; // Se vê Time, benchmark é meta. Se vê User, benchmark é Time.
+            valR.innerText = viewingTime ? 650 : mediaGeral; 
 
-            // Títulos
             labelL.innerText = viewingTime ? "Média da Equipa" : `Média ${targetName}`;
             labelR.innerText = viewingTime ? "Meta Esperada" : "Média Geral da Equipa";
 
-            // LÓGICA DE CORES (CRÍTICO)
-            // Esquerda (User/Time)
             if (mediaUser < 650) {
                 cardL.className = "flex-1 bg-red-500 border border-red-600 rounded-3xl p-8 text-center shadow-lg relative overflow-hidden transition-colors duration-300 text-white";
                 labelL.className = "block text-xs font-bold text-red-200 uppercase tracking-widest mb-4";
@@ -597,10 +567,8 @@
                 labelL.className = "block text-xs font-bold text-blue-200 uppercase tracking-widest mb-4";
             }
 
-            // Direita (Benchmark)
             const valRight = viewingTime ? 650 : mediaGeral;
-            // Se o benchmark for Time, e o Time estiver abaixo da meta, deve ficar vermelho?
-            // User disse: "se a assistente ou a média do time estiver abaixo da média que deveria ser (650)... card deve ficar vermelho"
+            
             if (valRight < 650) {
                 cardR.className = "flex-1 bg-red-50 border border-red-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
                 labelR.className = "block text-xs font-bold text-red-400 uppercase tracking-widest mb-4";
@@ -611,7 +579,6 @@
                 valR.className = "text-6xl font-black text-slate-700 tracking-tighter mb-2";
             }
 
-            // Mensagem
             const diff = mediaUser - valRight;
             const elMsg = document.getElementById('comp-mensagem');
             if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`;
