@@ -7,6 +7,8 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
@@ -21,9 +23,7 @@
 <body class="text-slate-800">
 
     <script>
-        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+        // CONFIGURAÇÃO SUPABASE REMOVIDA DAQUI (JÁ ESTÁ EM js/config.js)
 
         function renderNavbar() {
             const usuario = JSON.parse(localStorage.getItem('usuario'));
@@ -216,7 +216,6 @@
                 const isFds = diaSemana === 0 || diaSemana === 6;
                 const row = map[diaStr] || {};
                 
-                // Converte para Número para garantir soma correta
                 const qSys = Number(row.quantidade) || 0;
                 const qMan = row.quantidade_manual !== null ? Number(row.quantidade_manual) : null;
                 const qManVal = qMan || 0;
@@ -226,7 +225,6 @@
                 
                 if (!isFds || qSys > 0) {
                     labels.push(dt.getDate());
-                    // No gráfico, mostramos a soma para o usuário visualizar seu desempenho total
                     dataSys.push(qSys + qManVal);
                     dataMeta.push(meta);
                     diasUteis++;
