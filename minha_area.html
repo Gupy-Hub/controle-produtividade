@@ -50,7 +50,7 @@
                         <option value="me">👤 Minha Visão</option>
                         <option value="time">👥 Time Todo (Média)</option>
                         <option disabled>──────────</option>
-                        </select>
+                    </select>
                 </div>
                 
                 <button onclick="aplicarDataManual()" class="bg-blue-600 text-white p-2.5 rounded-lg hover:bg-blue-700 transition shadow-sm h-[42px] w-[42px] flex items-center justify-center" title="Atualizar">
@@ -177,11 +177,9 @@
                 </div>
 
                 <div id="tab-feedback" class="view-tab hidden flex flex-col h-[500px]">
-                    
                     <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50">
                         <div class="text-center text-slate-400 py-10">Carregando feedbacks...</div>
                     </div>
-                    
                     <div class="p-4 bg-white border-t border-slate-200">
                         <div class="flex flex-col gap-2">
                             <div class="flex items-center gap-2">
@@ -189,9 +187,8 @@
                                 <select id="feedback-destinatario" class="text-sm border border-slate-300 rounded px-2 py-1 bg-white focus:border-blue-500 outline-none">
                                     <option value="time">📢 Time (Todos)</option>
                                     <option disabled>──────────</option>
-                                    </select>
+                                </select>
                             </div>
-
                             <div class="flex gap-2">
                                 <input type="text" id="input-feedback" placeholder="Escreva uma mensagem..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition">
                                 <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 font-bold transition"><i class="fas fa-paper-plane"></i></button>
@@ -207,20 +204,21 @@
     <script>
         const sessao = JSON.parse(localStorage.getItem('usuario'));
         const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
+        
         let myChart1 = null;
         let myChart2 = null;
-        let usersMap = {}; // Cache de nomes
-        let usuariosLista = []; // Lista para dropdown
-
+        let usersMap = {}; // ID -> Nome (Para exibir nomes)
+        let nameToIdsMap = {}; // Nome -> [ID1, ID2...] (Para agrupar IDs)
+        
         document.addEventListener('DOMContentLoaded', async () => {
-            // Data padrão: Hoje (DD/MM/AAAA)
+            // Data padrão
             const hoje = new Date();
             const dia = String(hoje.getDate()).padStart(2, '0');
             const mes = String(hoje.getMonth() + 1).padStart(2, '0');
             const ano = hoje.getFullYear();
             document.getElementById('filtro-data-manual').value = `${dia}/${mes}/${ano}`;
 
-            await carregarUsuarios(); // Carrega todos os users para Feedback e Filtros
+            await carregarUsuarios(); // Fundamental para normalização
 
             if (isMgr) {
                 document.getElementById('container-filtro-user').classList.remove('hidden');
@@ -238,78 +236,112 @@
             input.value = v;
         }
 
-        function verificarEnter(e) {
-            if(e.key === 'Enter') aplicarDataManual();
-        }
+        function verificarEnter(e) { if(e.key === 'Enter') aplicarDataManual(); }
+        function aplicarDataManual() { if(document.getElementById('filtro-data-manual').value.length === 10) atualizarDashboard(); }
 
-        function aplicarDataManual() {
-            const val = document.getElementById('filtro-data-manual').value;
-            // Validação simples
-            if(val.length === 10) {
-                atualizarDashboard();
-            }
-        }
-
-        // --- CARREGAMENTO DE USUÁRIOS ---
+        // --- CORE: CARREGAMENTO DE USUÁRIOS E NORMALIZAÇÃO ---
         async function carregarUsuarios() {
-            // Busca todos os usuários para popular dropdowns
             const { data } = await _supabase.from('usuarios').select('id, nome, funcao').order('nome');
             if(data) {
-                usuariosLista = data;
-                
-                // 1. Popula Filtro de Gestor (Apenas Assistentes)
                 const selectFiltro = document.getElementById('filtro-user');
-                // 2. Popula Destinatário de Feedback (Todos, exceto eu mesmo)
                 const selectFeedback = document.getElementById('feedback-destinatario');
                 
+                // Limpa selects (exceto opções padrão)
+                // Mantém apenas a opção "Minha Visão" e "Time" no filtro gestor
+                
                 data.forEach(u => {
+                    // Mapeamento Simples
                     usersMap[u.id] = u.nome;
+                    
+                    // Mapeamento Reverso (Para saber que ID 10 e 20 são a mesma "Maria")
+                    if(!nameToIdsMap[u.nome]) nameToIdsMap[u.nome] = [];
+                    nameToIdsMap[u.nome].push(u.id);
 
-                    // Filtro de Gestor (Só mostra assistentes)
-                    if(u.funcao === 'Assistente' && selectFiltro) {
-                        const opt = document.createElement('option');
-                        opt.value = u.id; opt.text = u.nome;
-                        selectFiltro.appendChild(opt);
-                    }
-
-                    // Feedback (Mostra todos menos eu)
-                    if(u.id !== sessao.id) {
-                        const optF = document.createElement('option');
-                        optF.value = u.id; optF.text = `👤 ${u.nome}`;
-                        selectFeedback.appendChild(optF);
+                    // Dropdowns (Evita duplicar nomes no dropdown se tiverem IDs diferentes)
+                    // No dropdown, usamos o primeiro ID encontrado como referência para aquele nome
+                    if(nameToIdsMap[u.nome][0] === u.id) {
+                        // Filtro Gestor
+                        if(u.funcao === 'Assistente' && selectFiltro) {
+                            const opt = document.createElement('option');
+                            opt.value = u.id; // Usa o ID deste registo, mas na busca vamos usar o NOME
+                            opt.text = u.nome;
+                            selectFiltro.appendChild(opt);
+                        }
+                        // Feedback
+                        if(u.id !== sessao.id) {
+                            const optF = document.createElement('option');
+                            optF.value = u.id; optF.text = `👤 ${u.nome}`;
+                            selectFeedback.appendChild(optF);
+                        }
                     }
                 });
             }
         }
 
-        // --- FUNÇÃO CENTRAL ---
+        // --- FUNÇÃO AUXILIAR: NORMALIZAR DADOS POR NOME ---
+        // Recebe dados brutos do Supabase e agrupa por Nome em vez de ID
+        function normalizarDadosPorNome(rawData) {
+            const agrupado = {}; // { 'YYYY-MM-DD': { 'Maria': { qtd: 100, meta: 650, obs: ... } } }
+
+            rawData.forEach(item => {
+                // Descobre o nome baseado no ID
+                const nome = usersMap[item.usuario_id] || 'Desconhecido';
+                const data = item.data_referencia;
+
+                if (!agrupado[data]) agrupado[data] = {};
+                
+                if (!agrupado[data][nome]) {
+                    // Inicializa se primeira vez que vemos esse NOME neste DIA
+                    agrupado[data][nome] = {
+                        id_ref: item.id, // Guarda um ID para referência (edição)
+                        quantidade: 0,
+                        meta_diaria: item.meta_diaria || 650,
+                        observacao: item.observacao || '',
+                        observacao_gestora: item.observacao_gestora || ''
+                    };
+                }
+
+                // SOMA a produção (Unifica IDs diferentes da mesma pessoa)
+                agrupado[data][nome].quantidade += item.quantidade;
+                
+                // Concatena observações se houver duplicidade
+                if (item.observacao && agrupado[data][nome].observacao !== item.observacao) {
+                    agrupado[data][nome].observacao += ` | ${item.observacao}`;
+                }
+            });
+
+            return agrupado;
+        }
+
+        // --- ATUALIZAÇÃO DO DASHBOARD ---
         async function atualizarDashboard() {
-            // 1. Processa Data Manual
-            const dataInput = document.getElementById('filtro-data-manual').value; // DD/MM/AAAA
-            if(dataInput.length !== 10) return; // Espera digitar tudo
+            const dataInput = document.getElementById('filtro-data-manual').value;
+            if(dataInput.length !== 10) return;
 
             const parts = dataInput.split('/');
-            const mesAno = `${parts[2]}-${parts[1]}`; // YYYY-MM para lógica interna
+            const mesAno = `${parts[2]}-${parts[1]}`; // YYYY-MM
             
-            // 2. Define Alvo
-            let userId = sessao.id;
-            let modoTime = false;
+            // Definição do Alvo
+            let targetName = usersMap[sessao.id]; // Padrão: Eu
+            let viewingTime = false;
             let isGestoraViewSelf = false;
 
             if (isMgr) {
                 const val = document.getElementById('filtro-user').value;
-                if (val === 'time') modoTime = true;
-                else if (val === 'me') isGestoraViewSelf = true;
-                else userId = val;
-            } else {
-                usersMap[sessao.id] = sessao.nome;
+                if (val === 'time') {
+                    viewingTime = true;
+                } else if (val === 'me') {
+                    isGestoraViewSelf = true;
+                } else {
+                    // Selecionou alguém específico (ex: ID 10). Queremos o NOME associado.
+                    targetName = usersMap[val];
+                }
             }
 
             // Visibilidade
             if (isGestoraViewSelf) {
                 document.getElementById('conteudo-principal').classList.add('hidden');
                 document.getElementById('aviso-gestora-view').classList.remove('hidden');
-                // Ainda carrega feedbacks pois gestora precisa ver os seus
                 carregarFeedbacks(); 
                 return;
             } else {
@@ -317,134 +349,76 @@
                 document.getElementById('aviso-gestora-view').classList.add('hidden');
             }
 
-            // Busca Dados (Mês Inteiro baseado na data digitada)
+            // Busca Dados do Mês (Para todos)
             const [ano, mes] = mesAno.split('-');
             const dataInicio = `${mesAno}-01`;
             const ultimoDia = new Date(ano, mes, 0).getDate();
             const dataFim = `${mesAno}-${ultimoDia}`;
 
-            let dados = [];
-            
-            if (modoTime) {
-                const { data } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
-                dados = processarMediaTime(data);
-            } else {
-                const { data } = await _supabase.from('producao').select('*').eq('usuario_id', userId).gte('data_referencia', dataInicio).lte('data_referencia', dataFim).order('data_referencia');
-                dados = data || [];
-            }
-
-            atualizarKPIs(dados);
-            atualizarTabelaDiaria(dados, modoTime);
-            
-            if (!document.getElementById('tab-evolucao').classList.contains('hidden')) renderizarGraficos('mes'); 
-            
-            atualizarComparativoRapido(dados, mesAno, modoTime, userId);
-            carregarFeedbacks(); // Feedback é independente da data, mas recarrega para garantir
-        }
-
-        // --- 4. FEEDBACK (NOVA LÓGICA) ---
-        async function carregarFeedbacks() {
-            const container = document.getElementById('lista-feedbacks');
-            
-            // LÓGICA DE VISUALIZAÇÃO:
-            // 1. Mensagens para o TIME (usuario_alvo_id IS NULL)
-            // 2. Mensagens para MIM (usuario_alvo_id == sessao.id)
-            // 3. Mensagens que EU enviei (autor_nome == sessao.nome) - para eu ver o que mandei
-            
-            const { data, error } = await _supabase
-                .from('feedbacks')
+            // 1. Busca TUDO do período (Mais eficiente para poder calcular médias corretas)
+            const { data: rawData } = await _supabase.from('producao')
                 .select('*')
-                .order('created_at', { ascending: true }); // Carrega tudo e filtra no JS por enquanto
+                .gte('data_referencia', dataInicio)
+                .lte('data_referencia', dataFim);
+            
+            // 2. Normaliza (Agrupa nomes iguais)
+            const dadosNormalizados = normalizarDadosPorNome(rawData || []); // { data: { Nome: Obj } }
 
-            if (!data || data.length === 0) {
-                container.innerHTML = '<div class="text-center text-slate-400 py-10">Sem feedbacks.</div>'; return;
-            }
+            // 3. Prepara dados para exibição (Array Linear)
+            let dadosFinais = [];
 
-            let html = '';
-            let count = 0;
-
-            data.forEach(msg => {
-                // Filtro JS de Segurança/Privacidade
-                const isPublic = msg.usuario_alvo_id === null; // Time
-                const isForMe = msg.usuario_alvo_id == sessao.id;
-                const isMine = msg.autor_nome === sessao.nome;
-                
-                // Regra: Mostra se for público, se for pra mim, ou se for meu.
-                if (isPublic || isForMe || isMine) {
-                    count++;
-                    const align = isMine ? 'ml-auto bg-blue-100 border-blue-200' : 'mr-auto bg-white border-slate-200';
-                    const dateObj = new Date(msg.created_at);
-                    const dataFormatada = dateObj.toLocaleDateString('pt-BR');
-                    const horaFormatada = dateObj.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+            if (viewingTime) {
+                // Calcula MÉDIA DO TIME (Por dia)
+                // Percorre cada dia que teve produção
+                Object.keys(dadosNormalizados).sort().forEach(dia => {
+                    const producoesDoDia = Object.values(dadosNormalizados[dia]); // Array de objetos de produção das pessoas
+                    const totalDia = producoesDoDia.reduce((acc, curr) => acc + curr.quantidade, 0);
+                    const headcount = producoesDoDia.length; // Quantas pessoas únicas (nomes) produziram
                     
-                    // Badge de contexto
-                    let badge = '';
-                    if (isPublic) badge = '<span class="text-[9px] bg-purple-100 text-purple-700 px-1 rounded ml-2 uppercase font-bold">📢 Time</span>';
-                    else if (isMine && msg.usuario_alvo_id) badge = `<span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded ml-2 uppercase">🔒 Para: ${usersMap[msg.usuario_alvo_id] || 'Alguém'}</span>`;
-                    else badge = '<span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded ml-2 uppercase">🔒 Privado</span>';
-
-                    html += `
-                    <div class="max-w-[85%] w-fit mb-3 p-3 rounded-xl shadow-sm border text-sm text-slate-700 ${align}">
-                        <div class="flex justify-between items-center gap-4 mb-1 border-b border-black/5 pb-1">
-                            <span class="font-bold text-xs text-slate-800">${msg.autor_nome} ${badge}</span>
-                            <span class="text-[10px] text-slate-400">${dataFormatada} ${horaFormatada}</span>
-                        </div>
-                        <p class="whitespace-pre-wrap leading-relaxed">${msg.mensagem}</p>
-                    </div>`;
-                }
-            });
-
-            if (count === 0) container.innerHTML = '<div class="text-center text-slate-400 py-10">Nenhuma mensagem para exibir.</div>';
-            else container.innerHTML = html;
-            
-            // Rola para o fim
-            container.scrollTop = container.scrollHeight;
-        }
-
-        async function enviarFeedback() {
-            const txt = document.getElementById('input-feedback').value;
-            const destino = document.getElementById('feedback-destinatario').value; // 'time' ou ID
-            
-            if(!txt.trim()) return;
-
-            let alvoId = null; // null = Time
-            if (destino !== 'time') alvoId = parseInt(destino);
-
-            const { error } = await _supabase.from('feedbacks').insert({
-                usuario_alvo_id: alvoId,
-                autor_nome: sessao.nome,
-                autor_funcao: sessao.funcao,
-                mensagem: txt
-            });
-
-            if (error) alert('Erro ao enviar: ' + error.message);
-            else {
-                document.getElementById('input-feedback').value = '';
-                carregarFeedbacks();
+                    dadosFinais.push({
+                        data_referencia: dia,
+                        quantidade: headcount ? Math.round(totalDia / headcount) : 0,
+                        meta_diaria: 650,
+                        observacao: `Média de ${headcount} assistentes ativas`
+                    });
+                });
+            } else {
+                // Filtra APENAS O NOME SELECIONADO
+                Object.keys(dadosNormalizados).sort().forEach(dia => {
+                    const dadosPessoa = dadosNormalizados[dia][targetName];
+                    if (dadosPessoa) {
+                        dadosFinais.push({
+                            id: dadosPessoa.id_ref, // ID de um dos registros para update
+                            data_referencia: dia,
+                            quantidade: dadosPessoa.quantidade,
+                            meta_diaria: dadosPessoa.meta_diaria,
+                            observacao: dadosPessoa.observacao,
+                            observacao_gestora: dadosPessoa.observacao_gestora
+                        });
+                    }
+                });
             }
+
+            atualizarKPIs(dadosFinais);
+            atualizarTabelaDiaria(dadosFinais, viewingTime);
+            
+            // Atualiza Gráficos (Passamos o targetName para filtrar corretamente dentro da func)
+            if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
+                renderizarGraficos('mes'); 
+            }
+            
+            atualizarComparativoRapido(dadosFinais, mesAno, viewingTime, targetName);
+            carregarFeedbacks(); 
         }
 
-        // --- MANTER OUTRAS FUNÇÕES DO STEP ANTERIOR (KPIs, Gráficos, Etc) ---
-        function processarMediaTime(todosDados) {
-            const map = {};
-            todosDados.forEach(d => {
-                if(!map[d.data_referencia]) map[d.data_referencia] = { total: 0, count: 0 };
-                map[d.data_referencia].total += d.quantidade;
-                map[d.data_referencia].count++; 
-            });
-            return Object.keys(map).sort().map(data => ({
-                id: null, data_referencia: data,
-                quantidade: Math.round(map[data].total / map[data].count), 
-                meta_diaria: 650, observacao: `Média de ${map[data].count} assistentes`
-            }));
-        }
-
+        // --- 1. KPIs ---
         function atualizarKPIs(dados) {
             const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
             const dias = dados.length || 1;
             let metaTotal = 0;
             dados.forEach(d => metaTotal += (d.meta_diaria || 650));
             if (metaTotal === 0) metaTotal = 650 * 22;
+
             const media = Math.round(total / dias);
             const atingimento = Math.round((total / metaTotal) * 100);
 
@@ -453,13 +427,15 @@
             document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
             document.getElementById('kpi-media-real').innerText = media.toLocaleString();
             document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
+            
             const bar = document.getElementById('bar-progress');
             if(atingimento >= 100) bar.className = "bg-emerald-500 h-1.5 rounded-full transition-all";
             else if(atingimento >= 80) bar.className = "bg-yellow-400 h-1.5 rounded-full transition-all";
             else bar.className = "bg-red-500 h-1.5 rounded-full transition-all";
         }
 
-        function atualizarTabelaDiaria(dados, modoTime) {
+        // --- 2. TABELA ---
+        function atualizarTabelaDiaria(dados, viewingTime) {
             const tbody = document.getElementById('tabela-diario');
             if (dados.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Sem registos.</td></tr>'; return; }
             let html = '';
@@ -469,10 +445,16 @@
                 const corBadge = atingiu ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
                 const textoBadge = atingiu ? 'Atingida' : 'Abaixo';
                 const dataFmt = item.data_referencia.split('-').reverse().join('/');
+                
                 let celulaMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
-                if (isMgr && !modoTime && item.id) celulaMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-300 rounded px-1 outline-none">`;
+                // Permite editar se for gestor, não for visão time, e tiver ID
+                if (isMgr && !viewingTime && item.id) {
+                    celulaMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-300 rounded px-1 outline-none">`;
+                }
+
                 let obsHtml = item.observacao || '-';
                 if (item.observacao_gestora) obsHtml += `<div class="mt-1 text-[10px] text-blue-600 font-bold bg-blue-50 p-1 rounded border border-blue-100"><i class="fas fa-history mr-1"></i>Gestão: ${item.observacao_gestora}</div>`;
+                
                 html += `<tr class="hover:bg-slate-50 border-b border-slate-100 transition"><td class="px-4 py-3 font-medium text-slate-700">${dataFmt}</td><td class="px-4 py-3 text-center font-bold text-blue-600">${item.quantidade}</td><td class="px-4 py-3 text-center">${celulaMeta}</td><td class="px-4 py-3 text-center"><span class="${corBadge} px-2 py-0.5 rounded text-[10px] font-bold uppercase">${textoBadge}</span></td><td class="px-4 py-3 text-sm text-slate-500 max-w-xs break-words">${obsHtml}</td></tr>`;
             });
             tbody.innerHTML = html;
@@ -487,72 +469,187 @@
             if (!error) atualizarDashboard(); else alert(error.message);
         }
 
+        // --- 3. GRÁFICOS (COM NORMALIZAÇÃO) ---
         async function renderizarGraficos(periodo) {
+            // UI Update
             document.querySelectorAll('.btn-chart').forEach(b => {
                 b.className = "btn-chart px-3 py-1 bg-white border text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50";
                 if(b.innerText.toLowerCase().includes(periodo) || (periodo==='mes' && b.innerText.includes('Mês'))) b.className = "btn-chart px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-sm";
             });
+
             const hoje = new Date();
             let dataInicio, dataFim = hoje.toISOString().split('T')[0];
+            
             if (periodo === 'mes') { dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0]; dataFim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0]; } 
             else if (periodo === 'trimestre') { const d = new Date(); d.setDate(d.getDate() - 90); dataInicio = d.toISOString().split('T')[0]; }
             else if (periodo === 'semestre') { const d = new Date(); d.setDate(d.getDate() - 180); dataInicio = d.toISOString().split('T')[0]; }
             else if (periodo === 'ano') { dataInicio = `${hoje.getFullYear()}-01-01`; dataFim = `${hoje.getFullYear()}-12-31`; }
 
-            let targetId = sessao.id;
+            // Lógica de quem exibir
+            let targetName = usersMap[sessao.id];
             let viewingTime = false;
-            if(isMgr) { const val = document.getElementById('filtro-user').value; if(val === 'time') viewingTime = true; else if(val !== 'me') targetId = val; }
+            
+            if(isMgr) {
+                const val = document.getElementById('filtro-user').value;
+                if(val === 'time') viewingTime = true;
+                else if(val !== 'me') targetName = usersMap[val];
+            }
 
+            // Fetch Geral
             const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim).order('data_referencia');
-            const allData = rawData || [];
+            
+            // Normaliza (Group By Name)
+            const groupedData = normalizarDadosPorNome(rawData || []); // { Data: { Nome: {} } }
+            
+            // Prepara datasets
             const agruparPorMes = (periodo === 'ano');
-            const mapUser = {}, mapTime = {};
+            const processedMapMain = {}; // { 'LabelTempo': Valor }
+            const processedMapTime = {}; // { 'LabelTempo': ValorMedio }
+            const countsTime = {}; // { 'LabelTempo': countDates } (para media mensal se for ano)
 
-            allData.forEach(d => {
-                let key = d.data_referencia;
-                if(agruparPorMes) key = d.data_referencia.substring(0, 7);
-                if(!mapTime[key]) mapTime[key] = { sum: 0, count: 0 };
-                mapTime[key].sum += d.quantidade; mapTime[key].count++;
-                if (!viewingTime && d.usuario_id == targetId) { if(!mapUser[key]) mapUser[key] = 0; mapUser[key] += d.quantidade; }
+            Object.keys(groupedData).sort().forEach(date => {
+                let labelTime = date;
+                if (agruparPorMes) labelTime = date.substring(0, 7); // YYYY-MM
+
+                // 1. Calcular Média Time do Dia
+                const prodsDia = Object.values(groupedData[date]);
+                const totalDia = prodsDia.reduce((a, b) => a + b.quantidade, 0);
+                const countDia = prodsDia.length;
+                const mediaDia = countDia ? Math.round(totalDia / countDia) : 0;
+
+                // Acumula Time
+                if(!processedMapTime[labelTime]) { processedMapTime[labelTime] = 0; countsTime[labelTime] = 0; }
+                processedMapTime[labelTime] += mediaDia;
+                countsTime[labelTime]++;
+
+                // 2. Calcular Valor Alvo (Target)
+                let valUser = 0;
+                if (groupedData[date][targetName]) {
+                    valUser = groupedData[date][targetName].quantidade;
+                }
+                
+                // Acumula User
+                if(!processedMapMain[labelTime]) processedMapMain[labelTime] = 0;
+                processedMapMain[labelTime] += valUser;
             });
 
-            const keys = Object.keys(mapTime).sort();
-            const labels = [], dataMain = [], dataAvg = [];
-            keys.forEach(k => {
-                labels.push(agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/'));
-                const avg = mapTime[k].count ? Math.round(mapTime[k].sum / mapTime[k].count) : 0;
-                dataAvg.push(avg);
-                dataMain.push(viewingTime ? avg : (mapUser[k] || 0));
+            // Gera Arrays Finais
+            const labels = Object.keys(processedMapTime).sort();
+            const dataMain = [];
+            const dataAvg = [];
+
+            labels.forEach(k => {
+                // Formata Label
+                const labelDisplay = agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/');
+                
+                // Valor Média Global
+                // Se for Mês/Dia, countsTime é 1, então o valor acumulado é o do dia.
+                // Se for Ano, countsTime é ~30, então tiramos a média do mês.
+                const countT = countsTime[k] || 1;
+                const valT = Math.round(processedMapTime[k] / (agruparPorMes ? 1 : 1)); // Média diária acumulada ou pura? 
+                // Correção Lógica: 
+                // Se o gráfico é diário: mostramos média do dia.
+                // Se o gráfico é mensal: mostramos a SOMA do mês? Geralmente evolução mostra produtividade total.
+                
+                dataAvg.push(processedMapTime[k]); // Mostra Soma Total (se for dia é dia, se for mes é soma do mes)
+                
+                // Valor User
+                if (viewingTime) {
+                    dataMain.push(processedMapTime[k]); // Se vê time, main é igual average
+                } else {
+                    dataMain.push(processedMapMain[k]);
+                }
             });
-            criarGraficosCanvas(labels, dataMain, dataAvg, viewingTime ? "Média Equipa" : "Selecionado");
+
+            // Ajuste Label para Chart
+            const finalLabels = labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/'));
+
+            criarGraficosCanvas(finalLabels, dataMain, dataAvg, viewingTime ? "Média Equipa" : targetName);
         }
 
         function criarGraficosCanvas(labels, dataMain, dataAvg, labelMain) {
             const ctx1 = document.getElementById('chartEvolucao').getContext('2d');
             const ctx2 = document.getElementById('chartComparativo').getContext('2d');
             if(myChart1) myChart1.destroy(); if(myChart2) myChart2.destroy();
+            
             myChart1 = new Chart(ctx1, { type: 'bar', data: { labels: labels, datasets: [{ label: labelMain, data: dataMain, backgroundColor: '#3b82f6', borderRadius: 4 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } } });
-            myChart2 = new Chart(ctx2, { type: 'line', data: { labels: labels, datasets: [ { label: labelMain, data: dataMain, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.3 }, { label: 'Média Global', data: dataAvg, borderColor: '#94a3b8', backgroundColor: '#94a3b8', borderDash: [5, 5], tension: 0.3 } ] }, options: { responsive: true, maintainAspectRatio: false } });
+            
+            myChart2 = new Chart(ctx2, { type: 'line', data: { labels: labels, datasets: [ 
+                { label: labelMain, data: dataMain, borderColor: '#3b82f6', backgroundColor: '#3b82f6', tension: 0.3 }, 
+                { label: 'Média Global (Base)', data: dataAvg, borderColor: '#94a3b8', backgroundColor: '#94a3b8', borderDash: [5, 5], tension: 0.3 } 
+            ] }, options: { responsive: true, maintainAspectRatio: false } });
         }
 
-        async function atualizarComparativoRapido(dados, mesAno, modoTime, userId) {
+        // --- 4. COMPARATIVO RÁPIDO ---
+        async function atualizarComparativoRapido(dadosFinais, mesAno, viewingTime, targetName) {
             const labelTitulo = document.getElementById('label-media-selecionada');
-            if (modoTime) labelTitulo.innerText = "Média do Time"; else if (usersMap[userId]) labelTitulo.innerText = `Média ${usersMap[userId]}`; else labelTitulo.innerText = "Minha Média";
+            if (viewingTime) labelTitulo.innerText = "Média do Time"; else labelTitulo.innerText = `Média ${targetName}`;
+
+            // Para comparar, precisamos da média GLOBAL do mês (Média de todos os nomes únicos)
             const [ano, mes] = mesAno.split('-'); const inicio = `${mesAno}-01`; const fim = `${mesAno}-${new Date(ano, mes, 0).getDate()}`;
-            const { data: allData } = await _supabase.from('producao').select('quantidade').gte('data_referencia', inicio).lte('data_referencia', fim);
-            const totalGeral = allData ? allData.reduce((acc, curr) => acc + curr.quantidade, 0) : 0;
-            const mediaGeral = (allData && allData.length) ? Math.round(totalGeral / allData.length) : 0;
-            const totalUser = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
-            const mediaUser = dados.length ? Math.round(totalUser / dados.length) : 0;
-            document.getElementById('comp-media-user').innerText = mediaUser; document.getElementById('comp-media-time').innerText = mediaGeral;
-            const diff = mediaUser - mediaGeral; const elMsg = document.getElementById('comp-mensagem');
-            if (modoTime) elMsg.innerHTML = `<span class="text-blue-500">Visualizando média geral consolidada.</span>`; else if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600"><i class="fas fa-arrow-up"></i> ${diff} acima da média!</span>`; else if (diff < 0) elMsg.innerHTML = `<span class="text-orange-600"><i class="fas fa-arrow-down"></i> ${Math.abs(diff)} abaixo da média.</span>`; else elMsg.innerHTML = `<span class="text-blue-600">Exatamente na média.</span>`;
+            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+            
+            const normalized = normalizarDadosPorNome(rawData || []);
+            let somaMediasDiarias = 0;
+            let diasContados = 0;
+
+            Object.keys(normalized).forEach(dia => {
+                const prods = Object.values(normalized[dia]);
+                const total = prods.reduce((a, b) => a + b.quantidade, 0);
+                if (prods.length > 0) {
+                    somaMediasDiarias += (total / prods.length);
+                    diasContados++;
+                }
+            });
+            const mediaGeralMes = diasContados ? Math.round(somaMediasDiarias / diasContados) : 0; // Média diária média do time
+
+            // Média do Selecionado (Baseado nos dadosFinais já filtrados)
+            const totalUser = dadosFinais.reduce((acc, curr) => acc + curr.quantidade, 0);
+            const mediaUser = dadosFinais.length ? Math.round(totalUser / dadosFinais.length) : 0;
+
+            document.getElementById('comp-media-user').innerText = mediaUser;
+            document.getElementById('comp-media-time').innerText = mediaGeralMes;
+            
+            const diff = mediaUser - mediaGeralMes;
+            const elMsg = document.getElementById('comp-mensagem');
+            if (viewingTime) elMsg.innerHTML = `<span class="text-blue-500">Visualizando dados consolidados.</span>`;
+            else if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600"><i class="fas fa-arrow-up"></i> ${diff} acima da média!</span>`;
+            else if (diff < 0) elMsg.innerHTML = `<span class="text-orange-600"><i class="fas fa-arrow-down"></i> ${Math.abs(diff)} abaixo da média.</span>`;
+            else elMsg.innerHTML = `<span class="text-blue-600">Exatamente na média.</span>`;
         }
-        
+
+        // --- FEEDBACK & UTILS ---
         function mudarAba(aba) {
             document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden')); document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
             document.getElementById(`tab-${aba}`).classList.remove('hidden'); document.getElementById(`btn-${aba}`).classList.add('active');
             if(aba === 'evolucao') renderizarGraficos('mes');
+        }
+
+        async function carregarFeedbacks() {
+            const container = document.getElementById('lista-feedbacks');
+            const { data } = await _supabase.from('feedbacks').select('*').order('created_at', { ascending: true });
+            if (!data || !data.length) { container.innerHTML = '<div class="text-center text-slate-400 py-10">Sem feedbacks.</div>'; return; }
+            let html = ''; let count = 0;
+            data.forEach(msg => {
+                const isPublic = msg.usuario_alvo_id === null; const isForMe = msg.usuario_alvo_id == sessao.id; const isMine = msg.autor_nome === sessao.nome;
+                if (isPublic || isForMe || isMine) {
+                    count++;
+                    const align = isMine ? 'ml-auto bg-blue-100 border-blue-200' : 'mr-auto bg-white border-slate-200';
+                    const dateObj = new Date(msg.created_at);
+                    let badge = isPublic ? '<span class="text-[9px] bg-purple-100 text-purple-700 px-1 rounded ml-2 font-bold">📢 TIME</span>' : (isMine && msg.usuario_alvo_id ? `<span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded ml-2">🔒 ${usersMap[msg.usuario_alvo_id]}</span>` : '<span class="text-[9px] bg-slate-100 text-slate-500 px-1 rounded ml-2">🔒 PRIVADO</span>');
+                    html += `<div class="max-w-[85%] w-fit mb-3 p-3 rounded-xl shadow-sm border text-sm text-slate-700 ${align}"><div class="flex justify-between items-center gap-4 mb-1 border-b border-black/5 pb-1"><span class="font-bold text-xs text-slate-800">${msg.autor_nome} ${badge}</span><span class="text-[10px] text-slate-400">${dateObj.toLocaleDateString()} ${dateObj.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span></div><p class="whitespace-pre-wrap">${msg.mensagem}</p></div>`;
+                }
+            });
+            container.innerHTML = count ? html : '<div class="text-center text-slate-400 py-10">Nenhuma mensagem para exibir.</div>';
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function enviarFeedback() {
+            const txt = document.getElementById('input-feedback').value; const destino = document.getElementById('feedback-destinatario').value;
+            if(!txt.trim()) return;
+            const alvoId = destino !== 'time' ? parseInt(destino) : null;
+            const { error } = await _supabase.from('feedbacks').insert({ usuario_alvo_id: alvoId, autor_nome: sessao.nome, autor_funcao: sessao.funcao, mensagem: txt });
+            if (!error) { document.getElementById('input-feedback').value = ''; carregarFeedbacks(); } else alert(error.message);
         }
     </script>
 </body>
