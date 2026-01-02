@@ -11,20 +11,27 @@ window.logout = function() {
 // 2. Função Principal de Renderização
 function renderNavbar() {
     // --- VERIFICAÇÃO DE SEGURANÇA (FRONTEND) ---
+    // Verifica se estamos na página de login
     const path = window.location.pathname;
     const isLoginPage = path.endsWith('index.html') || path.endsWith('/');
+    
+    // Tenta recuperar o utilizador
     const usuarioLogado = JSON.parse(localStorage.getItem('usuario'));
 
+    // Se NÃO tem utilizador e NÃO é a página de login, expulsa para o login
     if (!usuarioLogado && !isLoginPage) {
         window.location.href = 'index.html';
-        return;
+        return; // Para a execução aqui
     }
 
+    // Se é a página de login, não desenha o menu
     if (isLoginPage) return;
 
     // --- DESENHAR O MENU ---
+    // Helper para criar links ativos
     const createLink = (nome, url) => {
         const isActive = window.location.href.includes(url);
+        // Classes do Tailwind: Destaque se ativo, ou cinza se inativo
         const classe = isActive 
             ? "bg-blue-700 text-white shadow-md" 
             : "text-slate-300 hover:bg-slate-800 hover:text-white";
@@ -46,7 +53,8 @@ function renderNavbar() {
             ${createLink('Performance', 'performance.html')}
             ${createLink('Consolidado', 'consolidado.html')}
             ${createLink('Minha Área', 'minha_area.html')}
-            ${createLink('Biblioteca', 'ferramentas.html')} </div>
+            ${createLink('Ferramentas', 'ferramentas.html')} 
+        </div>
 
         <div class="flex items-center gap-4">
             <div class="text-right hidden sm:block">
@@ -58,10 +66,10 @@ function renderNavbar() {
             </button>
         </div>
     </nav>
-    <div class="h-20"></div>
-    `;
+    <div class="h-20"></div> `;
 
     document.body.insertAdjacentHTML('afterbegin', navbarHTML);
 }
 
+// Executa assim que o script carregar
 renderNavbar();
