@@ -2,103 +2,157 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Performance</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance & Ranking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
     <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-6 py-8">
         <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-black text-slate-800">Ranking & Performance</h1>
-            <div class="relative">
-                <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">MÊS REF</span>
-                <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
+            <div>
+                <h1 class="text-3xl font-black text-slate-800">Ranking & Performance</h1>
+                <p class="text-slate-500">Classificação consolidada por produtividade (Top 10).</p>
             </div>
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total Validado</span>
-                <h2 class="text-2xl font-black text-blue-600 mt-1" id="perf-total">--</h2>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total FIFO</span>
-                <h2 class="text-2xl font-black text-slate-700 mt-1" id="perf-fifo">--</h2>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total Gradual</span>
-                <h2 class="text-2xl font-black text-slate-700 mt-1" id="perf-gt">--</h2>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total Parcial</span>
-                <h2 class="text-2xl font-black text-slate-700 mt-1" id="perf-gp">--</h2>
-            </div>
+            <input type="month" id="mes-ref" class="bg-white border border-slate-300 rounded-lg px-4 py-2 font-bold text-slate-600 outline-none focus:border-blue-500" onchange="carregarRanking()">
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div class="lg:col-span-1 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-4 bg-slate-50 border-b font-bold text-slate-500 uppercase">Top 10</div>
-                <div id="lista-ranking" class="divide-y divide-slate-50"></div>
+            <div class="lg:col-span-1 space-y-4">
+                <div class="bg-gradient-to-r from-yellow-400 to-orange-500 rounded-2xl p-6 text-white shadow-lg relative overflow-hidden">
+                    <div class="relative z-10">
+                        <span class="text-xs font-bold uppercase tracking-widest opacity-80">1º Lugar</span>
+                        <h2 class="text-3xl font-black mt-1" id="rank-1-nome">--</h2>
+                        <p class="text-xl font-medium opacity-90 mt-1" id="rank-1-valor">--</p>
+                    </div>
+                    <i class="fas fa-trophy absolute -bottom-4 -right-4 text-8xl opacity-20 rotate-12"></i>
+                </div>
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="p-4 bg-slate-50 border-b border-slate-100 font-bold text-slate-500 text-sm uppercase">Top 10 Assistentes</div>
+                    <div id="lista-ranking" class="divide-y divide-slate-50">
+                        <div class="p-6 text-center text-slate-400 italic">Carregando...</div>
+                    </div>
+                </div>
             </div>
-            <div class="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <canvas id="chartRanking"></canvas>
+
+            <div class="lg:col-span-2">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 h-full">
+                    <h3 class="font-bold text-slate-700 mb-6">Comparativo de Volume (Top 10)</h3>
+                    <div class="h-[400px]">
+                        <canvas id="chartRanking"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         let myChart = null;
-        document.addEventListener('DOMContentLoaded', async () => {
-            Sistema.Datas.configurarInputGlobal('data-global', carregarRanking);
-            await Sistema.Dados.carregarUsuarios();
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const hoje = new Date();
+            // Mês passado por padrão, ou atual se preferir
+            const mesStr = hoje.toISOString().substring(0, 7);
+            document.getElementById('mes-ref').value = mesStr;
             carregarRanking();
         });
 
         async function carregarRanking() {
-            // Performance é baseada no MÊS da data selecionada
-            const ref = Sistema.Datas.obterDataObjeto();
-            const ano = ref.getFullYear();
-            const mes = ref.getMonth();
-            const inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-            const fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+            const mes = document.getElementById('mes-ref').value;
+            const [ano, m] = mes.split('-');
+            const inicio = `${mes}-01`;
+            const fim = `${mes}-${new Date(ano, m, 0).getDate()}`;
 
-            const { data } = await _supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+            // 1. Carrega Usuários (Para filtrar Auditoras/Gestoras e pegar nomes)
+            const { data: users } = await _supabase.from('usuarios').select('id, nome, funcao');
+            const userMap = {};
+            users.forEach(u => userMap[u.id] = u);
 
-            const lista = Sistema.Dados.normalizar(data || []);
-            const top10 = lista.slice(0, 10);
+            // 2. Carrega Produção
+            const { data: prod } = await _supabase.from('producao')
+                .select('usuario_id, quantidade')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
 
-            // Atualiza Cards
-            const total = lista.reduce((a,b)=>a+b.total,0);
-            const fifo = lista.reduce((a,b)=>a+b.fifo,0);
-            const gt = lista.reduce((a,b)=>a+b.gt,0);
-            const gp = lista.reduce((a,b)=>a+b.gp,0);
+            // 3. NORMALIZAÇÃO POR NOME
+            const agrupado = {};
 
-            document.getElementById('perf-total').innerText = total.toLocaleString();
-            document.getElementById('perf-fifo').innerText = fifo.toLocaleString();
-            document.getElementById('perf-gt').innerText = gt.toLocaleString();
-            document.getElementById('perf-gp').innerText = gp.toLocaleString();
+            prod.forEach(item => {
+                const u = userMap[item.usuario_id];
+                // Regra: Só Assistentes
+                if (!u || u.funcao !== 'Assistente') return;
 
-            const container = document.getElementById('lista-ranking');
-            container.innerHTML = '';
-            top10.forEach((r, i) => {
-                const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`;
-                container.innerHTML += `<div class="p-4 flex justify-between hover:bg-slate-50"><div class="flex gap-2"><span class="w-6">${medal}</span><span class="font-bold text-sm">${r.nome}</span></div><span class="font-bold text-blue-600">${r.total}</span></div>`;
+                const nome = u.nome;
+                if (!agrupado[nome]) agrupado[nome] = 0;
+                agrupado[nome] += item.quantidade;
             });
 
+            // 4. Ordenação
+            const ranking = Object.entries(agrupado)
+                .map(([nome, total]) => ({ nome, total }))
+                .sort((a, b) => b.total - a.total);
+
+            atualizarUI(ranking);
+        }
+
+        function atualizarUI(ranking) {
+            // Top 1 Card
+            if (ranking.length > 0) {
+                document.getElementById('rank-1-nome').innerText = ranking[0].nome;
+                document.getElementById('rank-1-valor').innerText = ranking[0].total.toLocaleString() + ' docs';
+            } else {
+                document.getElementById('rank-1-nome').innerText = "Sem dados";
+                document.getElementById('rank-1-valor').innerText = "--";
+            }
+
+            // Lista Top 10
+            const lista = document.getElementById('lista-ranking');
+            lista.innerHTML = '';
+            
+            // Pega top 10
+            const top10 = ranking.slice(0, 10);
+
+            top10.forEach((r, index) => {
+                const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `#${index+1}`;
+                const html = `
+                <div class="p-4 flex justify-between items-center hover:bg-slate-50 transition">
+                    <div class="flex items-center gap-3">
+                        <span class="font-black text-slate-400 w-8">${medal}</span>
+                        <span class="font-bold text-slate-700 text-sm">${r.nome}</span>
+                    </div>
+                    <span class="font-bold text-blue-600 text-sm bg-blue-50 px-2 py-1 rounded">${r.total.toLocaleString()}</span>
+                </div>`;
+                lista.insertAdjacentHTML('beforeend', html);
+            });
+
+            // Gráfico
             const ctx = document.getElementById('chartRanking').getContext('2d');
             if(myChart) myChart.destroy();
+
             myChart = new Chart(ctx, {
                 type: 'bar',
-                data: { labels: top10.map(r=>r.nome), datasets: [{ label: 'Total', data: top10.map(r=>r.total), backgroundColor: '#3b82f6', borderRadius: 6 }] },
-                options: { responsive: true, plugins: { legend: { display: false } } }
+                data: {
+                    labels: top10.map(r => r.nome),
+                    datasets: [{
+                        label: 'Produção',
+                        data: top10.map(r => r.total),
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
             });
         }
     </script>

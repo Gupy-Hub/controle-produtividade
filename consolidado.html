@@ -2,116 +2,184 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Consolidado</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consolidado Gerencial</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
     <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-6 py-8">
         <div class="flex justify-between items-center mb-8">
-            <h1 class="text-3xl font-black text-slate-800">Consolidado</h1>
-            <div class="relative">
-                <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">MÊS REF</span>
-                <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
-            </div>
+            <h1 class="text-3xl font-black text-slate-800">Visão Consolidada</h1>
+            <input type="month" id="mes-ref" class="bg-white border border-slate-300 rounded-lg px-4 py-2 font-bold text-slate-600 outline-none focus:border-blue-500" onchange="carregarConsolidado()">
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total Validado / Deveria</span>
-                <div class="flex items-baseline gap-2 mt-2">
-                    <h2 class="text-2xl font-black text-blue-600" id="card-validado">--</h2>
-                    <span class="text-sm text-slate-400">/</span>
-                    <span class="text-lg font-bold text-slate-500" id="card-deveria">--</span>
-                </div>
+                <span class="text-xs font-bold text-slate-400 uppercase">Produção Total</span>
+                <h2 class="text-4xl font-black text-blue-600 mt-2" id="cons-total">--</h2>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Meta Validada / Deveria</span>
-                <div class="flex items-baseline gap-2 mt-2">
-                    <h2 class="text-2xl font-black text-slate-700" id="card-meta-validada">--</h2>
-                    <span class="text-sm text-slate-400">/</span>
-                    <span class="text-lg font-bold text-slate-500" id="card-meta-deveria">--</span>
-                </div>
+                <span class="text-xs font-bold text-slate-400 uppercase">Meta Projetada</span>
+                <h2 class="text-4xl font-black text-slate-700 mt-2" id="cons-meta">--</h2>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">% Atingiu / Deveria</span>
-                <div class="flex items-baseline gap-2 mt-2">
-                    <h2 class="text-2xl font-black text-emerald-600" id="card-pct-real">--%</h2>
-                    <span class="text-sm text-slate-400">/</span>
-                    <span class="text-lg font-bold text-slate-500">100%</span>
-                </div>
+                <span class="text-xs font-bold text-slate-400 uppercase">Atingimento</span>
+                <h2 class="text-4xl font-black text-emerald-600 mt-2" id="cons-ating">--%</h2>
             </div>
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <span class="text-xs font-bold text-slate-400 uppercase">Total de Assistentes</span>
-                <h2 class="text-4xl font-black text-purple-600 mt-2" id="card-hc">--</h2>
+                <span class="text-xs font-bold text-slate-400 uppercase">Headcount Ativo</span>
+                <h2 class="text-4xl font-black text-purple-600 mt-2" id="cons-hc">--</h2>
+                <span class="text-xs text-slate-400">pessoas únicas</span>
             </div>
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 font-bold text-slate-700">Detalhamento por Assistente (Normalizado)</div>
             <table class="w-full text-sm text-left">
                 <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
                     <tr>
                         <th class="px-6 py-4">Nome</th>
-                        <th class="px-6 py-4 text-center">Dias</th>
-                        <th class="px-6 py-4 text-center">Total Validado</th>
-                        <th class="px-6 py-4 text-center">Meta Calc.</th>
-                        <th class="px-6 py-4 text-center">Diferença</th>
+                        <th class="px-6 py-4 text-center">Dias Trab.</th>
+                        <th class="px-6 py-4 text-center">Total Prod.</th>
+                        <th class="px-6 py-4 text-center">Meta (650/dia)</th>
+                        <th class="px-6 py-4 text-center">Resultado</th>
                     </tr>
                 </thead>
-                <tbody id="lista-consolidada" class="divide-y divide-slate-50"></tbody>
+                <tbody id="tabela-consolidada" class="divide-y divide-slate-50"></tbody>
             </table>
         </div>
     </div>
 
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            Sistema.Datas.configurarInputGlobal('data-global', carregarConsolidado);
-            await Sistema.Dados.carregarUsuarios();
+        document.addEventListener('DOMContentLoaded', () => {
+            const hoje = new Date();
+            document.getElementById('mes-ref').value = hoje.toISOString().substring(0, 7);
             carregarConsolidado();
         });
 
         async function carregarConsolidado() {
-            const ref = Sistema.Datas.obterDataObjeto();
-            const ano = ref.getFullYear();
-            const mes = ref.getMonth();
-            const inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-            const fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+            const mes = document.getElementById('mes-ref').value;
+            const [ano, m] = mes.split('-');
+            const inicio = `${mes}-01`;
+            const fim = `${mes}-${new Date(ano, m, 0).getDate()}`;
 
-            const { data } = await _supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+            // 1. Mapa de Users (Filtro Assistente)
+            const { data: users } = await _supabase.from('usuarios').select('id, nome, funcao');
+            const userMap = {};
+            users.forEach(u => userMap[u.id] = u);
 
-            const lista = Sistema.Dados.normalizar(data || []);
+            // 2. Dados
+            const { data: prod } = await _supabase.from('producao')
+                .select('*')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
 
-            // Cálculos dos Cards
-            const totalValidado = lista.reduce((acc, c) => acc + c.total, 0);
-            const metaValidada = lista.reduce((acc, c) => acc + c.meta, 0); // Meta referente aos dias trabalhados
-            
-            // "Deveria" - Assumindo dias úteis ou dias totais?
-            // "Total que deveria ser validado" = Soma das metas
-            const totalDeveria = metaValidada; 
-            
-            document.getElementById('card-validado').innerText = totalValidado.toLocaleString();
-            document.getElementById('card-deveria').innerText = totalDeveria.toLocaleString();
-            
-            document.getElementById('card-meta-validada').innerText = metaValidada.toLocaleString();
-            document.getElementById('card-meta-deveria').innerText = totalDeveria.toLocaleString(); // Meta validada = Meta Deveria neste contexto
-            
-            const pct = totalDeveria ? Math.round((totalValidado/totalDeveria)*100) : 0;
-            document.getElementById('card-pct-real').innerText = pct + '%';
-            document.getElementById('card-hc').innerText = lista.length;
+            // 3. NORMALIZAÇÃO RIGOROSA
+            const agrupado = {}; // Chave: Nome
 
-            const tbody = document.getElementById('lista-consolidada');
+            prod.forEach(item => {
+                const u = userMap[item.usuario_id];
+                // Regra: Apenas Assistentes, ignorar auditoras/gestoras na soma
+                if (!u || u.funcao !== 'Assistente') return;
+
+                const nome = u.nome;
+                if (!agrupado[nome]) {
+                    agrupado[nome] = { total: 0, dias: new Set(), metaAcumulada: 0 };
+                }
+
+                agrupado[nome].total += item.quantidade;
+                
+                // Meta: Se houver meta_diaria definida no banco para aquele ID naquele dia, usa.
+                // Se não, usa 650 padrão.
+                // IMPORTANTE: Se a mesma pessoa tem 2 IDs no mesmo dia, não podemos somar 2 metas de 650.
+                // A meta é POR PESSOA POR DIA.
+                // Então vamos somar a meta apenas uma vez por dia por pessoa.
+                // Como fazemos isso iterando linha a linha?
+                // Vamos guardar as metas por dia no objeto.
+            });
+
+            // Recalcula Meta de forma justa (1 Meta por Dia Trabalhado por Pessoa)
+            // Precisamos iterar novamente ou estruturar melhor.
+            // Vamos fazer diferente: Agrupar { Nome: { Dia: { total: 0, meta_dia: 650 } } }
+            
+            const estrutura = {}; // Nome -> Data -> {qtd, meta}
+
+            prod.forEach(item => {
+                const u = userMap[item.usuario_id];
+                if (!u || u.funcao !== 'Assistente') return;
+                const nome = u.nome;
+                const dia = item.data_referencia;
+
+                if (!estrutura[nome]) estrutura[nome] = {};
+                if (!estrutura[nome][dia]) estrutura[nome][dia] = { qtd: 0, meta: 650 }; // Meta padrao
+
+                estrutura[nome][dia].qtd += item.quantidade;
+                // Se houver meta personalizada em ALGUM dos IDs, usa ela (prioridade para a alterada)
+                if (item.meta_diaria && item.meta_diaria !== 650) {
+                    estrutura[nome][dia].meta = item.meta_diaria;
+                }
+            });
+
+            // Agora achata para totais
+            let totalGeral = 0;
+            let metaGeral = 0;
+            let listaFinal = [];
+
+            Object.keys(estrutura).sort().forEach(nome => {
+                let somaUser = 0;
+                let metaUser = 0;
+                let diasUser = 0;
+
+                Object.values(estrutura[nome]).forEach(diaData => {
+                    // Só conta se produziu > 0 (Dia Trabalhado)
+                    if (diaData.qtd > 0) {
+                        somaUser += diaData.qtd;
+                        metaUser += diaData.meta;
+                        diasUser++;
+                    }
+                });
+
+                if (diasUser > 0) {
+                    totalGeral += somaUser;
+                    metaGeral += metaUser;
+                    listaFinal.push({ nome, dias: diasUser, total: somaUser, meta: metaUser });
+                }
+            });
+
+            // Ordena por produção
+            listaFinal.sort((a, b) => b.total - a.total);
+
+            // Renderiza Big Numbers
+            document.getElementById('cons-total').innerText = totalGeral.toLocaleString();
+            document.getElementById('cons-meta').innerText = metaGeral.toLocaleString();
+            const ating = metaGeral ? Math.round((totalGeral / metaGeral) * 100) : 0;
+            document.getElementById('cons-ating').innerText = ating + '%';
+            document.getElementById('cons-hc').innerText = listaFinal.length;
+
+            // Renderiza Tabela
+            const tbody = document.getElementById('tabela-consolidada');
             tbody.innerHTML = '';
-            lista.forEach(u => {
+            
+            listaFinal.forEach(u => {
                 const diff = u.total - u.meta;
-                const color = diff >= 0 ? 'text-emerald-600' : 'text-red-600';
-                tbody.innerHTML += `<tr class="hover:bg-slate-50"><td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td><td class="px-6 py-4 text-center">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-600">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center font-bold ${color}">${diff > 0 ? '+' : ''}${diff.toLocaleString()}</td></tr>`;
+                const color = diff >= 0 ? 'text-emerald-600' : 'text-rose-600';
+                const sign = diff >= 0 ? '+' : '';
+                
+                tbody.innerHTML += `
+                <tr class="hover:bg-slate-50 transition border-b border-slate-50">
+                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td>
+                    <td class="px-6 py-4 text-center text-slate-500">${u.dias}</td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-600">${u.total.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-center font-bold ${color}">${sign}${diff.toLocaleString()}</td>
+                </tr>`;
             });
         }
     </script>

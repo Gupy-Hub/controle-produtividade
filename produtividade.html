@@ -1,135 +1,279 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Produtividade</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
-</head>
-<body class="text-slate-800">
-    <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script>
-    <script src="js/layout.js"></script>
+// js/produtividade.js
 
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800">Painel de Produtividade</h1>
-                <p class="text-sm text-slate-500" id="titulo-dinamico">--</p>
-            </div>
-            
-            <div class="flex items-center gap-3">
-                <div class="relative">
-                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
-                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
-                </div>
+// Variáveis globais
+let dadosBrutos = [];
+let mapaUsuarios = {}; // ID -> Nome
+let dadosAgrupados = []; // Dados normalizados por nome
 
-                <select id="view-mode" onchange="carregarTela()" class="py-2 px-4 border-2 border-slate-200 rounded-lg font-bold text-slate-600 outline-none bg-white">
-                    <option value="dia">Dia</option>
-                    <option value="semana">Semana</option>
-                    <option value="mes">Mês</option>
-                </select>
-            </div>
-        </div>
+document.addEventListener('DOMContentLoaded', async () => {
+    // Configura datas iniciais para 'Ontem'
+    const ontem = new Date();
+    ontem.setDate(ontem.getDate() - 1);
+    
+    const strHoje = ontem.toISOString().split('T')[0];
+    const strMes = ontem.toISOString().substring(0, 7);
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase">Produção Total</p>
-                <p class="text-3xl font-extrabold text-blue-700" id="kpi-total">--</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase">Média / Pessoa</p>
-                <p class="text-3xl font-extrabold text-slate-800" id="kpi-media">--</p>
-            </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase">Assistentes Ativas</p>
-                <p class="text-3xl font-extrabold text-slate-800" id="kpi-hc">--</p>
-            </div>
-        </div>
+    // Proteção contra elementos inexistentes
+    if(document.getElementById('select-dia')) document.getElementById('select-dia').value = strHoje;
+    if(document.getElementById('select-mes')) document.getElementById('select-mes').value = strMes;
+    
+    ajustarSeletores();
+    await carregarMapaUsuarios(); // Passo crucial: Saber quem é quem antes de tudo
+    carregarDados(); 
+});
 
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                        <tr>
-                            <th class="px-6 py-4">Nome</th>
-                            <th class="px-6 py-4 text-center">Dias Trab.</th>
-                            <th class="px-6 py-4 text-center text-blue-700 font-bold">Produção</th>
-                            <th class="px-6 py-4 text-center">Meta Calc.</th>
-                            <th class="px-6 py-4 text-center">Média/Dia</th>
-                            <th class="px-6 py-4 text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', async () => {
-            // 1. Inicia Data Global e Cache
-            Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
-            await Sistema.Dados.carregarUsuarios();
-            carregarTela();
+// 1. Carrega Mapa de Usuários (ID -> Nome) para normalização
+async function carregarMapaUsuarios() {
+    if (!_supabase) return;
+    const { data } = await _supabase.from('usuarios').select('id, nome, funcao');
+    if (data) {
+        data.forEach(u => {
+            mapaUsuarios[u.id] = { nome: u.nome, funcao: u.funcao };
         });
+    }
+}
 
-        async function carregarTela() {
-            const modo = document.getElementById('view-mode').value;
-            // Pega o intervalo usando a lógica centralizada (incluindo semana)
-            const intervalo = Sistema.Datas.getIntervalo(modo);
-            
-            document.getElementById('titulo-dinamico').innerText = intervalo.titulo;
-            const tbody = document.getElementById('tabela-corpo');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10">Carregando...</td></tr>';
+function ajustarSeletores() {
+    const view = document.getElementById('view-selector').value;
+    const inputDia = document.getElementById('select-dia');
+    const inputMes = document.getElementById('select-mes');
+    const inputSemana = document.getElementById('select-semana');
 
-            const { data } = await _supabase.from('producao')
-                .select('*')
-                .gte('data_referencia', intervalo.inicio)
-                .lte('data_referencia', intervalo.fim);
+    inputDia.classList.add('hidden');
+    inputMes.classList.add('hidden');
+    inputSemana.classList.add('hidden');
 
-            // NORMALIZAÇÃO CENTRAL (Resolve duplicidade e regras de meta)
-            const lista = Sistema.Dados.normalizar(data || []);
+    if (view === 'dia') {
+        inputDia.classList.remove('hidden');
+    } else if (view === 'semana') {
+        inputMes.classList.remove('hidden');
+        inputSemana.classList.remove('hidden');
+        if(inputDia.value) inputMes.value = inputDia.value.substring(0, 7);
+    } else {
+        inputMes.classList.remove('hidden');
+        if(inputDia.value) inputMes.value = inputDia.value.substring(0, 7);
+    }
+    carregarDados();
+}
 
-            if (lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-slate-400">Sem dados.</td></tr>';
-                document.getElementById('kpi-total').innerText = '0';
-                document.getElementById('kpi-media').innerText = '0';
-                document.getElementById('kpi-hc').innerText = '0';
-                return;
-            }
+function getWeekNumber(dateString) { 
+    const date = new Date(dateString + 'T12:00:00'); 
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); 
+    return Math.ceil((date.getDate() + firstDay) / 7); 
+}
 
-            // KPIs
-            const totalGeral = lista.reduce((acc, curr) => acc + curr.total, 0);
-            const totalDias = lista.reduce((acc, curr) => acc + curr.dias, 0); // Soma de dias trabalhados
-            const mediaGeral = totalDias ? Math.round(totalGeral / totalDias) : 0;
+// 2. Carregamento e NORMALIZAÇÃO
+async function carregarDados() {
+    const view = document.getElementById('view-selector').value;
+    let dataInicio, dataFim, titulo, semanaSel;
+    
+    if (view === 'dia') {
+        const dia = document.getElementById('select-dia').value;
+        if (!dia) return;
+        dataInicio = dia; dataFim = dia;
+        titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
+    } else {
+        const mes = document.getElementById('select-mes').value;
+        if (!mes) return;
+        dataInicio = `${mes}-01`;
+        const [ano, m] = mes.split('-');
+        const ultimoDia = new Date(ano, m, 0).getDate();
+        dataFim = `${mes}-${ultimoDia}`;
 
-            document.getElementById('kpi-total').innerText = totalGeral.toLocaleString();
-            document.getElementById('kpi-media').innerText = mediaGeral.toLocaleString();
-            document.getElementById('kpi-hc').innerText = lista.length;
-
-            let html = '';
-            lista.forEach(u => {
-                const badge = u.atingiu 
-                    ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded-full text-xs font-bold">Atingida</span>'
-                    : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded-full text-xs font-bold">Abaixo</span>';
-
-                html += `
-                <tr class="hover:bg-slate-50">
-                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome}</td>
-                    <td class="px-6 py-4 text-center">${u.dias}</td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-700 text-lg">${u.total.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center text-slate-500">${u.meta.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center text-slate-500">${u.media.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center">${badge}</td>
-                </tr>`;
-            });
-            tbody.innerHTML = html;
+        if (view === 'semana') {
+            semanaSel = parseInt(document.getElementById('select-semana').value);
+            titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`;
+        } else {
+            titulo = `Visão Mensal: ${mes}`;
         }
-    </script>
-</body>
-</html>
+    }
+
+    document.getElementById('panel-titulo').innerText = "A carregar e consolidar dados...";
+    const tbody = document.getElementById('tabela-corpo');
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 animate-pulse text-blue-600">A processar dados...</td></tr>';
+
+    try {
+        const { data, error } = await _supabase
+            .from('producao')
+            .select('*')
+            .gte('data_referencia', dataInicio)
+            .lte('data_referencia', dataFim);
+
+        if (error) throw error;
+
+        let dadosFiltrados = data || [];
+        if (view === 'semana') {
+            dadosFiltrados = dadosFiltrados.filter(d => getWeekNumber(d.data_referencia) === semanaSel);
+        }
+
+        // --- AQUI ACONTECE A MÁGICA DA NORMALIZAÇÃO ---
+        processarDadosUnicos(dadosFiltrados);
+        renderizarTabela(titulo);
+
+    } catch (erro) {
+        console.error(erro);
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-red-500 font-bold">Erro na consolidação.</td></tr>';
+    }
+}
+
+// 3. Processamento com Regra de Nome Único
+function processarDadosUnicos(dados) {
+    const mapaConsolidado = {}; // Chave será o NOME
+
+    dados.forEach(item => {
+        // Pega info do usuário pelo ID
+        const usuarioInfo = mapaUsuarios[item.usuario_id];
+        
+        // REGRA: Se não for Assistente (ex: Auditora/Gestora), IGNORA os dados da planilha
+        if (!usuarioInfo || usuarioInfo.funcao !== 'Assistente') return;
+
+        const nome = usuarioInfo.nome;
+
+        if (!mapaConsolidado[nome]) {
+            mapaConsolidado[nome] = {
+                nome: nome,
+                total: 0,
+                fifo: 0,
+                gt: 0,
+                gp: 0,
+                diasTrabalhados: new Set() // Set para contar dias únicos trabalhados
+            };
+        }
+
+        // Soma TUDO (independente de qual ID veio, se o nome é igual, soma)
+        mapaConsolidado[nome].total += (item.quantidade || 0);
+        mapaConsolidado[nome].fifo += (item.fifo || 0);
+        mapaConsolidado[nome].gt += (item.gradual_total || 0);
+        mapaConsolidado[nome].gp += (item.gradual_parcial || 0);
+        
+        // Só conta dia trabalhado se produziu algo
+        if (item.quantidade > 0) {
+            mapaConsolidado[nome].diasTrabalhados.add(item.data_referencia);
+        }
+    });
+
+    // Converte para array
+    dadosAgrupados = Object.values(mapaConsolidado).sort((a, b) => b.total - a.total);
+}
+
+function renderizarTabela(tituloPainel) {
+    document.getElementById('panel-titulo').innerText = tituloPainel;
+    
+    // Cálculos de KPIs consolidados
+    const somaTotal = dadosAgrupados.reduce((acc, curr) => acc + curr.total, 0);
+    // Headcount = Número de nomes únicos que tiveram produção > 0
+    const assistentesAtivas = dadosAgrupados.filter(u => u.total > 0).length;
+    
+    // Média = Total / (Soma dos dias trabalhados de cada uma) ?? 
+    // NÃO. Média do Time = Total Produção / Total Dias-Pessoa Trabalhados.
+    // Ex: Maria trabalhou 2 dias (fez 2000), Joana 1 dia (fez 500). Total=2500. Dias=3. Média=833.
+    // Isso é o mais justo para o consolidado.
+    
+    let totalDiasPessoa = 0;
+    dadosAgrupados.forEach(u => totalDiasPessoa += u.diasTrabalhados.size);
+    
+    const mediaGeral = totalDiasPessoa ? Math.round(somaTotal / totalDiasPessoa) : 0;
+
+    document.getElementById('p-total').innerText = somaTotal.toLocaleString();
+    document.getElementById('p-media').innerText = mediaGeral.toLocaleString();
+    document.getElementById('p-headcount').innerText = assistentesAtivas; // Headcount real (nomes únicos)
+
+    const tbody = document.getElementById('tabela-corpo');
+    
+    if (dadosAgrupados.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado válido encontrado para Assistentes.</td></tr>';
+        return;
+    }
+
+    let html = '';
+    dadosAgrupados.forEach(user => {
+        const diasCount = user.diasTrabalhados.size || 1; // Evita divisão por zero
+        // Meta baseada nos dias que ELA trabalhou
+        const metaCalculada = 650 * diasCount;
+        
+        const atingiuMeta = user.total >= metaCalculada;
+        const mediaPessoal = Math.round(user.total / diasCount);
+        
+        const corBadge = atingiuMeta ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
+        const textoBadge = atingiuMeta ? 'Atingida' : 'Abaixo';
+
+        html += `
+        <tr class="hover:bg-slate-50 transition duration-150 border-b border-slate-100">
+            <td class="px-6 py-4 font-medium text-slate-900">
+                ${user.nome}
+                <div class="text-[10px] text-slate-400 font-normal">${diasCount} dias trab.</div>
+            </td>
+            <td class="px-6 py-4 text-center font-bold text-blue-700 text-lg">${user.total.toLocaleString()}</td>
+            <td class="px-6 py-4 text-center text-slate-600">${user.fifo}</td>
+            <td class="px-6 py-4 text-center text-slate-600">${user.gt}</td>
+            <td class="px-6 py-4 text-center text-slate-600">${user.gp}</td>
+            <td class="px-6 py-4 text-center text-slate-400">
+                ${metaCalculada.toLocaleString()}
+                <div class="text-[9px]">Média: ${mediaPessoal}</div>
+            </td>
+            <td class="px-6 py-4 text-center">
+                <span class="${corBadge} text-xs font-bold px-3 py-1 rounded-full border">
+                    ${textoBadge}
+                </span>
+            </td>
+        </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
+}
+
+// Função de Importação (Mantida, mas limpa para garantir inserção correta)
+async function importarArquivos() {
+    const files = document.getElementById('excel-files').files;
+    if (files.length === 0) return;
+
+    const btn = document.getElementById('btn-import');
+    btn.innerHTML = '⏳ Processando...'; btn.disabled = true;
+
+    let log = { ok: 0, dup: 0, err: 0 };
+
+    for (let f of files) {
+        try {
+            const name = f.name.replace('.xlsx', '');
+            if (!/^\d{8}$/.test(name)) { log.err++; continue; } // Valida AAAAMMDD
+
+            const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
+            const buffer = await f.arrayBuffer();
+            const wb = XLSX.read(buffer, { type: 'array' });
+            const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+
+            for (let row of json) {
+                if (!row.id_assistente) continue;
+
+                // Verifica se já existe esse ID nesse dia (evita duplicar importação)
+                const { data: exists } = await _supabase
+                    .from('producao')
+                    .select('id')
+                    .eq('usuario_id', row.id_assistente)
+                    .eq('data_referencia', dataRef)
+                    .maybeSingle();
+
+                if (exists) {
+                    log.dup++;
+                } else {
+                    await _supabase.from('producao').insert({
+                        usuario_id: row.id_assistente,
+                        data_referencia: dataRef,
+                        fifo: row.documentos_validados_fifo || 0,
+                        gradual_total: row.documentos_validados_gradual_total || 0,
+                        gradual_parcial: row.documentos_validados_gradual_parcial || 0,
+                        perfil_fc: row.documentos_validados_perfil_fc || 0,
+                        quantidade: row.documentos_validados || 0
+                    });
+                    log.ok++;
+                }
+            }
+        } catch (e) { console.error(e); log.err++; }
+    }
+
+    alert(`Fim da Importação!\n✅ Inseridos: ${log.ok}\n⚠️ Já existiam: ${log.dup}\n❌ Erros: ${log.err}`);
+    btn.innerHTML = 'Importar'; btn.disabled = false;
+    document.getElementById('excel-files').value = "";
+    carregarDados(); // Recarrega com a nova lógica
+}
