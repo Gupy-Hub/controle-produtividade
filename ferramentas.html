@@ -128,10 +128,12 @@
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden transform transition-all">
             <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-bold text-slate-800">Adicionar à Biblioteca</h3><button onclick="fecharModalFrase()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button></div>
             <div class="p-6 space-y-4">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div></div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Empresa</label><input type="text" id="form-empresa" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Motivo</label><input type="text" id="form-motivo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
+                </div>
                 <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Documento</label><input type="text" id="form-doc" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Título</label><input type="text" id="form-titulo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo da Frase</label><textarea id="form-conteudo" rows="4" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5"></textarea></div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end"><button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">Salvar</button></div>
         </div>
@@ -145,9 +147,8 @@
         document.addEventListener('DOMContentLoaded', () => { carregarFrases(); switchTab('lib'); });
 
         async function carregarFrases() {
-            // Tenta buscar. Se der erro (RLS), o array fica vazio.
             const { data, error } = await _supabase.from('biblioteca').select('*').order('created_at', { ascending: false });
-            if (error) console.log("Possível erro de RLS (Tabela travada):", error);
+            if (error) console.log("Erro API:", error);
             frasesGlobal = data || [];
 
             let query = _supabase.from('frases_usos').select('*'); if (!isMgr) query = query.eq('usuario_id', sessao.id);
@@ -169,7 +170,7 @@
             const fEmp = document.getElementById('filtro-empresa').value; const fMot = document.getElementById('filtro-motivo').value; const fDoc = document.getElementById('filtro-doc').value; const term = document.getElementById('lib-search').value.toLowerCase();
             const filtered = frasesGlobal.filter(f => {
                 const matchEmp = !fEmp || f.empresa === fEmp; const matchMot = !fMot || f.motivo === fMot; const matchDoc = !fDoc || f.documento === fDoc;
-                const matchText = f.titulo.toLowerCase().includes(term) || f.conteudo.toLowerCase().includes(term);
+                const matchText = (f.titulo||'').toLowerCase().includes(term) || (f.conteudo||'').toLowerCase().includes(term);
                 return matchEmp && matchMot && matchDoc && matchText;
             });
             renderizarFrases(filtered);
@@ -177,12 +178,12 @@
 
         function renderizarFrases(lista) {
             const container = document.getElementById('lib-grid');
-            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada (Verifique se a tabela foi destravada no Supabase).</div>'; return; }
+            if (lista.length === 0) { container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10">Nenhuma frase encontrada.</div>'; return; }
             let html = '';
             lista.forEach(item => {
                 const safeContent = item.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
                 const badges = [ item.empresa ? `<span class="bg-blue-50 text-blue-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.empresa}</span>` : '', item.motivo ? `<span class="bg-purple-50 text-purple-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.motivo}</span>` : '', item.documento ? `<span class="bg-emerald-50 text-emerald-600 text-[10px] px-2 py-1 rounded-md font-bold uppercase">${item.documento}</span>` : '' ].join('');
-                html += `<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full group"><div class="flex justify-between items-start mb-3"><h4 class="font-bold text-slate-800 text-sm">${item.titulo}</h4><button onclick="copiarTexto(${item.id}, '${safeContent}')" class="text-slate-400 hover:text-blue-600 transition" title="Copiar"><i class="far fa-copy text-lg"></i></button></div><div class="flex gap-2 mb-3">${badges}</div><p class="text-slate-600 text-xs mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 group-hover:border-blue-100 transition">${item.conteudo}</p></div>`;
+                html += `<div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 hover:shadow-md transition flex flex-col h-full group"><div class="flex justify-between items-start mb-3"><h4 class="font-bold text-slate-800 text-sm">${item.titulo || item.motivo || 'Sem Título'}</h4><button onclick="copiarTexto(${item.id}, '${safeContent}')" class="text-slate-400 hover:text-blue-600 transition" title="Copiar"><i class="far fa-copy text-lg"></i></button></div><div class="flex gap-2 mb-3">${badges}</div><p class="text-slate-600 text-xs mb-4 flex-1 whitespace-pre-wrap font-mono bg-slate-50 p-3 rounded-lg border border-slate-100 group-hover:border-blue-100 transition">${item.conteudo}</p></div>`;
             });
             container.innerHTML = html;
         }
@@ -197,7 +198,7 @@
             sortedIds.forEach(id => {
                 const frase = frasesGlobal.find(f => f.id == id); if (!frase) return;
                 const safeContent = frase.conteudo.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, '\\n');
-                html += `<div class="bg-white/80 p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition cursor-pointer" onclick="copiarTexto(${frase.id}, '${safeContent}')"><div class="flex justify-between items-center mb-2"><span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded-full">${contagem[id]} usos</span><i class="fas fa-copy text-slate-300"></i></div><h4 class="font-bold text-slate-700 text-xs mb-1 truncate">${frase.titulo}</h4><p class="text-[10px] text-slate-500 truncate font-mono">${frase.conteudo}</p></div>`;
+                html += `<div class="bg-white/80 p-3 rounded-xl border border-slate-100 shadow-sm hover:shadow-md hover:-translate-y-1 transition cursor-pointer" onclick="copiarTexto(${frase.id}, '${safeContent}')"><div class="flex justify-between items-center mb-2"><span class="text-[10px] font-bold text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded-full">${contagem[id]} usos</span><i class="fas fa-copy text-slate-300"></i></div><h4 class="font-bold text-slate-700 text-xs mb-1 truncate">${frase.titulo || frase.motivo}</h4><p class="text-[10px] text-slate-500 truncate font-mono">${frase.conteudo}</p></div>`;
             });
             container.innerHTML = html;
         }
@@ -220,7 +221,6 @@
                     let count = 0; let inserts = [];
                     for (let row of json) {
                         const cleanRow = {}; Object.keys(row).forEach(k => { cleanRow[k.trim().toLowerCase()] = row[k]; });
-                        // Detector de Colunas (Ignora maiúsculas e acentos)
                         const conteudo = cleanRow['conteudo'] || cleanRow['conteúdo'] || cleanRow['frase'];
                         if (conteudo) {
                             const empresa = cleanRow['empresa'] || ''; const motivo = cleanRow['motivo'] || ''; const doc = cleanRow['documento'] || cleanRow['doc'] || '';
@@ -232,7 +232,7 @@
                         btn.innerHTML = `Importando ${inserts.length}...`;
                         const { error } = await _supabase.from('biblioteca').insert(inserts); if (error) throw error;
                         alert(`${inserts.length} frases importadas com sucesso!`); carregarFrases();
-                    } else { alert("Nenhuma frase encontrada no arquivo. Verifique se as colunas são: conteudo, empresa, motivo."); }
+                    } else { alert("Nenhuma frase encontrada."); }
                 } catch (err) { console.error(err); alert("Erro: " + err.message); } finally { btn.innerHTML = txtOriginal; btn.disabled = false; input.value = ''; }
             };
             reader.readAsArrayBuffer(file);
@@ -240,9 +240,16 @@
 
         function abrirModalFrase() { document.getElementById('modal-frase').classList.remove('hidden'); document.getElementById('modal-frase').classList.add('flex'); }
         function fecharModalFrase() { document.getElementById('modal-frase').classList.add('hidden'); document.getElementById('modal-frase').classList.remove('flex'); }
+        
         async function salvarFrase() {
-            const t = document.getElementById('form-titulo').value; const c = document.getElementById('form-conteudo').value; const e = document.getElementById('form-empresa').value; const m = document.getElementById('form-motivo').value; const d = document.getElementById('form-doc').value;
-            if (!t || !c) return alert("Preencha Título e Conteúdo.");
+            const c = document.getElementById('form-conteudo').value; 
+            const e = document.getElementById('form-empresa').value; 
+            const m = document.getElementById('form-motivo').value; 
+            const d = document.getElementById('form-doc').value;
+            // Título vira Motivo se não especificado (que agora sempre será Motivo pois removemos o input)
+            const t = m || "Nova Frase";
+
+            if (!c) return alert("Preencha o Conteúdo.");
             const { error } = await _supabase.from('biblioteca').insert({ titulo: t, conteudo: c, empresa: e, motivo: m, documento: d, criado_por: sessao.nome });
             if (!error) { fecharModalFrase(); carregarFrases(); } else alert(error.message);
         }
