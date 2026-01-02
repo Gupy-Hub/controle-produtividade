@@ -1,54 +1,49 @@
-const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+<!DOCTYPE html>
+<html lang="pt-pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Controle de Produtividade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
 
-function renderNavbar() {
-    const usuario = JSON.parse(localStorage.getItem('usuario'));
-    
-    // Se não estiver logado e não for a página de login
-    const path = window.location.pathname;
-    if (!usuario && !path.endsWith('index.html') && !path.endsWith('/')) {
-        window.location.href = 'index.html';
-        return;
-    }
-
-    if (path.endsWith('index.html') || path.endsWith('/')) return;
-
-    const navbarHTML = `
-    <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-        <div class="flex items-center gap-3 select-none cursor-pointer" onclick="window.location.href='produtividade.html'">
-            <div class="flex flex-col leading-tight">
-                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
-                <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
+    <div class="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200">
+        <div class="bg-slate-900 p-8 text-center">
+            <h1 class="text-2xl font-extrabold text-white tracking-tight uppercase">Acesso Restrito</h1>
+            <p class="text-slate-400 text-sm mt-1">Controle de Produtividade & Performance</p>
+        </div>
+        
+        <div class="p-8 space-y-6">
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">ID do Colaborador</label>
+                <input type="number" id="login-id" class="w-full bg-slate-50 border-2 border-slate-200 text-slate-800 text-lg font-bold rounded-xl p-3 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition" placeholder="Digite seu ID" autofocus>
             </div>
-        </div>
-        <div class="hidden md:flex items-center gap-1 h-full">
-            ${createNavLink('Gestão', 'gestao.html')}
-            ${createNavLink('Produtividade', 'produtividade.html')}
-            ${createNavLink('Performance', 'performance.html')}
-            ${createNavLink('Consolidado', 'consolidado.html')}
-            ${createNavLink('Minha Área', 'minha_area.html')}
-            ${createNavLink('Ferramentas', 'ferramentas.html')} 
-        </div>
-        <div class="flex items-center gap-4">
-            <div class="text-right hidden sm:block">
-                <span class="block text-sm font-bold text-white">${usuario ? usuario.nome : 'Utilizador'}</span>
-                <span class="block text-xs text-slate-400">${usuario ? usuario.funcao : ''}</span>
+            
+            <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha de Acesso</label>
+                <input type="password" id="senha" class="w-full bg-slate-50 border-2 border-slate-200 text-slate-800 text-lg font-bold rounded-xl p-3 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition" placeholder="••••••••">
             </div>
-            <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
+
+            <div id="error-msg" class="hidden bg-red-50 text-red-600 text-sm font-bold p-3 rounded-lg border border-red-100 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                <span id="msg-texto">Erro de autenticação</span>
+            </div>
+
+            <button onclick="fazerLogin()" id="btn-entrar" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 text-lg">
+                Entrar no Sistema
+            </button>
         </div>
-    </nav>
-    <div class="h-20"></div>`;
+        <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
+            <p class="text-xs text-slate-400">© 2024 Gestão de Operações</p>
+        </div>
+    </div>
 
-    document.body.insertAdjacentHTML('afterbegin', navbarHTML);
-}
-
-function createNavLink(label, linkUrl) {
-    const isActive = window.location.href.includes(linkUrl);
-    const activeClass = isActive ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-    return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-}
-
-function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-
-renderNavbar();
+    <script src="js/config.js"></script>
+    <script src="js/layout.js"></script>
+    <script src="js/login.js"></script>
+</body>
+</html>

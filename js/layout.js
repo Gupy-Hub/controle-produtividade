@@ -1,17 +1,23 @@
-const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+// js/layout.js
 
 function renderNavbar() {
+    // Verifica se _supabase existe (carregado pelo config.js)
+    if (!window._supabase) {
+        console.error("Supabase não encontrado no layout.");
+        return;
+    }
+
     const usuario = JSON.parse(localStorage.getItem('usuario'));
-    
-    // Se não estiver logado e não for a página de login
     const path = window.location.pathname;
+
+    // Regra de Redirecionamento:
+    // Se não tiver usuário logado E não estiver na tela de login (index.html ou raiz /)
     if (!usuario && !path.endsWith('index.html') && !path.endsWith('/')) {
         window.location.href = 'index.html';
         return;
     }
 
+    // Se estiver na tela de login, não desenha a navbar
     if (path.endsWith('index.html') || path.endsWith('/')) return;
 
     const navbarHTML = `
@@ -38,7 +44,7 @@ function renderNavbar() {
             <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
         </div>
     </nav>
-    <div class="h-20"></div>`;
+    <div class="h-20"></div>`; // Espaçador para o conteúdo não ficar atrás da navbar
 
     document.body.insertAdjacentHTML('afterbegin', navbarHTML);
 }
@@ -49,6 +55,10 @@ function createNavLink(label, linkUrl) {
     return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
 }
 
-function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
+function logout() {
+    localStorage.removeItem('usuario');
+    window.location.href = 'index.html';
+}
 
+// Executa a função automaticamente ao carregar o arquivo
 renderNavbar();
