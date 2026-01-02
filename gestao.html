@@ -1,44 +1,31 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão Administrativa</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <script src=".js/config.js"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
-    <script>
-        function renderNavbar() {
-            if (!_supabase) { document.body.innerHTML = '<div class="p-10 text-center text-red-600 font-bold">Erro Crítico: Supabase não carregou. Verifique o caminho .js/config.js</div>'; return; }
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-            if (!usuario || usuario.funcao !== 'Gestora') { alert('Acesso restrito.'); window.location.href = 'produtividade.html'; return; }
-            const navbarHTML = `<nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6"><div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'"><div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div></div><div class="hidden md:flex items-center gap-1 h-full">${createNavLink('Gestão', 'gestao.html')}${createNavLink('Produtividade', 'produtividade.html')}${createNavLink('Performance', 'performance.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Minha Área', 'minha_area.html')}${createNavLink('Ferramentas', 'ferramentas.html')}</div><div class="flex items-center gap-4"><div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div><button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button></div></nav><div class="h-20"></div>`;
-            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
-        }
-        function createNavLink(label, linkUrl) { const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white"; return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`; }
-        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        renderNavbar();
-    </script>
+    <script src="js/layout.js"></script>
+
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="mb-8"><h1 class="text-2xl font-bold text-slate-800">Painel de Gestão</h1><p class="text-slate-500">Gerencie colaboradores e defina as metas do time.</p></div>
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
                 <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700 flex items-center gap-2">👥 Equipe <span id="total-users" class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">...</span></h3><button onclick="abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm">+ Novo Colaborador</button></div>
                 <div class="p-4 border-b border-slate-100"><input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar por nome ou ID..." class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 focus:ring-blue-500"></div>
-                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative" id="user-list"><div class="absolute inset-0 flex items-center justify-center text-slate-400"><div class="text-center"><span class="block text-2xl mb-2">⏳</span>Carregando equipe...</div></div></div>
+                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative" id="user-list"><div class="absolute inset-0 flex items-center justify-center text-slate-400"><div class="text-center"><span class="block text-2xl mb-2">⏳</span>A carregar equipa...</div></div></div>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-fit">
                 <div class="p-5 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700">🎯 Configuração de Metas</h3></div>
                 <div class="p-6 space-y-4">
-                    <div class="grid grid-cols-2 gap-4"><div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Aplicar Para</label><select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-medium"><option>Carregando...</option></select></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label><input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Diário</label><input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></div></div>
+                    <div class="grid grid-cols-2 gap-4"><div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Aplicar Para</label><select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-medium"><option>A carregar...</option></select></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label><input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Diário</label><input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></div></div>
                     <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-lg transition shadow-sm">Gravar Meta</button>
-                    <div class="pt-6 border-t border-slate-100"><h4 class="text-sm font-bold text-slate-700 mb-3">Metas Vigentes (Assistentes)</h4><div class="max-h-64 overflow-y-auto space-y-2" id="meta-list"><div class="text-xs text-slate-400 italic">Carregando metas...</div></div></div>
+                    <div class="pt-6 border-t border-slate-100"><h4 class="text-sm font-bold text-slate-700 mb-3">Metas Vigentes (Assistentes)</h4><div class="max-h-64 overflow-y-auto space-y-2" id="meta-list"><div class="text-xs text-slate-400 italic">A carregar metas...</div></div></div>
                 </div>
             </div>
         </div>
@@ -64,7 +51,7 @@
         }
         function renderUsers(lista) {
             const container = document.getElementById('user-list'); document.getElementById('total-users').innerText = lista.length;
-            if(!lista || lista.length === 0) { container.innerHTML = '<div class="text-center p-4 text-slate-400 text-sm">Nenhum usuário encontrado.</div>'; return; }
+            if(!lista || lista.length === 0) { container.innerHTML = '<div class="text-center p-4 text-slate-400 text-sm">Nenhum utilizador encontrado.</div>'; return; }
             let html = '';
             lista.forEach(u => { const userJson = JSON.stringify(u).replace(/"/g, '&quot;'); html += `<div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition group"><div class="flex items-center gap-3"><div class="bg-slate-200 text-slate-600 font-bold text-xs px-2 py-1 rounded">#${u.id}</div><div><div class="font-bold text-sm text-slate-700">${u.nome}</div><div class="text-xs text-slate-500">${u.funcao} • ${u.contrato || 'PJ'}</div></div></div><button onclick="abrirModal(${userJson})" class="text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition px-3 py-1 text-sm font-medium">Editar</button></div>`; });
             container.innerHTML = html;
@@ -89,13 +76,13 @@
             try { if(document.getElementById('form-id').disabled) { const res = await _supabase.from('usuarios').update(payload).eq('id', id); error = res.error; } else { const res = await _supabase.from('usuarios').insert(payload); error = res.error; } if(error) throw error; fecharModal(); await loadUsers(); await loadMetasAtuais(); } catch (err) { alert("Erro ao salvar: " + err.message); } finally { btns.forEach(b => b.disabled = false); }
         }
         async function excluirUsuario() {
-            const id = document.getElementById('form-id').value; if(!confirm('Tem certeza absoluta que deseja excluir este usuário?')) return;
+            const id = document.getElementById('form-id').value; if(!confirm('Tem a certeza que deseja excluir este utilizador?')) return;
             try { const { error } = await _supabase.from('usuarios').delete().eq('id', id); if(error) throw error; fecharModal(); await loadUsers(); await loadMetasAtuais(); } catch(err) { alert("Erro ao excluir: " + err.message); }
         }
         async function salvarMeta() {
             const uid = document.getElementById('meta-user').value; const data = document.getElementById('meta-date').value; const valor = document.getElementById('meta-value').value;
             if(!uid || !data || !valor) return alert("Preencha todos os campos da meta.");
-            const btn = document.getElementById('btn-meta'); const txt = btn.innerText; btn.innerText = "Salvando..."; btn.disabled = true;
+            const btn = document.getElementById('btn-meta'); const txt = btn.innerText; btn.innerText = "A guardar..."; btn.disabled = true;
             try { let error = null; if (uid === 'all') { if(!confirm(`Confirma definir meta de ${valor} para TODOS os assistentes?`)) { btn.innerText = txt; btn.disabled = false; return; } const assistentes = allUsers.filter(u => u.funcao === 'Assistente'); if(assistentes.length === 0) throw new Error("Não há assistentes para aplicar a meta."); const inserts = assistentes.map(u => ({ usuario_id: u.id, data_inicio: data, valor_meta: parseInt(valor) })); const res = await _supabase.from('metas').insert(inserts); error = res.error; } else { const res = await _supabase.from('metas').insert({ usuario_id: uid, data_inicio: data, valor_meta: parseInt(valor) }); error = res.error; } if(error) throw error; document.getElementById('meta-value').value = ''; await loadMetasAtuais(); alert('Meta salva com sucesso!'); } catch (err) { alert('Erro ao salvar meta: ' + err.message); } finally { btn.innerText = txt; btn.disabled = false; }
         }
     </script>

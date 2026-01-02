@@ -1,57 +1,21 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Produtividade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <script src=".js/config.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
-    <script>
-        // O _supabase agora vem do arquivo .js/config.js
-        // Se ainda der erro, verifique se o arquivo config.js está dentro da pasta .js
-
-        function renderNavbar() {
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-            if (!usuario) { window.location.href = 'index.html'; return; }
-            const navbarHTML = `
-            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
-                    <div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div>
-                </div>
-                <div class="hidden md:flex items-center gap-1 h-full">
-                    ${createNavLink('Gestão', 'gestao.html')}
-                    ${createNavLink('Produtividade', 'produtividade.html')}
-                    ${createNavLink('Performance', 'performance.html')}
-                    ${createNavLink('Consolidado', 'consolidado.html')}
-                    ${createNavLink('Minha Área', 'minha_area.html')}
-                    ${createNavLink('Ferramentas', 'ferramentas.html')}
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div>
-                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
-                </div>
-            </nav><div class="h-20"></div>`;
-            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
-        }
-        function createNavLink(label, linkUrl) {
-            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-        }
-        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        renderNavbar();
-    </script>
+    <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-8 flex flex-wrap gap-4 items-center justify-between">
-            <div class="flex items-center gap-3"><div class="p-2 bg-blue-100 text-blue-700 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><h1 class="text-xl font-bold text-slate-800">Controle de Produção</h1></div>
+            <div class="flex items-center gap-3"><div class="p-2 bg-blue-100 text-blue-700 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><h1 class="text-xl font-bold text-slate-800">Controlo de Produção</h1></div>
             <div class="flex flex-wrap gap-3 items-center">
                 <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
                     <option value="dia">📅 Dia Específico</option><option value="semana">📅 Por Semana</option><option value="mes">📊 Mês Completo</option>
@@ -66,13 +30,13 @@
             </div>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total</p><p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total (Sistema)</p><p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p></div>
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média do Time</p><p class="text-3xl font-extrabold text-slate-800" id="p-media">0</p></div>
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assistentes Ativos</p><p class="text-3xl font-extrabold text-slate-800" id="p-headcount">0</p></div>
         </div>
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3><span id="panel-titulo" class="text-sm font-medium text-slate-500">Carregando...</span></div>
-            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th><th class="px-6 py-3 text-center">FIFO</th><th class="px-6 py-3 text-center">G. Total</th><th class="px-6 py-3 text-center">G. Parcial</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Status</th></tr></thead><tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody></table></div>
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3><span id="panel-titulo" class="text-sm font-medium text-slate-500">A carregar...</span></div>
+            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th><th class="px-6 py-3 text-center">FIFO</th><th class="px-6 py-3 text-center">G. Total</th><th class="px-6 py-3 text-center">G. Parcial</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Estado</th></tr></thead><tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody></table></div>
         </div>
     </div>
 
@@ -95,7 +59,6 @@
         }
         function getWeek(dateString) { const date = new Date(dateString + 'T12:00:00'); const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); return Math.ceil((date.getDate() + firstDay) / 7); }
         async function carregarDados() {
-            if (!_supabase) return; 
             const view = document.getElementById('view-selector').value;
             let dataInicio, dataFim, titulo, semanaSel;
             if (view === 'dia') {
@@ -107,7 +70,7 @@
                 if (view === 'semana') { semanaSel = parseInt(document.getElementById('select-semana').value); titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`; }
                 else { titulo = `Visão Mensal: ${mes}`; }
             }
-            document.getElementById('panel-titulo').innerText = "Carregando..."; document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando dados...</td></tr>';
+            document.getElementById('panel-titulo').innerText = "A carregar..."; document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">A carregar dados...</td></tr>';
             try {
                 const { data: p, error: eP } = await _supabase.from('producao').select('*, usuarios(*)').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
                 if (eP) throw eP;
@@ -123,8 +86,8 @@
             dadosGlobais.forEach(item => {
                 if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                 const uid = item.usuario_id;
-                // REGRA DE NEGÓCIO: Usar apenas dados importados do sistema
-                const qtdTotal = (item.quantidade || 0);
+                // APENAS SISTEMA
+                const qtdTotal = (item.quantidade || 0); 
 
                 if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
                 stats[uid].total += qtdTotal;
@@ -139,7 +102,7 @@
             document.getElementById('p-media').innerText = lista.length ? Math.round(total / lista.length).toLocaleString() : 0;
             document.getElementById('p-headcount').innerText = lista.length;
             const tbody = document.getElementById('tabela-corpo');
-            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado.</td></tr>'; return; }
+            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registo encontrado.</td></tr>'; return; }
             let html = '';
             lista.forEach(u => {
                 const diasTrab = u.dias.size || 1; const meta = 650 * diasTrab; const atingiu = u.total >= meta; const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';

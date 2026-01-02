@@ -1,14 +1,11 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-pt">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Performance e Ranking</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <script src=".js/config.js"></script>
-    
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style> 
         body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
@@ -22,16 +19,8 @@
     </style>
 </head>
 <body class="text-slate-800">
-    <script>
-        function renderNavbar() {
-            const usuario = JSON.parse(localStorage.getItem('usuario')); if (!usuario) { window.location.href = 'index.html'; return; }
-            const navbarHTML = `<nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6"><div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'"><div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div></div><div class="hidden md:flex items-center gap-1 h-full">${createNavLink('Gestão', 'gestao.html')}${createNavLink('Produtividade', 'produtividade.html')}${createNavLink('Performance', 'performance.html')}${createNavLink('Consolidado', 'consolidado.html')}${createNavLink('Minha Área', 'minha_area.html')}${createNavLink('Ferramentas', 'ferramentas.html')}</div><div class="flex items-center gap-4"><div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div><button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button></div></nav><div class="h-20"></div>`;
-            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
-        }
-        function createNavLink(label, linkUrl) { const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white"; return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`; }
-        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        renderNavbar();
-    </script>
+    <script src="js/layout.js"></script>
+
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"><div><h1 class="text-2xl font-bold text-slate-800">Performance</h1><p class="text-slate-500 text-sm">Acompanhe o ranking e a evolução anual.</p></div><div class="bg-white p-1 rounded-lg border border-slate-200 shadow-sm flex"><button onclick="switchMode('individual')" id="tab-individual" class="px-4 py-2 text-sm font-bold rounded-md transition text-blue-700 bg-blue-50 shadow-sm">📊 Ranking</button><button onclick="switchMode('matrix')" id="tab-matrix" class="px-4 py-2 text-sm font-bold rounded-md transition text-slate-500 hover:text-slate-700">🏆 Matriz Anual</button></div></div>
         <div id="view-individual">
@@ -72,8 +61,7 @@
         function limparSelecaoECarregar() { selectedUserId = null; document.getElementById('btn-limpar').classList.add('hidden'); carregarRanking(); }
         function toggleUsuario(id) { if (selectedUserId === id) { selectedUserId = null; document.getElementById('btn-limpar').classList.add('hidden'); } else { selectedUserId = id; document.getElementById('btn-limpar').classList.remove('hidden'); } renderizarTelaRanking(); }
         async function carregarRanking() {
-            if(!_supabase) return;
-            const tbody = document.getElementById('ranking-body'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
+            const tbody = document.getElementById('ranking-body'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">A carregar dados...</td></tr>';
             try {
                 const tipo = document.getElementById('period-type').value; const val = parseInt(document.getElementById('period-value').value); const ano = document.getElementById('year-selector').value; let s, e;
                 if (tipo === 'mes') { s = `${ano}-${String(val).padStart(2,'0')}-01`; e = `${ano}-${String(val).padStart(2,'0')}-${new Date(ano, val, 0).getDate()}`; }
@@ -86,7 +74,7 @@
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
                     if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
-                    // CORREÇÃO: Apenas dados do sistema
+                    // APENAS SISTEMA
                     const qtd = Number(item.quantidade) || 0;
                     stats[uid].total += qtd;
                     stats[uid].dias.add(item.data_referencia);
@@ -117,15 +105,14 @@
             }
         }
         async function carregarMatriz() {
-            if(!_supabase) return;
-            const tbody = document.getElementById('matrix-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">Calculando matriz...</td></tr>';
+            const tbody = document.getElementById('matrix-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">A calcular matriz...</td></tr>';
             try {
                 const ano = document.getElementById('matrix-year').value; const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`); if (error) throw error;
                 let map = {};
                 prods.forEach(item => {
                     if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
                     const uid = item.usuario_id;
-                    // CORREÇÃO: Apenas dados do sistema
+                    // APENAS SISTEMA
                     const qtd = Number(item.quantidade) || 0;
                     if (!map[uid]) map[uid] = { nome: item.usuarios.nome, m: Array(12).fill(0), t: 0 };
                     const mes = new Date(item.data_referencia + 'T12:00:00').getMonth(); map[uid].m[mes] += qtd; map[uid].t += qtd;

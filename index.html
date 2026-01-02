@@ -1,92 +1,54 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Controle de Produtividade</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
+const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+
+function renderNavbar() {
+    const usuario = JSON.parse(localStorage.getItem('usuario'));
     
-    <script src="js/config.js"></script>
-    
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Inter', sans-serif; } </style>
-</head>
-<body class="bg-gradient-to-br from-slate-900 to-blue-900 h-screen w-screen flex items-center justify-center">
+    // Se não estiver logado e não for a página de login
+    const path = window.location.pathname;
+    if (!usuario && !path.endsWith('index.html') && !path.endsWith('/')) {
+        window.location.href = 'index.html';
+        return;
+    }
 
-    <div class="bg-white p-10 rounded-2xl shadow-2xl w-full max-w-sm text-center">
-        <div class="mb-8 select-none"><span class="block text-xs font-bold text-gray-400 uppercase tracking-widest">Controle de</span><span class="block text-2xl font-extrabold text-slate-900 tracking-tight">PRODUTIVIDADE</span></div><h2 class="text-xl font-semibold text-slate-700 mb-6">Bem-vindo</h2><div class="space-y-4 text-left"><div><label class="block text-sm font-bold text-slate-600 mb-1">ID do Funcionário</label><input type="number" id="login-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 transition" placeholder="Digite seu ID"></div><div><label class="block text-sm font-bold text-slate-600 mb-1">Senha</label><input type="password" id="senha" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 transition" placeholder="••••••••"></div><button onclick="fazerLogin()" id="btn-entrar" class="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 rounded-lg transition duration-200 shadow-lg mt-4">Acessar Sistema</button></div><div id="error-msg" class="hidden mt-4 p-3 bg-red-100 text-red-600 text-sm rounded-lg font-medium"></div><div class="mt-8 text-xs text-gray-400">&copy; 2025 Gestão Integrada</div>
-    </div>
+    if (path.endsWith('index.html') || path.endsWith('/')) return;
 
-    <script>
-        // CONFIGURAÇÃO REMOVIDA DAQUI (já está no config.js)
+    const navbarHTML = `
+    <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
+        <div class="flex items-center gap-3 select-none cursor-pointer" onclick="window.location.href='produtividade.html'">
+            <div class="flex flex-col leading-tight">
+                <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
+                <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
+            </div>
+        </div>
+        <div class="hidden md:flex items-center gap-1 h-full">
+            ${createNavLink('Gestão', 'gestao.html')}
+            ${createNavLink('Produtividade', 'produtividade.html')}
+            ${createNavLink('Performance', 'performance.html')}
+            ${createNavLink('Consolidado', 'consolidado.html')}
+            ${createNavLink('Minha Área', 'minha_area.html')}
+            ${createNavLink('Ferramentas', 'ferramentas.html')} 
+        </div>
+        <div class="flex items-center gap-4">
+            <div class="text-right hidden sm:block">
+                <span class="block text-sm font-bold text-white">${usuario ? usuario.nome : 'Utilizador'}</span>
+                <span class="block text-xs text-slate-400">${usuario ? usuario.funcao : ''}</span>
+            </div>
+            <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
+        </div>
+    </nav>
+    <div class="h-20"></div>`;
 
-        // --- 2. LÓGICA DE LOGIN ---
-        if (localStorage.getItem('usuario')) {
-            window.location.href = 'produtividade.html';
-        }
+    document.body.insertAdjacentHTML('afterbegin', navbarHTML);
+}
 
-        function setupEnterKey(id) {
-            document.getElementById(id).addEventListener('keypress', function (e) {
-                if (e.key === 'Enter') fazerLogin();
-            });
-        }
-        setupEnterKey('login-id');
-        setupEnterKey('senha');
+function createNavLink(label, linkUrl) {
+    const isActive = window.location.href.includes(linkUrl);
+    const activeClass = isActive ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+    return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+}
 
-        async function fazerLogin() {
-            const idInput = document.getElementById('login-id');
-            const passInput = document.getElementById('senha');
-            const btn = document.getElementById('btn-entrar');
-            const msg = document.getElementById('error-msg');
+function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
 
-            const idVal = idInput.value.trim();
-            const passVal = passInput.value.trim();
-
-            msg.classList.add('hidden');
-            idInput.classList.remove('border-red-500');
-            
-            if (!idVal || !passVal) {
-                msg.innerText = "Por favor, preencha ID e Senha.";
-                msg.classList.remove('hidden');
-                return;
-            }
-
-            const textoOriginal = btn.innerText;
-            btn.disabled = true;
-            btn.innerText = "Verificando...";
-            btn.classList.add('opacity-70', 'cursor-not-allowed');
-
-            try {
-                if (!_supabase) throw new Error("Erro de conexão com o banco.");
-
-                const { data, error } = await _supabase
-                    .from('usuarios')
-                    .select('*')
-                    .eq('id', idVal)
-                    .eq('senha', passVal)
-                    .maybeSingle();
-
-                if (error) throw error;
-
-                if (data) {
-                    localStorage.setItem('usuario', JSON.stringify(data));
-                    window.location.href = 'produtividade.html';
-                } else {
-                    throw new Error("Usuário não encontrado");
-                }
-
-            } catch (err) {
-                console.error(err);
-                msg.innerText = "ID ou Senha incorretos.";
-                msg.classList.remove('hidden');
-                idInput.classList.add('border-red-500');
-            } finally {
-                btn.disabled = false;
-                btn.innerText = textoOriginal;
-                btn.classList.remove('opacity-70', 'cursor-not-allowed');
-            }
-        }
-    </script>
-</body>
-</html>
+renderNavbar();
