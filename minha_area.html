@@ -3,22 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Área - Performance</title>
+    <title>Minha Área - Performance & Evolução</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
         .animate-fade-in { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Estilo para Tabs */
         .btn-tab.active { background-color: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
         .btn-tab { color: #64748b; border: 1px solid transparent; }
         .btn-tab:hover:not(.active) { background-color: #f8fafc; color: #334155; }
+        /* Estilo para inputs de filtro */
+        .filter-select { background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em; padding-right: 2.5rem; -webkit-appearance: none; appearance: none; }
     </style>
 </head>
 <body class="text-slate-800">
@@ -28,29 +28,48 @@
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <div class="mb-8">
-            <h1 class="text-2xl font-black text-slate-800">Minha Área</h1>
-            <p class="text-slate-500 text-sm">Acompanhamento detalhado de performance e desenvolvimento.</p>
+        <div class="flex flex-col md:flex-row justify-between items-end gap-4 mb-8">
+            <div>
+                <h1 class="text-2xl font-black text-slate-800">Minha Área</h1>
+                <p class="text-slate-500 text-sm">Dashboard de performance individual e comparativa.</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-3 bg-white p-2 rounded-xl border border-slate-200 shadow-sm">
+                
+                <div class="relative">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-0.5">Período</label>
+                    <input type="month" id="filtro-mes" onchange="atualizarDashboard()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-40 p-2 font-bold outline-none">
+                </div>
+
+                <div id="container-filtro-user" class="relative hidden">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase ml-1 mb-0.5">Visão do Gestor</label>
+                    <select id="filtro-user" onchange="atualizarDashboard()" class="filter-select bg-blue-50 border border-blue-200 text-blue-800 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-48 p-2 font-bold outline-none cursor-pointer">
+                        <option value="me">👤 Minha Visão</option>
+                        <option value="time">👥 Time Todo (Média)</option>
+                        <option disabled>──────────</option>
+                        </select>
+                </div>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 animate-fade-in">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
                 <div>
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produção Mensal</span>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Produção Total</span>
                     <div class="flex items-baseline gap-2 mt-1">
                         <h2 class="text-3xl font-black text-blue-600" id="kpi-total">--</h2>
                         <span class="text-xs text-slate-400 font-medium">docs</span>
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                    <span class="text-xs font-bold text-slate-500">Projeção/Meta:</span>
+                    <span class="text-xs font-bold text-slate-500">Meta do Período:</span>
                     <span class="text-sm font-bold text-slate-700" id="kpi-meta-total">--</span>
                 </div>
             </div>
 
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between">
                 <div>
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Atingimento da Meta</span>
+                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Atingimento</span>
                     <div class="flex items-baseline gap-2 mt-1">
                         <h2 class="text-3xl font-black text-slate-700" id="kpi-porcentagem">--%</h2>
                         <i id="icon-status" class="fas fa-circle text-[10px] text-gray-300"></i>
@@ -70,32 +89,25 @@
                     </div>
                 </div>
                 <div class="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                    <span class="text-xs font-bold text-slate-500">Média Ideal:</span>
+                    <span class="text-xs font-bold text-slate-500">Ideal:</span>
                     <span class="text-sm font-bold text-emerald-600" id="kpi-media-ideal">650</span>
                 </div>
             </div>
         </div>
 
-        <div class="bg-white p-1 rounded-xl border border-slate-200 shadow-sm inline-flex mb-6">
-            <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2">
-                <i class="fas fa-calendar-alt"></i> Diário de Produção
-            </button>
-            <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2">
-                <i class="fas fa-comments"></i> Feedback
-            </button>
-            <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2">
-                <i class="fas fa-chart-line"></i> Comparativo
-            </button>
+        <div class="bg-white p-1 rounded-xl border border-slate-200 shadow-sm inline-flex mb-6 flex-wrap gap-1">
+            <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-calendar-alt"></i> Diário</button>
+            <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-chart-area"></i> Evolução</button>
+            <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-users"></i> Comparativo Rápido</button>
+            <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab px-5 py-2.5 rounded-lg text-sm font-bold transition flex items-center gap-2"><i class="fas fa-comments"></i> Feedback</button>
         </div>
 
         <div class="bg-white rounded-2xl shadow-sm border border-slate-200 min-h-[400px] relative overflow-hidden">
             
             <div id="tab-diario" class="view-tab p-6 animate-fade-in">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="font-bold text-slate-700">Produção Recente</h3>
-                    <div class="text-xs text-slate-400 italic">
-                        <i class="fas fa-info-circle mr-1"></i> Apenas gestoras podem alterar a meta diária.
-                    </div>
+                    <h3 class="font-bold text-slate-700">Detalhe Diário</h3>
+                    <div id="aviso-edicao" class="hidden text-xs text-orange-500 font-bold bg-orange-50 px-2 py-1 rounded">Modo de Edição Ativo</div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -103,15 +115,58 @@
                             <tr>
                                 <th class="px-4 py-3 rounded-l-lg">Data</th>
                                 <th class="px-4 py-3 text-center">Produção</th>
-                                <th class="px-4 py-3 text-center">Meta do Dia</th>
+                                <th class="px-4 py-3 text-center">Meta</th>
                                 <th class="px-4 py-3 text-center">Status</th>
                                 <th class="px-4 py-3 rounded-r-lg">Observação</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-diario" class="divide-y divide-slate-100">
-                            <tr><td colspan="5" class="text-center py-10 text-slate-400">A carregar registos...</td></tr>
+                            <tr><td colspan="5" class="text-center py-10 text-slate-400">A carregar...</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <div id="tab-evolucao" class="view-tab hidden p-6 animate-fade-in">
+                <div class="flex justify-center gap-2 mb-6">
+                    <button onclick="renderizarGraficos('mes')" class="btn-chart px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-sm">Mensal</button>
+                    <button onclick="renderizarGraficos('trimestre')" class="btn-chart px-3 py-1 bg-white border text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50">Trimestral</button>
+                    <button onclick="renderizarGraficos('semestre')" class="btn-chart px-3 py-1 bg-white border text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50">Semestral</button>
+                    <button onclick="renderizarGraficos('ano')" class="btn-chart px-3 py-1 bg-white border text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50">Anual</button>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase mb-4 text-center">Minha Evolução</h4>
+                        <div class="h-64 relative">
+                            <canvas id="chartEvolucao"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <h4 class="text-xs font-bold text-slate-400 uppercase mb-4 text-center">Eu vs Média do Time</h4>
+                        <div class="h-64 relative">
+                            <canvas id="chartComparativo"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-comparativo" class="view-tab hidden p-6 animate-fade-in">
+                <div class="text-center py-10">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center justify-center max-w-2xl mx-auto">
+                        <div class="bg-blue-50 rounded-2xl p-8 text-center border border-blue-100">
+                            <span class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Média Selecionada</span>
+                            <h2 id="comp-media-user" class="text-5xl font-black text-blue-700">--</h2>
+                            <span class="text-sm text-blue-500 font-medium mt-2 block">docs / dia</span>
+                        </div>
+                        <div class="bg-slate-50 rounded-2xl p-8 text-center border border-slate-200">
+                            <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média da Equipa</span>
+                            <h2 id="comp-media-time" class="text-5xl font-black text-slate-600">--</h2>
+                            <span class="text-sm text-slate-400 font-medium mt-2 block">docs / dia</span>
+                        </div>
+                    </div>
+                    <p id="comp-mensagem" class="mt-8 font-bold text-slate-500">Comparação baseada no filtro de mês selecionado acima.</p>
                 </div>
             </div>
 
@@ -120,37 +175,8 @@
                     <div class="text-center text-slate-400 py-10">Sem feedbacks registados.</div>
                 </div>
                 <div class="p-4 bg-white border-t border-slate-200 flex gap-2">
-                    <input type="text" id="input-feedback" placeholder="Escreva uma mensagem ou anotação..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition">
-                    <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 font-bold transition shadow-md shadow-blue-200">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div id="tab-comparativo" class="view-tab hidden p-6 animate-fade-in">
-                <div class="flex gap-2 mb-6 justify-center">
-                    <button onclick="carregarComparativo('mes')" class="px-3 py-1 bg-blue-100 text-blue-700 rounded text-xs font-bold hover:bg-blue-200">Mês Atual</button>
-                    <button onclick="carregarComparativo('trimestre')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200">Últimos 3 Meses</button>
-                    <button onclick="carregarComparativo('semestre')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200">Últimos 6 Meses</button>
-                    <button onclick="carregarComparativo('ano')" class="px-3 py-1 bg-slate-100 text-slate-600 rounded text-xs font-bold hover:bg-slate-200">Ano Atual</button>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center justify-center">
-                    <div class="bg-blue-50 rounded-2xl p-8 text-center border border-blue-100">
-                        <span class="block text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Sua Média Diária</span>
-                        <h2 id="comp-media-user" class="text-5xl font-black text-blue-700">0</h2>
-                        <span class="text-sm text-blue-500 font-medium mt-2 block">docs / dia</span>
-                    </div>
-
-                    <div class="bg-slate-50 rounded-2xl p-8 text-center border border-slate-200">
-                        <span class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média da Equipa</span>
-                        <h2 id="comp-media-time" class="text-5xl font-black text-slate-600">0</h2>
-                        <span class="text-sm text-slate-400 font-medium mt-2 block">docs / dia</span>
-                    </div>
-                </div>
-                
-                <div id="comp-mensagem" class="text-center mt-8 font-bold text-slate-500">
-                    Selecione um período acima.
+                    <input type="text" id="input-feedback" placeholder="Escreva uma mensagem..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:border-blue-500 transition">
+                    <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 font-bold transition"><i class="fas fa-paper-plane"></i></button>
                 </div>
             </div>
 
@@ -160,106 +186,158 @@
     <script>
         const sessao = JSON.parse(localStorage.getItem('usuario'));
         const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
+        let myChart1 = null;
+        let myChart2 = null;
 
-        document.addEventListener('DOMContentLoaded', () => {
-            carregarKPIs();
-            carregarDiario();
-            carregarFeedbacks();
-        });
-
-        function mudarAba(aba) {
-            document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
-            
-            document.getElementById(`tab-${aba}`).classList.remove('hidden');
-            document.getElementById(`btn-${aba}`).classList.add('active');
-            
-            if (aba === 'comparativo') carregarComparativo('mes');
-        }
-
-        // --- 1. LÓGICA DE KPIS E DIÁRIO ---
-        async function carregarKPIs() {
-            if(!_supabase || !sessao) return;
-            
+        document.addEventListener('DOMContentLoaded', async () => {
+            // 1. Configura Filtro de Data (Padrão: Mês Atual)
             const hoje = new Date();
-            const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
-            const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+            const mesStr = hoje.toISOString().substring(0, 7); // YYYY-MM
+            document.getElementById('filtro-mes').value = mesStr;
 
-            // Busca produção do mês atual
-            const { data: prod } = await _supabase
-                .from('producao')
-                .select('*')
-                .eq('usuario_id', sessao.id)
-                .gte('data_referencia', inicioMes)
-                .lte('data_referencia', fimMes);
-
-            const dados = prod || [];
-            
-            // Cálculos
-            const totalProduzido = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-            const diasTrabalhados = dados.length || 1; // Evita divisão por zero
-            
-            // Meta: Soma das metas diárias (se existirem) ou 650 padrão
-            let metaTotalAcumulada = 0;
-            dados.forEach(d => {
-                const metaDia = d.meta_diaria !== null ? d.meta_diaria : 650;
-                metaTotalAcumulada += metaDia;
-            });
-            // Se não houver dados, projeta meta padrão para dias úteis (simplificado para 22)
-            if (metaTotalAcumulada === 0) metaTotalAcumulada = 650 * 22;
-
-            const mediaReal = Math.round(totalProduzido / diasTrabalhados);
-            const atingimento = Math.round((totalProduzido / metaTotalAcumulada) * 100);
-
-            // Atualiza UI
-            document.getElementById('kpi-total').innerText = totalProduzido.toLocaleString();
-            document.getElementById('kpi-meta-total').innerText = metaTotalAcumulada.toLocaleString();
-            document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
-            document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
-            
-            // Cor da barra e ícone
-            const bar = document.getElementById('bar-progress');
-            const icon = document.getElementById('icon-status');
-            if (atingimento >= 100) {
-                bar.className = "bg-emerald-500 h-1.5 rounded-full transition-all duration-1000";
-                icon.className = "fas fa-check-circle text-[10px] text-emerald-500";
-            } else if (atingimento >= 80) {
-                bar.className = "bg-yellow-400 h-1.5 rounded-full transition-all duration-1000";
-                icon.className = "fas fa-circle text-[10px] text-yellow-400";
-            } else {
-                bar.className = "bg-red-500 h-1.5 rounded-full transition-all duration-1000";
-                icon.className = "fas fa-exclamation-circle text-[10px] text-red-500";
+            // 2. Configura Filtro de Gestor
+            if (isMgr) {
+                document.getElementById('container-filtro-user').classList.remove('hidden');
+                document.getElementById('aviso-edicao').classList.remove('hidden');
+                await carregarListaAssistentes();
             }
 
-            document.getElementById('kpi-media-real').innerText = mediaReal.toLocaleString();
+            // 3. Carrega Dados
+            atualizarDashboard();
+        });
+
+        async function carregarListaAssistentes() {
+            const select = document.getElementById('filtro-user');
+            const { data } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').order('nome');
+            if(data) {
+                data.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = u.id;
+                    opt.text = u.nome;
+                    select.appendChild(opt);
+                });
+            }
         }
 
-        async function carregarDiario() {
-            const { data } = await _supabase
-                .from('producao')
-                .select('*')
-                .eq('usuario_id', sessao.id)
-                .order('data_referencia', { ascending: false })
-                .limit(31); // Último mês
+        // --- FUNÇÃO CENTRAL DE ATUALIZAÇÃO ---
+        async function atualizarDashboard() {
+            const mesAno = document.getElementById('filtro-mes').value; // YYYY-MM
+            let userId = sessao.id;
+            let modoTime = false;
 
+            // Se for gestora, verifica o select
+            if (isMgr) {
+                const val = document.getElementById('filtro-user').value;
+                if (val === 'time') {
+                    modoTime = true;
+                } else if (val !== 'me') {
+                    userId = val;
+                }
+            }
+
+            // Define datas de inicio e fim do mês selecionado
+            const [ano, mes] = mesAno.split('-');
+            const dataInicio = `${mesAno}-01`;
+            const ultimoDia = new Date(ano, mes, 0).getDate();
+            const dataFim = `${mesAno}-${ultimoDia}`;
+
+            // Busca Dados
+            let dados = [];
+            
+            if (modoTime) {
+                // Pega TUDO do mês
+                const { data } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
+                // Precisamos AGREGAR por dia (Média do time por dia)
+                dados = processarMediaTime(data, dataInicio, dataFim);
+            } else {
+                // Pega só do usuário
+                const { data } = await _supabase.from('producao').select('*').eq('usuario_id', userId).gte('data_referencia', dataInicio).lte('data_referencia', dataFim).order('data_referencia');
+                dados = data || [];
+            }
+
+            atualizarKPIs(dados, modoTime);
+            atualizarTabelaDiaria(dados, modoTime);
+            // Se a aba evolução estiver aberta, atualiza ela também, mas vamos forçar atualização no clique da aba
+            if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
+                renderizarGraficos('mes'); // Padrão
+            }
+            if (!document.getElementById('tab-comparativo').classList.contains('hidden')) {
+                atualizarComparativoRapido(dados, mesAno);
+            }
+            
+            // Atualiza Feedbacks (Recarrega para o usuário alvo correto)
+            carregarFeedbacks(userId);
+        }
+
+        function processarMediaTime(todosDados, inicio, fim) {
+            // Cria um mapa de datas para calcular médias
+            const map = {};
+            todosDados.forEach(d => {
+                if(!map[d.data_referencia]) map[d.data_referencia] = { total: 0, count: 0 };
+                map[d.data_referencia].total += d.quantidade;
+                map[d.data_referencia].count++; // Conta quantas pessoas produziram neste dia
+            });
+            
+            // Transforma em array ordenado
+            return Object.keys(map).sort().map(data => ({
+                data_referencia: data,
+                quantidade: Math.round(map[data].total / map[data].count), // Média
+                meta_diaria: 650, // Meta padrão para visualização
+                observacao: `Média de ${map[data].count} assistentes`
+            }));
+        }
+
+        // --- 1. KPIS E TABELA ---
+        function atualizarKPIs(dados, modoTime) {
+            const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+            
+            // Se for modo time, o total é a SOMA das MÉDIAS (não faz sentido somar produção de 50 pessoas contra meta de 1)
+            // Mas para "Produção Total" queremos ver o volume da operação? 
+            // O user pediu "ver do time todo". Geralmente KPI de time é Soma Total.
+            // Mas aqui estou usando a lógica de Média para caber nos cards existentes.
+            // Vamos manter: Se modoTime -> Soma das Médias Diárias (Performance Média).
+            
+            const dias = dados.length || 1;
+            let metaTotal = 0;
+            dados.forEach(d => metaTotal += (d.meta_diaria || 650));
+            if (metaTotal === 0) metaTotal = 650 * 22;
+
+            const media = Math.round(total / dias);
+            const atingimento = Math.round((total / metaTotal) * 100);
+
+            document.getElementById('kpi-total').innerText = total.toLocaleString();
+            document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
+            document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
+            document.getElementById('kpi-media-real').innerText = media.toLocaleString();
+            
+            // Barra
+            document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
+            const bar = document.getElementById('bar-progress');
+            if(atingimento >= 100) bar.classList.value = "bg-emerald-500 h-1.5 rounded-full transition-all";
+            else if(atingimento >= 80) bar.classList.value = "bg-yellow-400 h-1.5 rounded-full transition-all";
+            else bar.classList.value = "bg-red-500 h-1.5 rounded-full transition-all";
+        }
+
+        function atualizarTabelaDiaria(dados, modoTime) {
             const tbody = document.getElementById('tabela-diario');
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Nenhum registo recente.</td></tr>';
+            if (dados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-slate-400">Sem registos no período.</td></tr>';
                 return;
             }
 
             let html = '';
-            data.forEach(item => {
-                const meta = item.meta_diaria !== null ? item.meta_diaria : 650;
+            dados.forEach(item => {
+                const meta = item.meta_diaria || 650;
                 const atingiu = item.quantidade >= meta;
                 const corBadge = atingiu ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700';
                 const textoBadge = atingiu ? 'Atingida' : 'Abaixo';
                 const dataFmt = item.data_referencia.split('-').reverse().join('/');
-
-                // Lógica de Edição da Meta (Só Gestora)
+                
+                // Edição só se for Gestora E NÃO for modo time E NÃO for minha própria área (opcional, mas seguro)
+                // Vamos permitir gestora editar meta de qualquer um, menos do time agregado.
                 let celulaMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
-                if (isMgr) {
-                    celulaMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value)" class="w-20 text-center border border-slate-300 rounded px-1 py-1 text-sm focus:border-blue-500 outline-none">`;
+                if (isMgr && !modoTime && item.id) { 
+                    celulaMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value)" class="w-20 text-center border border-slate-300 rounded px-1 bg-white focus:border-blue-500 outline-none">`;
                 }
 
                 html += `
@@ -268,148 +346,213 @@
                     <td class="px-4 py-3 text-center font-bold text-blue-600">${item.quantidade}</td>
                     <td class="px-4 py-3 text-center">${celulaMeta}</td>
                     <td class="px-4 py-3 text-center"><span class="${corBadge} px-2 py-0.5 rounded text-[10px] font-bold uppercase">${textoBadge}</span></td>
-                    <td class="px-4 py-3 text-sm text-slate-500 truncate max-w-xs" title="${item.observacao || ''}">${item.observacao || '-'}</td>
+                    <td class="px-4 py-3 text-sm text-slate-500 truncate max-w-xs">${item.observacao || '-'}</td>
                 </tr>`;
             });
             tbody.innerHTML = html;
         }
 
-        async function atualizarMeta(id, novaMeta) {
-            if (!confirm('Deseja alterar a meta deste dia?')) return;
-            const val = parseInt(novaMeta);
-            if (isNaN(val)) return alert('Valor inválido');
-
-            const { error } = await _supabase.from('producao').update({ meta_diaria: val }).eq('id', id);
-            if (error) alert('Erro ao atualizar: ' + error.message);
-            else {
-                carregarKPIs(); // Recalcula os totais
-                // Feedback visual leve (toast) poderia ser adicionado aqui
-            }
-        }
-
-        // --- 2. LÓGICA DE FEEDBACK ---
-        async function carregarFeedbacks() {
-            const container = document.getElementById('lista-feedbacks');
-            
-            const { data, error } = await _supabase
-                .from('feedbacks')
-                .select('*')
-                .eq('usuario_alvo_id', sessao.id)
-                .order('created_at', { ascending: true });
-
-            if (!data || data.length === 0) {
-                container.innerHTML = '<div class="text-center text-slate-400 py-10 flex flex-col items-center"><i class="far fa-comments text-4xl mb-3 opacity-20"></i><span>Nenhum feedback registado.</span></div>';
-                return;
-            }
-
-            let html = '';
-            data.forEach(msg => {
-                const isMe = msg.autor_nome === sessao.nome;
-                const align = isMe ? 'ml-auto bg-blue-100 text-blue-900' : 'mr-auto bg-white border border-slate-200 text-slate-700';
-                const date = new Date(msg.created_at).toLocaleString('pt-BR', { hour: '2-digit', minute: '2-digit', day:'2-digit', month:'2-digit' });
-
-                html += `
-                <div class="max-w-[80%] w-fit mb-4 p-4 rounded-xl shadow-sm ${align}">
-                    <div class="flex justify-between items-baseline gap-4 mb-1 border-b border-black/5 pb-1">
-                        <span class="text-xs font-bold uppercase tracking-wide opacity-70">${msg.autor_nome}</span>
-                        <span class="text-[10px] opacity-50">${date}</span>
-                    </div>
-                    <p class="text-sm whitespace-pre-wrap leading-relaxed">${msg.mensagem}</p>
-                </div>`;
-            });
-            container.innerHTML = html;
-            // Rolar para baixo
-            container.scrollTop = container.scrollHeight;
-        }
-
-        async function enviarFeedback() {
-            const input = document.getElementById('input-feedback');
-            const texto = input.value.trim();
-            if (!texto) return;
-
-            const { error } = await _supabase.from('feedbacks').insert({
-                usuario_alvo_id: sessao.id,
-                autor_nome: sessao.nome,
-                autor_funcao: sessao.funcao,
-                mensagem: texto
+        // --- 2. GRÁFICOS (EVOLUÇÃO) ---
+        async function renderizarGraficos(periodo) {
+            // Atualiza botões visuais
+            document.querySelectorAll('.btn-chart').forEach(b => {
+                b.className = "btn-chart px-3 py-1 bg-white border text-slate-500 rounded-lg text-xs font-bold hover:bg-slate-50";
+                if(b.innerText.toLowerCase().includes(periodo) || (periodo === 'mes' && b.innerText === 'Mensal')) {
+                    b.className = "btn-chart px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-bold shadow-sm";
+                }
             });
 
-            if (error) alert('Erro ao enviar');
-            else {
-                input.value = '';
-                carregarFeedbacks();
-            }
-        }
-
-        // --- 3. LÓGICA DE COMPARATIVO ---
-        async function carregarComparativo(periodo) {
-            const elUser = document.getElementById('comp-media-user');
-            const elTime = document.getElementById('comp-media-time');
-            const elMsg = document.getElementById('comp-mensagem');
-
-            elUser.innerText = '...';
-            elTime.innerText = '...';
-            
+            // Define intervalo para o gráfico
             const hoje = new Date();
             let dataInicio;
-            
-            if (periodo === 'mes') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+            if (periodo === 'mes') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1); // Mês Atual
             else if (periodo === 'trimestre') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1);
             else if (periodo === 'semestre') dataInicio = new Date(hoje.getFullYear(), hoje.getMonth() - 6, 1);
-            else dataInicio = new Date(hoje.getFullYear(), 0, 1); // Ano
+            else dataInicio = new Date(hoje.getFullYear(), 0, 1); // Ano atual
 
             const strInicio = dataInicio.toISOString().split('T')[0];
 
-            // Busca TODOS os dados do período para calcular médias
-            const { data } = await _supabase
-                .from('producao')
-                .select('quantidade, usuario_id')
-                .gte('data_referencia', strInicio);
-
-            if (!data || data.length === 0) {
-                elUser.innerText = '0';
-                elTime.innerText = '0';
-                elMsg.innerText = "Sem dados neste período.";
-                return;
+            // Pega ID do usuário alvo
+            let targetId = sessao.id;
+            if(isMgr) {
+                const val = document.getElementById('filtro-user').value;
+                if(val !== 'me' && val !== 'time') targetId = val;
             }
 
-            // 1. Calcular Minha Média
-            const meusDados = data.filter(d => d.usuario_id === sessao.id);
-            const minhaSoma = meusDados.reduce((a, b) => a + (b.quantidade || 0), 0);
-            const minhaMedia = meusDados.length ? Math.round(minhaSoma / meusDados.length) : 0;
+            // Busca Dados
+            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', strInicio).order('data_referencia');
+            const dataTeam = rawData || [];
+            const dataUser = dataTeam.filter(d => d.usuario_id == targetId);
 
-            // 2. Calcular Média Time (Geral)
-            // Agrupa por utilizador para ser justo (Média das Médias ou Média Global?)
-            // Vamos fazer Média Global de Produção Diária (Soma Tudo / Total Dias Registados por Todos)
-            const timeSoma = data.reduce((a, b) => a + (b.quantidade || 0), 0);
-            const timeMedia = Math.round(timeSoma / data.length);
+            // Processa dados para Chart.js
+            const labels = [];
+            const valuesUser = [];
+            const valuesTeam = [];
 
-            // Atualiza UI com animação
-            animateValue(elUser, 0, minhaMedia, 500);
-            animateValue(elTime, 0, timeMedia, 500);
+            // Agrupa por Mês (se for anual) ou por Dia (se for mensal/trimestral)
+            const agrupamentoMensal = periodo === 'ano'; // Se for ano, agrupa por mês
 
-            // Mensagem de Feedback
-            const diff = minhaMedia - timeMedia;
-            if (diff > 0) {
-                elMsg.innerHTML = `<span class="text-emerald-500"><i class="fas fa-arrow-up"></i> Estás ${diff} docs acima da média da equipa! Parabéns!</span>`;
-            } else if (diff < 0) {
-                elMsg.innerHTML = `<span class="text-orange-500"><i class="fas fa-arrow-down"></i> Estás ${Math.abs(diff)} docs abaixo da média. Vamos recuperar?</span>`;
-            } else {
-                elMsg.innerHTML = `<span class="text-blue-500">Estás exatamente na média da equipa.</span>`;
+            const mapUser = {};
+            const mapTeam = {};
+
+            // Preenche mapas
+            dataTeam.forEach(d => {
+                const key = agrupamentoMensal ? d.data_referencia.substring(0, 7) : d.data_referencia; // YYYY-MM ou YYYY-MM-DD
+                
+                // Mapa Time (Soma e Contagem para Média)
+                if(!mapTeam[key]) mapTeam[key] = { sum: 0, count: 0 };
+                mapTeam[key].sum += d.quantidade;
+                mapTeam[key].count++;
+
+                // Mapa User
+                if(d.usuario_id == targetId) {
+                    if(!mapUser[key]) mapUser[key] = 0;
+                    mapUser[key] += d.quantidade;
+                }
+            });
+
+            // Gera Labels e Arrays finais
+            const keys = Object.keys(mapTeam).sort();
+            keys.forEach(k => {
+                labels.push(agrupamentoMensal ? k : k.split('-').reverse().slice(0, 2).join('/')); // Formata data
+                
+                // Valor User
+                valuesUser.push(mapUser[k] || 0);
+                
+                // Valor Time (Média)
+                const mediaTime = mapTeam[k].count ? Math.round(mapTeam[k].sum / mapTeam[k].count) : 0;
+                valuesTeam.push(mediaTime);
+            });
+
+            criarGraficosCanvas(labels, valuesUser, valuesTeam, periodo);
+        }
+
+        function criarGraficosCanvas(labels, dataUser, dataTeam, periodo) {
+            const ctx1 = document.getElementById('chartEvolucao').getContext('2d');
+            const ctx2 = document.getElementById('chartComparativo').getContext('2d');
+
+            if(myChart1) myChart1.destroy();
+            if(myChart2) myChart2.destroy();
+
+            // Gráfico 1: Minha Evolução (Barras)
+            myChart1 = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Minha Produção',
+                        data: dataUser,
+                        backgroundColor: '#3b82f6',
+                        borderRadius: 4
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+
+            // Gráfico 2: Comparativo (Linha)
+            myChart2 = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Eu',
+                            data: dataUser,
+                            borderColor: '#3b82f6',
+                            backgroundColor: '#3b82f6',
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Média Time',
+                            data: dataTeam,
+                            borderColor: '#94a3b8', // Cinza
+                            backgroundColor: '#94a3b8',
+                            borderDash: [5, 5],
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // --- 3. COMPARATIVO TEXTO ---
+        async function atualizarComparativoRapido(dados, mesAno) {
+            // A função atualizarDashboard já nos dá os dados filtrados (dados).
+            // Se for modo time, dados já é a média. Se for user, é o user.
+            
+            // Mas precisamos da Média do Time GLOBAL para o mesmo período para comparar
+            const [ano, mes] = mesAno.split('-');
+            const inicio = `${mesAno}-01`;
+            const fim = `${mesAno}-${new Date(ano, mes, 0).getDate()}`;
+
+            const { data: allData } = await _supabase.from('producao').select('quantidade').gte('data_referencia', inicio).lte('data_referencia', fim);
+            
+            const totalGeral = allData.reduce((acc, curr) => acc + curr.quantidade, 0);
+            const mediaGeral = allData.length ? Math.round(totalGeral / allData.length) : 0;
+
+            // Minha Média (ou Média Selecionada)
+            const totalUser = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
+            const mediaUser = dados.length ? Math.round(totalUser / dados.length) : 0;
+
+            document.getElementById('comp-media-user').innerText = mediaUser;
+            document.getElementById('comp-media-time').innerText = mediaGeral;
+
+            const diff = mediaUser - mediaGeral;
+            const elMsg = document.getElementById('comp-mensagem');
+            if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600"><i class="fas fa-arrow-up"></i> ${diff} acima da média geral!</span>`;
+            else if (diff < 0) elMsg.innerHTML = `<span class="text-orange-600"><i class="fas fa-arrow-down"></i> ${Math.abs(diff)} abaixo da média geral.</span>`;
+            else elMsg.innerHTML = `<span class="text-blue-600">Exatamente na média.</span>`;
+        }
+
+        // --- AUXILIARES (Abas, Meta, Feedback) ---
+        function mudarAba(aba) {
+            document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(`tab-${aba}`).classList.remove('hidden');
+            document.getElementById(`btn-${aba}`).classList.add('active');
+            
+            if(aba === 'evolucao') renderizarGraficos('mes'); // Carrega gráfico ao abrir aba
+        }
+
+        async function atualizarMeta(id, novaMeta) {
+            if (!confirm('Alterar meta?')) return;
+            const { error } = await _supabase.from('producao').update({ meta_diaria: parseInt(novaMeta) }).eq('id', id);
+            if (!error) atualizarDashboard();
+        }
+
+        async function carregarFeedbacks(targetUserId) {
+            const container = document.getElementById('lista-feedbacks');
+            // Se não passar target, usa o da sessão (segurança fallback)
+            const uid = targetUserId || sessao.id;
+            
+            const { data } = await _supabase.from('feedbacks').select('*').eq('usuario_alvo_id', uid).order('created_at');
+            if (!data || !data.length) {
+                container.innerHTML = '<div class="text-center text-slate-400 py-10">Sem feedbacks.</div>'; return;
             }
+            let html = '';
+            data.forEach(msg => {
+                const isMe = msg.autor_nome === sessao.nome;
+                const align = isMe ? 'ml-auto bg-blue-100 text-blue-900' : 'mr-auto bg-white border border-slate-200';
+                html += `<div class="max-w-[80%] w-fit mb-3 p-3 rounded-xl shadow-sm text-sm ${align}"><div class="font-bold text-xs opacity-70 mb-1">${msg.autor_nome}</div>${msg.mensagem}</div>`;
+            });
+            container.innerHTML = html;
         }
-
-        function animateValue(obj, start, end, duration) {
-            let startTimestamp = null;
-            const step = (timestamp) => {
-                if (!startTimestamp) startTimestamp = timestamp;
-                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                obj.innerHTML = Math.floor(progress * (end - start) + start).toLocaleString();
-                if (progress < 1) window.requestAnimationFrame(step);
-            };
-            window.requestAnimationFrame(step);
+        
+        async function enviarFeedback() {
+            // Descobre para quem estamos enviando
+            let targetId = sessao.id;
+            if(isMgr) {
+                const val = document.getElementById('filtro-user').value;
+                if(val !== 'me' && val !== 'time') targetId = val;
+            }
+            
+            const txt = document.getElementById('input-feedback').value;
+            if(!txt) return;
+            await _supabase.from('feedbacks').insert({ usuario_alvo_id: targetId, autor_nome: sessao.nome, mensagem: txt });
+            document.getElementById('input-feedback').value = '';
+            carregarFeedbacks(targetId);
         }
-
     </script>
 </body>
 </html>
