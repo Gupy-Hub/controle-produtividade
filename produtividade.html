@@ -91,8 +91,7 @@
                             <i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i>
                         </div>
                     </div>
-                    <div id="info-abonados" class="mt-2 text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded hidden border border-amber-100">
-                        </div>
+                    <div id="info-abonados" class="mt-2 text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded hidden border border-amber-100"></div>
                     <p class="text-[10px] text-slate-400 mt-1" id="label-hc-desc">Ativos no Período</p>
                 </div>
 
@@ -114,13 +113,13 @@
                     <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden"><div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div></div>
                 </div>
 
-                <div class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 group relative text-white">
-                    <p class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Atingimento Global</p>
+                <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500">
+                    <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
                     <div class="flex items-center justify-between">
                         <p class="text-4xl font-black tracking-tighter" id="kpi-pct">--%</p>
                         <div id="icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div>
                     </div>
-                    <p class="text-[10px] text-blue-100 mt-2 font-medium">Real vs Esperado</p>
+                    <p class="text-[10px] text-white/60 mt-2 font-medium">Real vs Esperado</p>
                 </div>
 
             </div>
@@ -368,12 +367,10 @@
                 elInfoAbonados.classList.add('hidden'); // Reset
 
                 if (modo === 'dia' && !this.selecionado) {
-                    // Contar quantos estão com meio período (0.5) ou abonado (0) na lista total carregada
                     let qtdMeio = 0;
                     let qtdAbonado = 0;
 
                     this.listaAtual.forEach(u => {
-                        // Verifica se existe no dia e qual o fator
                         const diaInfo = u.diasMap[this.dataVisualizada];
                         if (diaInfo) {
                             if (diaInfo.fator === 0.5) qtdMeio++;
@@ -402,14 +399,25 @@
                 document.getElementById('kpi-meta-media').innerText = mediaMeta.toLocaleString();
                 document.getElementById('bar-media').style.width = Math.min((mediaReal/(mediaMeta||1))*100, 100) + '%';
 
-                // --- NOVO CARD: ATINGIMENTO (%) ---
+                // --- NOVO CARD: ATINGIMENTO (%) COM COR DINÂMICA ---
                 const percentual = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
                 document.getElementById('kpi-pct').innerText = percentual + '%';
                 
+                const cardPct = document.getElementById('card-pct');
                 const iconPct = document.getElementById('icon-pct');
-                if(percentual >= 100) iconPct.innerHTML = '<i class="fas fa-check-circle text-emerald-200"></i>';
-                else if(percentual >= 80) iconPct.innerHTML = '<i class="fas fa-exclamation-circle text-amber-200"></i>';
-                else iconPct.innerHTML = '<i class="fas fa-times-circle text-red-200"></i>';
+                
+                // Remove todas as classes de cor possíveis
+                cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+
+                if (percentual < 100) {
+                    // VERMELHO SE MENOR QUE 100%
+                    cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                    iconPct.innerHTML = '<i class="fas fa-times-circle text-white/50"></i>';
+                } else {
+                    // AZUL SE MAIOR OU IGUAL
+                    cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                    iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
+                }
 
                 // Cabeçalho de seleção
                 const selHeader = document.getElementById('selection-header');
@@ -425,18 +433,12 @@
                     const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
                     const subIds = u.ids.length > 1 ? `<br><span class="text-[9px] text-slate-400">IDs: ${u.ids.join(', ')}</span>` : '';
 
-                    // Lógica para mostrar o dropdown correto
                     let fator = 1;
-                    // Se estivermos vendo um período, o 'u.dias' é a soma. Mas no dropdown queremos o do dia específico se modo==dia
-                    // No sistema.js, normalizar retorna dias somados.
-                    // Para o dropdown funcionar direito no modo DIA, precisamos pegar o fator daquele dia específico.
                     if (modo === 'dia') {
                          const infoDia = u.diasMap[this.dataVisualizada];
                          fator = infoDia ? infoDia.fator : 1;
                     } else {
-                         // Se for mês, não faz sentido editar fator por aqui (ou mostra média/soma?), vamos bloquear visualmente ou deixar padrão
-                         // Mantemos a lógica original mas o dropdown só funciona com modo Dia
-                         if (u.dias === 0) fator = 0; else if (u.dias % 1 !== 0) fator = 0.5; // Aproximação visual apenas
+                         if (u.dias === 0) fator = 0; else if (u.dias % 1 !== 0) fator = 0.5;
                     }
 
                     const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
