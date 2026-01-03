@@ -105,7 +105,7 @@
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe</p>
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe</p>
                         <div class="flex items-end justify-between">
                             <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p>
                             <i class="fas fa-users text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
@@ -124,37 +124,29 @@
                     <p class="text-[10px] text-slate-400 mt-1 font-bold" id="kpi-dias-label">Geral ou Individual</p>
                 </div>
 
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção Total</p>
-                    <div class="flex items-end gap-2">
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
                         <p class="text-2xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
                     </div>
-                    <div>
-                         <p class="text-[10px] text-slate-400 mt-1 font-bold mb-1">Meta: <span id="kpi-meta-total" class="text-slate-600">--</span></p>
-                         <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                            <div id="bar-prod" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
-                         </div>
-                    </div>
+                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total" class="text-slate-700">--</span></p>
                 </div>
 
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média / Analista</p>
-                    <div class="flex items-end gap-2">
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média / Analista</p>
                         <p class="text-2xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p>
                     </div>
-                     <div>
-                         <p class="text-[10px] text-slate-400 mt-1 font-bold mb-1">Meta: <span id="kpi-meta-media" class="text-slate-600">--</span></p>
-                         <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                            <div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
-                         </div>
-                    </div>
+                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-media" class="text-slate-700">--</span></p>
                 </div>
 
                 <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500 flex flex-col justify-between">
-                    <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
-                    <div class="flex items-center justify-between">
-                        <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                        <div id="icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                    <div>
+                        <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
+                        <div class="flex items-center justify-between">
+                            <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
+                            <div id="icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                        </div>
                     </div>
                     <p class="text-[10px] text-white/60 mt-1 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
