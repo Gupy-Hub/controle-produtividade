@@ -14,9 +14,8 @@ const Cons = {
         let el = document.getElementById('global-date');
         let val = el ? el.value : new Date().toISOString().split('T')[0];
         
-        // Salva a base para o Mês de Referência Global
         Sistema.Dados.definirBaseHC(val, novoValor);
-        this.carregar(true); // Recarrega para aplicar a nova base no cálculo
+        this.carregar(true); 
     },
     
     carregar: async function(forcar = false) {
@@ -33,7 +32,6 @@ const Cons = {
         if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
         else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
-        // Atualiza o input visual com a base do mês selecionado
         const inputHC = document.getElementById('cons-input-hc');
         if(inputHC) {
             const baseDoMes = Sistema.Dados.obterBaseHC(val);
@@ -50,9 +48,7 @@ const Cons = {
         else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; } 
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
-        // Calcula a Base Média do Período (Ex: Média das bases de Jan, Fev, Mar)
         const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
-
         const cacheKey = `${t}_${s}_${e}_${HF}`;
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
@@ -88,11 +84,9 @@ const Cons = {
         let cols = []; 
         let startMonthIdx = 0; 
 
-        if (t === 'dia') {
-            cols = ['Dia Atual']; 
-        } else if (t === 'mes') {
-            cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; 
-        } else if (t === 'trimestre') {
+        if (t === 'dia') { cols = ['Dia Atual']; } 
+        else if (t === 'mes') { cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; } 
+        else if (t === 'trimestre') {
             const trim = Math.ceil(currentMonth / 3);
             startMonthIdx = (trim - 1) * 3;
             cols = [mesesNomes[startMonthIdx], mesesNomes[startMonthIdx+1], mesesNomes[startMonthIdx+2]];
@@ -102,7 +96,7 @@ const Cons = {
             cols = mesesNomes.slice(startMonthIdx, startMonthIdx + 6);
         } else if (t === 'ano_trim') {
             cols = ['1º Trimestre', '2º Trimestre', '3º Trimestre', '4º Trimestre'];
-        } else { // ano_mes
+        } else { 
             cols = mesesNomes; 
         }
         
@@ -203,24 +197,41 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        h += mkRow('Assistentes Ativas', 'fas fa-users', 'text-indigo-500', s => s.users); 
-        h += mkRow('Dias Trabalhados', 'fas fa-calendar-check', 'text-cyan-500', s => s.diasPonderados); 
-        h += mkRow('Produção Total', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
+        // 1. Total de assistentes
+        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => s.users);
         
-        h += mkRow('Média (Time)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true); 
-        h += mkRow(`Média (Base Config.)`, 'fas fa-user-tag', 'text-amber-600', (s) => s.qty / HF, true); 
+        // 2. Total de dias úteis / trabalhado
+        h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', s => s.diasPonderados);
         
+        // 3. Total de documentos Fifo
+        h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
+        
+        // 4. Total de documentos Gradual Parcial
+        h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
+        
+        // 5. Total de documentos Gradual Total
+        h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
+        
+        // 6. Total de documentos Perfil Fc
+        h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
+        
+        // 7. Total de documentos validados (DESTACADO)
+        h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
+        
+        // 8. Total validação diária (Dias uteis) -> Média do Time por Dia
+        h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
+        
+        // 9. Média validação diária (Todas assistentes) -> Média por Pessoa Real (Ativos)
+        h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
+        
+        // 10. Média validação diária (Por Assistentes) -> Média pela BASE HC Configurada (HF)
+        h += mkRow(`Média Validação Diária (Base ${HF})`, 'fas fa-user-tag', 'text-amber-600', (s, d) => d > 0 ? s.qty / d / HF : 0, true);
+        
+        // SEGMENTAÇÃO (Opcional - Mantida para completude, mas visualmente separada)
         h += `<tr><td colspan="${numCols + 2}" class="px-6 py-6 bg-slate-50/50"><div class="flex items-center gap-4"><div class="h-px bg-slate-200 flex-1"></div><span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"><i class="fas fa-file-signature mr-2"></i>Segmentação por Contrato</span><div class="h-px bg-slate-200 flex-1"></div></div></td></tr>`;
-
         h += mkRow('Produção CLT', 'fas fa-building', 'text-blue-500', s => s.clt_qty); 
-        h += mkRow('Média Diária CLT', 'fas fa-calculator', 'text-blue-400', (s, d, a, dc, dp) => dc > 0 ? s.clt_qty / dc : 0, true);
         h += mkRow('Produção PJ', 'fas fa-briefcase', 'text-indigo-500', s => s.pj_qty); 
-        h += mkRow('Média Diária PJ', 'fas fa-calculator', 'text-indigo-400', (s, d, a, dc, dp) => dp > 0 ? s.pj_qty / dp : 0, true);
 
-        h += `<tr><td colspan="${numCols + 2}" class="h-4"></td></tr>`;
-        h += mkRow('FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo); 
-        h += mkRow('Gradual Total', 'fas fa-check-double', 'text-slate-400', s => s.gt); 
-        
         tbody.innerHTML = h;
         
         const tot = st[99]; 
@@ -230,9 +241,10 @@ const Cons = {
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
-        
-        // Atualiza Card de Headcount com valor REAL de pessoas ativas
         setSafe('cons-p-headcount', tot.users.size); 
+        
+        const elBadge = document.getElementById('cons-badge-base');
+        if (elBadge) elBadge.innerText = `Base ${HF}`;
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
         if(elLblBase) elLblBase.innerText = HF;
