@@ -1,0 +1,188 @@
+// js/produtividade_performance.js
+
+const Perf = {
+    selectedUserId: null,
+    dadosCarregados: [],
+    initialized: false,
+
+    init: function() { 
+        if(!this.initialized) { 
+            Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); }); 
+            this.initialized = true; 
+        } 
+        this.carregarRanking(); 
+    },
+
+    limparSelecao: function() { 
+        this.selectedUserId = null; 
+        document.getElementById('perf-btn-limpar').classList.add('hidden'); 
+        this.carregarRanking(); 
+    },
+
+    toggleUsuario: function(id) { 
+        if (this.selectedUserId === id) { 
+            this.selectedUserId = null; 
+            document.getElementById('perf-btn-limpar').classList.add('hidden'); 
+        } else { 
+            this.selectedUserId = id; 
+            document.getElementById('perf-btn-limpar').classList.remove('hidden'); 
+        } 
+        this.renderRanking(); 
+    },
+    
+    carregarRanking: async function() {
+        const tbody = document.getElementById('perf-ranking-body'); 
+        if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">A carregar dados...</td></tr>';
+        
+        try {
+            const tipo = document.getElementById('perf-period-type').value; 
+            const refDate = Sistema.Datas.lerInput('data-perf');
+            const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
+            let s, e;
+            
+            if (tipo === 'mes') { 
+                s = `${ano}-${String(mes).padStart(2,'0')}-01`; 
+                e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; 
+            } else if (tipo === 'trimestre') { 
+                const trim = Math.ceil(mes / 3); 
+                const mStart = ((trim-1)*3)+1; 
+                const mEnd = mStart+2; 
+                s = `${ano}-${String(mStart).padStart(2,'0')}-01`; 
+                e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; 
+            } else if (tipo === 'semestre') { 
+                const sem = Math.ceil(mes / 6); 
+                s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; 
+                e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
+            } else { 
+                s = `${ano}-01-01`; 
+                e = `${ano}-12-31`; 
+            }
+            
+            // Busca apenas producao
+            const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
+            if(error) throw error;
+            
+            let stats = {};
+            let countCLT = 0;
+            let countPJ = 0;
+            let processedUsers = new Set(); 
+
+            prods.forEach(item => {
+                const uid = item.usuario_id;
+                const user = USERS_CACHE[uid];
+                
+                // Filtra usuários sem cadastro ou que não são Assistentes
+                if (!user || user.funcao !== 'Assistente') return;
+
+                // Contagem CLT/PJ
+                if (!processedUsers.has(uid)) {
+                    if (user.contrato && user.contrato.includes('CLT')) countCLT++;
+                    else countPJ++;
+                    processedUsers.add(uid);
+                }
+
+                if (!stats[uid]) stats[uid] = { id: uid, nome: user.nome, total: 0, dias: new Set() };
+                stats[uid].total += (Number(item.quantidade) || 0); 
+                stats[uid].dias.add(item.data_referencia);
+            });
+            
+            // Atualiza Card Mix
+            const elClt = document.getElementById('perf-clt');
+            const elPj = document.getElementById('perf-pj');
+            if(elClt) elClt.innerText = countCLT;
+            if(elPj) elPj.innerText = countPJ;
+
+            this.dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
+            this.renderRanking();
+        } catch (err) { 
+            console.error(err); 
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-red-400">Erro ao carregar ranking.</td></tr>'; 
+        }
+    },
+
+    renderRanking: function() {
+        const tbody = document.getElementById('perf-ranking-body'); 
+        if (!this.dadosCarregados.length) { 
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado para o período.</td></tr>'; 
+            this.atualizarCards(null); 
+            return; 
+        }
+        
+        let html = ''; 
+        let userStats = null;
+        
+        this.dadosCarregados.forEach((u, idx) => {
+            const dias = u.dias.size || 1; 
+            const media = Math.round(u.total / dias); 
+            const meta = 650 * dias; 
+            const pct = Math.round((u.total / meta) * 100);
+            
+            const isSelected = this.selectedUserId === u.id; 
+            if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
+            
+            // Usa 'sessao' global
+            const isMe = (typeof sessao !== 'undefined' && sessao) && u.id === sessao.id; 
+            
+            let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; 
+            if (isSelected) rowClass += "selected-row"; 
+            else if (isMe) rowClass += "me-row";
+
+            // Destaque Top 5
+            let iconTrofeu = '';
+            if (idx === 0) { rowClass += " rank-1"; iconTrofeu = '🥇'; }
+            else if (idx === 1) { rowClass += " rank-2"; iconTrofeu = '🥈'; }
+            else if (idx === 2) { rowClass += " rank-3"; iconTrofeu = '🥉'; }
+            else if (idx < 5) { rowClass += " rank-top"; iconTrofeu = '🏅'; }
+
+            let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+            html += `<tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-600">${iconTrofeu} #${idx + 1}</td><td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
+        });
+        
+        if(tbody) tbody.innerHTML = html; 
+        this.atualizarCards(userStats);
+    },
+
+    atualizarCards: function(userStats) {
+        const elTotal = document.getElementById('perf-card-total');
+        const elMedia = document.getElementById('perf-card-media');
+        const elMeta = document.getElementById('perf-card-meta');
+        const labelMetaTotal = document.getElementById('perf-label-meta-total');
+        const labelRealTotal = document.getElementById('perf-label-real-total');
+        const elRankContent = document.getElementById('perf-rank-content');
+
+        if (userStats) {
+            // Individual
+            if(elTotal) elTotal.innerText = userStats.total.toLocaleString(); 
+            if(labelMetaTotal) labelMetaTotal.innerText = userStats.meta.toLocaleString();
+
+            if(elMedia) elMedia.innerText = userStats.media.toLocaleString(); 
+            
+            if(elMeta) elMeta.innerText = userStats.meta.toLocaleString(); 
+            if(labelRealTotal) labelRealTotal.innerText = userStats.total.toLocaleString();
+        } else {
+            // Geral
+            const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
+            const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); 
+            const metaGeral = 650 * diasGeral; 
+            const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
+            
+            if(elTotal) elTotal.innerText = totalGeral.toLocaleString(); 
+            if(labelMetaTotal) labelMetaTotal.innerText = metaGeral.toLocaleString();
+            
+            if(elMedia) elMedia.innerText = mediaGeral.toLocaleString(); 
+            
+            if(elMeta) elMeta.innerText = metaGeral.toLocaleString(); 
+            if(labelRealTotal) labelRealTotal.innerText = totalGeral.toLocaleString();
+            
+            // Top 5 Mini List
+            let topHtml = '<div class="flex flex-col gap-1.5">'; 
+            this.dadosCarregados.slice(0, 5).forEach((u, i) => { 
+                let color = i===0 ? 'text-amber-500' : (i===1 ? 'text-slate-400' : (i===2 ? 'text-orange-400' : 'text-slate-600'));
+                let icon = i < 3 ? '<i class="fas fa-trophy text-[9px]"></i>' : '<i class="fas fa-medal text-[9px]"></i>';
+                topHtml += `<div class="flex justify-between items-center text-xs border-b border-slate-100 pb-1 last:border-0"><div class="flex items-center gap-1.5"><span class="${color}">${icon}</span> <span class="font-bold text-slate-700 truncate max-w-[80px]">${u.nome.split(' ')[0]}</span></div> <span class="text-blue-600 font-bold bg-blue-50 px-1.5 rounded">${u.total.toLocaleString()}</span></div>`; 
+            }); 
+            topHtml += '</div>'; 
+            if(elRankContent) elRankContent.innerHTML = topHtml;
+        }
+    }
+};

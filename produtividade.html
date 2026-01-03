@@ -24,6 +24,13 @@
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
         .col-fixed { position: sticky; left: 0; background: white; z-index: 10; border-right: 1px solid #e2e8f0; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        
+        /* Destaque Top 5 */
+        .rank-1 { background: linear-gradient(to right, #fffbeb, #ffffff); border-left: 4px solid #fbbf24 !important; }
+        .rank-2 { background: linear-gradient(to right, #f8fafc, #ffffff); border-left: 4px solid #94a3b8 !important; }
+        .rank-3 { background: linear-gradient(to right, #fff7ed, #ffffff); border-left: 4px solid #fdba74 !important; }
+        .rank-top { background-color: #f0f9ff; border-left: 4px solid #60a5fa !important; }
+
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
         .status-select { 
@@ -82,46 +89,34 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe Considerada</p>
-                        <div class="flex items-end justify-between">
-                            <p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p>
-                            <i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i>
-                        </div>
+                        <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p><i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i></div>
                     </div>
                     <div id="info-abonados" class="mt-2 text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded hidden border border-amber-100"></div>
                     <p class="text-[10px] text-slate-400 mt-1" id="label-hc-desc">Ativos no Período</p>
                 </div>
-
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Trabalhados</p>
                     <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p><i class="fas fa-calendar-day text-4xl text-slate-100 group-hover:text-blue-50 transition"></i></div>
                     <p class="text-[10px] text-slate-400 mt-1" id="kpi-dias-label">Geral ou Individual</p>
                 </div>
-
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção vs Meta</p>
                     <div class="flex items-end gap-2"><p class="text-3xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p><span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-total">--</span></span></div>
                     <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden"><div id="bar-prod" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div></div>
                 </div>
-
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média / Analista</p>
                     <div class="flex items-end gap-2"><p class="text-3xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p><span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-media">--</span></span></div>
                     <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden"><div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div></div>
                 </div>
-
                 <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500">
                     <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
-                    <div class="flex items-center justify-between">
-                        <p class="text-4xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                        <div id="icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div>
-                    </div>
+                    <div class="flex items-center justify-between"><p class="text-4xl font-black tracking-tighter" id="kpi-pct">--%</p><div id="icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div></div>
                     <p class="text-[10px] text-white/60 mt-2 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
-
             </div>
 
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
@@ -138,21 +133,11 @@
                                     <div class="flex flex-col items-center gap-1">
                                         <span class="text-[10px] text-slate-400">Ação em Massa</span>
                                         <select id="bulk-fator" onchange="Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer hover:border-blue-400 focus:border-blue-500 transition">
-                                            <option value="">Aplicar...</option>
-                                            <option value="1">Todos 100%</option>
-                                            <option value="0.5">Todos 50%</option>
-                                            <option value="0">Todos Abonar</option>
+                                            <option value="">Aplicar...</option><option value="1">Todos 100%</option><option value="0.5">Todos 50%</option><option value="0">Todos Abonar</option>
                                         </select>
                                     </div>
                                 </th>
-                                <th class="px-6 py-4">Assistente</th>
-                                <th class="px-6 py-4 text-center">Dias Calc.</th>
-                                <th class="px-6 py-4 text-center">Total</th>
-                                <th class="px-6 py-4 text-center">FIFO</th>
-                                <th class="px-6 py-4 text-center">G. Total</th>
-                                <th class="px-6 py-4 text-center">G. Parcial</th>
-                                <th class="px-6 py-4 text-center">Meta Calc.</th>
-                                <th class="px-6 py-4 text-center">% Meta</th>
+                                <th class="px-6 py-4">Assistente</th><th class="px-6 py-4 text-center">Dias Calc.</th><th class="px-6 py-4 text-center">Total</th><th class="px-6 py-4 text-center">FIFO</th><th class="px-6 py-4 text-center">G. Total</th><th class="px-6 py-4 text-center">G. Parcial</th><th class="px-6 py-4 text-center">Meta Calc.</th><th class="px-6 py-4 text-center">% Meta</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
@@ -172,12 +157,36 @@
                 </div>
             </div>
             <div id="perf-view-individual">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1" id="perf-label-total">Total</p><p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p></div>
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p><p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p></div>
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta Período</p><p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p></div>
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Top Ranking</p><div id="perf-rank-content" class="text-sm font-medium text-slate-700"></div></div>
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
+                        <p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-600">--</span></p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p>
+                        <p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Esperado: <span class="text-slate-600">650</span></p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta do Período</p>
+                        <p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p>
+                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Real: <span id="perf-label-real-total" class="text-blue-600">--</span></p>
+                    </div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Mix Contratual</p>
+                        <div class="flex items-center justify-between mt-1">
+                            <div><p class="text-xl font-black text-slate-800" id="perf-clt">0</p><p class="text-[9px] text-slate-400 uppercase font-bold">CLT</p></div>
+                            <div class="h-8 w-px bg-slate-100"></div>
+                            <div class="text-right"><p class="text-xl font-black text-slate-800" id="perf-pj">0</p><p class="text-[9px] text-slate-400 uppercase font-bold">PJ</p></div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Top 5 Ranking</p>
+                        <div id="perf-rank-content" class="text-[10px] font-medium text-slate-700 space-y-1"></div>
+                    </div>
                 </div>
+
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Ranking Detalhado</h3><button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">✕ Limpar Seleção</button></div>
                     <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">#</th><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th><th class="px-6 py-3 text-center">Dias</th><th class="px-6 py-3 text-center">Média</th><th class="px-6 py-3 text-center">Meta Total</th><th class="px-6 py-3 text-center">% Meta</th></tr></thead><tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody></table></div>
@@ -208,556 +217,10 @@
         </div>
     </div>
 
-    <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario'));
-        const KEY_DATA_GLOBAL = 'data_sistema_global';
-        
-        // --- CORREÇÃO 2: Cache Global de Usuários para evitar Join com falha ---
-        let USERS_CACHE = {};
-
-        async function carregarUsuariosGlobal() {
-            try {
-                const { data, error } = await _supabase.from('usuarios').select('id, nome, funcao, contrato');
-                if (data) {
-                    data.forEach(u => {
-                        USERS_CACHE[u.id] = u;
-                    });
-                }
-            } catch (e) { console.error("Erro cache user", e); }
-        }
-
-        function mudarAba(aba) {
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-            document.getElementById(`tab-${aba}`).classList.remove('hidden');
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            document.getElementById(`btn-${aba}`).classList.add('active');
-
-            const dataAtual = localStorage.getItem(KEY_DATA_GLOBAL) || Sistema.Datas.formatar(new Date());
-            if (aba === 'geral') { 
-                const inp = document.getElementById('data-validacao');
-                inp.value = dataAtual; 
-                Geral.carregarTela(); 
-            }
-            if (aba === 'performance') { 
-                const inp = document.getElementById('data-perf');
-                inp.value = dataAtual; 
-                Perf.init(); 
-            }
-            if (aba === 'matriz') { 
-                const inp = document.getElementById('data-matriz');
-                inp.value = dataAtual; 
-                Matriz.init(); 
-            }
-            if (aba === 'consolidado') { 
-                const inp = document.getElementById('data-cons');
-                inp.value = dataAtual; 
-                Cons.init(); 
-            }
-        }
-
-        // Função Importar Excel mantida (código original)
-        async function importarExcel(input) {
-            const file = input.files[0];
-            if (!file) return;
-            const nomeArquivo = file.name;
-            const matchData = nomeArquivo.match(/^(\d{2})(\d{2})(\d{4})/);
-            if (!matchData) { alert("Nome inválido (ddmmaaaa.xlsx)"); input.value = ''; return; }
-            const dataDoArquivo = `${matchData[3]}-${matchData[2]}-${matchData[1]}`;
-
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(sheet);
-                    if (json.length === 0) return alert("Vazia.");
-
-                    const usersMap = {};
-                    const { data: users } = await _supabase.from('usuarios').select('id, nome');
-                    users.forEach(u => usersMap[u.nome.trim().toLowerCase()] = u.id);
-
-                    let inserts = [];
-                    for (let row of json) {
-                        const nomeCsv = row['assistente'];
-                        const idCsv = row['id_assistente'];
-                        if (!idCsv && !nomeCsv) continue;
-                        if (String(nomeCsv).toLowerCase().includes('total')) continue;
-
-                        let uid = idCsv;
-                        if (!uid && nomeCsv && usersMap[nomeCsv.trim().toLowerCase()]) uid = usersMap[nomeCsv.trim().toLowerCase()];
-
-                        if (uid) {
-                            inserts.push({
-                                usuario_id: uid, data_referencia: dataDoArquivo,
-                                quantidade: row['documentos_validados'] || 0,
-                                fifo: row['documentos_validados_fifo'] || 0,
-                                gradual_total: row['documentos_validados_gradual_total'] || 0,
-                                gradual_parcial: row['documentos_validados_gradual_parcial'] || 0,
-                                perfil_fc: row['documentos_validados_perfil_fc'] || 0
-                            });
-                        }
-                    }
-
-                    if (inserts.length > 0) {
-                        if(confirm(`Importar ${inserts.length} registros para ${matchData[1]}/${matchData[2]}/${matchData[3]}?`)) {
-                            const { error } = await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
-                            if (error) throw error;
-                            alert("Sucesso!");
-                            localStorage.setItem(KEY_DATA_GLOBAL, `${matchData[1]}/${matchData[2]}/${matchData[3]}`);
-                            mudarAba('geral');
-                        }
-                    } else alert("Dados inválidos.");
-                } catch (err) { alert("Erro: " + err.message); } finally { input.value = ''; }
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        const Geral = {
-            listaAtual: [],
-            selecionado: null,
-            dataVisualizada: null,
-            periodoInicio: null,
-            periodoFim: null,
-
-            toggleSemana: function() {
-                const mode = document.getElementById('view-mode').value;
-                const selSemana = document.getElementById('select-semana');
-                if (mode === 'semana') selSemana.classList.remove('hidden'); else selSemana.classList.add('hidden');
-                this.carregarTela();
-            },
-            
-            carregarTela: async function() {
-                const modo = document.getElementById('view-mode').value;
-                const refDate = Sistema.Datas.lerInput('data-validacao');
-                const isoDate = refDate.toISOString().split('T')[0];
-                this.dataVisualizada = isoDate; 
-
-                const bulkSelect = document.getElementById('bulk-fator');
-                if(bulkSelect) bulkSelect.value = "";
-
-                let inicio, fim;
-                if (modo === 'dia') { 
-                    inicio = isoDate; fim = isoDate; 
-                } else { 
-                    const ano = refDate.getFullYear(); const mes = refDate.getMonth();
-                    inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-                    fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-                }
-
-                this.periodoInicio = inicio;
-                this.periodoFim = fim;
-
-                const { data } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-                let dadosFiltrados = data || [];
-                
-                if (modo === 'semana') {
-                    const numSemana = parseInt(document.getElementById('select-semana').value);
-                    dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
-                }
-
-                this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
-                this.renderizar();
-            },
-
-            contarDiasUteis: function(inicioStr, fimStr) {
-                if(!inicioStr || !fimStr) return 1;
-                let count = 0;
-                let cur = new Date(inicioStr + 'T12:00:00');
-                const end = new Date(fimStr + 'T12:00:00');
-                while(cur <= end) {
-                    const d = cur.getDay();
-                    if(d !== 0 && d !== 6) count++;
-                    cur.setDate(cur.getDate() + 1);
-                }
-                return count || 1;
-            },
-
-            mudarFator: function(nome, valor) {
-                const modo = document.getElementById('view-mode').value;
-                if (modo !== 'dia') {
-                    alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico.");
-                    this.renderizar(); 
-                    return;
-                }
-                Sistema.Dados.definirFator(nome, this.dataVisualizada, valor);
-                this.carregarTela();
-            },
-
-            mudarFatorTodos: function(valor) {
-                if (!valor) return; 
-                const modo = document.getElementById('view-mode').value;
-                if (modo !== 'dia') {
-                    alert("Atenção: A alteração em massa só é permitida na visão 'Apenas o Dia' para evitar erros em históricos.");
-                    document.getElementById('bulk-fator').value = "";
-                    return;
-                }
-                if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas abaixo?")) {
-                    document.getElementById('bulk-fator').value = "";
-                    return;
-                }
-                this.listaAtual.forEach(u => {
-                    if (!u.inativo) {
-                        Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor);
-                    }
-                });
-                this.carregarTela(); 
-            },
-
-            selecionar: function(nome) {
-                if (this.selecionado === nome) this.selecionado = null; else this.selecionado = nome;
-                this.renderizar();
-            },
-            limparSelecao: function() { this.selecionado = null; this.renderizar(); },
-
-            renderizar: function() {
-                const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML = '';
-                const modo = document.getElementById('view-mode').value;
-
-                const bulkSelect = document.getElementById('bulk-fator');
-                if (bulkSelect) {
-                    if (modo !== 'dia') {
-                        bulkSelect.disabled = true;
-                        bulkSelect.classList.add('opacity-50', 'cursor-not-allowed');
-                        bulkSelect.title = "Disponível apenas na visão de Dia";
-                    } else {
-                        bulkSelect.disabled = false;
-                        bulkSelect.classList.remove('opacity-50', 'cursor-not-allowed');
-                        bulkSelect.title = "Alterar todas";
-                    }
-                }
-
-                const ativos = this.listaAtual.filter(u => !u.inativo);
-                const baseCalculo = this.selecionado ? this.listaAtual.filter(u => u.nome === this.selecionado) : ativos;
-                const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
-
-                let qtdMeio = 0;
-                let qtdAbonado = 0;
-                
-                if (modo === 'dia' && !this.selecionado) {
-                    this.listaAtual.forEach(u => {
-                        const diaInfo = u.diasMap[this.dataVisualizada];
-                        if (diaInfo) { 
-                            if (diaInfo.fator === 0.5) qtdMeio++; 
-                            else if (diaInfo.fator === 0) qtdAbonado++; 
-                        }
-                    });
-                }
-                
-                let hcConsiderado = this.selecionado ? 1 : ativos.length;
-                if (!this.selecionado && modo === 'dia') {
-                    const reducaoParesMeio = Math.floor(qtdMeio / 2);
-                    const reducaoAbonados = qtdAbonado;
-                    hcConsiderado = ativos.length - reducaoAbonados - reducaoParesMeio;
-                }
-
-                let diasUteisPeriodo = 1;
-                if(modo === 'dia') {
-                    diasUteisPeriodo = 1;
-                } else if (modo === 'mes') {
-                    diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
-                } else if (modo === 'semana') {
-                    if(this.listaAtual.length > 0) {
-                        let todasDatas = new Set();
-                        this.listaAtual.forEach(u => Object.keys(u.diasMap).forEach(d => todasDatas.add(d)));
-                        let datasArr = Array.from(todasDatas).sort();
-                        if(datasArr.length > 0) {
-                            diasUteisPeriodo = this.contarDiasUteis(datasArr[0], datasArr[datasArr.length-1]);
-                        } else diasUteisPeriodo = 5;
-                    } else diasUteisPeriodo = 5;
-                }
-
-                const metaDiaria = 650;
-                const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
-                const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
-                const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
-                
-                let diasDisplay = 0;
-                let diasLabel = "";
-                if (this.selecionado) {
-                    diasDisplay = baseCalculo.length ? baseCalculo[0].dias : 0; 
-                    diasLabel = "Dias do Colaborador (Considera 50%)";
-                } else {
-                    const setDiasUnicos = new Set();
-                    ativos.forEach(u => {
-                        if (u.diasMap) { Object.entries(u.diasMap).forEach(([data, info]) => { if (info.fator > 0) setDiasUnicos.add(data); }); }
-                    });
-                    diasDisplay = setDiasUnicos.size;
-                    diasLabel = "Dias Úteis da Equipe (Calendário)";
-                }
-
-                const elInfoAbonados = document.getElementById('info-abonados');
-                elInfoAbonados.classList.add('hidden'); 
-                if ((qtdMeio > 0 || qtdAbonado > 0) && modo === 'dia' && !this.selecionado) {
-                    let texto = [];
-                    if (qtdMeio > 0) texto.push(`${qtdMeio} Meio Período`);
-                    if (qtdAbonado > 0) texto.push(`${qtdAbonado} Abonado(s)`);
-                    elInfoAbonados.innerText = texto.join(', ');
-                    elInfoAbonados.classList.remove('hidden');
-                }
-
-                document.getElementById('kpi-hc').innerText = hcConsiderado;
-                document.getElementById('kpi-dias').innerText = diasDisplay;
-                document.getElementById('kpi-dias-label').innerText = diasLabel;
-                
-                document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
-                document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
-                document.getElementById('bar-prod').style.width = Math.min((totalProd/(metaTotalEsperada||1))*100, 100) + '%';
-
-                document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
-                document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
-                document.getElementById('bar-media').style.width = Math.min((mediaRealAnalista/(metaMediaIndividual||1))*100, 100) + '%';
-
-                const percentual = metaTotalEsperada > 0 ? Math.round((totalProd / metaTotalEsperada) * 100) : 0;
-                document.getElementById('kpi-pct').innerText = percentual + '%';
-                document.getElementById('kpi-pct-detail').innerText = `${totalProd.toLocaleString()} / ${metaTotalEsperada.toLocaleString()}`;
-                
-                const cardPct = document.getElementById('card-pct');
-                const iconPct = document.getElementById('icon-pct');
-                cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
-
-                if (percentual < 100) {
-                    cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
-                    iconPct.innerHTML = '<i class="fas fa-times-circle text-white/50"></i>';
-                } else {
-                    cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
-                    iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
-                }
-
-                const selHeader = document.getElementById('selection-header');
-                if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
-                else selHeader.classList.add('hidden');
-
-                if(this.listaAtual.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400">Sem dados.</td></tr>'; return; }
-
-                this.listaAtual.forEach(u => {
-                    const isSelected = this.selecionado === u.nome;
-                    const rowClass = isSelected ? "selected-row" : "hover:bg-slate-50";
-                    const opacity = u.inativo ? "row-ignored" : "";
-                    const subIds = u.ids.length > 1 ? `<br><span class="text-[9px] text-slate-400">IDs: ${u.ids.join(', ')}</span>` : '';
-
-                    let fator = 1;
-                    if (modo === 'dia') {
-                         const infoDia = u.diasMap[this.dataVisualizada];
-                         fator = infoDia ? infoDia.fator : 1;
-                    } else {
-                         if (u.dias === 0) fator = 0; else if (u.dias % 1 !== 0) fator = 0.5;
-                    }
-                    const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
-                    const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
-
-                    const selectHtml = `
-                    <select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)">
-                        <option value="1" ${fator===1?'selected':''}>100%</option>
-                        <option value="0.5" ${fator===0.5?'selected':''}>50%</option>
-                        <option value="0" ${fator===0?'selected':''}>0%</option>
-                    </select>`;
-
-                    const pctIndividual = u.meta > 0 ? Math.round((u.total / u.meta) * 100) : 0;
-                    let badgeClass = '';
-                    if (pctIndividual >= 100) {
-                        badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
-                    } else {
-                        badgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
-                    }
-                    const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;
-
-                    tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome} ${subIds}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${pctBadge}</td></tr>`;
-                });
-            }
-        };
-
-        const Perf = {
-            selectedUserId: null, dadosCarregados: [], initialized: false,
-            init: function() { 
-                if(!this.initialized) { 
-                    Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); }); 
-                    this.initialized = true; 
-                } 
-                this.carregarRanking(); 
-            },
-            limparSelecao: function() { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); this.carregarRanking(); },
-            toggleUsuario: function(id) { if (this.selectedUserId === id) { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); } else { this.selectedUserId = id; document.getElementById('perf-btn-limpar').classList.remove('hidden'); } this.renderRanking(); },
-            
-            // CORREÇÃO 2: Usa apenas tabela 'producao' e mapeia usuário via JS
-            carregarRanking: async function() {
-                const tbody = document.getElementById('perf-ranking-body'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">A carregar dados...</td></tr>';
-                try {
-                    const tipo = document.getElementById('perf-period-type').value; 
-                    const refDate = Sistema.Datas.lerInput('data-perf');
-                    const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
-                    let s, e;
-                    if (tipo === 'mes') { s = `${ano}-${String(mes).padStart(2,'0')}-01`; e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; }
-                    else if (tipo === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
-                    else if (tipo === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
-                    
-                    // Sem Join complexo
-                    const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
-                    if(error) throw error;
-                    
-                    let stats = {};
-                    prods.forEach(item => {
-                        const uid = item.usuario_id;
-                        const user = USERS_CACHE[uid];
-                        if (!user || user.funcao !== 'Assistente') return; // Filtra via JS
-
-                        if (!stats[uid]) stats[uid] = { id: uid, nome: user.nome, total: 0, dias: new Set() };
-                        stats[uid].total += (Number(item.quantidade) || 0); 
-                        stats[uid].dias.add(item.data_referencia);
-                    });
-                    this.dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
-                    this.renderRanking();
-                } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="7" class="text-center text-red-400">Erro.</td></tr>'; }
-            },
-            renderRanking: function() {
-                const tbody = document.getElementById('perf-ranking-body'); if (!this.dadosCarregados.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado.</td></tr>'; this.atualizarCards(null); return; }
-                let html = ''; let userStats = null;
-                this.dadosCarregados.forEach((u, idx) => {
-                    const dias = u.dias.size || 1; const media = Math.round(u.total / dias); const meta = 650 * dias; const pct = Math.round((u.total / meta) * 100);
-                    const isSelected = this.selectedUserId === u.id; if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
-                    const isMe = sessao && u.id === sessao.id; let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
-                    let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-                    html += `<tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td><td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
-                });
-                tbody.innerHTML = html; this.atualizarCards(userStats);
-            },
-            atualizarCards: function(userStats) {
-                if (userStats) {
-                    document.getElementById('perf-label-total').innerText = "Total (" + userStats.nome.split(' ')[0] + ")"; document.getElementById('perf-card-total').innerText = userStats.total.toLocaleString(); document.getElementById('perf-card-media').innerText = userStats.media.toLocaleString(); document.getElementById('perf-card-meta').innerText = userStats.meta.toLocaleString(); 
-                } else {
-                    const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); const metaGeral = 650 * diasGeral; const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
-                    document.getElementById('perf-label-total').innerText = "Total (Time)"; document.getElementById('perf-card-total').innerText = totalGeral.toLocaleString(); document.getElementById('perf-card-media').innerText = mediaGeral.toLocaleString(); document.getElementById('perf-card-meta').innerText = metaGeral.toLocaleString(); 
-                    let topHtml = '<div class="flex flex-col gap-1">'; this.dadosCarregados.slice(0, 3).forEach((u, i) => { topHtml += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600 font-bold">${u.total.toLocaleString()}</span></div>`; }); topHtml += '</div>'; document.getElementById('perf-rank-content').innerHTML = topHtml;
-                }
-            }
-        };
-
-        const Matriz = {
-            initialized: false,
-            init: function() { 
-                if(!this.initialized) { 
-                    Sistema.Datas.criarInputInteligente('data-matriz', KEY_DATA_GLOBAL, () => { this.carregar(); }); 
-                    this.initialized = true; 
-                } 
-                this.carregar(); 
-            },
-            
-            // CORREÇÃO 2: Usa apenas tabela 'producao' e mapeia usuário via JS
-            carregar: async function() {
-                const tbody = document.getElementById('matriz-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">A calcular...</td></tr>';
-                try {
-                    const ano = Sistema.Datas.lerInput('data-matriz').getFullYear();
-                    // Sem Join complexo
-                    const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
-                    if(error) throw error;
-                    
-                    let map = {};
-                    prods.forEach(item => {
-                        const uid = item.usuario_id;
-                        const user = USERS_CACHE[uid];
-                        if (!user || user.funcao !== 'Assistente') return;
-
-                        if (!map[uid]) map[uid] = { nome: user.nome, m: Array(12).fill(0), t: 0 };
-                        const mes = new Date(item.data_referencia + 'T12:00:00').getMonth(); 
-                        map[uid].m[mes] += (Number(item.quantidade)||0); 
-                        map[uid].t += (Number(item.quantidade)||0);
-                    });
-                    const lista = Object.values(map).sort((a, b) => b.t - a.t);
-                    let html = '';
-                    lista.forEach(u => {
-                        const q1 = u.m[0]+u.m[1]+u.m[2]; const q2 = u.m[3]+u.m[4]+u.m[5]; const s1 = q1+q2; const q3 = u.m[6]+u.m[7]+u.m[8]; const q4 = u.m[9]+u.m[10]+u.m[11]; const s2 = q3+q4; const cell = (v) => v ? v.toLocaleString() : '-';
-                        html += `<tr class="hover:bg-slate-50 border-b border-slate-100"><td class="px-4 py-3 font-bold text-slate-700 sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="col-tri">${cell(q1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="col-tri">${cell(q2)}</td><td class="col-sem">${cell(s1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="col-tri">${cell(q3)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="col-tri">${cell(q4)}</td><td class="col-sem">${cell(s2)}</td><td class="col-ano">${u.t.toLocaleString()}</td></tr>`;
-                    });
-                    tbody.innerHTML = html || '<tr><td colspan="20" class="text-center py-4">Sem dados.</td></tr>';
-                } catch(e) { console.error(e); }
-            }
-        };
-
-        const Cons = {
-            initialized: false,
-            init: function() { 
-                if(!this.initialized) { 
-                    Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(); }); 
-                    this.initialized = true; 
-                } 
-                this.carregar(); 
-            },
-            
-            // CORREÇÃO 2: Usa apenas tabela 'producao' e mapeia usuário via JS
-            carregar: async function() {
-                const tbody = document.getElementById('cons-table-body'); tbody.innerHTML = '<tr><td colspan="15" class="text-center py-8 text-slate-400">A calcular indicadores...</td></tr>';
-                const t = document.getElementById('cons-period-type').value; 
-                const refDate = Sistema.Datas.lerInput('data-cons');
-                const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
-                let s, e;
-                if (t === 'dia') { const iso = refDate.toISOString().split('T')[0]; s = iso; e = iso; }
-                else if (t === 'mes') { s = `${ano}-${String(mes).padStart(2,'0')}-01`; e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; }
-                else if (t === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
-                else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
-
-                try {
-                    // Sem Join complexo
-                    const { data: rawData, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
-                    if(error) throw error;
-                    
-                    let cols = []; if (t === 'dia') cols = ['Dia']; else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                    const numCols = cols.length; let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
-                    
-                    rawData.forEach(r => {
-                        const uid = r.usuario_id;
-                        const user = USERS_CACHE[uid];
-                        if (!user || user.funcao !== 'Assistente') return;
-
-                        let b = 1; const dt = new Date(r.data_referencia + 'T12:00:00');
-                        if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
-                        else if (t === 'trimestre') b = (dt.getMonth() % 3) + 1; else if (t === 'semestre') b = (dt.getMonth() % 6) + 1; else if (t === 'ano_mes') b = dt.getMonth() + 1;
-                        if(b > numCols) b = numCols;
-                        const sys = Number(r.quantidade) || 0;
-                        [b, 99].forEach(k => {
-                            if(!st[k]) return; const x = st[k];
-                            x.users.add(r.usuario_id); x.dates.add(r.data_referencia); x.qty += sys; x.fifo += (Number(r.fifo)||0); x.gt += (Number(r.gradual_total)||0); x.gp += (Number(r.gradual_parcial)||0); x.fc += (Number(r.perfil_fc)||0);
-                            if (user.contrato && user.contrato.includes('CLT')) { x.clt_users.add(r.usuario_id); x.clt_qty += sys; } else { x.pj_users.add(r.usuario_id); x.pj_qty += sys; }
-                        });
-                    });
-
-                    const hRow = document.getElementById('cons-table-header'); hRow.innerHTML = `<th class="px-4 py-3 sticky left-0 bg-slate-50 z-20 border-r border-slate-200">Indicadores</th>` + cols.map(c => `<th class="px-4 py-3 text-center border-l border-slate-100">${c}</th>`).join('') + `<th class="px-4 py-3 text-center bg-blue-50 text-blue-800 border-l border-blue-100">TOTAL</th>`;
-                    let h = ''; const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
-                    const mkRow = (label, getter, isCalc=false, isBold=false, isSub=false) => {
-                        const rowClass = isBold ? 'row-total' : (isSub ? 'row-sub' : 'hover:bg-slate-50'); let tr = `<tr class="${rowClass} border-b border-slate-100"><td class="px-4 py-3 font-medium col-fixed">${label}</td>`;
-                        idxs.forEach(i => {
-                            const s = st[i]; const dias = s.dates.size || 1; const ativos = s.users.size || 1; const ac = s.clt_users.size || 1; const ap = s.pj_users.size || 1;
-                            let val = 0; if (!isCalc) { val = getter(s); if (val instanceof Set) val = val.size; } else { val = getter(s, dias, ativos, ac, ap); }
-                            const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); const cellClass = i === 99 ? 'bg-blue-50 font-bold border-l border-blue-100 text-blue-900' : 'text-center border-l border-slate-50'; tr += `<td class="${cellClass} px-2 py-2">${txt}</td>`;
-                        });
-                        return tr + '</tr>';
-                    };
-                    const HF = 17;
-                    h += mkRow('Ativos', s => s.users); h += mkRow('Dias Trabalhados', s => s.dates); h += mkRow('FIFO', s => s.fifo); h += mkRow('G. Parcial', s => s.gp); h += mkRow('G. Total', s => s.gt); h += mkRow('Perfil FC', s => s.fc); h += mkRow('Produção Total', s => s.qty, false, true);
-                    h += mkRow('Média Diária (Time)', (s, d) => s.qty / d, true); h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => s.qty / d / HF, true);
-                    h += `<tr><td colspan="${numCols + 2}" class="px-4 py-6 bg-slate-50 font-bold text-slate-400 text-xs uppercase tracking-widest text-center border-y border-slate-200">Segmentação por Contrato</td></tr>`;
-                    h += mkRow('Produção CLT', s => s.clt_qty); h += mkRow('Média Diária/CLT', (s, d, a, ac) => s.clt_qty / d / ac, true);
-                    h += mkRow('Produção PJ', s => s.pj_qty); h += mkRow('Média Diária/PJ', (s, d, a, ac, ap) => s.pj_qty / d / ap, true);
-                    tbody.innerHTML = h;
-                    
-                    const tot = st[99]; const dTot = tot.dates.size || 1; 
-                    document.getElementById('cons-p-total').innerText = tot.qty.toLocaleString(); 
-                    document.getElementById('cons-p-media-time').innerText = Math.round(tot.qty / dTot).toLocaleString(); 
-                    document.getElementById('cons-p-media-ind').innerText = Math.round(tot.qty / dTot / HF).toLocaleString(); 
-                    document.getElementById('cons-p-headcount').innerText = tot.users.size;
-                } catch (e) { console.error(e); }
-            },
-            newStats: function() { return { users: new Set(), dates: new Set(), qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, clt_users: new Set(), clt_qty: 0, pj_users: new Set(), pj_qty: 0 }; }
-        };
-
-        // --- INICIALIZAÇÃO GLOBAL ---
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Inicializa e carrega usuários antes de tudo
-            await carregarUsuariosGlobal();
-            
-            Sistema.Datas.criarInputInteligente('data-validacao', KEY_DATA_GLOBAL, Geral.carregarTela);
-            await Sistema.Dados.inicializar(); 
-            Geral.carregarTela();
-        });
-    </script>
+    <script src="js/produtividade_main.js"></script>
+    <script src="js/produtividade_geral.js"></script>
+    <script src="js/produtividade_performance.js"></script>
+    <script src="js/produtividade_matriz.js"></script>
+    <script src="js/produtividade_consolidado.js"></script>
 </body>
 </html>
