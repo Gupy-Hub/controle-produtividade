@@ -11,15 +11,7 @@ const Cons = {
         setTimeout(() => this.carregar(false), 50); 
     },
 
-    mudarBase: function(novoValor) {
-        if(!novoValor) return;
-        let el = document.getElementById('global-date');
-        let val = el ? el.value : new Date().toISOString().split('T')[0];
-        
-        // Define no sistema (sem confirmação)
-        Sistema.Dados.definirBaseHC(val, novoValor);
-        this.carregar(true); 
-    },
+    // Função mudarBase removida pois não existe mais input local
 
     togglePeriodo: function() {
         const t = document.getElementById('cons-period-type').value;
@@ -80,11 +72,7 @@ const Cons = {
         if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
         else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
-        const inputHC = document.getElementById('cons-input-hc');
-        if(inputHC) {
-            const baseDoMes = Sistema.Dados.obterBaseHC(val);
-            inputHC.value = baseDoMes;
-        }
+        // Código que atualizava o input local removido
 
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
         
