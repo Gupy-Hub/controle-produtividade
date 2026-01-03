@@ -152,7 +152,7 @@
                                 <th class="px-6 py-4 text-center">G. Total</th>
                                 <th class="px-6 py-4 text-center">G. Parcial</th>
                                 <th class="px-6 py-4 text-center">Meta Calc.</th>
-                                <th class="px-6 py-4 text-center">Status</th>
+                                <th class="px-6 py-4 text-center">% Meta</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
@@ -410,7 +410,7 @@
 
                 const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
 
-                // --- Lógica de Contagem de Abonados e Meio Período (Movida para antes do cálculo da Meta) ---
+                // --- Lógica de Contagem de Abonados e Meio Período ---
                 let qtdMeio = 0;
                 let qtdAbonado = 0;
                 
@@ -425,22 +425,15 @@
                 }
                 
                 // CÁLCULO DE EQUIPE CONSIDERADA (HEADCOUNT EFETIVO)
-                // Começa com o total de ativos
                 let hcConsiderado = this.selecionado ? 1 : ativos.length;
 
-                // Se não tiver seleção, aplicamos as reduções
                 if (!this.selecionado && modo === 'dia') {
-                    // Pares de meio período removem 1 pessoa inteira
-                    // Ex: 2 meio = -1. 3 meio = -1. 4 meio = -2.
                     const reducaoParesMeio = Math.floor(qtdMeio / 2);
-                    
-                    // Abonados (Fator 0) removem a pessoa inteira da contagem
                     const reducaoAbonados = qtdAbonado;
-                    
                     hcConsiderado = ativos.length - reducaoAbonados - reducaoParesMeio;
                 }
 
-                // --- CÁLCULO DE META DINÂMICA (Baseado em Dias Úteis do Período) ---
+                // --- CÁLCULO DE META DINÂMICA ---
                 let diasUteisPeriodo = 1;
                 if(modo === 'dia') {
                     diasUteisPeriodo = 1;
@@ -458,8 +451,6 @@
                 }
 
                 const metaDiaria = 650;
-                
-                // Meta Total usa o HC Efetivo calculado
                 const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
                 const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
                 const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
@@ -495,17 +486,14 @@
                 document.getElementById('kpi-dias').innerText = diasDisplay;
                 document.getElementById('kpi-dias-label').innerText = diasLabel;
                 
-                // Card Produção vs Meta
                 document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
                 document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
                 document.getElementById('bar-prod').style.width = Math.min((totalProd/(metaTotalEsperada||1))*100, 100) + '%';
 
-                // Card Média / Analista
                 document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
                 document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
                 document.getElementById('bar-media').style.width = Math.min((mediaRealAnalista/(metaMediaIndividual||1))*100, 100) + '%';
 
-                // Card Atingimento (%)
                 const percentual = metaTotalEsperada > 0 ? Math.round((totalProd / metaTotalEsperada) * 100) : 0;
                 document.getElementById('kpi-pct').innerText = percentual + '%';
                 document.getElementById('kpi-pct-detail').innerText = `${totalProd.toLocaleString()} / ${metaTotalEsperada.toLocaleString()}`;
@@ -522,7 +510,6 @@
                     iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
                 }
 
-                // Cabeçalho de seleção
                 const selHeader = document.getElementById('selection-header');
                 if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
                 else selHeader.classList.add('hidden');
@@ -533,7 +520,6 @@
                     const isSelected = this.selecionado === u.nome;
                     const rowClass = isSelected ? "selected-row" : "hover:bg-slate-50";
                     const opacity = u.inativo ? "row-ignored" : "";
-                    const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
                     const subIds = u.ids.length > 1 ? `<br><span class="text-[9px] text-slate-400">IDs: ${u.ids.join(', ')}</span>` : '';
 
                     let fator = 1;
@@ -553,7 +539,20 @@
                         <option value="0" ${fator===0?'selected':''}>0%</option>
                     </select>`;
 
-                    tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome} ${subIds}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${badge}</td></tr>`;
+                    // CÁLCULO DA PORCENTAGEM INDIVIDUAL
+                    const pctIndividual = u.meta > 0 ? Math.round((u.total / u.meta) * 100) : 0;
+                    
+                    // Definição da cor do badge
+                    let badgeClass = '';
+                    if (pctIndividual >= 100) {
+                        badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
+                    } else {
+                        badgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
+                    }
+
+                    const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;
+
+                    tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome} ${subIds}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${pctBadge}</td></tr>`;
                 });
             }
         };
