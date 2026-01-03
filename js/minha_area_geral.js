@@ -28,20 +28,15 @@ const MA_Diario = {
         q.classList.add('hidden');
         s.classList.add('hidden');
         
-        // Sincroniza automaticamente na primeira seleção
         const dt = MA_Main.getDateFromInput();
         const m = dt.getMonth() + 1;
 
         if(type === 'trimestre') {
             q.classList.remove('hidden');
-            if (q.value === '1' && m > 3) { // Pequena lógica para setar padrão
-                q.value = Math.ceil(m/3);
-            }
+            if (q.value === '1' && m > 3) q.value = Math.ceil(m/3);
         } else if (type === 'semestre') {
             s.classList.remove('hidden');
-            if (s.value === '1' && m > 6) {
-                s.value = 2;
-            }
+            if (s.value === '1' && m > 6) s.value = 2;
         }
         
         MA_Main.atualizarDashboard();
@@ -49,13 +44,17 @@ const MA_Diario = {
 
     atualizarKPIs: function(dados) {
         const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-        const diasTrabalhados = dados.filter(d => d.quantidade > 0).length || 1; 
         
-        let metaTotal = 0;
-        if(dados.length > 0) dados.forEach(d => metaTotal += (d.meta_diaria || 650)); else metaTotal = 650 * 22;
+        // CORREÇÃO: Dias Trabalhados agora considera a soma dos FATORES (ex: 0.5 conta como meio dia)
+        // Se for view de Time, fator é 1, então conta dias normais.
+        const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator !== undefined ? curr.fator : 1), 0);
+        
+        // Meta Total ajustada pelos fatores
+        const metaTotal = dados.reduce((acc, curr) => acc + (curr.meta_ajustada !== undefined ? curr.meta_ajustada : 650), 0);
 
-        const media = Math.round(total / diasTrabalhados);
-        const atingimento = Math.round((total / metaTotal) * 100);
+        // Média considera os dias efetivos (ex: produziu 1000 em 1.5 dias)
+        const media = diasEfetivos > 0 ? Math.round(total / diasEfetivos) : 0;
+        const atingimento = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
 
         this.setTxt('kpi-total', total.toLocaleString());
         this.setTxt('kpi-meta-total', metaTotal.toLocaleString());
@@ -91,12 +90,46 @@ const MA_Diario = {
         dados.sort((a,b) => new Date(b.data_referencia) - new Date(a.data_referencia));
 
         dados.forEach(item => {
-            const meta = item.meta_diaria || 650; const atingiu = item.quantidade >= meta;
-            const badge = atingiu ? '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-emerald-200">Meta Batida</span>' : '<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-rose-200">Abaixo</span>';
+            const metaReal = item.meta_ajustada !== undefined ? item.meta_ajustada : 650;
+            const fator = item.fator !== undefined ? item.fator : 1;
+            
+            // Cálculo da Porcentagem para o Status
+            let pct = 0;
+            let statusHtml = '';
+            
+            if (fator === 0) {
+                // Se fator é 0, foi totalmente abonado
+                statusHtml = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-slate-200">Abonado</span>';
+            } else {
+                pct = Math.round((item.quantidade / metaReal) * 100);
+                
+                let colorClass = '';
+                if(pct >= 100) colorClass = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                else if(pct >= 80) colorClass = 'bg-amber-100 text-amber-700 border-amber-200';
+                else colorClass = 'bg-rose-100 text-rose-700 border-rose-200';
+                
+                statusHtml = `<span class="${colorClass} px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border">${pct}%</span>`;
+            }
+
             const dFmt = item.data_referencia.split('-').reverse().join('/');
             
-            let inputMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
-            if(MA_Main.isMgr && !viewingTime && item.id) inputMeta = `<input type="number" value="${meta}" onchange="MA_Diario.atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-200 rounded px-1 py-1 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">`;
+            // Exibição da Meta (Se houve ajuste, mostra o valor ajustado)
+            let displayMeta = metaReal;
+            let infoFator = '';
+            if (fator < 1) {
+                infoFator = `<span class="ml-1 text-[9px] text-amber-600 bg-amber-50 px-1 rounded" title="Abono aplicado">Fator ${fator}</span>`;
+            }
+
+            // Input para Gestora (Edita a Meta BASE, não a ajustada)
+            let inputMeta = `<div class="flex flex-col items-center"><span class="font-bold text-slate-600">${displayMeta}</span>${infoFator}</div>`;
+            
+            if(MA_Main.isMgr && !viewingTime && item.id) {
+                // Gestora edita a meta original do banco (item.meta_diaria)
+                inputMeta = `<div class="flex flex-col items-center gap-1">
+                                <input type="number" value="${item.meta_diaria}" onchange="MA_Diario.atualizarMeta(${item.id}, this.value, ${item.meta_diaria})" class="w-16 text-center border border-slate-200 rounded px-1 py-0.5 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">
+                                ${infoFator}
+                             </div>`;
+            }
             
             let obs = item.observacao || '<span class="text-slate-300">-</span>';
             if(item.observacao_gestora) obs += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100"><i class="fas fa-user-shield mr-1"></i>${item.observacao_gestora}</div>`;
@@ -105,7 +138,7 @@ const MA_Diario = {
                         <td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td>
                         <td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade}</td>
                         <td class="px-6 py-4 text-center">${inputMeta}</td>
-                        <td class="px-6 py-4 text-center">${badge}</td>
+                        <td class="px-6 py-4 text-center">${statusHtml}</td>
                         <td class="px-6 py-4 text-xs text-slate-500 max-w-xs break-words">${obs}</td>
                     </tr>`;
         });

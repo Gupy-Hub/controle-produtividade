@@ -12,7 +12,9 @@ const MA_Main = {
         const f = this.sessao.funcao;
         this.isMgr = (f === 'Gestora' || f === 'Auditora');
         
-        if (typeof Sistema !== 'undefined' && Sistema.Datas) {
+        // Inicializa o Sistema para carregar fatores (abonos) e configurações
+        if (typeof Sistema !== 'undefined' && Sistema.Dados) {
+            await Sistema.Dados.inicializar();
             Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', () => this.atualizarDashboard());
         } else {
             document.getElementById('filtro-data-manual').value = new Date().toISOString().split('T')[0];
@@ -102,7 +104,6 @@ const MA_Main = {
         if (isNaN(refDate.getTime())) return;
 
         const ano = refDate.getFullYear();
-        // A lógica do seletor só se aplica se ele existir na tela
         const elType = document.getElementById('diario-period-type');
         const type = elType ? elType.value : 'mes';
         
@@ -128,7 +129,6 @@ const MA_Main = {
             dataInicio = `${ano}-01-01`;
             dataFim = `${ano}-12-31`;
         } else {
-             // Fallback
              const mes = refDate.getMonth();
              dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
              dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
@@ -155,23 +155,45 @@ const MA_Main = {
         const dadosNormalizados = MA_Diario.normalizarDadosPorNome(rawData || []);
         let dadosFinais = [];
 
+        // Garante que o sistema tenha os dados carregados (caso a init tenha corrido antes)
+        if(!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
+
         if (viewingTime) {
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const prods = Object.values(dadosNormalizados[dia]);
+                // Cálculo de Média do Time
+                // Nota: Para o TIME, usamos uma simplificação de meta padrão (650) ou média das metas
+                // Mas geralmente KPI de time compara contra 650 fixo por cabeça.
                 const total = prods.reduce((a, b) => a + b.quantidade, 0);
                 const headcount = prods.length;
                 dadosFinais.push({
-                    data_referencia: dia, quantidade: headcount ? Math.round(total / headcount) : 0,
-                    meta_diaria: 650, observacao: `Média de ${headcount} assistentes`
+                    data_referencia: dia, 
+                    quantidade: headcount ? Math.round(total / headcount) : 0,
+                    meta_diaria: 650, // Meta base do time
+                    meta_ajustada: 650, // Time não tem "abono" individual na média simples
+                    fator: 1,
+                    observacao: `Média de ${headcount} assistentes`
                 });
             });
         } else {
+            // Visão Individual: Aplica Fator e Meta Ajustada
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
                 if (dPessoa) {
+                    // Busca o Fator definido na Gestão
+                    const fator = Sistema.Dados.obterFator(targetName, dia);
+                    const metaBase = dPessoa.meta_diaria || 650;
+                    const metaAjustada = Math.round(metaBase * fator);
+
                     dadosFinais.push({
-                        id: dPessoa.id_ref, data_referencia: dia, quantidade: dPessoa.quantidade,
-                        meta_diaria: dPessoa.meta_diaria, observacao: dPessoa.observacao, observacao_gestora: dPessoa.observacao_gestora
+                        id: dPessoa.id_ref, 
+                        data_referencia: dia, 
+                        quantidade: dPessoa.quantidade,
+                        meta_diaria: metaBase,
+                        meta_ajustada: metaAjustada, // Valor real a ser cobrado
+                        fator: fator,
+                        observacao: dPessoa.observacao, 
+                        observacao_gestora: dPessoa.observacao_gestora
                     });
                 }
             });
