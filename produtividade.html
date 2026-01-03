@@ -76,6 +76,7 @@
                     <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
                         <i class="fas fa-file-excel"></i> Importar Excel
                     </button>
+                    <span class="text-[10px] text-slate-400 block mt-1 ml-1">Arquivo deve ser: ddmmaaaa.xlsx</span>
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -273,10 +274,24 @@
             }
         }
 
-        // --- IMPORTAÇÃO DE EXCEL ---
+        // --- IMPORTAÇÃO DE EXCEL INTELIGENTE ---
         async function importarExcel(input) {
             const file = input.files[0];
             if (!file) return;
+
+            // 1. Extrai a data do Nome do Arquivo (Ex: 31122025.xlsx -> 2025-12-31)
+            const nomeArquivo = file.name;
+            const matchData = nomeArquivo.match(/^(\d{2})(\d{2})(\d{4})/);
+
+            if (!matchData) {
+                alert("Nome do arquivo inválido. O arquivo deve começar com a data no formato ddmmaaaa (ex: 31122025.xlsx)");
+                input.value = '';
+                return;
+            }
+
+            // Data formatada para o banco (YYYY-MM-DD)
+            const dataDoArquivo = `${matchData[3]}-${matchData[2]}-${matchData[1]}`;
+            console.log("Data extraída do arquivo:", dataDoArquivo);
 
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -297,51 +312,61 @@
                     let erros = 0;
 
                     for (let row of json) {
-                        const nome = row['Nome'] || row['nome'] || row['Colaborador'];
-                        const dataRef = row['Data'] || row['data'] || row['Data Referencia'];
-                        const qtd = row['Quantidade'] || row['quantidade'] || row['Total'];
+                        // Mapeamento baseado no seu CSV (31122025.csv)
+                        // Colunas: id_assistente, assistente, documentos_validados, documentos_validados_fifo...
                         
-                        let dataFinal = dataRef;
-                        if (typeof dataRef === 'number') {
-                            const dateObj = new Date((dataRef - (25567 + 2)) * 86400 * 1000);
-                            dataFinal = dateObj.toISOString().split('T')[0];
+                        const idCsv = row['id_assistente'];
+                        const nomeCsv = row['assistente'];
+                        
+                        // Ignora linhas de cabeçalho ou totais que não tenham ID ou Nome válido
+                        if (!idCsv && !nomeCsv) continue;
+                        if (String(nomeCsv).toLowerCase().includes('total')) continue;
+
+                        let uid = idCsv;
+                        // Se não tiver ID no Excel, tenta achar pelo nome
+                        if (!uid && nomeCsv && usersMap[nomeCsv.trim().toLowerCase()]) {
+                            uid = usersMap[nomeCsv.trim().toLowerCase()];
                         }
 
-                        let uid = row['ID'] || row['id'];
-                        if (!uid && nome && usersMap[nome.trim().toLowerCase()]) {
-                            uid = usersMap[nome.trim().toLowerCase()];
-                        }
-
-                        if (uid && dataFinal && qtd !== undefined) {
+                        // Se achou um usuário válido
+                        if (uid) {
                             inserts.push({
                                 usuario_id: uid,
-                                data_referencia: dataFinal,
-                                quantidade: qtd,
-                                fifo: row['FIFO'] || row['fifo'] || 0,
-                                gradual_total: row['Gradual Total'] || 0,
-                                gradual_parcial: row['Gradual Parcial'] || 0
+                                data_referencia: dataDoArquivo, // USA A DATA DO NOME DO ARQUIVO
+                                quantidade: row['documentos_validados'] || 0,
+                                fifo: row['documentos_validados_fifo'] || 0,
+                                gradual_total: row['documentos_validados_gradual_total'] || 0,
+                                gradual_parcial: row['documentos_validados_gradual_parcial'] || 0,
+                                perfil_fc: row['documentos_validados_perfil_fc'] || 0
                             });
                         } else {
-                            erros++;
+                            // Opcional: Contar erros apenas se parecer ser uma linha de dados
+                            if(nomeCsv) erros++;
                         }
                     }
 
                     if (inserts.length > 0) {
-                        if(confirm(`Encontrados ${inserts.length} registros válidos. Deseja importar?`)) {
+                        if(confirm(`Arquivo: ${nomeArquivo}\nData Identificada: ${matchData[1]}/${matchData[2]}/${matchData[3]}\n\nEncontrados ${inserts.length} registros válidos para importar.\nDeseja continuar?`)) {
+                            
                             const { error } = await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
+                            
                             if (error) throw error;
-                            alert(`Importação concluída! ${inserts.length} salvos.`);
-                            Geral.carregarTela();
+                            
+                            alert(`Sucesso! ${inserts.length} registros importados para o dia ${matchData[1]}/${matchData[2]}/${matchData[3]}.`);
+                            
+                            // Atualiza a tela com a data do arquivo importado
+                            localStorage.setItem(KEY_DATA_GLOBAL, `${matchData[1]}/${matchData[2]}/${matchData[3]}`);
+                            mudarAba('geral');
                         }
                     } else {
-                        alert("Nenhum dado válido encontrado.");
+                        alert("Nenhum dado válido encontrado. Verifique se os nomes/IDs dos assistentes correspondem ao cadastro.");
                     }
 
                 } catch (err) {
                     console.error(err);
                     alert("Erro ao importar: " + err.message);
                 } finally {
-                    input.value = '';
+                    input.value = ''; // Limpa input
                 }
             };
             reader.readAsArrayBuffer(file);
