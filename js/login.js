@@ -1,78 +1,94 @@
-// js/login.js
+// Aguarda o carregamento do DOM para adicionar os eventos
+document.addEventListener('DOMContentLoaded', () => {
+    
+    // Adicionar evento de "Enter" nos campos de input para facilitar o login
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                fazerLogin();
+            }
+        });
+    });
 
-// 1. Verifica se já está logado ao abrir a página
-if (localStorage.getItem('usuario')) {
-    window.location.href = 'produtividade.html';
-}
-
-// 2. Adiciona evento para tecla "Enter" nos inputs
-document.getElementById('login-id').addEventListener('keypress', handleEnter);
-document.getElementById('senha').addEventListener('keypress', handleEnter);
-
-function handleEnter(e) {
-    if (e.key === 'Enter') fazerLogin();
-}
-
-// 3. Função Principal de Login
-async function fazerLogin() {
-    // Pega os elementos da tela
+    // Foco automático no campo de ID ao carregar
     const idInput = document.getElementById('login-id');
-    const passInput = document.getElementById('senha');
-    const btn = document.getElementById('btn-entrar');
-    const msg = document.getElementById('error-msg');
+    if(idInput) idInput.focus();
+});
+
+async function fazerLogin() {
+    const idInput = document.getElementById('login-id');
+    const passInput = document.getElementById('login-pass');
+    const btn = document.querySelector('button');
+    
+    // Resetar estilos de erro
+    idInput.classList.remove('border-red-500');
+    passInput.classList.remove('border-red-500');
 
     const idVal = idInput.value.trim();
     const passVal = passInput.value.trim();
 
-    // Reseta estado visual
-    msg.classList.add('hidden'); // Esconde erro
-    idInput.classList.remove('border-red-500'); // Remove borda vermelha
-    
     // Validação básica
     if (!idVal || !passVal) {
-        msg.innerText = "Por favor, preencha ID e Senha.";
-        msg.classList.remove('hidden');
+        alert("Por favor, preencha o ID e a Senha.");
+        if(!idVal) idInput.classList.add('border-red-500');
+        if(!passVal) passInput.classList.add('border-red-500');
         return;
     }
 
-    // Feedback de carregamento
-    const textoOriginal = btn.innerText;
+    // Feedback visual no botão
+    const originalText = btn.innerText;
+    btn.innerText = "Entrando...";
     btn.disabled = true;
-    btn.innerText = "Verificando...";
     btn.classList.add('opacity-70', 'cursor-not-allowed');
 
     try {
-        // Consulta ao Supabase (usando a variável _supabase do config.js)
-        if (!_supabase) throw new Error("Erro de conexão com o banco.");
+        // Verifica conexão
+        if (typeof _supabase === 'undefined' || !_supabase) {
+            throw new Error("Erro de conexão com o banco de dados. Verifique o config.js.");
+        }
 
+        // Consulta ao Supabase
         const { data, error } = await _supabase
             .from('usuarios')
             .select('*')
             .eq('id', idVal)
             .eq('senha', passVal)
+            .eq('ativo', true) // <-- SEGURANÇA: Só permite login se estiver ativo
             .maybeSingle();
 
         if (error) throw error;
 
         if (data) {
-            // Sucesso: Salva sessão e redireciona
+            // SUCESSO
+            console.log("Login realizado com sucesso:", data.nome);
+            
+            // Salvar sessão no navegador
             localStorage.setItem('usuario', JSON.stringify(data));
-            // Como ainda não migramos a produtividade.html, isso pode dar 404 se testar agora, 
-            // mas é o comportamento correto.
+            
+            // Redirecionamento baseado na função (Opcional: podes direcionar gestores para outra pág)
+            // Por padrão, todos vão para produtividade
             window.location.href = 'produtividade.html'; 
         } else {
-            throw new Error("Usuário não encontrado");
+            // FALHA (Usuário não encontrado, senha errada ou inativo)
+            throw new Error("ID ou Senha incorretos, ou conta inativa.");
         }
 
     } catch (err) {
-        console.error(err);
-        msg.innerText = "ID ou Senha incorretos.";
-        msg.classList.remove('hidden');
-        idInput.classList.add('border-red-500'); // Destaca erro no input
+        console.error("Erro no login:", err);
+        alert(err.message);
+        
+        // Se for erro de credenciais, destaca os campos
+        if (err.message.includes("incorretos") || err.message.includes("inativa")) {
+            idInput.classList.add('border-red-500');
+            passInput.classList.add('border-red-500');
+            passInput.value = ''; // Limpa a senha
+            passInput.focus();
+        }
     } finally {
         // Restaura o botão
+        btn.innerText = originalText;
         btn.disabled = false;
-        btn.innerText = textoOriginal;
         btn.classList.remove('opacity-70', 'cursor-not-allowed');
     }
 }
