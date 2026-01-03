@@ -1,189 +1,124 @@
 const Cons = {
     initialized: false,
-    ultimoCache: { key: null, data: null },
 
-    init: function() { 
-        if(!this.initialized) { 
-            Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(true); }); 
-            this.initialized = true; 
-        } 
-        setTimeout(() => this.carregar(false), 50); 
+    init: async function() {
+        if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
+        this.carregar();
     },
-    
-    carregar: async function(forcar = false) {
-        const tbody = document.getElementById('cons-table-body'); 
-        const t = document.getElementById('cons-period-type').value; 
+
+    carregar: async function() {
+        const tbody = document.getElementById('cons-table-body');
+        const thead = document.getElementById('cons-table-header');
         
-        // --- CORREÇÃO DE LEITURA (DATA MANUAL) ---
-        // Evita usar new Date(string) direto para não ter problema de fuso horário ou formato inválido
-        let el = document.getElementById('data-cons');
-        let val = el ? el.value : '';
-        let dia, mes, ano;
+        if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Consolidando dados...</td></tr>';
 
-        if (val.includes('/')) { 
-            // Formato PT-BR: dd/mm/yyyy
-            [dia, mes, ano] = val.split('/').map(Number);
-        } else if (val.includes('-')) {
-            // Formato US: yyyy-mm-dd
-            [ano, mes, dia] = val.split('-').map(Number);
-        } else {
-            // Fallback para hoje
-            const now = new Date();
-            dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear();
-        }
+        const tipo = document.getElementById('cons-period-type').value;
+        const hcInput = document.getElementById('cons-input-hc');
+        const baseHC = hcInput ? parseInt(hcInput.value) || 17 : 17;
 
-        // Garante números válidos
-        if (!dia || !mes || !ano) { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
+        // Pega data do seletor GLOBAL
+        const globalInput = document.getElementById('global-date');
+        const dataRef = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
+        const [gAno, gMes, gDia] = dataRef.split('-').map(Number);
 
-        // Formata para SQL (YYYY-MM-DD) - O banco PRECISA deste formato
-        const sAno = String(ano);
-        const sMes = String(mes).padStart(2, '0');
-        const sDia = String(dia).padStart(2, '0');
-        const dataSql = `${sAno}-${sMes}-${sDia}`;
-        // ------------------------------------------
-
-        const inputHC = document.getElementById('cons-input-hc');
-        const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
-
-        const cacheKey = `${t}_${dataSql}_${HF}`;
-
-        if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
-            this.renderizar(this.ultimoCache.data, t, HF);
-            return;
-        }
-
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</td></tr>';
-        
-        // Definição de Intervalos usando a data formatada
         let s, e;
-        
-        if (t === 'dia') { 
-            s = dataSql; e = dataSql; 
-        }
-        else if (t === 'mes') { 
-            s = `${sAno}-${sMes}-01`; 
-            const ultimoDia = new Date(ano, mes, 0).getDate();
-            e = `${sAno}-${sMes}-${ultimoDia}`; 
-        }
-        else if (t === 'trimestre') { 
-            const trim = Math.ceil(mes / 3); 
-            const mStart = ((trim-1)*3)+1; 
-            const mEnd = mStart+2; 
-            const ultimoDiaT = new Date(ano, mEnd, 0).getDate();
-            s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; 
-            e = `${sAno}-${String(mEnd).padStart(2,'0')}-${ultimoDiaT}`; 
-        }
-        else if (t === 'semestre') { 
-            const sem = Math.ceil(mes / 6); 
-            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
-            e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
-        } 
-        else { 
-            s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
+        let labels = []; 
+
+        // Define Range Baseado na Data Global + Tipo de Período
+        if (tipo === 'dia') {
+            s = dataRef; e = dataRef;
+            labels = ['Dia'];
+        } else if (tipo === 'mes') {
+            s = `${gAno}-${String(gMes).padStart(2,'0')}-01`;
+            e = `${gAno}-${String(gMes).padStart(2,'0')}-${new Date(gAno, gMes, 0).getDate()}`;
+            labels = [`${gMes}/${gAno}`];
+        } else if (tipo === 'trimestre') {
+            const tri = Math.ceil(gMes / 3);
+            const mStart = ((tri-1)*3)+1;
+            s = `${gAno}-${String(mStart).padStart(2,'0')}-01`;
+            e = `${gAno}-${String(mStart+2).padStart(2,'0')}-${new Date(gAno, mStart+2, 0).getDate()}`;
+            labels = [`${tri}º Tri`];
+        } else if (tipo === 'semestre') {
+            const sem = gMes <= 6 ? 1 : 2;
+            s = sem === 1 ? `${gAno}-01-01` : `${gAno}-07-01`;
+            e = sem === 1 ? `${gAno}-06-30` : `${gAno}-12-31`;
+            labels = [`${sem}º Sem`];
+        } else { // Anual
+            s = `${gAno}-01-01`; e = `${gAno}-12-31`;
+            labels = [`${gAno}`];
         }
 
         try {
-            console.log(`Enviando para SQL: ${s} até ${e}`);
-            const { data: rawData, error } = await _supabase.rpc('get_consolidado_dados', { data_ini: s, data_fim: e });
-            if(error) throw error;
+            // Busca Produção
+            const { data: prods, error } = await _supabase
+                .from('producao')
+                .select('usuario_id, data_referencia, quantidade')
+                .gte('data_referencia', s)
+                .lte('data_referencia', e);
+
+            if (error) throw error;
+
+            let totalGeral = 0;
+            let usuariosAtivosSet = new Set();
             
-            this.ultimoCache = { key: cacheKey, data: rawData };
-            this.renderizar(rawData, t, HF);
-            
-        } catch (e) { 
-            console.error(e);
-            if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-red-500">Erro ao carregar dados.</td></tr>';
-        }
-    },
-
-    renderizar: function(rawData, t, HF) {
-        const tbody = document.getElementById('cons-table-body');
-        if (!tbody) return;
-
-        let cols = []; 
-        if (t === 'dia') cols = ['Dia']; 
-        else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; 
-        else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; 
-        else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; 
-        else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-        
-        const numCols = cols.length; 
-        let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
-        
-        if(rawData) {
-            rawData.forEach(r => {
-                let b = 1; 
-                const parts = r.data_ref.split('-'); 
-                const dt = new Date(parts[0], parts[1]-1, parts[2]);
-
-                if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
-                else if (t === 'trimestre') b = (dt.getMonth() % 3) + 1; 
-                else if (t === 'semestre') b = (dt.getMonth() % 6) + 1; 
-                else if (t === 'ano_mes') b = dt.getMonth() + 1;
-                
-                if(b > numCols) b = numCols;
-                
-                const sys = Number(r.soma_quantidade) || 0;
-                
-                const populate = (k) => {
-                    if(!st[k]) return;
-                    const x = st[k];
-                    x.users.add(r.nome_assistente); 
-                    x.dates.add(r.data_ref); 
-                    x.qty += sys; 
-                    x.fifo += (Number(r.soma_fifo)||0); 
-                    x.gt += (Number(r.soma_gradual_total)||0); 
-                    x.gp += (Number(r.soma_gradual_parcial)||0); 
-                    x.fc += (Number(r.soma_perfil_fc)||0);
-                    if (r.contrato && r.contrato.includes('CLT')) { x.clt_users.add(r.nome_assistente); x.clt_qty += sys; } 
-                    else { x.pj_users.add(r.nome_assistente); x.pj_qty += sys; }
-                };
-                populate(b);
-                populate(99);
+            // Agrupa por usuário para contar headcount real
+            prods.forEach(p => {
+                const u = Sistema.Dados.usuariosCache[p.usuario_id];
+                if (u && u.funcao === 'Assistente') {
+                    totalGeral += (Number(p.quantidade) || 0);
+                    usuariosAtivosSet.add(p.usuario_id);
+                }
             });
-        }
 
-        const hRow = document.getElementById('cons-table-header'); 
-        if(hRow) hRow.innerHTML = `<th class="px-4 py-3 sticky left-0 bg-slate-50 z-20 border-r border-slate-200">Indicadores</th>` + cols.map(c => `<th class="px-4 py-3 text-center border-l border-slate-100">${c}</th>`).join('') + `<th class="px-4 py-3 text-center bg-blue-50 text-blue-800 border-l border-blue-100">TOTAL</th>`;
-        
-        let h = ''; 
-        const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
-        
-        const mkRow = (label, getter, isCalc=false, isBold=false, isSub=false) => {
-            const rowClass = isBold ? 'row-total' : (isSub ? 'row-sub' : 'hover:bg-slate-50'); 
-            let tr = `<tr class="${rowClass} border-b border-slate-100"><td class="px-4 py-3 font-medium col-fixed">${label}</td>`;
-            idxs.forEach(i => {
-                const s = st[i]; const dias = s.dates.size || 1; const ativos = s.users.size || 1; const ac = s.clt_users.size || 1; const ap = s.pj_users.size || 1;
-                let val = 0; if (!isCalc) { val = getter(s); if (val instanceof Set) val = val.size; } else { val = getter(s, dias, ativos, ac, ap); }
-                const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); const cellClass = i === 99 ? 'bg-blue-50 font-bold border-l border-blue-100 text-blue-900' : 'text-center border-l border-slate-50'; tr += `<td class="${cellClass} px-2 py-2">${txt}</td>`;
-            });
-            return tr + '</tr>';
-        };
-        
-        h += mkRow('Assistentes Ativas', s => s.users); 
-        h += mkRow('Dias Trabalhados', s => s.dates); 
-        h += mkRow('FIFO', s => s.fifo); 
-        h += mkRow('G. Parcial', s => s.gp); 
-        h += mkRow('G. Total', s => s.gt); 
-        h += mkRow('Perfil FC', s => s.fc); 
-        h += mkRow('Produção Total', s => s.qty, false, true);
-        h += mkRow('Média Diária (Time)', (s, d) => s.qty / d, true); 
-        h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); 
-        h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => s.qty / d / HF, true);
-        h += `<tr><td colspan="${numCols + 2}" class="px-4 py-6 bg-slate-50 font-bold text-slate-400 text-xs uppercase tracking-widest text-center border-y border-slate-200">Segmentação por Contrato</td></tr>`;
-        h += mkRow('Produção CLT', s => s.clt_qty); h += mkRow('Média Diária/CLT', (s, d, a, ac) => s.clt_qty / d / ac, true);
-        h += mkRow('Produção PJ', s => s.pj_qty); h += mkRow('Média Diária/PJ', (s, d, a, ac, ap) => s.pj_qty / d / ap, true);
-        
-        tbody.innerHTML = h;
-        
-        const tot = st[99]; const dTot = tot.dates.size || 1; 
-        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
-        
-        setSafe('cons-p-total', tot.qty.toLocaleString()); 
-        setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString()); 
-        setSafe('cons-p-headcount', tot.users.size);
-    },
-    
-    newStats: function() { return { users: new Set(), dates: new Set(), qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, clt_users: new Set(), clt_qty: 0, pj_users: new Set(), pj_qty: 0 }; }
+            // Atualiza Cards
+            const hcReal = usuariosAtivosSet.size;
+            const mediaTime = hcReal > 0 ? Math.round(totalGeral / hcReal) : 0;
+            const mediaInd = baseHC > 0 ? Math.round(totalGeral / baseHC) : 0;
+
+            const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+            safeSet('cons-p-total', totalGeral.toLocaleString());
+            safeSet('cons-p-media-time', mediaTime.toLocaleString());
+            safeSet('cons-p-media-ind', mediaInd.toLocaleString());
+            safeSet('cons-p-headcount', hcReal);
+
+            // Renderiza Tabela Resumo
+            // Nota: Nesta visão simplificada, mostramos o resumo do período selecionado.
+            // Se quiser quebrar por sub-períodos (ex: meses dentro do ano), a lógica seria mais complexa.
+            // Aqui mantivemos o totalizador do período selecionado.
+
+            if (thead) {
+                thead.innerHTML = `
+                    <tr class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wide">
+                        <th class="px-6 py-4 text-left">Métrica</th>
+                        <th class="px-6 py-4 text-center">Valor do Período (${labels[0]})</th>
+                    </tr>
+                `;
+            }
+
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50">
+                        <td class="px-6 py-4 font-bold text-slate-700">Produção Total</td>
+                        <td class="px-6 py-4 text-center font-bold text-blue-700">${totalGeral.toLocaleString()}</td>
+                    </tr>
+                    <tr class="border-b border-slate-100 hover:bg-slate-50">
+                        <td class="px-6 py-4 font-bold text-slate-700">HC Ativo (Produziram)</td>
+                        <td class="px-6 py-4 text-center text-slate-600">${hcReal}</td>
+                    </tr>
+                    <tr class="border-b border-slate-100 hover:bg-slate-50">
+                        <td class="px-6 py-4 font-bold text-slate-700">Média por Ativo</td>
+                        <td class="px-6 py-4 text-center text-emerald-600 font-bold">${mediaTime.toLocaleString()}</td>
+                    </tr>
+                    <tr class="border-b border-slate-100 hover:bg-slate-50 bg-amber-50/30">
+                        <td class="px-6 py-4 font-bold text-slate-700">Média por Base HC (${baseHC})</td>
+                        <td class="px-6 py-4 text-center text-amber-600 font-bold">${mediaInd.toLocaleString()}</td>
+                    </tr>
+                `;
+            }
+
+        } catch (err) {
+            console.error(err);
+            if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-red-400">Erro ao consolidar dados.</td></tr>';
+        }
+    }
 };
