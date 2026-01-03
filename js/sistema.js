@@ -1,76 +1,48 @@
 const Sistema = {
     Datas: {
-        lerInput: function(elementIdOrNode) {
-            const el = typeof elementIdOrNode === 'string' ? document.getElementById(elementIdOrNode) : elementIdOrNode;
-            if (!el || el.value.length !== 10) return new Date();
-            const parts = el.value.split('/');
-            return new Date(parts[2], parts[1] - 1, parts[0]);
-        },
-
-        formatar: function(date) {
-            const d = String(date.getDate()).padStart(2, '0');
-            const m = String(date.getMonth() + 1).padStart(2, '0');
-            const a = date.getFullYear();
-            return `${d}/${m}/${a}`;
-        },
-
         criarInputInteligente: function(elementId, storageKey, callback) {
             const input = document.getElementById(elementId);
             if (!input) return;
-
             const salva = localStorage.getItem(storageKey);
-            input.value = salva && salva.length === 10 ? salva : this.formatar(new Date());
-
-            input.addEventListener('input', function() {
-                let v = this.value.replace(/\D/g, '').slice(0, 8);
-                if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
-                else if (v.length >= 3) v = v.replace(/(\d{2})(\d{1,2})/, '$1/$2');
-                this.value = v;
-            });
-
+            // Se houver valor salvo, usa; senão data de hoje
+            input.value = salva && salva.length === 10 ? salva : new Date().toISOString().split('T')[0];
+            
             input.addEventListener('change', function() {
                 if (this.value.length === 10) {
                     localStorage.setItem(storageKey, this.value);
                     if (typeof callback === 'function') callback();
                 }
             });
-        },
-
-        getSemanaDoMes: function(dataIsoStr) {
-            const date = new Date(dataIsoStr + 'T12:00:00');
-            const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
-            return Math.ceil((date.getDate() + firstDay) / 7);
         }
     },
 
     Dados: {
         usuariosCache: {},
         metasCache: [],
-        fatoresCache: {},
+        fatoresCache: {}, // Cache para os fatores (1, 0.5, 0)
         inicializado: false,
 
         inicializar: async function() {
-            if (this.inicializado) return; // Evita recarregar à toa
-
+            // Recarrega fatores do localStorage sempre que inicializar/reinicializar
             const saved = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = saved ? JSON.parse(saved) : {};
+
+            if (this.inicializado) return; 
 
             if (!window._supabase) { console.error("Supabase Off"); return; }
             
             try {
-                // CORREÇÃO: Busca colunas essenciais para todas as abas (incluindo contrato)
+                // Carrega usuários
                 const { data: users, error: errUser } = await _supabase
                     .from('usuarios')
                     .select('id, nome, funcao, contrato, ativo')
                     .order('nome');
                 
                 if (errUser) throw errUser;
-
                 this.usuariosCache = {};
-                if(users) {
-                    users.forEach(u => this.usuariosCache[u.id] = u);
-                }
+                if(users) users.forEach(u => this.usuariosCache[u.id] = u);
                 
+                // Carrega metas
                 const { data: metas, error: errMeta } = await _supabase
                     .from('metas')
                     .select('*')
@@ -80,9 +52,9 @@ const Sistema = {
                 this.metasCache = metas || [];
                 
                 this.inicializado = true;
-                console.log("Sistema inicializado com sucesso.");
+                console.log("Sistema: Dados iniciais carregados.");
             } catch (e) {
-                console.error("Erro ao inicializar Sistema:", e);
+                console.error("Erro Sistema:", e);
             }
         },
 
@@ -93,6 +65,7 @@ const Sistema = {
         },
 
         obterFator: function(nome, dataRef) {
+            // Retorna 1.0 (Dia cheio) se não houver definição
             if (this.fatoresCache[dataRef] && this.fatoresCache[dataRef][nome] !== undefined) {
                 return this.fatoresCache[dataRef][nome];
             }
@@ -105,6 +78,7 @@ const Sistema = {
             return metaEncontrada ? metaEncontrada.valor_meta : 650;
         },
 
+        // Normaliza dados para a aba GERAL
         normalizar: function(listaProducao) {
             const agrupado = {};
 
@@ -112,8 +86,7 @@ const Sistema = {
                 const uid = item.usuario_id;
                 let user = this.usuariosCache[uid];
                 
-                if (!user) user = { id: uid, nome: `Desconhecido (ID ${uid})`, funcao: 'Assistente' };
-                if (user.funcao && user.funcao !== 'Assistente') return;
+                if (!user || (user.funcao && user.funcao !== 'Assistente')) return;
 
                 const nomeChave = user.nome.trim();
 
@@ -123,49 +96,51 @@ const Sistema = {
                         ids: new Set(),
                         diasMap: {}, 
                         total: 0, fifo: 0, gt: 0, gp: 0,
-                        metaAcc: 0 // Acumulador de meta
+                        metaAcc: 0,
+                        inativo: !user.ativo // Marca se o usuário está inativo no cadastro
                     };
                 }
 
                 agrupado[nomeChave].ids.add(uid);
-
-                const qtd = Number(item.quantidade) || 0;
-                agrupado[nomeChave].total += qtd;
-                agrupado[nomeChave].fifo += Number(item.fifo) || 0;
-                agrupado[nomeChave].gt += Number(item.gradual_total) || 0;
-                agrupado[nomeChave].gp += Number(item.gradual_parcial) || 0;
+                agrupado[nomeChave].total += (Number(item.quantidade) || 0);
+                agrupado[nomeChave].fifo += (Number(item.fifo) || 0);
+                agrupado[nomeChave].gt += (Number(item.gradual_total) || 0);
+                agrupado[nomeChave].gp += (Number(item.gradual_parcial) || 0);
 
                 const dia = item.data_referencia;
-                // Busca meta correta do dia
-                const metaDoDia = this.obterMetaVigente(uid, dia);
-                
+                // Garante que o dia exista no mapa para buscar o fator depois
                 if (!agrupado[nomeChave].diasMap[dia]) {
-                    agrupado[nomeChave].diasMap[dia] = {
-                        metaBase: metaDoDia,
-                        fator: this.obterFator(user.nome, dia)
-                    };
+                    agrupado[nomeChave].diasMap[dia] = { qtd: 0 };
                 }
+                agrupado[nomeChave].diasMap[dia].qtd += (Number(item.quantidade) || 0);
             });
 
+            // Processamento final: Aplica Fatores e Metas
             return Object.values(agrupado).map(obj => {
                 let diasContabilizados = 0;
                 let metaTotalAdjustada = 0;
 
-                Object.values(obj.diasMap).forEach(d => {
-                    diasContabilizados += d.fator; 
-                    metaTotalAdjustada += (d.metaBase * d.fator);
+                // Itera sobre os dias que tiveram produção OU que foram registrados
+                Object.keys(obj.diasMap).forEach(dia => {
+                    const fator = this.obterFator(obj.nome, dia);
+                    
+                    // Busca ID do usuário para meta (pega o primeiro ID associado ao nome)
+                    const uid = obj.ids.values().next().value;
+                    const metaBase = this.obterMetaVigente(uid, dia);
+
+                    diasContabilizados += fator; // Soma 1, 0.5 ou 0
+                    metaTotalAdjustada += (metaBase * fator); // Meta proporcional
+                    
+                    // Salva fator no objeto do dia para exibição no select
+                    obj.diasMap[dia].fator = fator;
+                    obj.diasMap[dia].meta = metaBase * fator;
                 });
 
                 return {
-                    nome: obj.nome,
-                    ids: Array.from(obj.ids),
-                    diasMap: obj.diasMap,
-                    dias: diasContabilizados,
-                    total: obj.total,
-                    fifo: obj.fifo, gt: obj.gt, gp: obj.gp,
+                    ...obj,
+                    dias: diasContabilizados, // Agora pode ser decimal (ex: 4.5)
                     meta: Math.round(metaTotalAdjustada),
-                    atingiu: obj.total >= metaTotalAdjustada,
-                    inativo: diasContabilizados === 0 && obj.total === 0 
+                    atingiu: obj.total >= metaTotalAdjustada
                 };
             }).sort((a, b) => b.total - a.total);
         }

@@ -6,7 +6,10 @@ const Perf = {
     carregarRanking: async function(forcar = false) {
         const tbody = document.getElementById('perf-ranking-body'); 
         
+        // Garante Sistema Inicializado e Fatores Carregados
         if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
+        // Recarrega fatores do disco para garantir atualização recente da aba Geral
+        Sistema.Dados.inicializar(); 
 
         const tipo = document.getElementById('perf-period-type').value; 
         const globalInput = document.getElementById('global-date');
@@ -60,7 +63,12 @@ const Perf = {
 
                 const nome = user.nome.trim(); 
                 const qtd = Number(item.quantidade) || 0;
-                const metaDoDia = Sistema.Dados.obterMetaVigente(item.usuario_id, item.data_referencia);
+                
+                // --- AQUI A MÁGICA: Obtém fator e meta ---
+                const fator = Sistema.Dados.obterFator(nome, item.data_referencia);
+                const metaBase = Sistema.Dados.obterMetaVigente(item.usuario_id, item.data_referencia);
+                const metaAjustada = metaBase * fator;
+                // ----------------------------------------
 
                 prodTotalGeral += qtd;
                 
@@ -70,23 +78,21 @@ const Perf = {
                     prodPJ += qtd; namesPJ.add(nome); 
                 }
 
-                if (!stats[nome]) stats[nome] = { id: item.usuario_id, nome: nome, total: 0, metaAcc: 0, dias: new Set() };
+                if (!stats[nome]) stats[nome] = { id: item.usuario_id, nome: nome, total: 0, metaAcc: 0, diasUteis: 0 };
                 
                 stats[nome].total += qtd; 
-                stats[nome].metaAcc += metaDoDia;
-                stats[nome].dias.add(item.data_referencia);
+                stats[nome].metaAcc += metaAjustada;
+                stats[nome].diasUteis += fator; // Soma frações (0, 0.5, 1)
             });
             
+            // Atualiza Cards Superiores
             const atualizarElemento = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
             atualizarElemento('perf-pct-clt', (prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0) + '%');
             atualizarElemento('perf-count-clt', namesCLT.size);
             atualizarElemento('perf-pct-pj', (prodTotalGeral > 0 ? Math.round((prodPJ / prodTotalGeral) * 100) : 0) + '%');
             atualizarElemento('perf-count-pj', namesPJ.size);
 
-            this.dadosCarregados = Object.values(stats).sort((a, b) => {
-                // Ordenação Decrescente por TOTAL VALIDADO (quem mais validou para quem menos validou)
-                return b.total - a.total; 
-            });
+            this.dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
 
             this.renderRanking();
         } catch (err) { 
@@ -110,9 +116,11 @@ const Perf = {
         const currentUserId = sessaoAtual ? sessaoAtual.id : null;
 
         this.dadosCarregados.forEach((u, idx) => {
-            const dias = u.dias.size || 1; 
-            const media = Math.round(u.total / dias); 
-            const meta = u.metaAcc;
+            // Dias agora é a soma dos fatores (pode ser float)
+            const dias = u.diasUteis; 
+            // Média: Se dias for 0 (tudo abonado), média é o total (ou 0 se total 0)
+            const media = dias > 0 ? Math.round(u.total / dias) : u.total; 
+            const meta = Math.round(u.metaAcc);
             const pct = meta > 0 ? Math.round((u.total / meta) * 100) : 0;
             
             const isSelected = String(this.selectedUserId) === String(u.id); 
@@ -120,18 +128,11 @@ const Perf = {
             
             const isMe = currentUserId && String(u.id) === String(currentUserId);
             
-            // Definição de Classes das Linhas
             let rowClass = "transition border-b border-slate-100 cursor-pointer ";
-            if (isSelected) {
-                rowClass += "selected-row";
-            } else if (isMe) {
-                rowClass += "me-row bg-blue-50/50 border-l-4 border-blue-300";
-            } else if (idx < 5) {
-                // Destaque para as 5 primeiras (Top 5)
-                rowClass += "top-row hover:bg-amber-50"; 
-            } else {
-                rowClass += "hover:bg-slate-50";
-            }
+            if (isSelected) rowClass += "selected-row";
+            else if (isMe) rowClass += "me-row bg-blue-50/50 border-l-4 border-blue-300";
+            else if (idx < 5) rowClass += "top-row hover:bg-amber-50"; 
+            else rowClass += "hover:bg-slate-50";
 
             let trofeu = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
 
@@ -140,7 +141,7 @@ const Perf = {
                     <td class="px-6 py-4 font-bold text-slate-600">${trofeu} #${idx + 1}</td>
                     <td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '<span class="text-xs text-blue-600 ml-1">(Você)</span>' : ''}</td>
                     <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
-                    <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
+                    <td class="px-6 py-4 text-center text-slate-500">${Number(dias).toLocaleString('pt-BR')}</td>
                     <td class="px-6 py-4 text-center">${media.toLocaleString()}</td>
                     <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
                     <td class="px-6 py-4 text-center">
@@ -159,10 +160,8 @@ const Perf = {
     toggleUsuario: function(id) { 
         const strId = String(id);
         this.selectedUserId = (this.selectedUserId === strId) ? null : strId; 
-        
         const btnLimpar = document.getElementById('perf-btn-limpar');
         if(btnLimpar) btnLimpar.classList.toggle('hidden', !this.selectedUserId);
-        
         this.renderRanking(); 
     },
 
@@ -175,17 +174,20 @@ const Perf = {
     atualizarCards: function(userStats) {
         const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
 
+        // Se nenhum selecionado, soma tudo
         const total = userStats ? userStats.total : this.dadosCarregados.reduce((a, b) => a + b.total, 0);
-        const meta = userStats ? userStats.metaAcc : this.dadosCarregados.reduce((a, b) => a + b.metaAcc, 0);
-        const pct = meta > 0 ? Math.round((total / meta) * 100) : 0;
+        const meta = userStats ? Math.round(userStats.metaAcc) : Math.round(this.dadosCarregados.reduce((a, b) => a + b.metaAcc, 0));
         
         let media = 0;
         if (userStats) {
             media = userStats.media;
         } else {
-            const totalDiasSomados = this.dadosCarregados.reduce((a,b) => a + (b.dias.size||1), 0);
-            media = totalDiasSomados > 0 ? Math.round(total / totalDiasSomados) : 0;
+            // Média Geral = Total Geral / Soma dos Dias Úteis de Todos
+            const totalDias = this.dadosCarregados.reduce((a, b) => a + b.diasUteis, 0);
+            media = totalDias > 0 ? Math.round(total / totalDias) : 0;
         }
+        
+        const pct = meta > 0 ? Math.round((total / meta) * 100) : 0;
 
         safeSet('perf-card-total', total.toLocaleString());
         safeSet('perf-card-media', media.toLocaleString());

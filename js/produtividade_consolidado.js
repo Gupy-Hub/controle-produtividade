@@ -3,12 +3,9 @@ const Cons = {
     ultimoCache: { key: null, data: null },
 
     init: async function() { 
-        // Apenas marca como inicializado e carrega.
-        // A escuta de eventos da data global é feita no main.js via 'mudarAba' ou 'atualizarDataGlobal'
         if(!this.initialized) { 
             this.initialized = true; 
         } 
-        // Pequeno delay para garantir que o DOM do global-date esteja pronto se for o primeiro load
         setTimeout(() => this.carregar(false), 50); 
     },
     
@@ -16,75 +13,48 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body'); 
         const t = document.getElementById('cons-period-type').value; 
         
-        // --- ALTERAÇÃO: LÊ DO GLOBAL-DATE ---
+        // Garante Sistema carregado para usar os Fatores
+        if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
+        Sistema.Dados.inicializar(); // Force reload
+
         let el = document.getElementById('global-date');
-        // Se não existir o global, tenta fallback ou data atual
         let val = el ? el.value : new Date().toISOString().split('T')[0];
         
         let dia, mes, ano;
-
-        if (val.includes('-')) {
-            // Formato padrão HTML date: yyyy-mm-dd
-            [ano, mes, dia] = val.split('-').map(Number);
-        } else {
-            // Fallback
-            const now = new Date();
-            dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear();
-        }
-
-        // Garante integridade
-        if (!dia || !mes || !ano) { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
-
-        // Formata para SQL (YYYY-MM-DD)
-        const sAno = String(ano);
-        const sMes = String(mes).padStart(2, '0');
-        const sDia = String(dia).padStart(2, '0');
-        const dataSql = `${sAno}-${sMes}-${sDia}`;
-        // ------------------------------------------
+        if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
+        else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
         const inputHC = document.getElementById('cons-input-hc');
         const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
 
-        const cacheKey = `${t}_${dataSql}_${HF}`;
+        // Intervalos
+        const sAno = String(ano); const sMes = String(mes).padStart(2, '0'); const sDia = String(dia).padStart(2, '0');
+        const dataSql = `${sAno}-${sMes}-${sDia}`;
+        
+        let s, e;
+        if (t === 'dia') { s = dataSql; e = dataSql; }
+        else if (t === 'mes') { s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; }
+        else if (t === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; e = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`; }
+        else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; } 
+        else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
+
+        const cacheKey = `${t}_${s}_${e}_${HF}`;
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
             this.renderizar(this.ultimoCache.data, t, HF);
             return;
         }
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Consolidação...</td></tr>';
-        
-        // Lógica de Intervalos (Mantida Original)
-        let s, e;
-        
-        if (t === 'dia') { 
-            s = dataSql; e = dataSql; 
-        }
-        else if (t === 'mes') { 
-            s = `${sAno}-${sMes}-01`; 
-            const ultimoDia = new Date(ano, mes, 0).getDate();
-            e = `${sAno}-${sMes}-${ultimoDia}`; 
-        }
-        else if (t === 'trimestre') { 
-            const trim = Math.ceil(mes / 3); 
-            const mStart = ((trim-1)*3)+1; 
-            const mEnd = mStart+2; 
-            const ultimoDiaT = new Date(ano, mEnd, 0).getDate();
-            s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; 
-            e = `${sAno}-${String(mEnd).padStart(2,'0')}-${ultimoDiaT}`; 
-        }
-        else if (t === 'semestre') { 
-            const sem = Math.ceil(mes / 6); 
-            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
-            e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
-        } 
-        else { // Ano
-            s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
-        }
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Consolidação (com Fatores)...</td></tr>';
 
         try {
-            // Mantendo a chamada RPC original que você solicitou recuperar
-            const { data: rawData, error } = await _supabase.rpc('get_consolidado_dados', { data_ini: s, data_fim: e });
+            // Busca dados brutos para processar no JS (necessário para aplicar Fatores do LocalStorage)
+            const { data: rawData, error } = await _supabase
+                .from('producao')
+                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
+                .gte('data_referencia', s)
+                .lte('data_referencia', e);
+                
             if(error) throw error;
             
             this.ultimoCache = { key: cacheKey, data: rawData };
@@ -92,7 +62,7 @@ const Cons = {
             
         } catch (e) { 
             console.error(e);
-            if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-red-500">Erro ao carregar dados (RPC).</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-4 text-red-500">Erro ao carregar dados.</td></tr>';
         }
     },
 
@@ -100,7 +70,6 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body');
         if (!tbody) return;
 
-        // Definição de colunas dinâmicas (Mantido Original)
         let cols = []; 
         if (t === 'dia') cols = ['Dia']; 
         else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; 
@@ -113,8 +82,17 @@ const Cons = {
         
         if(rawData) {
             rawData.forEach(r => {
+                const user = Sistema.Dados.usuariosCache[r.usuario_id];
+                if(!user || user.funcao !== 'Assistente') return;
+
+                const nome = user.nome;
+                const sys = Number(r.quantidade) || 0;
+                
+                // APLICANDO FATOR (Abonado = 0, Meio = 0.5)
+                const fator = Sistema.Dados.obterFator(nome, r.data_referencia);
+                
                 let b = 1; 
-                const parts = r.data_ref.split('-'); 
+                const parts = r.data_referencia.split('-'); 
                 const dt = new Date(parts[0], parts[1]-1, parts[2]);
 
                 if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
@@ -123,24 +101,36 @@ const Cons = {
                 else if (t === 'ano_mes') b = dt.getMonth() + 1;
                 
                 if(b > numCols) b = numCols;
-                
-                const sys = Number(r.soma_quantidade) || 0;
-                
+
                 const populate = (k) => {
                     if(!st[k]) return;
                     const x = st[k];
-                    x.users.add(r.nome_assistente); 
-                    x.dates.add(r.data_ref); 
+                    x.users.add(nome); 
+                    
+                    // Acumula dias ponderados pelo fator
+                    if (!x.diasMap[r.data_referencia]) x.diasMap[r.data_referencia] = 0;
+                    // Se houver múltiplos registros no mesmo dia (raro, mas possível), soma apenas uma vez o fator do dia
+                    // Aqui simplificamos: somamos o fator. Nota: isso assume 1 registro por dia por user.
+                    x.diasPonderados += fator; 
+
                     x.qty += sys; 
-                    x.fifo += (Number(r.soma_fifo)||0); 
-                    x.gt += (Number(r.soma_gradual_total)||0); 
-                    x.gp += (Number(r.soma_gradual_parcial)||0); 
-                    x.fc += (Number(r.soma_perfil_fc)||0);
-                    if (r.contrato && r.contrato.includes('CLT')) { x.clt_users.add(r.nome_assistente); x.clt_qty += sys; } 
-                    else { x.pj_users.add(r.nome_assistente); x.pj_qty += sys; }
+                    x.fifo += (Number(r.fifo)||0); 
+                    x.gt += (Number(r.gradual_total)||0); 
+                    x.gp += (Number(r.gradual_parcial)||0); 
+                    x.fc += (Number(r.perfil_fc)||0);
+                    
+                    if (user.contrato && user.contrato.includes('CLT')) { 
+                        x.clt_users.add(nome); 
+                        x.clt_qty += sys; 
+                        x.clt_dias += fator;
+                    } else { 
+                        x.pj_users.add(nome); 
+                        x.pj_qty += sys;
+                        x.pj_dias += fator;
+                    }
                 };
                 populate(b);
-                populate(99); // Totalizador
+                populate(99);
             });
         }
 
@@ -154,30 +144,45 @@ const Cons = {
             const rowClass = isBold ? 'row-total' : (isSub ? 'row-sub' : 'hover:bg-slate-50'); 
             let tr = `<tr class="${rowClass} border-b border-slate-100"><td class="px-4 py-3 font-medium col-fixed">${label}</td>`;
             idxs.forEach(i => {
-                const s = st[i]; const dias = s.dates.size || 1; const ativos = s.users.size || 1; const ac = s.clt_users.size || 1; const ap = s.pj_users.size || 1;
-                let val = 0; if (!isCalc) { val = getter(s); if (val instanceof Set) val = val.size; } else { val = getter(s, dias, ativos, ac, ap); }
-                const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); const cellClass = i === 99 ? 'bg-blue-50 font-bold border-l border-blue-100 text-blue-900' : 'text-center border-l border-slate-50'; tr += `<td class="${cellClass} px-2 py-2">${txt}</td>`;
+                const s = st[i]; 
+                const diasReais = s.diasPonderados; // Soma dos fatores (ex: 10.5 dias)
+                const ativos = s.users.size || 1; 
+                
+                let val = 0; 
+                if (!isCalc) { 
+                    val = getter(s); 
+                    if (val instanceof Set) val = val.size; 
+                } else { 
+                    // Passa os dias já ajustados pelo fator
+                    val = getter(s, diasReais, ativos, s.clt_dias, s.pj_dias); 
+                }
+                const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); 
+                const cellClass = i === 99 ? 'bg-blue-50 font-bold border-l border-blue-100 text-blue-900' : 'text-center border-l border-slate-50'; 
+                tr += `<td class="${cellClass} px-2 py-2">${txt}</td>`;
             });
             return tr + '</tr>';
         };
         
         h += mkRow('Assistentes Ativas', s => s.users); 
-        h += mkRow('Dias Trabalhados', s => s.dates); 
+        h += mkRow('Dias Trabalhados (Fator)', s => s.diasPonderados); 
         h += mkRow('FIFO', s => s.fifo); 
         h += mkRow('G. Parcial', s => s.gp); 
         h += mkRow('G. Total', s => s.gt); 
         h += mkRow('Perfil FC', s => s.fc); 
         h += mkRow('Produção Total', s => s.qty, false, true);
-        h += mkRow('Média Diária (Time)', (s, d) => s.qty / d, true); 
+        h += mkRow('Média Diária (Time)', (s, d) => d > 0 ? s.qty / d : 0, true); 
         h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); 
-        h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => s.qty / d / HF, true);
+        h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => d > 0 ? s.qty / d / HF : 0, true);
         h += `<tr><td colspan="${numCols + 2}" class="px-4 py-6 bg-slate-50 font-bold text-slate-400 text-xs uppercase tracking-widest text-center border-y border-slate-200">Segmentação por Contrato</td></tr>`;
-        h += mkRow('Produção CLT', s => s.clt_qty); h += mkRow('Média Diária/CLT', (s, d, a, ac) => s.clt_qty / d / ac, true);
-        h += mkRow('Produção PJ', s => s.pj_qty); h += mkRow('Média Diária/PJ', (s, d, a, ac, ap) => s.pj_qty / d / ap, true);
+        h += mkRow('Produção CLT', s => s.clt_qty); 
+        h += mkRow('Média Diária/CLT', (s, d, a, dc, dp) => dc > 0 ? s.clt_qty / dc : 0, true);
+        h += mkRow('Produção PJ', s => s.pj_qty); 
+        h += mkRow('Média Diária/PJ', (s, d, a, dc, dp) => dp > 0 ? s.pj_qty / dp : 0, true);
         
         tbody.innerHTML = h;
         
-        const tot = st[99]; const dTot = tot.dates.size || 1; 
+        const tot = st[99]; 
+        const dTot = tot.diasPonderados || 1; 
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
@@ -186,5 +191,14 @@ const Cons = {
         setSafe('cons-p-headcount', tot.users.size);
     },
     
-    newStats: function() { return { users: new Set(), dates: new Set(), qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, clt_users: new Set(), clt_qty: 0, pj_users: new Set(), pj_qty: 0 }; }
+    newStats: function() { 
+        return { 
+            users: new Set(), 
+            diasMap: {}, // Para controle se necessário
+            diasPonderados: 0, // Soma dos fatores (0, 0.5, 1)
+            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, 
+            clt_users: new Set(), clt_qty: 0, clt_dias: 0,
+            pj_users: new Set(), pj_qty: 0, pj_dias: 0
+        }; 
+    }
 };
