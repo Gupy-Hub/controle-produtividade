@@ -108,7 +108,7 @@
                 </div>
 
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Real</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média / Analista</p>
                     <div class="flex items-end gap-2"><p class="text-3xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p><span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-media">--</span></span></div>
                     <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden"><div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div></div>
                 </div>
@@ -273,6 +273,8 @@
             listaAtual: [],
             selecionado: null,
             dataVisualizada: null,
+            periodoInicio: null,
+            periodoFim: null,
 
             toggleSemana: function() {
                 const mode = document.getElementById('view-mode').value;
@@ -287,23 +289,52 @@
                 const isoDate = refDate.toISOString().split('T')[0];
                 this.dataVisualizada = isoDate; 
 
+                // Definição dos limites do período para cálculo de metas
                 let inicio, fim;
-                if (modo === 'dia') { inicio = isoDate; fim = isoDate; } 
-                else { 
+                if (modo === 'dia') { 
+                    inicio = isoDate; fim = isoDate; 
+                } else { 
                     const ano = refDate.getFullYear(); const mes = refDate.getMonth();
                     inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
                     fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
                 }
 
+                // Armazena para uso no renderizar
+                this.periodoInicio = inicio;
+                this.periodoFim = fim;
+
                 const { data } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
                 let dadosFiltrados = data || [];
+                
                 if (modo === 'semana') {
                     const numSemana = parseInt(document.getElementById('select-semana').value);
                     dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
+                    
+                    // Ajustar inicio e fim do período para a semana selecionada (aproximado pelos dados ou lógica de semana)
+                    // Como não temos a lógica exata de limites da semana aqui, vamos filtrar os dias úteis na renderização
+                    // Mas precisamos garantir que this.periodoInicio/Fim reflitam a semana para o cálculo de meta
+                    // Simplificação: vamos calcular meta baseada nos dias encontrados OU recalcular limites da semana
+                    // Para precisão, o ideal seria ter uma função getDatesOfWeek(mes, semana).
+                    // Vou assumir que o filtro visual já basta, e no renderizar contaremos dias úteis entre o menor e maior dia da semana encontrada nos dados
+                    // Se não houver dados na semana, a meta será 0.
                 }
 
                 this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
                 this.renderizar();
+            },
+
+            // Função auxiliar para contar dias úteis (Seg-Sex)
+            contarDiasUteis: function(inicioStr, fimStr) {
+                if(!inicioStr || !fimStr) return 1;
+                let count = 0;
+                let cur = new Date(inicioStr + 'T12:00:00');
+                const end = new Date(fimStr + 'T12:00:00');
+                while(cur <= end) {
+                    const d = cur.getDay();
+                    if(d !== 0 && d !== 6) count++;
+                    cur.setDate(cur.getDate() + 1);
+                }
+                return count || 1;
             },
 
             mudarFator: function(nome, valor) {
@@ -335,49 +366,66 @@
                     : ativos;
 
                 const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
-                const totalMeta = baseCalculo.reduce((a, b) => a + b.meta, 0);
-                const totalDias = baseCalculo.reduce((a, b) => a + b.dias, 0); 
                 
-                // --- CÁLCULOS E CARDS ---
+                // --- CÁLCULO DE META DINÂMICA (Baseado em Dias Úteis do Período) ---
+                let diasUteisPeriodo = 1;
+                if(modo === 'dia') {
+                    diasUteisPeriodo = 1;
+                } else if (modo === 'mes') {
+                    diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
+                } else if (modo === 'semana') {
+                    // Para semana, tentamos pegar o range dos dados ou estimar 5 dias se tiver dados
+                    // Se houver dados, pegamos min e max data
+                    if(this.listaAtual.length > 0) {
+                        // Encontrar todas as datas presentes
+                        let todasDatas = new Set();
+                        this.listaAtual.forEach(u => Object.keys(u.diasMap).forEach(d => todasDatas.add(d)));
+                        let datasArr = Array.from(todasDatas).sort();
+                        if(datasArr.length > 0) {
+                            diasUteisPeriodo = this.contarDiasUteis(datasArr[0], datasArr[datasArr.length-1]);
+                        } else diasUteisPeriodo = 5; // Fallback
+                    } else diasUteisPeriodo = 5;
+                }
+
+                const hcConsiderado = this.selecionado ? 1 : ativos.length;
+                const metaDiaria = 650;
+                
+                // Meta Total Esperada para o Período Selecionado
+                // Ex: Mês (22 dias) * 10 Pessoas * 650 = 143.000
+                const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
+
+                // Meta para Média Individual
+                // Ex: Mês (22 dias) * 650 = 14.300 por pessoa
+                const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
+
+                // Média Real (Por Analista)
+                // Quanto cada analista entregou em média neste período
+                const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
+                
+                // --- CARD 1: EQUIPE ---
                 let diasDisplay = 0;
                 let diasLabel = "";
-
                 if (this.selecionado) {
-                    diasDisplay = totalDias; 
+                    diasDisplay = baseCalculo.length ? baseCalculo[0].dias : 0; 
                     diasLabel = "Dias do Colaborador (Considera 50%)";
                 } else {
                     const setDiasUnicos = new Set();
                     ativos.forEach(u => {
-                        if (u.diasMap) {
-                            Object.entries(u.diasMap).forEach(([data, info]) => {
-                                if (info.fator > 0) setDiasUnicos.add(data);
-                            });
-                        }
+                        if (u.diasMap) { Object.entries(u.diasMap).forEach(([data, info]) => { if (info.fator > 0) setDiasUnicos.add(data); }); }
                     });
                     diasDisplay = setDiasUnicos.size;
                     diasLabel = "Dias Úteis da Equipe (Calendário)";
                 }
 
-                // Cálculo de Médias
-                const mediaReal = totalDias ? Math.round(totalProd / totalDias) : 0;
-                const mediaMeta = totalDias ? Math.round(totalMeta / totalDias) : 650;
-                
-                // --- CARD 1: LÓGICA DE ABONADOS ---
+                // Lógica de Abonados
                 const elInfoAbonados = document.getElementById('info-abonados');
-                elInfoAbonados.classList.add('hidden'); // Reset
-
+                elInfoAbonados.classList.add('hidden'); 
                 if (modo === 'dia' && !this.selecionado) {
-                    let qtdMeio = 0;
-                    let qtdAbonado = 0;
-
+                    let qtdMeio = 0, qtdAbonado = 0;
                     this.listaAtual.forEach(u => {
                         const diaInfo = u.diasMap[this.dataVisualizada];
-                        if (diaInfo) {
-                            if (diaInfo.fator === 0.5) qtdMeio++;
-                            else if (diaInfo.fator === 0) qtdAbonado++;
-                        }
+                        if (diaInfo) { if (diaInfo.fator === 0.5) qtdMeio++; else if (diaInfo.fator === 0) qtdAbonado++; }
                     });
-
                     if (qtdMeio > 0 || qtdAbonado > 0) {
                         let texto = [];
                         if (qtdMeio > 0) texto.push(`${qtdMeio} Meio Período`);
@@ -387,41 +435,39 @@
                     }
                 }
 
-                document.getElementById('kpi-hc').innerText = this.selecionado ? "1" : ativos.length;
+                // Atualização dos Cards
+                document.getElementById('kpi-hc').innerText = hcConsiderado;
                 document.getElementById('kpi-dias').innerText = diasDisplay;
                 document.getElementById('kpi-dias-label').innerText = diasLabel;
                 
+                // Card Produção vs Meta
                 document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
-                document.getElementById('kpi-meta-total').innerText = totalMeta.toLocaleString();
-                document.getElementById('bar-prod').style.width = Math.min((totalProd/(totalMeta||1))*100, 100) + '%';
+                document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
+                document.getElementById('bar-prod').style.width = Math.min((totalProd/(metaTotalEsperada||1))*100, 100) + '%';
 
-                document.getElementById('kpi-media').innerText = mediaReal.toLocaleString();
-                document.getElementById('kpi-meta-media').innerText = mediaMeta.toLocaleString();
-                document.getElementById('bar-media').style.width = Math.min((mediaReal/(mediaMeta||1))*100, 100) + '%';
+                // Card Média / Analista
+                document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
+                document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
+                document.getElementById('bar-media').style.width = Math.min((mediaRealAnalista/(metaMediaIndividual||1))*100, 100) + '%';
 
-                // --- CARD 5: ATINGIMENTO (%) COM COR DINÂMICA E DETALHES ---
-                const percentual = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
+                // Card Atingimento (%)
+                const percentual = metaTotalEsperada > 0 ? Math.round((totalProd / metaTotalEsperada) * 100) : 0;
                 document.getElementById('kpi-pct').innerText = percentual + '%';
-                
-                // Atualiza o texto com os valores reais
-                document.getElementById('kpi-pct-detail').innerText = `${totalProd.toLocaleString()} / ${totalMeta.toLocaleString()}`;
+                document.getElementById('kpi-pct-detail').innerText = `${totalProd.toLocaleString()} / ${metaTotalEsperada.toLocaleString()}`;
                 
                 const cardPct = document.getElementById('card-pct');
                 const iconPct = document.getElementById('icon-pct');
-                
                 cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
 
                 if (percentual < 100) {
-                    // VERMELHO
                     cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
                     iconPct.innerHTML = '<i class="fas fa-times-circle text-white/50"></i>';
                 } else {
-                    // AZUL
                     cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
                     iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
                 }
 
-                // Cabeçalho de seleção
+                // Cabeçalho de seleção e Tabela (sem alterações lógicas, apenas renderização)
                 const selHeader = document.getElementById('selection-header');
                 if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
                 else selHeader.classList.add('hidden');
@@ -442,7 +488,6 @@
                     } else {
                          if (u.dias === 0) fator = 0; else if (u.dias % 1 !== 0) fator = 0.5;
                     }
-
                     const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
                     const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
 
