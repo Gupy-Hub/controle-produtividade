@@ -18,36 +18,51 @@ async function carregarUsuariosGlobal() {
 
 // --- Controle de Abas ---
 function mudarAba(aba) {
-    // Esconde todas as seções
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    // Mostra a selecionada
     document.getElementById(`tab-${aba}`).classList.remove('hidden');
-    
-    // Atualiza botões
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById(`btn-${aba}`).classList.add('active');
 
-    const dataAtual = localStorage.getItem(KEY_DATA_GLOBAL) || Sistema.Datas.formatar(new Date());
+    // Recupera data global (ex: "2023-10-25")
+    const dataString = localStorage.getItem(KEY_DATA_GLOBAL) || Sistema.Datas.formatar(new Date());
+    
+    // Converte para objeto Date para extrair partes
+    const [ano, mes, dia] = dataString.split('-').map(Number); // Assume formato YYYY-MM-DD do input type="date"
+    const dataObj = new Date(ano, mes - 1, dia);
 
-    // Roteamento de Inicialização
     if (aba === 'geral') { 
         const inp = document.getElementById('data-validacao');
-        if(inp) inp.value = dataAtual; 
+        if(inp) inp.value = dataString; 
         if(typeof Geral !== 'undefined') Geral.carregarTela(); 
     }
+    
     if (aba === 'performance') { 
-        const inp = document.getElementById('data-perf');
-        if(inp) inp.value = dataAtual; 
-        if(typeof Perf !== 'undefined') Perf.init(); 
+        // Lógica de Sincronização de Data
+        const inpMonth = document.getElementById('perf-input-month');
+        const inpYear = document.getElementById('perf-input-year');
+        
+        // Formata YYYY-MM para o input type="month"
+        const anoStr = dataObj.getFullYear().toString();
+        const mesStr = String(dataObj.getMonth() + 1).padStart(2, '0');
+        
+        if(inpMonth) inpMonth.value = `${anoStr}-${mesStr}`;
+        if(inpYear) inpYear.value = anoStr;
+
+        if(typeof Perf !== 'undefined') {
+            Perf.uiChange(); // Ajusta visibilidade dos inputs
+            Perf.carregarRanking(); 
+        }
     }
+    
     if (aba === 'matriz') { 
         const inp = document.getElementById('data-matriz');
-        if(inp) inp.value = dataAtual; 
+        if(inp) inp.value = dataString; 
         if(typeof Matriz !== 'undefined') Matriz.init(); 
     }
+    
     if (aba === 'consolidado') { 
         const inp = document.getElementById('data-cons');
-        if(inp) inp.value = dataAtual; 
+        if(inp) inp.value = dataString; 
         if(typeof Cons !== 'undefined') Cons.init(); 
     }
 }
@@ -71,7 +86,6 @@ async function importarExcel(input) {
             if (json.length === 0) return alert("Vazia.");
 
             const usersMap = {};
-            // Pequena query local para garantir mapeamento correto no momento do import
             const { data: users } = await _supabase.from('usuarios').select('id, nome');
             if(users) users.forEach(u => usersMap[u.nome.trim().toLowerCase()] = u.id);
 
@@ -105,7 +119,7 @@ async function importarExcel(input) {
                     localStorage.setItem(KEY_DATA_GLOBAL, `${matchData[1]}/${matchData[2]}/${matchData[3]}`);
                     mudarAba('geral');
                 }
-            } else alert("Dados inválidos ou vazios.");
+            } else alert("Dados inválidos.");
         } catch (err) { alert("Erro: " + err.message); } finally { input.value = ''; }
     };
     reader.readAsArrayBuffer(file);
@@ -121,6 +135,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     await Sistema.Dados.inicializar(); 
     
-    // Carrega a aba padrão
+    // Inicia na aba Geral
     if(typeof Geral !== 'undefined') Geral.carregarTela();
 });

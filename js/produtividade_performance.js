@@ -6,11 +6,25 @@ const Perf = {
     initialized: false,
 
     init: function() { 
-        if(!this.initialized) { 
-            Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); }); 
-            this.initialized = true; 
-        } 
+        // A inicialização principal agora é chamada pelo main.js via carregarRanking
+        this.uiChange();
         this.carregarRanking(); 
+    },
+
+    // Alterna visualização dos inputs (Mes vs Ano)
+    uiChange: function() {
+        const tipo = document.getElementById('perf-period-type').value;
+        const inpMonth = document.getElementById('perf-input-month');
+        const inpYear = document.getElementById('perf-input-year');
+
+        if (tipo === 'ano') {
+            inpMonth.classList.add('hidden');
+            inpYear.classList.remove('hidden');
+        } else {
+            inpMonth.classList.remove('hidden');
+            inpYear.classList.add('hidden');
+        }
+        this.carregarRanking(); // Recarrega ao mudar o tipo
     },
 
     limparSelecao: function() { 
@@ -36,34 +50,63 @@ const Perf = {
         
         try {
             const tipo = document.getElementById('perf-period-type').value; 
-            const refDate = Sistema.Datas.lerInput('data-perf');
-            const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
-            let s, e;
             
+            // Pega valores dos inputs novos
+            const valMonth = document.getElementById('perf-input-month').value; // YYYY-MM
+            const valYear = document.getElementById('perf-input-year').value;   // YYYY
+
+            // Se não tiver data, não carrega (ou usa fallback)
+            if((tipo !== 'ano' && !valMonth) || (tipo === 'ano' && !valYear)) return;
+
+            let ano, mes;
+            if(tipo !== 'ano') {
+                const parts = valMonth.split('-');
+                ano = parseInt(parts[0]);
+                mes = parseInt(parts[1]); // 1-12
+            } else {
+                ano = parseInt(valYear);
+                mes = 1; 
+            }
+
+            let s, e, labelTexto;
+            
+            // Lógica de Datas
             if (tipo === 'mes') { 
                 s = `${ano}-${String(mes).padStart(2,'0')}-01`; 
-                e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; 
+                e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`;
+                
+                const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+                labelTexto = `Mensal: ${nomesMeses[mes-1]} de ${ano}`;
+
             } else if (tipo === 'trimestre') { 
                 const trim = Math.ceil(mes / 3); 
                 const mStart = ((trim-1)*3)+1; 
                 const mEnd = mStart+2; 
+                
                 s = `${ano}-${String(mStart).padStart(2,'0')}-01`; 
-                e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; 
+                e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`;
+                labelTexto = `${trim}º Trimestre de ${ano} (Ref: ${String(mes).padStart(2,'0')})`;
+
             } else if (tipo === 'semestre') { 
                 const sem = Math.ceil(mes / 6); 
                 s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; 
                 e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
-            } else { 
+                labelTexto = `${sem}º Semestre de ${ano}`;
+
+            } else { // Anual
                 s = `${ano}-01-01`; 
                 e = `${ano}-12-31`; 
+                labelTexto = `Ano de ${ano}`;
             }
             
-            const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao, contrato)').gte('data_referencia', s).lte('data_referencia', e); 
+            // Atualiza Label Visual
+            document.getElementById('perf-range-label').innerText = labelTexto;
+
+            // Query
+            const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
             if(error) throw error;
             
             let stats = {};
-            
-            // Variáveis para o Card CLT vs PJ
             let prodTotalGeral = 0;
             let prodCLT = 0;
             let prodPJ = 0;
@@ -71,19 +114,16 @@ const Perf = {
             let usersPJ = new Set();
 
             prods.forEach(item => {
-                // Tenta pegar usuario do join ou do cache
-                let user = item.usuarios;
                 const uid = item.usuario_id;
-                
-                // Fallback para cache se o join falhar (devido a estrutura do supabase)
-                if (!user && USERS_CACHE[uid]) user = USERS_CACHE[uid];
+                const user = USERS_CACHE[uid];
                 
                 if (!user || user.funcao !== 'Assistente') return;
 
                 const qtd = Number(item.quantidade) || 0;
                 
-                // Lógica CLT vs PJ
                 prodTotalGeral += qtd;
+                
+                // Só conta quem produziu algo
                 if (user.contrato && user.contrato.includes('CLT')) {
                     prodCLT += qtd;
                     usersCLT.add(uid);
@@ -97,7 +137,7 @@ const Perf = {
                 stats[uid].dias.add(item.data_referencia);
             });
             
-            // Atualiza Card CLT vs PJ (Visual)
+            // Atualiza Card Mix
             const pctCLT = prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0;
             const pctPJ = prodTotalGeral > 0 ? Math.round((prodPJ / prodTotalGeral) * 100) : 0;
             
@@ -107,7 +147,7 @@ const Perf = {
             document.getElementById('perf-pct-pj').innerText = pctPJ + '%';
             document.getElementById('perf-count-pj').innerText = usersPJ.size;
 
-            // Ordenação: Agora por % de Atingimento da Meta, não Total Bruto
+            // Ordenação: % Atingimento da Meta (Decrescente)
             this.dadosCarregados = Object.values(stats).sort((a, b) => {
                 const diasA = a.dias.size || 1;
                 const metaA = diasA * 650;
@@ -117,7 +157,7 @@ const Perf = {
                 const metaB = diasB * 650;
                 const pctB = b.total / metaB;
 
-                return pctB - pctA; // Decrescente por %
+                return pctB - pctA; 
             });
 
             this.renderRanking();
@@ -153,7 +193,6 @@ const Perf = {
             if (isSelected) rowClass += "selected-row"; 
             else if (isMe) rowClass += "me-row";
 
-            // Destaque Top 5
             let iconTrofeu = '';
             if (idx === 0) { rowClass += " rank-1"; iconTrofeu = '🥇'; }
             else if (idx === 1) { rowClass += " rank-2"; iconTrofeu = '🥈'; }
@@ -187,7 +226,6 @@ const Perf = {
         const elRankContent = document.getElementById('perf-rank-content');
 
         if (userStats) {
-            // Visão Individual
             if(elTotal) elTotal.innerText = userStats.total.toLocaleString(); 
             if(labelMetaTotal) labelMetaTotal.innerText = userStats.meta.toLocaleString();
 
@@ -196,15 +234,11 @@ const Perf = {
             if(elMeta) elMeta.innerText = userStats.meta.toLocaleString(); 
             if(labelRealTotal) labelRealTotal.innerText = userStats.total.toLocaleString();
         } else {
-            // Visão Geral do Time
             const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
             const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); 
             
-            // Meta Geral = Soma das Metas Individuais (Dias trabalhados * 650)
             let metaGeral = 0;
-            this.dadosCarregados.forEach(u => {
-                metaGeral += (u.dias.size || 0) * 650;
-            });
+            this.dadosCarregados.forEach(u => { metaGeral += (u.dias.size || 0) * 650; });
 
             const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
             
@@ -216,7 +250,7 @@ const Perf = {
             if(elMeta) elMeta.innerText = metaGeral.toLocaleString(); 
             if(labelRealTotal) labelRealTotal.innerText = totalGeral.toLocaleString();
             
-            // Top 5 Mini List (Visual do Card)
+            // Top 5 Mini List
             let topHtml = '<div class="flex flex-col gap-1.5">'; 
             this.dadosCarregados.slice(0, 5).forEach((u, i) => { 
                 const dias = u.dias.size || 1;
@@ -225,8 +259,6 @@ const Perf = {
 
                 let color = i===0 ? 'text-amber-500' : (i===1 ? 'text-slate-400' : (i===2 ? 'text-orange-400' : 'text-slate-600'));
                 let icon = i < 3 ? '<i class="fas fa-trophy text-[9px]"></i>' : '<i class="fas fa-medal text-[9px]"></i>';
-                
-                // Cor da porcentagem no card pequeno
                 let pctColor = pct >= 100 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50';
 
                 topHtml += `
