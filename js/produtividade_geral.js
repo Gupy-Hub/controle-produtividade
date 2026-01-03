@@ -9,17 +9,8 @@ const Geral = {
         const mode = document.getElementById('view-mode').value;
         const selSemana = document.getElementById('select-semana');
         
-        // Exibe o select secundário se a opção for 'semana'
         if (mode === 'semana') {
             selSemana.classList.remove('hidden');
-            // Auto-seleciona a semana correspondente ao dia global para evitar saltos bruscos
-            const globalInput = document.getElementById('global-date');
-            if(globalInput && globalInput.value) {
-                const dia = parseInt(globalInput.value.split('-')[2]);
-                // Estimativa simples: Semana 1 (1-7), Semana 2 (8-14)...
-                // Ou pela lógica de semanas completas do mês.
-                // Vamos manter a seleção atual do usuário se ele já tiver mexido, ou setar para 1.
-            }
         } else {
             selSemana.classList.add('hidden');
         }
@@ -29,73 +20,64 @@ const Geral = {
     carregarTela: async function() {
         const modo = document.getElementById('view-mode').value;
         const globalInput = document.getElementById('global-date');
-        const isoDate = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
+        // Fallback para hoje se não houver data global
+        const isoDate = globalInput && globalInput.value ? globalInput.value : new Date().toISOString().split('T')[0];
         
         this.dataVisualizada = isoDate; 
+        // Conversão segura de data (evita problemas de timezone UTC)
         const [ano, mes, dia] = isoDate.split('-').map(Number);
-        const refDate = new Date(ano, mes - 1, dia);
 
         const bulkSelect = document.getElementById('bulk-fator');
         if(bulkSelect) bulkSelect.value = "";
 
         let inicio, fim;
+        
         if (modo === 'dia') { 
             inicio = isoDate; fim = isoDate; 
-        } else if (modo === 'mes') { 
+        } 
+        else if (modo === 'mes') { 
             const dateIni = new Date(ano, mes - 1, 1);
             const dateFim = new Date(ano, mes, 0);
             inicio = dateIni.toLocaleDateString('en-CA'); 
             fim = dateFim.toLocaleDateString('en-CA');
-        } else if (modo === 'semana') {
-            // Lógica de Semanas Específicas (1 a 5) dentro do mês selecionado
+        } 
+        else if (modo === 'semana') {
             const numSemana = parseInt(document.getElementById('select-semana').value) || 1;
+            const ultimoDiaMes = new Date(ano, mes, 0).getDate();
             
-            // Definição: Semana 1 começa no dia 1. Semana 2 começa no próximo domingo.
-            // Estratégia simples e funcional para relatórios mensais:
-            // Semana 1: Dia 1 até o primeiro Sábado.
-            // Semana 2: Domingo seguinte até Sábado...
-            
-            let cursor = new Date(ano, mes - 1, 1); // Dia 1 do mês
-            let weekCount = 1;
-            
-            // Avança até a semana desejada
-            while (weekCount < numSemana) {
-                // Encontra o próximo domingo
-                const day = cursor.getDay(); // 0=Dom, 6=Sab
-                const daysToNextSun = (7 - day) % 7;
-                const jump = daysToNextSun === 0 ? 7 : daysToNextSun; // Se é domingo, pula 7 para o próximo
-                
-                // Se estamos na semana 1 e dia 1 não é domingo, o próximo domingo começa a semana 2.
-                // Ajuste: A primeira semana vai do dia 1 até o primeiro Sábado.
-                const distToSaturday = 6 - cursor.getDay();
-                
-                // Pula para o Domingo da próxima semana
-                cursor.setDate(cursor.getDate() + distToSaturday + 1);
-                weekCount++;
-            }
-            
-            // Agora 'cursor' é o início da semana desejada (ou passou do mês)
-            if (cursor.getMonth() !== mes - 1) {
-                // Se passou do mês (ex: mês curto não tem semana 6), pega última semana válida
-                // Fallback: pega o último dia
-                 cursor = new Date(ano, mes, 0); 
+            let semanaAtual = 1;
+            let dataIniSemana = null;
+            let dataFimSemana = null;
+
+            // Percorre o mês dia a dia para identificar a semana corretamente
+            for (let d = 1; d <= ultimoDiaMes; d++) {
+                const dataLoop = new Date(ano, mes - 1, d);
+                const diaSemana = dataLoop.getDay(); // 0=Dom, 6=Sab
+
+                // Se o dia pertence à semana selecionada, registra limites
+                if (semanaAtual === numSemana) {
+                    if (!dataIniSemana) dataIniSemana = new Date(dataLoop);
+                    dataFimSemana = new Date(dataLoop);
+                }
+
+                // Sábado encerra a semana corrente no calendário
+                if (diaSemana === 6) {
+                    semanaAtual++;
+                }
+
+                // Se já passamos da semana desejada, paramos o loop
+                if (semanaAtual > numSemana) break;
             }
 
-            const weekStart = new Date(cursor);
-            
-            // O fim da semana é o próximo sábado ou o fim do mês
-            const distToSaturday = 6 - weekStart.getDay();
-            const weekEnd = new Date(weekStart);
-            weekEnd.setDate(weekEnd.getDate() + distToSaturday);
-            
-            // Não deixa passar do fim do mês
-            const lastDayOfMonth = new Date(ano, mes, 0);
-            if (weekEnd > lastDayOfMonth) {
-                weekEnd.setDate(lastDayOfMonth.getDate());
+            // Se encontrou datas válidas para a semana
+            if (dataIniSemana && dataFimSemana) {
+                inicio = dataIniSemana.toLocaleDateString('en-CA');
+                fim = dataFimSemana.toLocaleDateString('en-CA');
+            } else {
+                // Fallback (ex: selecionou semana 5 num mês que só tem 4)
+                // Define intervalo inválido ou o próprio dia para não quebrar
+                inicio = isoDate; fim = isoDate;
             }
-
-            inicio = weekStart.toLocaleDateString('en-CA');
-            fim = weekEnd.toLocaleDateString('en-CA');
         }
 
         this.periodoInicio = inicio;
@@ -108,27 +90,37 @@ const Geral = {
             .lte('data_referencia', fim);
             
         let dadosFiltrados = data || [];
+        // Normaliza e agrupa os dados
         this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
         this.renderizar();
     },
 
     contarDiasUteis: function(inicioStr, fimStr) {
-        if(!inicioStr || !fimStr) return 1;
+        if(!inicioStr || !fimStr) return 0;
+        
         let count = 0;
+        // Adiciona T12:00:00 para evitar problemas de fuso horário voltando 1 dia
         let cur = new Date(inicioStr + 'T12:00:00');
         const end = new Date(fimStr + 'T12:00:00');
-        while(cur <= end) {
+        
+        // Loop de segurança para não travar navegador
+        let safety = 0;
+        while(cur <= end && safety < 366) {
             const d = cur.getDay();
-            if(d !== 0 && d !== 6) count++;
+            // Conta apenas se não for Domingo (0) nem Sábado (6)
+            if(d !== 0 && d !== 6) {
+                count++;
+            }
             cur.setDate(cur.getDate() + 1);
+            safety++;
         }
-        return count || 1;
+        return count; // Pode retornar 0 se a semana só tiver fds
     },
 
     mudarFator: function(nome, valor) {
         const modo = document.getElementById('view-mode').value;
         if (modo !== 'dia') {
-            alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico para maior precisão.");
+            alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico para garantir o histórico correto.");
             this.renderizar(); 
             return;
         }
@@ -144,7 +136,7 @@ const Geral = {
             document.getElementById('bulk-fator').value = "";
             return;
         }
-        if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes?")) {
+        if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas?")) {
             document.getElementById('bulk-fator').value = "";
             return;
         }
@@ -168,6 +160,7 @@ const Geral = {
         tbody.innerHTML = '';
         const modo = document.getElementById('view-mode').value;
 
+        // Controle do Select em Massa
         const bulkSelect = document.getElementById('bulk-fator');
         if (bulkSelect) {
             if (modo !== 'dia') {
@@ -183,11 +176,15 @@ const Geral = {
         const baseCalculo = this.selecionado ? this.listaAtual.filter(u => u.nome === this.selecionado) : ativos;
         const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
 
+        // Lógica de Abonados/Meio Período (Apenas visualização DIÁRIA)
         let qtdMeio = 0; let qtdAbonado = 0;
         if (modo === 'dia' && !this.selecionado) {
             this.listaAtual.forEach(u => {
                 const diaInfo = u.diasMap[this.dataVisualizada];
-                if (diaInfo) { if (diaInfo.fator === 0.5) qtdMeio++; else if (diaInfo.fator === 0) qtdAbonado++; }
+                if (diaInfo) { 
+                    if (diaInfo.fator === 0.5) qtdMeio++; 
+                    else if (diaInfo.fator === 0) qtdAbonado++; 
+                }
             });
         }
         
@@ -198,25 +195,34 @@ const Geral = {
             hcConsiderado = ativos.length - reducaoAbonados - reducaoParesMeio;
         }
 
+        // --- CÁLCULO DE META CORRIGIDO ---
         let diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
-        
+        // Garante ao menos 1 dia para evitar divisão por zero, exceto se realmente for 0 (ex: selecionou sábado)
+        if (diasUteisPeriodo === 0 && modo === 'dia') {
+           // Se selecionou um sábado/domingo, diasUteis é 0. Meta deveria ser 0.
+        }
+
         const metaDiaria = 650;
         const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
         const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
+        
+        // Média Real: Produção total / (HC ajustado * dias uteis) ou apenas / HC se for visão macro
+        // Na visão original: KPI Média = Produção Total / HC Considerado (Média acumulada do período por pessoa)
         const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
         
+        // Atualiza Labels de Dias
         let diasDisplay = 0;
         let diasLabel = "";
         if (this.selecionado) {
             diasDisplay = baseCalculo.length ? baseCalculo[0].dias : 0; 
             diasLabel = "Dias do Colaborador";
         } else {
-            const setDiasUnicos = new Set();
-            ativos.forEach(u => { if (u.diasMap) { Object.entries(u.diasMap).forEach(([data, info]) => { if (info.fator > 0) setDiasUnicos.add(data); }); } });
-            diasDisplay = setDiasUnicos.size;
-            diasLabel = "Dias Úteis da Equipe";
+            // Se for mês/semana, mostra dias úteis do calendário. Se dia, mostra 1.
+            diasDisplay = diasUteisPeriodo;
+            diasLabel = "Dias Úteis (Calendário)";
         }
 
+        // Info Abonados
         const elInfoAbonados = document.getElementById('info-abonados');
         if(elInfoAbonados) {
             elInfoAbonados.classList.add('hidden'); 
@@ -229,6 +235,7 @@ const Geral = {
             }
         }
 
+        // Atualiza KPIs
         document.getElementById('kpi-hc').innerText = hcConsiderado;
         document.getElementById('kpi-dias').innerText = diasDisplay;
         document.getElementById('kpi-dias-label').innerText = diasLabel;
