@@ -182,7 +182,6 @@ const MA_Main = {
         if(!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
 
         if (viewingTime) {
-            // LÓGICA DE TIME (Média Ponderada e Observação Detalhada)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const assistants = Object.values(dadosNormalizados[dia]);
                 
@@ -203,13 +202,8 @@ const MA_Main = {
                     }
                 });
 
-                // Média de produção simples (Total / Pessoas)
                 const mediaProd = headcount ? Math.round(totalProd / headcount) : 0;
-                
-                // Média de Fator (Se todos são 0.5, média é 0.5. Se metade é, média é 0.75)
                 const mediaFator = headcount ? sumFatores / headcount : 1;
-                
-                // Meta do Time Ajustada pela média de fatores
                 const metaTimeAjustada = Math.round(650 * mediaFator);
 
                 let obs = `Média de ${headcount} assistentes.`;
@@ -227,7 +221,6 @@ const MA_Main = {
                 });
             });
         } else {
-            // LÓGICA INDIVIDUAL (Mantida)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
                 if (dPessoa) {

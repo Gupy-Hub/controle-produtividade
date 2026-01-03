@@ -27,7 +27,6 @@ const MA_Diario = {
         const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator !== undefined ? curr.fator : 1), 0);
         const metaTotal = dados.reduce((acc, curr) => acc + (curr.meta_ajustada !== undefined ? curr.meta_ajustada : 650), 0);
 
-        // Proteção para divisão por zero
         const media = diasEfetivos > 0 ? Math.round(total / diasEfetivos) : 0;
         const atingimento = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
 
@@ -87,8 +86,6 @@ const MA_Diario = {
             
             let displayMeta = metaReal;
             let infoFator = '';
-            
-            // Exibe badge de fator se for diferente de 1 (ou se for time com média quebrada)
             if (fator < 1 && fator > 0) {
                 infoFator = `<span class="ml-1 text-[9px] text-amber-600 bg-amber-50 px-1 rounded" title="Fator/Média aplicada">Fat ${fator.toFixed(2)}</span>`;
             }
@@ -102,10 +99,8 @@ const MA_Diario = {
                              </div>`;
             }
             
-            // Tratamento da Observação (que agora pode vir longa com os nomes dos abonos)
             let obs = item.observacao || '<span class="text-slate-300">-</span>';
             
-            // Se for visão de time e tiver lista de abonos, destaca
             if (obs.includes('Abonos:')) {
                 const parts = obs.split('Abonos:');
                 obs = `${parts[0]}<br><span class="text-[10px] text-amber-600 font-bold bg-amber-50 px-1 rounded mt-1 inline-block border border-amber-100">Abonos:${parts[1]}</span>`;

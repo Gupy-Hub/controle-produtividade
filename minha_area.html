@@ -39,12 +39,39 @@
                 <p class="text-slate-500 text-sm font-medium">Painel de controle e evolução pessoal.</p>
             </div>
             
-            <div class="flex flex-wrap gap-4 items-center">
+            <div class="flex flex-wrap gap-3 items-center">
                 <div class="bg-white p-2 rounded-xl shadow-sm border border-blue-200 flex items-center gap-3">
                     <div class="bg-blue-50 p-2 rounded-lg text-blue-600"><i class="fas fa-calendar-alt text-lg"></i></div>
                     <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Ano/Mês de Referência</p>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data Ref.</p>
                         <input type="date" id="filtro-data-manual" class="text-sm font-black text-slate-700 outline-none bg-transparent cursor-pointer font-sans w-32">
+                    </div>
+                </div>
+
+                <div class="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex items-center gap-2">
+                    <div class="bg-slate-50 p-2 rounded-lg text-slate-500"><i class="fas fa-filter text-lg"></i></div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Período</p>
+                        <div class="flex gap-1">
+                            <select id="diario-period-type" onchange="MA_Main.togglePeriodo()" class="text-sm font-bold text-slate-700 bg-transparent outline-none cursor-pointer w-24">
+                                <option value="mes">Mensal</option>
+                                <option value="trimestre">Trimestral</option>
+                                <option value="semestre">Semestral</option>
+                                <option value="ano">Anual</option>
+                            </select>
+
+                            <select id="diario-select-quarter" onchange="MA_Main.atualizarDashboard()" class="hidden text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded px-1 outline-none cursor-pointer">
+                                <option value="1">1º Tri</option>
+                                <option value="2">2º Tri</option>
+                                <option value="3">3º Tri</option>
+                                <option value="4">4º Tri</option>
+                            </select>
+
+                            <select id="diario-select-semester" onchange="MA_Main.atualizarDashboard()" class="hidden text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded px-1 outline-none cursor-pointer">
+                                <option value="1">1º Sem</option>
+                                <option value="2">2º Sem</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -53,10 +80,7 @@
                     <div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Visão Gestora</p>
                         <select id="filtro-user" class="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer w-40">
-                            <option value="me">👤 Minha Visão</option>
-                            <option value="time">👥 Time (Média)</option>
-                            <option disabled>──────────</option>
-                        </select>
+                            </select>
                     </div>
                 </div>
 
@@ -77,28 +101,6 @@
         <div id="conteudo-principal" class="space-y-6">
             
             <div id="tab-diario" class="view-section animate-fade-in space-y-6">
-                
-                <div class="flex justify-end items-center gap-2 p-1">
-                    <select id="diario-period-type" onchange="MA_Diario.togglePeriodo()" class="text-sm font-bold text-slate-600 bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none cursor-pointer focus:border-blue-500 transition shadow-sm">
-                        <option value="mes">📅 Mensal</option>
-                        <option value="trimestre">📊 Trimestral</option>
-                        <option value="semestre">📆 Semestral</option>
-                        <option value="ano">🗓️ Anual</option>
-                    </select>
-
-                    <select id="diario-select-quarter" onchange="MA_Main.atualizarDashboard()" class="hidden text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 outline-none cursor-pointer">
-                        <option value="1">1º Trimestre</option>
-                        <option value="2">2º Trimestre</option>
-                        <option value="3">3º Trimestre</option>
-                        <option value="4">4º Trimestre</option>
-                    </select>
-
-                    <select id="diario-select-semester" onchange="MA_Main.atualizarDashboard()" class="hidden text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2 outline-none cursor-pointer">
-                        <option value="1">1º Semestre</option>
-                        <option value="2">2º Semestre</option>
-                    </select>
-                </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                         <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-layer-group text-6xl text-blue-600"></i></div>
@@ -122,7 +124,7 @@
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200">
                     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                        <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico Diário Detalhado</h3>
+                        <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico Detalhado</h3>
                         <div id="aviso-edicao" class="hidden text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded flex items-center gap-1"><i class="fas fa-pen"></i> Modo Gestora</div>
                     </div>
                     <div class="overflow-x-auto">
