@@ -81,12 +81,22 @@
                     </button>
                     <span class="text-[10px] text-slate-400 block mt-1 ml-1">Arquivo: ddmmaaaa.xlsx</span>
                 </div>
+                
                 <div class="flex items-center gap-3">
                     <span class="text-xs font-bold text-slate-400">Visualizar:</span>
+                    
                     <select id="view-mode" onchange="Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
                         <option value="dia">Apenas o Dia</option>
                         <option value="mes">Mês da Data</option>
-                        <option value="semana">Semana da Data</option>
+                        <option value="semana">Semana Específica</option>
+                    </select>
+
+                    <select id="select-semana" onchange="Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-sm font-bold outline-none cursor-pointer">
+                        <option value="1">Semana 1</option>
+                        <option value="2">Semana 2</option>
+                        <option value="3">Semana 3</option>
+                        <option value="4">Semana 4</option>
+                        <option value="5">Semana 5</option>
                     </select>
                 </div>
             </div>

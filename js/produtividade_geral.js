@@ -6,6 +6,23 @@ const Geral = {
     periodoFim: null,
 
     toggleSemana: function() {
+        const mode = document.getElementById('view-mode').value;
+        const selSemana = document.getElementById('select-semana');
+        
+        // Exibe o select secundário se a opção for 'semana'
+        if (mode === 'semana') {
+            selSemana.classList.remove('hidden');
+            // Auto-seleciona a semana correspondente ao dia global para evitar saltos bruscos
+            const globalInput = document.getElementById('global-date');
+            if(globalInput && globalInput.value) {
+                const dia = parseInt(globalInput.value.split('-')[2]);
+                // Estimativa simples: Semana 1 (1-7), Semana 2 (8-14)...
+                // Ou pela lógica de semanas completas do mês.
+                // Vamos manter a seleção atual do usuário se ele já tiver mexido, ou setar para 1.
+            }
+        } else {
+            selSemana.classList.add('hidden');
+        }
         this.carregarTela();
     },
     
@@ -30,14 +47,55 @@ const Geral = {
             inicio = dateIni.toLocaleDateString('en-CA'); 
             fim = dateFim.toLocaleDateString('en-CA');
         } else if (modo === 'semana') {
-            // Calcula inicio e fim da semana (domingo a sabado)
-            const dayOfWeek = refDate.getDay(); 
-            const diffIni = refDate.getDate() - dayOfWeek;
-            const diffFim = refDate.getDate() + (6 - dayOfWeek);
-            const dateIni = new Date(refDate); dateIni.setDate(diffIni);
-            const dateFim = new Date(refDate); dateFim.setDate(diffFim);
-            inicio = dateIni.toLocaleDateString('en-CA');
-            fim = dateFim.toLocaleDateString('en-CA');
+            // Lógica de Semanas Específicas (1 a 5) dentro do mês selecionado
+            const numSemana = parseInt(document.getElementById('select-semana').value) || 1;
+            
+            // Definição: Semana 1 começa no dia 1. Semana 2 começa no próximo domingo.
+            // Estratégia simples e funcional para relatórios mensais:
+            // Semana 1: Dia 1 até o primeiro Sábado.
+            // Semana 2: Domingo seguinte até Sábado...
+            
+            let cursor = new Date(ano, mes - 1, 1); // Dia 1 do mês
+            let weekCount = 1;
+            
+            // Avança até a semana desejada
+            while (weekCount < numSemana) {
+                // Encontra o próximo domingo
+                const day = cursor.getDay(); // 0=Dom, 6=Sab
+                const daysToNextSun = (7 - day) % 7;
+                const jump = daysToNextSun === 0 ? 7 : daysToNextSun; // Se é domingo, pula 7 para o próximo
+                
+                // Se estamos na semana 1 e dia 1 não é domingo, o próximo domingo começa a semana 2.
+                // Ajuste: A primeira semana vai do dia 1 até o primeiro Sábado.
+                const distToSaturday = 6 - cursor.getDay();
+                
+                // Pula para o Domingo da próxima semana
+                cursor.setDate(cursor.getDate() + distToSaturday + 1);
+                weekCount++;
+            }
+            
+            // Agora 'cursor' é o início da semana desejada (ou passou do mês)
+            if (cursor.getMonth() !== mes - 1) {
+                // Se passou do mês (ex: mês curto não tem semana 6), pega última semana válida
+                // Fallback: pega o último dia
+                 cursor = new Date(ano, mes, 0); 
+            }
+
+            const weekStart = new Date(cursor);
+            
+            // O fim da semana é o próximo sábado ou o fim do mês
+            const distToSaturday = 6 - weekStart.getDay();
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + distToSaturday);
+            
+            // Não deixa passar do fim do mês
+            const lastDayOfMonth = new Date(ano, mes, 0);
+            if (weekEnd > lastDayOfMonth) {
+                weekEnd.setDate(lastDayOfMonth.getDate());
+            }
+
+            inicio = weekStart.toLocaleDateString('en-CA');
+            fim = weekEnd.toLocaleDateString('en-CA');
         }
 
         this.periodoInicio = inicio;
@@ -70,7 +128,7 @@ const Geral = {
     mudarFator: function(nome, valor) {
         const modo = document.getElementById('view-mode').value;
         if (modo !== 'dia') {
-            alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico.");
+            alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico para maior precisão.");
             this.renderizar(); 
             return;
         }
@@ -214,7 +272,6 @@ const Geral = {
                  const infoDia = u.diasMap[this.dataVisualizada];
                  fator = infoDia ? infoDia.fator : 1;
             } else {
-                 // Em modos agregados, mostra 100% ou calcula média
                  fator = 1; 
             }
             const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
