@@ -12,7 +12,7 @@ const MA_Main = {
         const f = this.sessao.funcao;
         this.isMgr = (f === 'Gestora' || f === 'Auditora');
         
-        // Inicializa o Sistema para carregar fatores (abonos) e configurações
+        // Inicializa o Sistema
         if (typeof Sistema !== 'undefined' && Sistema.Dados) {
             await Sistema.Dados.inicializar();
             Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', () => this.atualizarDashboard());
@@ -99,6 +99,30 @@ const MA_Main = {
         if(aba === 'comparativo') this.atualizarDashboard(); 
     },
 
+    togglePeriodo: function() {
+        const type = document.getElementById('diario-period-type').value;
+        const q = document.getElementById('diario-select-quarter');
+        const s = document.getElementById('diario-select-semester');
+        
+        if(!q || !s) return;
+
+        q.classList.add('hidden');
+        s.classList.add('hidden');
+        
+        const dt = this.getDateFromInput();
+        const m = dt.getMonth() + 1;
+
+        if(type === 'trimestre') {
+            q.classList.remove('hidden');
+            if (q.value === '1' && m > 3) q.value = Math.ceil(m/3);
+        } else if (type === 'semestre') {
+            s.classList.remove('hidden');
+            if (s.value === '1' && m > 6) s.value = 2;
+        }
+        
+        this.atualizarDashboard();
+    },
+
     atualizarDashboard: async function() {
         const refDate = this.getDateFromInput();
         if (isNaN(refDate.getTime())) return;
@@ -155,32 +179,58 @@ const MA_Main = {
         const dadosNormalizados = MA_Diario.normalizarDadosPorNome(rawData || []);
         let dadosFinais = [];
 
-        // Garante que o sistema tenha os dados carregados (caso a init tenha corrido antes)
         if(!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
 
         if (viewingTime) {
+            // LÓGICA DE TIME (Média Ponderada e Observação Detalhada)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
-                const prods = Object.values(dadosNormalizados[dia]);
-                // Cálculo de Média do Time
-                // Nota: Para o TIME, usamos uma simplificação de meta padrão (650) ou média das metas
-                // Mas geralmente KPI de time compara contra 650 fixo por cabeça.
-                const total = prods.reduce((a, b) => a + b.quantidade, 0);
-                const headcount = prods.length;
+                const assistants = Object.values(dadosNormalizados[dia]);
+                
+                let totalProd = 0;
+                let sumFatores = 0;
+                let headcount = 0;
+                let nomesAbonados = [];
+
+                assistants.forEach(p => {
+                    totalProd += p.quantidade;
+                    
+                    const fator = Sistema.Dados.obterFator(p.nome, dia);
+                    sumFatores += fator;
+                    headcount++;
+
+                    if (fator < 1) {
+                        nomesAbonados.push(`${p.nome} (${fator})`);
+                    }
+                });
+
+                // Média de produção simples (Total / Pessoas)
+                const mediaProd = headcount ? Math.round(totalProd / headcount) : 0;
+                
+                // Média de Fator (Se todos são 0.5, média é 0.5. Se metade é, média é 0.75)
+                const mediaFator = headcount ? sumFatores / headcount : 1;
+                
+                // Meta do Time Ajustada pela média de fatores
+                const metaTimeAjustada = Math.round(650 * mediaFator);
+
+                let obs = `Média de ${headcount} assistentes.`;
+                if (nomesAbonados.length > 0) {
+                    obs += ` Abonos: ${nomesAbonados.join(', ')}`;
+                }
+
                 dadosFinais.push({
                     data_referencia: dia, 
-                    quantidade: headcount ? Math.round(total / headcount) : 0,
-                    meta_diaria: 650, // Meta base do time
-                    meta_ajustada: 650, // Time não tem "abono" individual na média simples
-                    fator: 1,
-                    observacao: `Média de ${headcount} assistentes`
+                    quantidade: mediaProd,
+                    meta_diaria: 650, 
+                    meta_ajustada: metaTimeAjustada, 
+                    fator: mediaFator,
+                    observacao: obs
                 });
             });
         } else {
-            // Visão Individual: Aplica Fator e Meta Ajustada
+            // LÓGICA INDIVIDUAL (Mantida)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
                 if (dPessoa) {
-                    // Busca o Fator definido na Gestão
                     const fator = Sistema.Dados.obterFator(targetName, dia);
                     const metaBase = dPessoa.meta_diaria || 650;
                     const metaAjustada = Math.round(metaBase * fator);
@@ -190,7 +240,7 @@ const MA_Main = {
                         data_referencia: dia, 
                         quantidade: dPessoa.quantidade,
                         meta_diaria: metaBase,
-                        meta_ajustada: metaAjustada, // Valor real a ser cobrado
+                        meta_ajustada: metaAjustada, 
                         fator: fator,
                         observacao: dPessoa.observacao, 
                         observacao_gestora: dPessoa.observacao_gestora
