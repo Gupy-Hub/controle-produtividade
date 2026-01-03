@@ -58,7 +58,7 @@ const Sistema = {
             }
         },
 
-        // Conta quantos assistentes estão marcados como 'ativo' no cadastro
+        // Métodos de Contagem e Fatores
         contarAssistentesAtivos: function() {
             if (!this.usuariosCache) return 0;
             return Object.values(this.usuariosCache).filter(u => u.funcao === 'Assistente' && u.ativo).length;
@@ -77,15 +77,14 @@ const Sistema = {
             return 1.0; 
         },
 
+        // --- GESTÃO DE BASE HC (PADRÃO 17) ---
         definirBaseHC: function(dataRef, quantidade) {
             if(!dataRef) return;
             const key = dataRef.substring(0, 7); 
             
-            // Se o valor for vazio ou igual ao count do sistema, remove o override
-            const countSistema = this.contarAssistentesAtivos();
-            
-            if (!quantidade || parseInt(quantidade) === countSistema) {
-                delete this.basesHcCache[key]; // Usa o padrão
+            // Se for vazio ou 17, remove do cache para usar o padrão
+            if (!quantidade || parseInt(quantidade) === 17) {
+                delete this.basesHcCache[key]; 
             } else {
                 this.basesHcCache[key] = parseInt(quantidade);
             }
@@ -94,11 +93,11 @@ const Sistema = {
         },
 
         obterBaseHC: function(dataRef) {
-            if(!dataRef) return this.contarAssistentesAtivos() || 17;
+            if(!dataRef) return 17;
             const key = dataRef.substring(0, 7);
             
-            // Retorna o manual se existir, senão retorna o count atual do sistema
-            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : (this.contarAssistentesAtivos() || 17);
+            // CORREÇÃO: Se não houver manual, retorna 17 fixo.
+            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
         },
 
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
@@ -122,7 +121,7 @@ const Sistema = {
                 inicio.setMonth(inicio.getMonth() + 1);
             }
 
-            return mesesContados > 0 ? Math.round(somaBases / mesesContados) : (this.contarAssistentesAtivos() || 17);
+            return mesesContados > 0 ? Math.round(somaBases / mesesContados) : 17;
         },
 
         obterMetaVigente: function(usuarioId, dataReferencia) {

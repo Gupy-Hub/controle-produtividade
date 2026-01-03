@@ -14,8 +14,25 @@ const Cons = {
         let el = document.getElementById('global-date');
         let val = el ? el.value : new Date().toISOString().split('T')[0];
         
+        // Confirmação removida daqui pois já está no main.js, ou mantemos simples
         Sistema.Dados.definirBaseHC(val, novoValor);
         this.carregar(true); 
+    },
+    
+    // Função auxiliar para contar dias úteis (Seg-Sex) no calendário
+    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
+        let count = 0;
+        let cur = new Date(dataInicio + 'T12:00:00'); // Hora fixa para evitar timezone
+        const end = new Date(dataFim + 'T12:00:00');
+        
+        while (cur <= end) {
+            const day = cur.getDay();
+            if (day !== 0 && day !== 6) { // 0=Dom, 6=Sab
+                count++;
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count;
     },
     
     carregar: async function(forcar = false) {
@@ -32,7 +49,6 @@ const Cons = {
         if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
         else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
-        // Sincroniza input visual
         const inputHC = document.getElementById('cons-input-hc');
         if(inputHC) {
             const baseDoMes = Sistema.Dados.obterBaseHC(val);
@@ -41,10 +57,7 @@ const Cons = {
 
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0'); const sDia = String(dia).padStart(2, '0');
         
-        // Definição dos Intervalos de Data
         let s, e;
-        
-        // CORREÇÃO: Visão Diária agora pega o MÊS INTEIRO para explodir em dias
         if (t === 'dia' || t === 'mes') { 
             s = `${sAno}-${sMes}-01`; 
             e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
@@ -60,7 +73,7 @@ const Cons = {
             s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
             e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
         } 
-        else { // ano_mes e ano_trim
+        else { 
             s = `${sAno}-01-01`; 
             e = `${sAno}-12-31`; 
         }
@@ -99,26 +112,63 @@ const Cons = {
 
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
-        
-        // --- GERAÇÃO DAS COLUNAS ---
+        let datesMap = {}; // Armazena início e fim de cada coluna para contar dias úteis
+
+        // --- GERAÇÃO DAS COLUNAS E INTERVALOS ---
         if (t === 'dia') { 
-            // Gera colunas de 01 a 31 (ou ultimo dia do mes)
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-            for(let d=1; d<=lastDay; d++) cols.push(String(d).padStart(2,'0'));
+            for(let d=1; d<=lastDay; d++) {
+                cols.push(String(d).padStart(2,'0'));
+                datesMap[d] = { 
+                    ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+                    fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+                };
+            }
         } 
-        else if (t === 'mes') { cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; } 
+        else if (t === 'mes') { 
+            cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; 
+            // Para semanas, a contagem exata de dias úteis é complexa sem definir as datas exatas.
+            // Aqui usaremos aproximação baseada nos dados ou calendário se implementarmos a lógica de semanas.
+            // Para simplificar, vamos manter a contagem de dias com produção para Semanas, ou melhorar depois.
+        } 
         else if (t === 'trimestre') {
             const trim = Math.ceil(currentMonth / 3);
             const idxStart = (trim - 1) * 3;
             cols = [mesesNomes[idxStart], mesesNomes[idxStart+1], mesesNomes[idxStart+2]];
+            
+            for(let i=0; i<3; i++) {
+                const m = idxStart + i + 1;
+                const ultimoDia = new Date(currentYear, m, 0).getDate();
+                datesMap[i+1] = {
+                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
+                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}`
+                };
+            }
         } else if (t === 'semestre') {
             const sem = Math.ceil(currentMonth / 6);
             const idxStart = (sem - 1) * 6;
             cols = mesesNomes.slice(idxStart, idxStart + 6);
+            for(let i=0; i<6; i++) {
+                const m = idxStart + i + 1;
+                const ultimoDia = new Date(currentYear, m, 0).getDate();
+                datesMap[i+1] = {
+                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
+                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}`
+                };
+            }
         } else if (t === 'ano_trim') {
             cols = ['1º Trim', '2º Trim', '3º Trim', '4º Trim'];
+            // Lógica similar para trimestres
         } else { 
             cols = mesesNomes; 
+            for(let i=0; i<12; i++) {
+                const m = i + 1;
+                const ultimoDia = new Date(currentYear, m, 0).getDate();
+                datesMap[i+1] = {
+                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
+                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}`
+                };
+            }
         }
         
         const numCols = cols.length; 
@@ -138,10 +188,7 @@ const Cons = {
                 const mIdx = dt.getMonth(); 
                 const dDia = dt.getDate();
 
-                // Lógica de agrupamento (Bucket)
-                if (t === 'dia') {
-                    b = dDia; // Bucket é o dia do mês (1 a 31)
-                }
+                if (t === 'dia') { b = dDia; }
                 else if (t === 'mes') { 
                     const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); 
                     b = Math.ceil((dt.getDate() + firstDay) / 7); 
@@ -157,7 +204,7 @@ const Cons = {
                     if(!st[k]) return;
                     const x = st[k];
                     x.users.add(nome); 
-                    x.dates.add(r.data_referencia); // Adiciona data única para contar dias úteis
+                    x.dates.add(r.data_referencia);
                     
                     x.qty += sys; 
                     x.fifo += (Number(r.fifo)||0); 
@@ -166,10 +213,40 @@ const Cons = {
                     x.fc += (Number(r.perfil_fc)||0);
                 };
                 populate(b);
-                populate(99); // Totalizador
+                populate(99); 
             });
         }
 
+        // --- CÁLCULO DE DIAS ÚTEIS DE CALENDÁRIO ---
+        // Preenche a propriedade 'diasUteis' de cada bucket com base no calendário
+        for(let i=1; i<=numCols; i++) {
+            if(datesMap[i]) {
+                st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
+            } else if (t === 'dia') {
+                // Se for visão diária, cada coluna é 1 dia. Se for Sáb/Dom é 0.
+                st[i].diasUteis = this.calcularDiasUteisCalendario(
+                    `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`,
+                    `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`
+                );
+            } else {
+                // Fallback para outros modos (ex: semana) onde não mapeamos datas exatas
+                st[i].diasUteis = st[i].dates.size; 
+            }
+        }
+        
+        // Total Geral de Dias Úteis do Período Inteiro
+        if (t === 'mes' || t === 'dia') {
+            const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+            const ini = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+            const fim = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`;
+            st[99].diasUteis = this.calcularDiasUteisCalendario(ini, fim);
+        } else {
+            // Para trimestres/anos, soma os dias úteis dos meses
+            st[99].diasUteis = 0;
+            for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
+        }
+
+        // --- RENDERIZAÇÃO ---
         const hRow = document.getElementById('cons-table-header'); 
         if(hRow) hRow.innerHTML = `
             <th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]">
@@ -201,20 +278,15 @@ const Cons = {
             
             idxs.forEach(i => {
                 const s = st[i]; 
-                
-                // CORREÇÃO: Dias Úteis agora é a contagem de datas únicas com produção (Calendário)
-                // Se for a coluna de um dia específico (visão diária), size será 1 (se houve trabalho) ou 0.
-                // Se for Total, size será o total de dias distintos no mês (ex: 22).
-                const diasReais = s.dates.size; 
-                
+                const diasCal = s.diasUteis; // Dias Úteis do Calendário
                 const ativos = s.users.size || 1; 
-                let val = 0; 
                 
+                let val = 0; 
                 if (!isCalc) { 
                     val = getter(s); 
                     if (val instanceof Set) val = val.size; 
                 } else { 
-                    val = getter(s, diasReais, ativos); 
+                    val = getter(s, diasCal, ativos); 
                 }
                 const txt = val ? Math.round(val).toLocaleString() : '-';
                 const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
@@ -223,60 +295,40 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // 1. Total de assistentes
         h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => s.users);
         
-        // 2. Total de dias úteis / trabalhado (Agora conta dias de calendário únicos)
-        h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', s => s.dates);
+        // CORREÇÃO: Mostra dias úteis do calendário (ex: 22)
+        h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
         
-        // 3. Total de documentos Fifo
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
-        
-        // 4. Total de documentos Gradual Parcial
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
-        
-        // 5. Total de documentos Gradual Total
         h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
-        
-        // 6. Total de documentos Perfil Fc
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         
-        // 7. Total de documentos validados (DESTACADO)
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // 8. Total validação diária (Dias uteis) 
-        // Lógica: Produção Total / Dias Úteis do Período (Média Absoluta da Equipe por Dia)
+        // Média Time = Produção / Dias Úteis Calendário
         h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         
-        // 9. Média validação diária (Todas assistentes)
-        // Lógica: (Produção Total / Dias Úteis) / Total de Pessoas Reais Ativas
-        // Isso mostra quanto CADA pessoa real produziu por dia em média
+        // Média (Todas) = Média Time / Ativos Reais
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
         
-        // 10. Média validação diária (Por Assistentes)
-        // Lógica: (Produção Total / Dias Úteis) / Base HC Configurada (HF)
-        // Isso mostra a média considerando o quadro esperado (Base) e não o real
+        // Média (Por Assistentes) = Média Time / Base HC (HF)
+        // CORREÇÃO: Removido "Base 17" do texto
         h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d) => d > 0 ? s.qty / d / HF : 0, true);
         
         tbody.innerHTML = h;
         
-        // Atualiza Cards Superiores
+        // Cards
         const tot = st[99]; 
-        const dTot = tot.dates.size || 1; // Dias Únicos Totais
+        const dTot = tot.diasUteis || 1; 
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
-        
-        // Média do Time = Produção / Dias
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        
-        // Média Ind = (Produção / Dias) / Base HC
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
-        
-        // Card Headcount mostra as Ativas Reais
         setSafe('cons-p-headcount', tot.users.size); 
         
-        // Badge mostra a Base Configurada
         const elLblBase = document.getElementById('cons-lbl-base-avg');
         if(elLblBase) elLblBase.innerText = HF;
         const elBadge = document.getElementById('cons-badge-base');
@@ -285,8 +337,7 @@ const Cons = {
     
     newStats: function() { 
         return { 
-            users: new Set(), 
-            dates: new Set(), // Set de datas únicas para contagem correta de dias úteis
+            users: new Set(), dates: new Set(), diasUteis: 0,
             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0
         }; 
     }
