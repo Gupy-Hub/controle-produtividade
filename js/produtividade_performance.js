@@ -20,7 +20,7 @@ const Perf = {
         if(inpMonth) inpMonth.value = `${ano}-${String(mes).padStart(2,'0')}`;
         if(inpYear) inpYear.value = ano;
         
-        this.carregarRanking(true); // Força recarregamento pois a data mudou externa mente
+        this.carregarRanking(true); // Força recarregamento pois a data mudou externamente
     },
 
     uiChange: function() {
@@ -90,7 +90,10 @@ const Perf = {
                 labelTexto = `Ano de ${ano}`;
             }
             
-            document.getElementById('perf-range-label').innerText = labelTexto;
+            // --- CORREÇÃO DE SEGURANÇA ---
+            const elRange = document.getElementById('perf-range-label');
+            if(elRange) elRange.innerText = labelTexto;
+            // -----------------------------
 
             // Busca otimizada: apenas colunas necessárias
             const { data: prods, error } = await _supabase
@@ -106,7 +109,10 @@ const Perf = {
             let namesCLT = new Set(), namesPJ = new Set();
 
             prods.forEach(item => {
-                const user = USERS_CACHE[item.usuario_id];
+                // Tenta buscar no cache global ou no cache do Sistema (Fallback)
+                const user = (typeof USERS_CACHE !== 'undefined' ? USERS_CACHE[item.usuario_id] : null) || 
+                             (Sistema.Dados.usuariosCache ? Sistema.Dados.usuariosCache[item.usuario_id] : null);
+                
                 if (!user || user.funcao !== 'Assistente') return;
 
                 const nome = user.nome.trim(); 
@@ -121,7 +127,7 @@ const Perf = {
                 stats[nome].dias.add(item.data_referencia);
             });
             
-            // Atualiza indicadores de segmentação
+            // --- CORREÇÃO DE SEGURANÇA ---
             const atualizarElemento = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
             atualizarElemento('perf-pct-clt', (prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0) + '%');
             atualizarElemento('perf-count-clt', namesCLT.size);
@@ -145,7 +151,7 @@ const Perf = {
     renderRanking: function() {
         const tbody = document.getElementById('perf-ranking-body'); 
         if (!this.dadosCarregados.length) { 
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>'; 
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>'; 
             this.atualizarCards(null); 
             return; 
         }
@@ -153,6 +159,9 @@ const Perf = {
         let html = ''; 
         let selectedStats = null;
         
+        // Verifica se 'sessao' existe para evitar erro
+        const currentUserName = (typeof sessao !== 'undefined' && sessao) ? sessao.nome : null;
+
         this.dadosCarregados.forEach((u, idx) => {
             const dias = u.dias.size || 1; 
             const media = Math.round(u.total / dias); 
@@ -161,7 +170,7 @@ const Perf = {
             const isSelected = this.selectedUserId === u.id; 
             if (isSelected) selectedStats = { ...u, media, meta, rank: idx + 1 };
             
-            const isMe = sessao && u.nome === sessao.nome; 
+            const isMe = currentUserName && u.nome === currentUserName; 
             let rowClass = isSelected ? "selected-row" : (isMe ? "me-row" : "hover:bg-slate-50");
             let trofeu = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
 
@@ -181,7 +190,7 @@ const Perf = {
                 </tr>`;
         });
         
-        tbody.innerHTML = html; 
+        if(tbody) tbody.innerHTML = html; 
         this.atualizarCards(selectedStats);
     },
 
@@ -193,13 +202,16 @@ const Perf = {
     },
 
     atualizarCards: function(userStats) {
+        // --- CORREÇÃO DE SEGURANÇA: Evita erro 'Cannot set properties of null' ---
+        const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+
         const total = userStats ? userStats.total : this.dadosCarregados.reduce((a, b) => a + b.total, 0);
         const meta = userStats ? userStats.meta : this.dadosCarregados.reduce((a, b) => a + (b.dias.size * 650), 0);
         const pct = meta > 0 ? Math.round((total / meta) * 100) : 0;
 
-        document.getElementById('perf-card-total').innerText = total.toLocaleString();
-        document.getElementById('perf-card-meta').innerText = meta.toLocaleString();
-        document.getElementById('perf-card-pct-val').innerText = pct + '%';
+        safeSet('perf-card-total', total.toLocaleString());
+        safeSet('perf-card-meta', meta.toLocaleString());
+        safeSet('perf-card-pct-val', pct + '%');
         
         const cardPct = document.getElementById('perf-card-pct');
         if(cardPct) {

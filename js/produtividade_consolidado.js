@@ -15,7 +15,12 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body'); 
         
         const t = document.getElementById('cons-period-type').value; 
-        const refDate = Sistema.Datas.lerInput('data-cons');
+        
+        // --- CORREÇÃO DE SEGURANÇA NA DATA ---
+        let refDate = Sistema.Datas.lerInput('data-cons');
+        if (!refDate || isNaN(refDate.getTime())) refDate = new Date(); // Garante data válida
+        // -------------------------------------
+
         const inputHC = document.getElementById('cons-input-hc');
         const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
 
@@ -52,11 +57,6 @@ const Cons = {
     },
 
     renderizar: function(rawData, t, HF) {
-        // ... (Mesma lógica de renderização anterior) ...
-        // Copie todo o código que estava dentro do bloco "try" do carregar original, 
-        // começando da definição de "cols" até o final do preenchimento do tbody.
-        // Abaixo está uma versão resumida da lógica para colar aqui:
-
         const tbody = document.getElementById('cons-table-body');
         let cols = []; 
         if (t === 'dia') cols = ['Dia']; 
@@ -135,10 +135,14 @@ const Cons = {
         tbody.innerHTML = h;
         
         const tot = st[99]; const dTot = tot.dates.size || 1; 
-        document.getElementById('cons-p-total').innerText = tot.qty.toLocaleString(); 
-        document.getElementById('cons-p-media-time').innerText = Math.round(tot.qty / dTot).toLocaleString(); 
-        document.getElementById('cons-p-media-ind').innerText = Math.round(tot.qty / dTot / HF).toLocaleString(); 
-        document.getElementById('cons-p-headcount').innerText = tot.users.size;
+        
+        // --- FUNÇÃO SEGURA PARA EVITAR ERRO NULL ---
+        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
+        
+        setSafe('cons-p-total', tot.qty.toLocaleString()); 
+        setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
+        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString()); 
+        setSafe('cons-p-headcount', tot.users.size);
     },
     
     newStats: function() { return { users: new Set(), dates: new Set(), qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, clt_users: new Set(), clt_qty: 0, pj_users: new Set(), pj_qty: 0 }; }
