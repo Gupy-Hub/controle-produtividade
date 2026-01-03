@@ -22,21 +22,15 @@
         
         /* Estilos de Tabela */
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
+        .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
-        .col-fixed { position: sticky; left: 0; background: white; z-index: 10; border-right: 1px solid #e2e8f0; }
         
         /* Animações */
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Destaque Ranking Top 5 */
-        .rank-1 { background: linear-gradient(to right, #fffbeb, #ffffff); border-left: 4px solid #fbbf24 !important; }
-        .rank-2 { background: linear-gradient(to right, #f8fafc, #ffffff); border-left: 4px solid #94a3b8 !important; }
-        .rank-3 { background: linear-gradient(to right, #fff7ed, #ffffff); border-left: 4px solid #fdba74 !important; }
-        .rank-top { background-color: #f0f9ff; border-left: 4px solid #60a5fa !important; }
         
         /* Select de Status Customizado */
         .status-select { 
@@ -278,15 +272,16 @@
                     </div>
                     
                     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative flex flex-col">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Top 5 (% Meta)</p>
-                        <div id="perf-rank-content" class="text-[11px] font-medium text-slate-700 space-y-1.5 flex-1 overflow-y-auto"></div>
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-3">Top 5 (% Meta)</p>
+                        <div id="perf-rank-content" class="text-[11px] font-medium text-slate-700 space-y-1.5 flex-1 overflow-y-auto custom-scrollbar">
+                            </div>
                     </div>
                 </div>
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h3 class="font-bold text-slate-700">Ranking Detalhado (% Meta)</h3>
-                        <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">
+                        <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden bg-blue-50 px-3 py-1 rounded border border-blue-200" id="perf-btn-limpar">
                             ✕ Limpar Seleção
                         </button>
                     </div>

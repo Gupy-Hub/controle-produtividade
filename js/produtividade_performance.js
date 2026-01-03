@@ -56,6 +56,18 @@ const Perf = {
         // Validação de inputs
         if((tipo === 'mes' && !valMonth) || (tipo !== 'mes' && !valYear)) return;
 
+        // --- CORREÇÃO 1: Aguardar Cache de Usuários (Evita tabela vazia) ---
+        // Se o cache de usuários ainda não carregou, aguarda um pouco
+        if (typeof USERS_CACHE === 'undefined' || Object.keys(USERS_CACHE).length === 0) {
+            console.log("Aguardando carregamento de usuários...");
+            await new Promise(resolve => setTimeout(resolve, 800)); // Espera 800ms
+            // Se ainda estiver vazio e a função existir, tenta carregar forçado
+            if ((typeof USERS_CACHE === 'undefined' || Object.keys(USERS_CACHE).length === 0) && typeof carregarUsuariosGlobal === 'function') {
+                await carregarUsuariosGlobal();
+            }
+        }
+        // -------------------------------------------------------------------
+
         // Gerar chave de cache baseada nos filtros atuais
         const queryKey = `${tipo}-${valMonth}-${valYear}-${valQuarter}-${valSemester}`;
         if(!forcar && this.cacheFiltros === queryKey && this.dadosCarregados.length > 0) {
@@ -90,10 +102,8 @@ const Perf = {
                 labelTexto = `Ano de ${ano}`;
             }
             
-            // --- CORREÇÃO DE SEGURANÇA ---
             const elRange = document.getElementById('perf-range-label');
             if(elRange) elRange.innerText = labelTexto;
-            // -----------------------------
 
             // Busca otimizada: apenas colunas necessárias
             const { data: prods, error } = await _supabase
@@ -127,7 +137,6 @@ const Perf = {
                 stats[nome].dias.add(item.data_referencia);
             });
             
-            // --- CORREÇÃO DE SEGURANÇA ---
             const atualizarElemento = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
             atualizarElemento('perf-pct-clt', (prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0) + '%');
             atualizarElemento('perf-count-clt', namesCLT.size);
@@ -153,14 +162,19 @@ const Perf = {
         if (!this.dadosCarregados.length) { 
             if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>'; 
             this.atualizarCards(null); 
+            // Limpa o Top 5 também
+            const divTop5 = document.getElementById('perf-rank-content');
+            if(divTop5) divTop5.innerHTML = '<div class="text-center text-slate-400 py-4 italic">Sem dados</div>';
             return; 
         }
         
         let html = ''; 
         let selectedStats = null;
         
-        // Verifica se 'sessao' existe para evitar erro
-        const currentUserName = (typeof sessao !== 'undefined' && sessao) ? sessao.nome : null;
+        // --- CORREÇÃO 2: Comparação de ID segura ---
+        const sessaoAtual = JSON.parse(localStorage.getItem('usuario'));
+        const currentUserId = sessaoAtual ? sessaoAtual.id : null;
+        // -------------------------------------------
 
         this.dadosCarregados.forEach((u, idx) => {
             const dias = u.dias.size || 1; 
@@ -170,14 +184,15 @@ const Perf = {
             const isSelected = this.selectedUserId === u.id; 
             if (isSelected) selectedStats = { ...u, media, meta, rank: idx + 1 };
             
-            const isMe = currentUserName && u.nome === currentUserName; 
-            let rowClass = isSelected ? "selected-row" : (isMe ? "me-row" : "hover:bg-slate-50");
+            // Usa o ID para saber se é "Você"
+            const isMe = currentUserId && u.id === currentUserId; 
+            let rowClass = isSelected ? "selected-row" : (isMe ? "me-row bg-blue-50/50 border-l-4 border-blue-300" : "hover:bg-slate-50");
             let trofeu = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
 
             html += `
-                <tr class="${rowClass} transition border-b border-slate-100 cursor-pointer" onclick="Perf.toggleUsuario(${u.id})">
+                <tr class="${rowClass} transition border-b border-slate-100 cursor-pointer" onclick="Perf.toggleUsuario('${u.id}')">
                     <td class="px-6 py-4 font-bold text-slate-600">${trofeu} #${idx + 1}</td>
-                    <td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '(Você)' : ''}</td>
+                    <td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '<span class="text-xs text-blue-600 ml-1">(Você)</span>' : ''}</td>
                     <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
                     <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
                     <td class="px-6 py-4 text-center">${media.toLocaleString()}</td>
@@ -191,31 +206,91 @@ const Perf = {
         });
         
         if(tbody) tbody.innerHTML = html; 
+
+        // --- CORREÇÃO 3: Renderizar o Top 5 (Código Novo) ---
+        const divTop5 = document.getElementById('perf-rank-content');
+        if (divTop5) {
+            // Pega os 5 primeiros
+            const top5 = this.dadosCarregados.slice(0, 5);
+            let htmlTop = '';
+            
+            top5.forEach((u, i) => {
+                const dias = u.dias.size || 1;
+                const meta = 650 * dias;
+                const pct = meta > 0 ? Math.round((u.total / meta) * 100) : 0;
+                const corBarra = pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500';
+                
+                htmlTop += `
+                <div class="flex items-center gap-2 mb-3">
+                    <div class="w-5 text-center text-[10px] font-bold text-slate-400 border border-slate-200 rounded">${i + 1}º</div>
+                    <div class="flex-1">
+                        <div class="flex justify-between text-[10px] mb-0.5">
+                            <span class="font-bold text-slate-700 truncate w-28">${u.nome}</span>
+                            <span class="font-bold text-slate-500">${pct}%</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                            <div class="${corBarra} h-full transition-all duration-500" style="width: ${Math.min(pct, 100)}%"></div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            divTop5.innerHTML = htmlTop;
+        }
+        // ---------------------------------------------------
+
         this.atualizarCards(selectedStats);
     },
 
     toggleUsuario: function(id) { 
-        this.selectedUserId = (this.selectedUserId === id) ? null : id; 
+        // Converte para string para garantir comparação correta
+        const strId = String(id);
+        this.selectedUserId = (this.selectedUserId === strId) ? null : strId; 
+        
         const btnLimpar = document.getElementById('perf-btn-limpar');
         if(btnLimpar) btnLimpar.classList.toggle('hidden', !this.selectedUserId);
+        
         this.renderRanking(); 
     },
 
+    limparSelecao: function() {
+        this.selectedUserId = null;
+        document.getElementById('perf-btn-limpar').classList.add('hidden');
+        this.renderRanking();
+    },
+
     atualizarCards: function(userStats) {
-        // --- CORREÇÃO DE SEGURANÇA: Evita erro 'Cannot set properties of null' ---
         const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
 
+        // Se tem usuário selecionado, mostra dados dele. Se não, mostra TOTAL GERAL.
         const total = userStats ? userStats.total : this.dadosCarregados.reduce((a, b) => a + b.total, 0);
-        const meta = userStats ? userStats.meta : this.dadosCarregados.reduce((a, b) => a + (b.dias.size * 650), 0);
+        
+        // Meta: Se individual, dias do usuário * 650. Se Geral, soma da meta de todos.
+        const meta = userStats ? userStats.meta : this.dadosCarregados.reduce((a, b) => a + ((b.dias.size || 1) * 650), 0);
+        
         const pct = meta > 0 ? Math.round((total / meta) * 100) : 0;
+        
+        // Média Diária
+        let media = 0;
+        if (userStats) {
+            media = userStats.media;
+        } else {
+            // Média global = Total Produção / Total Dias de todos somados
+            const totalDiasSomados = this.dadosCarregados.reduce((a,b) => a + (b.dias.size||1), 0);
+            media = totalDiasSomados > 0 ? Math.round(total / totalDiasSomados) : 0;
+        }
 
         safeSet('perf-card-total', total.toLocaleString());
+        safeSet('perf-card-media', media.toLocaleString());
         safeSet('perf-card-meta', meta.toLocaleString());
-        safeSet('perf-card-pct-val', pct + '%');
         
-        const cardPct = document.getElementById('perf-card-pct');
-        if(cardPct) {
-            cardPct.className = `p-6 rounded-2xl shadow-sm bg-gradient-to-br text-white transition-all duration-500 ${pct >= 100 ? 'from-indigo-600 to-blue-700' : 'from-red-600 to-rose-700'}`;
-        }
+        safeSet('perf-label-real-total', total.toLocaleString());
+        safeSet('perf-label-meta-total', meta.toLocaleString());
+        
+        // Atualiza a cor do card principal de %
+        const cardPct = document.getElementById('perf-card-pct'); // Nota: esse ID precisa existir no HTML da aba performance se quiser colorir
+        // No seu HTML atual, o card colorido é fixo no header geral, mas na aba performance tem "pct" dentro do gráfico
+        // Vamos focar no que existe:
+        // Na aba performance não tem um card "Atingimento Global" colorido grande igual na home, 
+        // mas se quiser atualizar algo específico, adicione aqui.
     }
 };
