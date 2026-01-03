@@ -43,7 +43,7 @@ const Cons = {
             return;
         }
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Consolidação...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando Indicadores...</td></tr>';
 
         try {
             const { data: rawData, error } = await _supabase
@@ -68,8 +68,8 @@ const Cons = {
         if (!tbody) return;
 
         let cols = []; 
-        if (t === 'dia') cols = ['Dia']; 
-        else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; 
+        if (t === 'dia') cols = ['Dia Atual']; 
+        else if (t === 'mes') cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; 
         else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; 
         else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; 
         else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -84,7 +84,6 @@ const Cons = {
 
                 const nome = user.nome;
                 const sys = Number(r.quantidade) || 0;
-                
                 const fator = Sistema.Dados.obterFator(nome, r.data_referencia);
                 
                 let b = 1; 
@@ -113,13 +112,9 @@ const Cons = {
                     x.fc += (Number(r.perfil_fc)||0);
                     
                     if (user.contrato && user.contrato.includes('CLT')) { 
-                        x.clt_users.add(nome); 
-                        x.clt_qty += sys; 
-                        x.clt_dias += fator;
+                        x.clt_users.add(nome); x.clt_qty += sys; x.clt_dias += fator;
                     } else { 
-                        x.pj_users.add(nome); 
-                        x.pj_qty += sys;
-                        x.pj_dias += fator;
+                        x.pj_users.add(nome); x.pj_qty += sys; x.pj_dias += fator;
                     }
                 };
                 populate(b);
@@ -127,15 +122,37 @@ const Cons = {
             });
         }
 
+        // --- HEADER ESTILIZADO ---
         const hRow = document.getElementById('cons-table-header'); 
-        if(hRow) hRow.innerHTML = `<th class="px-4 py-3 sticky left-0 bg-slate-50 z-20 border-r border-slate-200">Indicadores</th>` + cols.map(c => `<th class="px-4 py-3 text-center border-l border-slate-100">${c}</th>`).join('') + `<th class="px-4 py-3 text-center bg-blue-50 text-blue-800 border-l border-blue-100">TOTAL</th>`;
+        if(hRow) hRow.innerHTML = `
+            <th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]">
+                <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
+            </th>` + 
+            cols.map(c => `<th class="px-4 py-4 text-center border-b-2 border-slate-100"><span class="text-xs font-bold text-slate-500 uppercase">${c}</span></th>`).join('') + 
+            `<th class="px-6 py-4 text-center bg-slate-50 border-b-2 border-slate-100 border-l border-slate-100 min-w-[120px]">
+                <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
+            </th>`;
         
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
         
-        const mkRow = (label, getter, isCalc=false, isBold=false, isSub=false) => {
-            const rowClass = isBold ? 'row-total' : (isSub ? 'row-sub' : 'hover:bg-slate-50'); 
-            let tr = `<tr class="${rowClass} border-b border-slate-100"><td class="px-4 py-3 font-medium col-fixed">${label}</td>`;
+        // --- FUNÇÃO GERADORA DE LINHAS (Nova Estilização) ---
+        const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
+            const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
+            const iconColor = colorInfo || 'text-slate-400';
+            const textColor = isBold ? 'text-slate-800' : 'text-slate-600';
+            const fontWeight = isBold ? 'font-black' : 'font-medium';
+            
+            let tr = `<tr class="${rowBg} border-b border-slate-50 last:border-0 group">
+                <td class="px-6 py-4 sticky left-0 bg-white z-10 border-r border-slate-50 group-hover:bg-slate-50 transition-colors shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100">
+                            <i class="${icon} ${iconColor} text-sm"></i>
+                        </div>
+                        <span class="${textColor} ${fontWeight} text-xs uppercase tracking-wide">${label}</span>
+                    </div>
+                </td>`;
+            
             idxs.forEach(i => {
                 const s = st[i]; 
                 const diasReais = s.diasPonderados; 
@@ -148,55 +165,65 @@ const Cons = {
                 } else { 
                     val = getter(s, diasReais, ativos, s.clt_dias, s.pj_dias); 
                 }
-                const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); 
-                const cellClass = i === 99 ? 'bg-blue-50 font-bold border-l border-blue-100 text-blue-900' : 'text-center border-l border-slate-50'; 
-                tr += `<td class="${cellClass} px-2 py-2">${txt}</td>`;
+                
+                const txt = val ? Math.round(val).toLocaleString() : '-';
+                // Coluna TOTAL (99) com destaque
+                const cellClass = i === 99 
+                    ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` 
+                    : `px-4 py-4 text-center text-slate-500 font-medium`;
+                
+                tr += `<td class="${cellClass}">${txt}</td>`;
             });
             return tr + '</tr>';
         };
         
-        h += mkRow('Assistentes Ativas (Produção)', s => s.users); 
-        h += mkRow('Dias Trabalhados (Fator)', s => s.diasPonderados); 
-        h += mkRow('FIFO', s => s.fifo); 
-        h += mkRow('G. Parcial', s => s.gp); 
-        h += mkRow('G. Total', s => s.gt); 
-        h += mkRow('Perfil FC', s => s.fc); 
-        h += mkRow('Produção Total', s => s.qty, false, true);
-        h += mkRow('Média Diária (Time)', (s, d) => d > 0 ? s.qty / d : 0, true); 
-        h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); 
-        h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => d > 0 ? s.qty / d / HF : 0, true);
-        h += `<tr><td colspan="${numCols + 2}" class="px-4 py-6 bg-slate-50 font-bold text-slate-400 text-xs uppercase tracking-widest text-center border-y border-slate-200">Segmentação por Contrato</td></tr>`;
-        h += mkRow('Produção CLT', s => s.clt_qty); 
-        h += mkRow('Média Diária/CLT', (s, d, a, dc, dp) => dc > 0 ? s.clt_qty / dc : 0, true);
-        h += mkRow('Produção PJ', s => s.pj_qty); 
-        h += mkRow('Média Diária/PJ', (s, d, a, dc, dp) => dp > 0 ? s.pj_qty / dp : 0, true);
+        // GRUPO 1: GERAL
+        h += mkRow('Assistentes Ativas', 'fas fa-users', 'text-indigo-500', s => s.users); 
+        h += mkRow('Dias Trabalhados', 'fas fa-calendar-check', 'text-cyan-500', s => s.diasPonderados); 
+        h += mkRow('Produção Total', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true); // Bold
+        
+        // GRUPO 2: MÉDIAS
+        h += mkRow('Média (Time)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true); 
+        h += mkRow(`Média (Base ${HF})`, 'fas fa-user-tag', 'text-amber-600', (s) => s.qty / HF, true); 
+        
+        // DIVISOR DE SEÇÃO ELEGANTE
+        h += `<tr><td colspan="${numCols + 2}" class="px-6 py-6 bg-slate-50/50">
+                <div class="flex items-center gap-4">
+                    <div class="h-px bg-slate-200 flex-1"></div>
+                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"><i class="fas fa-file-signature mr-2"></i>Segmentação por Contrato</span>
+                    <div class="h-px bg-slate-200 flex-1"></div>
+                </div>
+              </td></tr>`;
+
+        // GRUPO 3: CONTRATOS
+        h += mkRow('Produção CLT', 'fas fa-building', 'text-blue-500', s => s.clt_qty); 
+        h += mkRow('Média Diária CLT', 'fas fa-calculator', 'text-blue-400', (s, d, a, dc, dp) => dc > 0 ? s.clt_qty / dc : 0, true);
+        h += mkRow('Produção PJ', 'fas fa-briefcase', 'text-indigo-500', s => s.pj_qty); 
+        h += mkRow('Média Diária PJ', 'fas fa-calculator', 'text-indigo-400', (s, d, a, dc, dp) => dp > 0 ? s.pj_qty / dp : 0, true);
+
+        // GRUPO 4: DETALHES TÉCNICOS (Opcional, pode ficar no final)
+        h += `<tr><td colspan="${numCols + 2}" class="h-4"></td></tr>`; // Espaço
+        h += mkRow('FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo); 
+        h += mkRow('Gradual Total', 'fas fa-check-double', 'text-slate-400', s => s.gt); 
         
         tbody.innerHTML = h;
         
+        // Atualiza Cards
         const tot = st[99]; 
         const dTot = tot.diasPonderados || 1; 
-        
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
-        
-        // --- ATUALIZAÇÕES SOLICITADAS ---
-        // 1. Atualiza Badge Base
+        setSafe('cons-p-headcount', HF); 
         const elBadge = document.getElementById('cons-badge-base');
         if (elBadge) elBadge.innerText = `Base ${HF}`;
-        
-        // 2. Card "Assistentes Ativas" agora mostra o valor digitado (HF)
-        setSafe('cons-p-headcount', HF); 
-        // -------------------------------
     },
     
     newStats: function() { 
         return { 
-            users: new Set(), 
-            diasMap: {}, 
-            diasPonderados: 0,
+            users: new Set(), diasMap: {}, diasPonderados: 0,
             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, 
             clt_users: new Set(), clt_qty: 0, clt_dias: 0,
             pj_users: new Set(), pj_qty: 0, pj_dias: 0
