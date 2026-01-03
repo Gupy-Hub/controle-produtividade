@@ -19,6 +19,7 @@
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
+        .top-row { background-color: #fffbeb; border-left: 4px solid #f59e0b; } /* Destaque Top 5 */
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
@@ -216,60 +217,54 @@
             </div>
             
             <div id="perf-view-individual">
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
                         <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Produção Total</p>
-                            <p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
+                            <p class="text-2xl font-black text-blue-700" id="perf-card-total">0</p>
                         </div>
-                        <p class="text-sm text-slate-500 mt-2 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-700">--</span></p>
+                        <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-700">--</span></p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
                         <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Média Diária</p>
-                            <p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p>
+                            <p class="text-2xl font-black text-slate-800" id="perf-card-media">0</p>
                         </div>
-                        <p class="text-sm text-slate-500 mt-2 font-bold">Esperado: <span class="text-slate-700">650</span></p>
+                        <p class="text-[10px] text-slate-500 mt-1 font-bold">Esperado: <span class="text-slate-700">650</span></p>
                     </div>
                     
-                    <div id="perf-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between transition-colors duration-300">
+                    <div id="perf-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between transition-colors duration-300">
                          <div>
-                            <p class="text-xs font-bold text-white/70 uppercase mb-2">Atingimento</p>
+                            <p class="text-[10px] font-bold text-white/70 uppercase mb-1">Atingimento</p>
                              <div class="flex items-center justify-between">
-                                <p class="text-3xl font-black" id="perf-txt-pct">0%</p>
-                                <i id="perf-icon-pct" class="fas fa-chart-line text-2xl text-white/80"></i>
+                                <p class="text-2xl font-black" id="perf-txt-pct">0%</p>
+                                <i id="perf-icon-pct" class="fas fa-chart-line text-xl text-white/80"></i>
                              </div>
                         </div>
-                        <p class="text-[10px] text-white/60 mt-2 font-medium">Real vs Meta do Período</p>
+                        <p class="text-[9px] text-white/60 mt-1 font-medium">Real vs Meta do Período</p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">CLT vs PJ</p>
+                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">CLT vs PJ</p>
                         <div class="flex items-center justify-between mt-1 h-full">
                             <div class="text-center">
-                                <p class="text-xl font-black text-blue-800" id="perf-pct-clt">0%</p>
-                                <p class="text-[10px] text-slate-400 uppercase font-bold">CLT (<span id="perf-count-clt">0</span>)</p>
+                                <p class="text-lg font-black text-blue-800" id="perf-pct-clt">0%</p>
+                                <p class="text-[9px] text-slate-400 uppercase font-bold">CLT (<span id="perf-count-clt">0</span>)</p>
                             </div>
-                            <div class="h-10 w-px bg-slate-200 mx-2"></div>
+                            <div class="h-8 w-px bg-slate-200 mx-2"></div>
                             <div class="text-center">
-                                <p class="text-xl font-black text-indigo-800" id="perf-pct-pj">0%</p>
-                                <p class="text-[10px] text-slate-400 uppercase font-bold">PJ (<span id="perf-count-pj">0</span>)</p>
+                                <p class="text-lg font-black text-indigo-800" id="perf-pct-pj">0%</p>
+                                <p class="text-[9px] text-slate-400 uppercase font-bold">PJ (<span id="perf-count-pj">0</span>)</p>
                             </div>
-                        </div>
-                    </div>
-                    
-                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative flex flex-col">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-3">Top 5 (% Meta)</p>
-                        <div id="perf-rank-content" class="text-[11px] font-medium text-slate-700 space-y-1.5 flex-1 overflow-y-auto custom-scrollbar">
                         </div>
                     </div>
                 </div>
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700">Ranking Detalhado (% Meta)</h3>
+                        <h3 class="font-bold text-slate-700">Ranking Detalhado (Por Produção)</h3>
                         <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden bg-blue-50 px-3 py-1 rounded border border-blue-200" id="perf-btn-limpar">
                             ✕ Limpar Seleção
                         </button>

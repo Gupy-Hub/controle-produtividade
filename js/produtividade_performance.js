@@ -84,9 +84,8 @@ const Perf = {
             atualizarElemento('perf-count-pj', namesPJ.size);
 
             this.dadosCarregados = Object.values(stats).sort((a, b) => {
-                const pctA = a.metaAcc > 0 ? a.total / a.metaAcc : 0;
-                const pctB = b.metaAcc > 0 ? b.total / b.metaAcc : 0;
-                return pctB - pctA; 
+                // Ordenação Decrescente por TOTAL VALIDADO (quem mais validou para quem menos validou)
+                return b.total - a.total; 
             });
 
             this.renderRanking();
@@ -101,8 +100,6 @@ const Perf = {
         if (!this.dadosCarregados.length) { 
             if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>'; 
             this.atualizarCards(null); 
-            const divTop5 = document.getElementById('perf-rank-content');
-            if(divTop5) divTop5.innerHTML = '<div class="text-center text-slate-400 py-4 italic">Sem dados</div>';
             return; 
         }
         
@@ -121,12 +118,25 @@ const Perf = {
             const isSelected = String(this.selectedUserId) === String(u.id); 
             if (isSelected) selectedStats = { ...u, media, meta, rank: idx + 1 };
             
-            const isMe = currentUserId && String(u.id) === String(currentUserId); 
-            let rowClass = isSelected ? "selected-row" : (isMe ? "me-row bg-blue-50/50 border-l-4 border-blue-300" : "hover:bg-slate-50");
+            const isMe = currentUserId && String(u.id) === String(currentUserId);
+            
+            // Definição de Classes das Linhas
+            let rowClass = "transition border-b border-slate-100 cursor-pointer ";
+            if (isSelected) {
+                rowClass += "selected-row";
+            } else if (isMe) {
+                rowClass += "me-row bg-blue-50/50 border-l-4 border-blue-300";
+            } else if (idx < 5) {
+                // Destaque para as 5 primeiras (Top 5)
+                rowClass += "top-row hover:bg-amber-50"; 
+            } else {
+                rowClass += "hover:bg-slate-50";
+            }
+
             let trofeu = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
 
             html += `
-                <tr class="${rowClass} transition border-b border-slate-100 cursor-pointer" onclick="Perf.toggleUsuario('${u.id}')">
+                <tr class="${rowClass}" onclick="Perf.toggleUsuario('${u.id}')">
                     <td class="px-6 py-4 font-bold text-slate-600">${trofeu} #${idx + 1}</td>
                     <td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '<span class="text-xs text-blue-600 ml-1">(Você)</span>' : ''}</td>
                     <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
@@ -142,33 +152,6 @@ const Perf = {
         });
         
         if(tbody) tbody.innerHTML = html; 
-
-        // Top 5
-        const divTop5 = document.getElementById('perf-rank-content');
-        if (divTop5) {
-            const top5 = this.dadosCarregados.slice(0, 5);
-            let htmlTop = '';
-            top5.forEach((u, i) => {
-                const meta = u.metaAcc;
-                const pct = meta > 0 ? Math.round((u.total / meta) * 100) : 0;
-                const corBarra = pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500';
-                
-                htmlTop += `
-                <div class="flex items-center gap-2 mb-3">
-                    <div class="w-5 text-center text-[10px] font-bold text-slate-400 border border-slate-200 rounded">${i + 1}º</div>
-                    <div class="flex-1">
-                        <div class="flex justify-between text-[10px] mb-0.5">
-                            <span class="font-bold text-slate-700 truncate w-28">${u.nome}</span>
-                            <span class="font-bold text-slate-500">${pct}%</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                            <div class="${corBarra} h-full transition-all duration-500" style="width: ${Math.min(pct, 100)}%"></div>
-                        </div>
-                    </div>
-                </div>`;
-            });
-            divTop5.innerHTML = htmlTop;
-        }
 
         this.atualizarCards(selectedStats);
     },
@@ -206,8 +189,6 @@ const Perf = {
 
         safeSet('perf-card-total', total.toLocaleString());
         safeSet('perf-card-media', media.toLocaleString());
-        safeSet('perf-card-meta', meta.toLocaleString());
-        safeSet('perf-label-real-total', total.toLocaleString());
         safeSet('perf-label-meta-total', meta.toLocaleString());
 
         const txtPct = document.getElementById('perf-txt-pct');
@@ -219,10 +200,10 @@ const Perf = {
             cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
             if (pct >= 100) {
                 cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
-                iconPct.className = "fas fa-check-circle text-2xl text-white/80";
+                iconPct.className = "fas fa-check-circle text-xl text-white/80";
             } else {
                 cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
-                iconPct.className = "fas fa-chart-line text-2xl text-white/80";
+                iconPct.className = "fas fa-chart-line text-xl text-white/80";
             }
         }
     }
