@@ -13,26 +13,32 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
+        
+        /* Estilos de Abas */
         .tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: #2563eb; border-color: #2563eb; background-color: #eff6ff; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        
+        /* Estilos de Tabela */
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
         .col-fixed { position: sticky; left: 0; background: white; z-index: 10; border-right: 1px solid #e2e8f0; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         
-        /* Destaque Top 5 */
+        /* Animações */
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Destaque Ranking Top 5 */
         .rank-1 { background: linear-gradient(to right, #fffbeb, #ffffff); border-left: 4px solid #fbbf24 !important; }
         .rank-2 { background: linear-gradient(to right, #f8fafc, #ffffff); border-left: 4px solid #94a3b8 !important; }
         .rank-3 { background: linear-gradient(to right, #fff7ed, #ffffff); border-left: 4px solid #fdba74 !important; }
         .rank-top { background-color: #f0f9ff; border-left: 4px solid #60a5fa !important; }
-
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
+        /* Select de Status Customizado */
         .status-select { 
             background: transparent; font-weight: bold; font-size: 0.75rem; 
             padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none;
@@ -57,10 +63,18 @@
             </div>
             
             <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex overflow-x-auto max-w-full">
-                <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2"><i class="fas fa-check-circle"></i> Validação Diária</button>
-                <button onclick="mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2"><i class="fas fa-trophy"></i> Performance</button>
-                <button onclick="mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2"><i class="fas fa-th"></i> Matriz Anual</button>
-                <button onclick="mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2"><i class="fas fa-table"></i> Consolidado</button>
+                <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-check-circle"></i> Validação Diária
+                </button>
+                <button onclick="mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-trophy"></i> Performance
+                </button>
+                <button onclick="mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-th"></i> Matriz Anual
+                </button>
+                <button onclick="mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-table"></i> Consolidado
+                </button>
             </div>
         </div>
 
@@ -68,7 +82,9 @@
             <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
                 <div>
                     <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2"><i class="fas fa-file-excel"></i> Importar Excel</button>
+                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                        <i class="fas fa-file-excel"></i> Importar Excel
+                    </button>
                     <span class="text-[10px] text-slate-400 block mt-1 ml-1">Arquivo: ddmmaaaa.xlsx</span>
                 </div>
                 <div class="flex items-center gap-3">
@@ -83,45 +99,76 @@
                         <option value="semana">Por Semana</option>
                     </select>
                     <select id="select-semana" onchange="Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-sm font-bold outline-none cursor-pointer">
-                        <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
+                        <option value="1">Semana 1</option>
+                        <option value="2">Semana 2</option>
+                        <option value="3">Semana 3</option>
+                        <option value="4">Semana 4</option>
+                        <option value="5">Semana 5</option>
                     </select>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe Considerada</p>
-                        <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p><i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i></div>
+                        <div class="flex items-end justify-between">
+                            <p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p>
+                            <i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i>
+                        </div>
                     </div>
                     <div id="info-abonados" class="mt-2 text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded hidden border border-amber-100"></div>
                     <p class="text-[10px] text-slate-400 mt-1" id="label-hc-desc">Ativos no Período</p>
                 </div>
+
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Trabalhados</p>
-                    <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p><i class="fas fa-calendar-day text-4xl text-slate-100 group-hover:text-blue-50 transition"></i></div>
+                    <div class="flex items-end justify-between">
+                        <p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p>
+                        <i class="fas fa-calendar-day text-4xl text-slate-100 group-hover:text-blue-50 transition"></i>
+                    </div>
                     <p class="text-[10px] text-slate-400 mt-1" id="kpi-dias-label">Geral ou Individual</p>
                 </div>
+
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção vs Meta</p>
-                    <div class="flex items-end gap-2"><p class="text-3xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p><span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-total">--</span></span></div>
-                    <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden"><div id="bar-prod" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div></div>
+                    <div class="flex items-end gap-2">
+                        <p class="text-3xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
+                        <span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-total">--</span></span>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
+                        <div id="bar-prod" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
                 </div>
+
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média / Analista</p>
-                    <div class="flex items-end gap-2"><p class="text-3xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p><span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-media">--</span></span></div>
-                    <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden"><div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div></div>
+                    <div class="flex items-end gap-2">
+                        <p class="text-3xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p>
+                        <span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-media">--</span></span>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
+                        <div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
                 </div>
+
                 <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500">
                     <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
-                    <div class="flex items-center justify-between"><p class="text-4xl font-black tracking-tighter" id="kpi-pct">--%</p><div id="icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div></div>
+                    <div class="flex items-center justify-between">
+                        <p class="text-4xl font-black tracking-tighter" id="kpi-pct">--%</p>
+                        <div id="icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                    </div>
                     <p class="text-[10px] text-white/60 mt-2 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
+
             </div>
 
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
                 <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
-                <button onclick="Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar Filtro</button>
+                <button onclick="Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
+                    <i class="fas fa-times mr-1"></i> Limpar Filtro
+                </button>
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -133,11 +180,21 @@
                                     <div class="flex flex-col items-center gap-1">
                                         <span class="text-[10px] text-slate-400">Ação em Massa</span>
                                         <select id="bulk-fator" onchange="Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer hover:border-blue-400 focus:border-blue-500 transition">
-                                            <option value="">Aplicar...</option><option value="1">Todos 100%</option><option value="0.5">Todos 50%</option><option value="0">Todos Abonar</option>
+                                            <option value="">Aplicar...</option>
+                                            <option value="1">Todos 100%</option>
+                                            <option value="0.5">Todos 50%</option>
+                                            <option value="0">Todos Abonar</option>
                                         </select>
                                     </div>
                                 </th>
-                                <th class="px-6 py-4">Assistente</th><th class="px-6 py-4 text-center">Dias Calc.</th><th class="px-6 py-4 text-center">Total</th><th class="px-6 py-4 text-center">FIFO</th><th class="px-6 py-4 text-center">G. Total</th><th class="px-6 py-4 text-center">G. Parcial</th><th class="px-6 py-4 text-center">Meta Calc.</th><th class="px-6 py-4 text-center">% Meta</th>
+                                <th class="px-6 py-4">Assistente</th>
+                                <th class="px-6 py-4 text-center">Dias Calc.</th>
+                                <th class="px-6 py-4 text-center">Total</th>
+                                <th class="px-6 py-4 text-center">FIFO</th>
+                                <th class="px-6 py-4 text-center">G. Total</th>
+                                <th class="px-6 py-4 text-center">G. Parcial</th>
+                                <th class="px-6 py-4 text-center">Meta Calc.</th>
+                                <th class="px-6 py-4 text-center">% Meta</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
@@ -153,43 +210,86 @@
                         <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span>
                         <input type="text" id="data-perf" onchange="Perf.carregarRanking()" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" placeholder="DD/MM/AAAA" maxlength="10">
                     </div>
-                    <select id="perf-period-type" onchange="Perf.carregarRanking()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer"><option value="mes">Mensal</option><option value="trimestre">Trimestral</option><option value="semestre">Semestral</option><option value="ano">Anual</option></select>
+                    <select id="perf-period-type" onchange="Perf.carregarRanking()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
+                        <option value="mes">Mensal</option>
+                        <option value="trimestre">Trimestral</option>
+                        <option value="semestre">Semestral</option>
+                        <option value="ano">Anual</option>
+                    </select>
                 </div>
             </div>
+            
             <div id="perf-view-individual">
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
-                        <p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-600">--</span></p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Produção Total</p>
+                            <p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p>
+                        </div>
+                        <p class="text-sm text-slate-500 mt-2 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-700">--</span></p>
                     </div>
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p>
-                        <p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Esperado: <span class="text-slate-600">650</span></p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Média Diária</p>
+                            <p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p>
+                        </div>
+                        <p class="text-sm text-slate-500 mt-2 font-bold">Esperado: <span class="text-slate-700">650</span></p>
                     </div>
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta do Período</p>
-                        <p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p>
-                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Real: <span id="perf-label-real-total" class="text-blue-600">--</span></p>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                        <div>
+                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Meta do Período</p>
+                            <p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p>
+                        </div>
+                        <p class="text-sm text-slate-500 mt-2 font-bold">Realizado: <span id="perf-label-real-total" class="text-blue-600">--</span></p>
                     </div>
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Mix Contratual</p>
-                        <div class="flex items-center justify-between mt-1">
-                            <div><p class="text-xl font-black text-slate-800" id="perf-clt">0</p><p class="text-[9px] text-slate-400 uppercase font-bold">CLT</p></div>
-                            <div class="h-8 w-px bg-slate-100"></div>
-                            <div class="text-right"><p class="text-xl font-black text-slate-800" id="perf-pj">0</p><p class="text-[9px] text-slate-400 uppercase font-bold">PJ</p></div>
+                    
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">CLT vs PJ</p>
+                        <div class="flex items-center justify-between mt-1 h-full">
+                            <div class="text-center">
+                                <p class="text-xl font-black text-blue-800" id="perf-pct-clt">0%</p>
+                                <p class="text-[10px] text-slate-400 uppercase font-bold">CLT (<span id="perf-count-clt">0</span>)</p>
+                            </div>
+                            <div class="h-10 w-px bg-slate-200 mx-2"></div>
+                            <div class="text-center">
+                                <p class="text-xl font-black text-indigo-800" id="perf-pct-pj">0%</p>
+                                <p class="text-[10px] text-slate-400 uppercase font-bold">PJ (<span id="perf-count-pj">0</span>)</p>
+                            </div>
                         </div>
                     </div>
-                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Top 5 Ranking</p>
-                        <div id="perf-rank-content" class="text-[10px] font-medium text-slate-700 space-y-1"></div>
+                    
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative flex flex-col">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Top 5 (% Meta)</p>
+                        <div id="perf-rank-content" class="text-[11px] font-medium text-slate-700 space-y-1.5 flex-1 overflow-y-auto"></div>
                     </div>
                 </div>
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Ranking Detalhado</h3><button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">✕ Limpar Seleção</button></div>
-                    <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">#</th><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th><th class="px-6 py-3 text-center">Dias</th><th class="px-6 py-3 text-center">Média</th><th class="px-6 py-3 text-center">Meta Total</th><th class="px-6 py-3 text-center">% Meta</th></tr></thead><tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody></table></div>
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700">Ranking Detalhado (% Meta)</h3>
+                        <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">
+                            ✕ Limpar Seleção
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-600">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-3">#</th>
+                                    <th class="px-6 py-3">Assistente</th>
+                                    <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
+                                    <th class="px-6 py-3 text-center">Dias</th>
+                                    <th class="px-6 py-3 text-center">Média</th>
+                                    <th class="px-6 py-3 text-center">Meta Total</th>
+                                    <th class="px-6 py-3 text-center">% Meta</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
@@ -199,21 +299,51 @@
                 <h3 class="font-bold text-slate-700">Visão Panorâmica</h3>
                 <input type="text" id="data-matriz" onchange="Matriz.carregar()" class="w-24 bg-slate-50 text-center font-bold text-slate-700 outline-none text-sm p-1 rounded border border-slate-100" placeholder="DD/MM/AAAA" maxlength="10">
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-xs text-left"><tbody id="matriz-body"></tbody></table></div></div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left"><tbody id="matriz-body"></tbody></table>
+                </div>
+            </div>
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
             <div class="flex justify-end p-3 bg-white rounded-xl shadow-sm border border-slate-200 gap-2">
                 <input type="text" id="data-cons" onchange="Cons.carregar()" class="w-24 bg-slate-50 text-center font-bold text-slate-700 outline-none text-sm p-1 rounded border border-slate-100" placeholder="DD/MM/AAAA" maxlength="10">
-                <select id="cons-period-type" onchange="Cons.carregar()" class="text-sm font-bold text-slate-600 bg-transparent outline-none cursor-pointer"><option value="mes">Mensal</option><option value="trimestre">Trimestral</option><option value="semestre">Semestral</option><option value="ano_mes">Anual</option><option value="dia">Diário</option></select>
+                <select id="cons-period-type" onchange="Cons.carregar()" class="text-sm font-bold text-slate-600 bg-transparent outline-none cursor-pointer">
+                    <option value="mes">Mensal</option>
+                    <option value="trimestre">Trimestral</option>
+                    <option value="semestre">Semestral</option>
+                    <option value="ano_mes">Anual</option>
+                    <option value="dia">Diário</option>
+                </select>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p><p class="text-3xl font-black text-blue-700" id="cons-p-total">0</p></div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média do Time</p><p class="text-3xl font-black text-slate-800" id="cons-p-media-time">0</p></div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden"><div class="absolute right-0 top-0 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-bl">Base 17</div><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média (Base Fixa)</p><p class="text-3xl font-black text-amber-600" id="cons-p-media-ind">0</p></div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Ativos</p><p class="text-3xl font-black text-slate-800" id="cons-p-headcount">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
+                    <p class="text-3xl font-black text-blue-700" id="cons-p-total">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média do Time</p>
+                    <p class="text-3xl font-black text-slate-800" id="cons-p-media-time">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden">
+                    <div class="absolute right-0 top-0 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-bl">Base 17</div>
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média (Base Fixa)</p>
+                    <p class="text-3xl font-black text-amber-600" id="cons-p-media-ind">0</p>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Ativos</p>
+                    <p class="text-3xl font-black text-slate-800" id="cons-p-headcount">0</p>
+                </div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead id="cons-table-header"></thead><tbody id="cons-table-body"></tbody></table></div></div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead id="cons-table-header"></thead>
+                        <tbody id="cons-table-body"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
