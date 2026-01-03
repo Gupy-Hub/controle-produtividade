@@ -6,7 +6,7 @@ const Perf = {
     initialized: false,
 
     init: function() { 
-        // A inicialização principal agora é chamada pelo main.js via carregarRanking
+        // A inicialização principal é chamada pelo main.js
         this.uiChange();
         this.carregarRanking(); 
     },
@@ -24,7 +24,7 @@ const Perf = {
             inpMonth.classList.remove('hidden');
             inpYear.classList.add('hidden');
         }
-        this.carregarRanking(); // Recarrega ao mudar o tipo
+        this.carregarRanking(); 
     },
 
     limparSelecao: function() { 
@@ -55,14 +55,14 @@ const Perf = {
             const valMonth = document.getElementById('perf-input-month').value; // YYYY-MM
             const valYear = document.getElementById('perf-input-year').value;   // YYYY
 
-            // Se não tiver data, não carrega (ou usa fallback)
+            // Se não tiver data, usa fallback ou retorna
             if((tipo !== 'ano' && !valMonth) || (tipo === 'ano' && !valYear)) return;
 
             let ano, mes;
             if(tipo !== 'ano') {
                 const parts = valMonth.split('-');
                 ano = parseInt(parts[0]);
-                mes = parseInt(parts[1]); // 1-12
+                mes = parseInt(parts[1]); 
             } else {
                 ano = parseInt(valYear);
                 mes = 1; 
@@ -100,7 +100,8 @@ const Perf = {
             }
             
             // Atualiza Label Visual
-            document.getElementById('perf-range-label').innerText = labelTexto;
+            const elLabel = document.getElementById('perf-range-label');
+            if(elLabel) elLabel.innerText = labelTexto;
 
             // Query
             const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
@@ -120,10 +121,9 @@ const Perf = {
                 if (!user || user.funcao !== 'Assistente') return;
 
                 const qtd = Number(item.quantidade) || 0;
-                
                 prodTotalGeral += qtd;
                 
-                // Só conta quem produziu algo
+                // Contabiliza CLT vs PJ (somente produção)
                 if (user.contrato && user.contrato.includes('CLT')) {
                     prodCLT += qtd;
                     usersCLT.add(uid);
@@ -137,7 +137,7 @@ const Perf = {
                 stats[uid].dias.add(item.data_referencia);
             });
             
-            // Atualiza Card Mix
+            // Atualiza Card CLT vs PJ
             const pctCLT = prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0;
             const pctPJ = prodTotalGeral > 0 ? Math.round((prodPJ / prodTotalGeral) * 100) : 0;
             
@@ -151,11 +151,11 @@ const Perf = {
             this.dadosCarregados = Object.values(stats).sort((a, b) => {
                 const diasA = a.dias.size || 1;
                 const metaA = diasA * 650;
-                const pctA = a.total / metaA;
+                const pctA = metaA > 0 ? a.total / metaA : 0;
 
                 const diasB = b.dias.size || 1;
                 const metaB = diasB * 650;
-                const pctB = b.total / metaB;
+                const pctB = metaB > 0 ? b.total / metaB : 0;
 
                 return pctB - pctA; 
             });
@@ -218,39 +218,71 @@ const Perf = {
     },
 
     atualizarCards: function(userStats) {
+        // IDs dos elementos
         const elTotal = document.getElementById('perf-card-total');
+        const elLabelMetaTotal = document.getElementById('perf-label-meta-total');
+        const elBarTotal = document.getElementById('perf-bar-total');
+
         const elMedia = document.getElementById('perf-card-media');
-        const elMeta = document.getElementById('perf-card-meta');
-        const labelMetaTotal = document.getElementById('perf-label-meta-total');
-        const labelRealTotal = document.getElementById('perf-label-real-total');
+        const elBarMedia = document.getElementById('perf-bar-media');
+
+        const elCardPct = document.getElementById('perf-card-pct');
+        const elPctVal = document.getElementById('perf-card-pct-val');
+        const elPctDetail = document.getElementById('perf-card-pct-detail');
+        const elIconPct = document.getElementById('perf-icon-pct');
+
         const elRankContent = document.getElementById('perf-rank-content');
 
-        if (userStats) {
-            if(elTotal) elTotal.innerText = userStats.total.toLocaleString(); 
-            if(labelMetaTotal) labelMetaTotal.innerText = userStats.meta.toLocaleString();
+        let totalReal, metaRef, mediaReal, pctAtingimento;
 
-            if(elMedia) elMedia.innerText = userStats.media.toLocaleString(); 
-            
-            if(elMeta) elMeta.innerText = userStats.meta.toLocaleString(); 
-            if(labelRealTotal) labelRealTotal.innerText = userStats.total.toLocaleString();
+        if (userStats) {
+            // --- VISÃO INDIVIDUAL ---
+            totalReal = userStats.total;
+            metaRef = userStats.meta;
+            mediaReal = userStats.media;
+            pctAtingimento = metaRef > 0 ? Math.round((totalReal / metaRef) * 100) : 0;
         } else {
-            const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
+            // --- VISÃO GERAL (TIME) ---
+            totalReal = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
             const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); 
             
-            let metaGeral = 0;
-            this.dadosCarregados.forEach(u => { metaGeral += (u.dias.size || 0) * 650; });
+            // Meta Geral = Soma das Metas Individuais
+            metaRef = 0;
+            this.dadosCarregados.forEach(u => { metaRef += (u.dias.size || 0) * 650; });
 
-            const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
-            
-            if(elTotal) elTotal.innerText = totalGeral.toLocaleString(); 
-            if(labelMetaTotal) labelMetaTotal.innerText = metaGeral.toLocaleString();
-            
-            if(elMedia) elMedia.innerText = mediaGeral.toLocaleString(); 
-            
-            if(elMeta) elMeta.innerText = metaGeral.toLocaleString(); 
-            if(labelRealTotal) labelRealTotal.innerText = totalGeral.toLocaleString();
-            
-            // Top 5 Mini List
+            mediaReal = diasGeral ? Math.round(totalReal / diasGeral) : 0;
+            pctAtingimento = metaRef > 0 ? Math.round((totalReal / metaRef) * 100) : 0;
+        }
+
+        // --- ATUALIZA DOM ---
+
+        // Card 1: Produção vs Meta
+        if(elTotal) elTotal.innerText = totalReal.toLocaleString(); 
+        if(elLabelMetaTotal) elLabelMetaTotal.innerText = metaRef.toLocaleString();
+        if(elBarTotal) elBarTotal.style.width = Math.min((totalReal/(metaRef||1))*100, 100) + '%';
+
+        // Card 2: Média vs 650
+        if(elMedia) elMedia.innerText = mediaReal.toLocaleString();
+        if(elBarMedia) elBarMedia.style.width = Math.min((mediaReal/650)*100, 100) + '%';
+
+        // Card 3: Atingimento Global
+        if(elPctVal) elPctVal.innerText = pctAtingimento + '%';
+        if(elPctDetail) elPctDetail.innerText = `${totalReal.toLocaleString()} / ${metaRef.toLocaleString()}`;
+        
+        // Cores Dinâmicas do Card 3
+        if (elCardPct) {
+            elCardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+            if (pctAtingimento < 100) {
+                elCardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                if(elIconPct) elIconPct.innerHTML = '<i class="fas fa-times-circle text-white/50"></i>';
+            } else {
+                elCardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                if(elIconPct) elIconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
+            }
+        }
+
+        // Top 5 Mini List (Somente se não houver usuário selecionado)
+        if (!userStats && elRankContent) {
             let topHtml = '<div class="flex flex-col gap-1.5">'; 
             this.dadosCarregados.slice(0, 5).forEach((u, i) => { 
                 const dias = u.dias.size || 1;
@@ -271,7 +303,9 @@ const Perf = {
                 </div>`; 
             }); 
             topHtml += '</div>'; 
-            if(elRankContent) elRankContent.innerHTML = topHtml;
+            elRankContent.innerHTML = topHtml;
+        } else if (userStats && elRankContent) {
+            elRankContent.innerHTML = '<p class="text-slate-400 text-center py-4">Visualizando Individual</p>';
         }
     }
 };

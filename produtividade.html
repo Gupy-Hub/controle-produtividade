@@ -109,7 +109,6 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe Considerada</p>
@@ -161,7 +160,6 @@
                     </div>
                     <p class="text-[10px] text-white/60 mt-2 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
-
             </div>
 
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
@@ -215,16 +213,13 @@
 
                 <div class="flex items-center gap-3">
                     <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Período:</span>
-                    
                     <select id="perf-period-type" onchange="Perf.uiChange()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
                         <option value="mes">Mensal</option>
                         <option value="trimestre">Trimestral</option>
                         <option value="semestre">Semestral</option>
                         <option value="ano">Anual</option>
                     </select>
-
                     <input type="month" id="perf-input-month" onchange="Perf.carregarRanking()" class="py-1 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none bg-white focus:border-blue-500">
-                    
                     <input type="number" id="perf-input-year" onchange="Perf.carregarRanking()" class="hidden w-20 py-1 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 outline-none bg-white focus:border-blue-500" min="2020" max="2030" placeholder="Ano">
                 </div>
             </div>
@@ -232,28 +227,35 @@
             <div id="perf-view-individual">
                 <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Produção Total</p>
-                            <p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção vs Meta</p>
+                        <div class="flex items-end gap-2">
+                            <p class="text-3xl font-black text-blue-600 tracking-tighter" id="perf-card-total">--</p>
+                            <span class="text-xs font-bold text-slate-400 mb-1">/ <span id="perf-label-meta-total">--</span></span>
                         </div>
-                        <p class="text-sm text-slate-500 mt-2 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-700">--</span></p>
+                        <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
+                            <div id="perf-bar-total" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Média Diária</p>
-                            <p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Diária</p>
+                        <div class="flex items-end gap-2">
+                            <p class="text-3xl font-black text-slate-800 tracking-tighter" id="perf-card-media">--</p>
+                            <span class="text-xs font-bold text-slate-400 mb-1">/ 650</span>
                         </div>
-                        <p class="text-sm text-slate-500 mt-2 font-bold">Esperado: <span class="text-slate-700">650</span></p>
+                        <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
+                            <div id="perf-bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Meta do Período</p>
-                            <p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p>
+                    <div id="perf-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500">
+                        <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
+                        <div class="flex items-center justify-between">
+                            <p class="text-4xl font-black tracking-tighter" id="perf-card-pct-val">--%</p>
+                            <div id="perf-icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div>
                         </div>
-                        <p class="text-sm text-slate-500 mt-2 font-bold">Realizado: <span id="perf-label-real-total" class="text-blue-600">--</span></p>
+                        <p class="text-[10px] text-white/60 mt-2 font-medium" id="perf-card-pct-detail">Real vs Esperado</p>
                     </div>
                     
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
