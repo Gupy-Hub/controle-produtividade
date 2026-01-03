@@ -1,46 +1,29 @@
 const Sistema = {
     Datas: {
-        // Vincula o input de data global (do topo da página) ao DataGlobal do config.js
         configurarInputGlobal: function(elementId, callback) {
             const input = document.getElementById(elementId);
             if (!input) return;
-
-            // Define o valor inicial recuperado do localStorage
             input.value = DataGlobal.obter();
-
-            // Aplica a máscara enquanto digita
-            input.addEventListener('input', function() {
-                mascaraDataGlobal(this);
-            });
-
-            // Ao confirmar (mudança completa), atualiza o global e recarrega a tela
+            input.addEventListener('input', function() { mascaraDataGlobal(this); });
             input.addEventListener('change', function() {
                 if (this.value.length === 10) {
                     DataGlobal.definir(this.value);
                     if (typeof callback === 'function') callback();
                 }
             });
-            
-            // Garante que o Enter funcione para disparar o change
             input.addEventListener('keypress', function(e) {
-                if(e.key === 'Enter' && this.value.length === 10) {
-                    this.blur(); 
-                }
+                if(e.key === 'Enter' && this.value.length === 10) { this.blur(); }
             });
         },
 
-        // Retorna um objeto Date com base na data selecionada no topo
         obterDataObjeto: function() {
             const str = DataGlobal.obter();
             if (!str || str.length !== 10) return new Date();
             const parts = str.split('/');
-            // Cria data UTC/Local segura (Ano, Mês-1, Dia)
             return new Date(parts[2], parts[1] - 1, parts[0]);
         },
 
-        // Calcula a semana do mês para os filtros de semana
         getSemanaDoMes: function(dataIsoStr) {
-            // dataIsoStr vem do banco como YYYY-MM-DD
             const date = new Date(dataIsoStr + 'T12:00:00');
             const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
             return Math.ceil((date.getDate() + firstDay) / 7);
@@ -49,31 +32,36 @@ const Sistema = {
 
     Dados: {
         usuariosCache: {},
+        metasCache: [], // Novo cache para as metas
 
-        // Carrega usuários para mapear ID -> Nome
-        carregarUsuarios: async function() {
-            if (!window._supabase) {
-                console.error("Supabase não inicializado.");
-                return;
-            }
-            // Busca apenas campos necessários
-            const { data, error } = await _supabase
-                .from('usuarios')
-                .select('id, nome, funcao');
+        // Carrega usuários e Metas ao mesmo tempo
+        inicializar: async function() {
+            if (!window._supabase) { console.error("Supabase Off"); return; }
             
-            if (error) {
-                console.error("Erro ao carregar usuários:", error);
-                return;
-            }
-
-            // Cria um mapa para acesso rápido: usuariosCache[id] = dados
+            // 1. Busca Usuários
+            const { data: users } = await _supabase.from('usuarios').select('id, nome, funcao');
             this.usuariosCache = {};
-            data.forEach(u => {
-                this.usuariosCache[u.id] = u;
-            });
+            if(users) users.forEach(u => this.usuariosCache[u.id] = u);
+
+            // 2. Busca Histórico de Metas (Ordenado por data decrescente para facilitar a busca)
+            const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false });
+            this.metasCache = metas || [];
         },
 
-        // Transforma os dados brutos do Supabase na estrutura que a tabela espera
+        // Função inteligente para descobrir a meta na data específica
+        obterMetaVigente: function(usuarioId, dataReferencia) {
+            // Filtra metas deste usuário
+            const metasUsuario = this.metasCache.filter(m => m.usuario_id == usuarioId);
+            
+            // Encontra a primeira meta cuja data de início seja menor ou igual à data de referência
+            // Como a lista já está ordenada decrescente (do mais novo para o mais velho),
+            // o primeiro match é a meta vigente na época.
+            const metaEncontrada = metasUsuario.find(m => m.data_inicio <= dataReferencia);
+
+            // Se achar, retorna o valor. Se não, retorna 650 (padrão)
+            return metaEncontrada ? metaEncontrada.valor_meta : 650;
+        },
+
         normalizar: function(listaProducao) {
             const agrupado = {};
 
@@ -81,7 +69,6 @@ const Sistema = {
                 const uid = item.usuario_id;
                 const user = this.usuariosCache[uid];
                 
-                // Filtra apenas Assistentes (para evitar gestores na tabela de produção)
                 if (!user || user.funcao !== 'Assistente') return;
 
                 if (!agrupado[uid]) {
@@ -90,24 +77,25 @@ const Sistema = {
                         diasSet: new Set(),
                         total: 0,
                         fifo: 0,
-                        gt: 0, // Gradual Total
-                        gp: 0, // Gradual Parcial
+                        gt: 0, gp: 0,
                         metaAccum: 0,
                         atingiu: false
                     };
                 }
 
-                // Soma os valores
                 const qtd = Number(item.quantidade) || 0;
                 agrupado[uid].total += qtd;
                 agrupado[uid].fifo += Number(item.fifo) || 0;
                 agrupado[uid].gt += Number(item.gradual_total) || 0;
                 agrupado[uid].gp += Number(item.gradual_parcial) || 0;
-                agrupado[uid].metaAccum += Number(item.meta_diaria) || 650; // Meta padrão se nula
                 agrupado[uid].diasSet.add(item.data_referencia);
+
+                // --- CORREÇÃO AQUI ---
+                // Em vez de usar o valor fixo no banco, calculamos com base no histórico
+                const metaDoDia = this.obterMetaVigente(uid, item.data_referencia);
+                agrupado[uid].metaAccum += metaDoDia;
             });
 
-            // Converte objeto agrupado em array para a tabela
             return Object.values(agrupado).map(obj => {
                 return {
                     nome: obj.nome,
@@ -117,10 +105,9 @@ const Sistema = {
                     gt: obj.gt,
                     gp: obj.gp,
                     meta: obj.metaAccum,
-                    // Verifica se bateu a meta somada do período
                     atingiu: obj.total >= obj.metaAccum
                 };
-            }).sort((a, b) => b.total - a.total); // Ordena do maior para o menor
+            }).sort((a, b) => b.total - a.total);
         }
     }
 };

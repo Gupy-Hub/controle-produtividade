@@ -80,10 +80,13 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
-            Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
-            await Sistema.Dados.carregarUsuarios();
-            carregarTela();
-        });
+    Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
+    
+    // Agora carregamos Usuários E Metas
+    await Sistema.Dados.inicializar(); 
+    
+    carregarTela();
+});
 
         function toggleSemana() {
             const mode = document.getElementById('view-mode').value;
