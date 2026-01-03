@@ -134,7 +134,17 @@
                     <table class="w-full text-sm text-left">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wide">
                             <tr>
-                                <th class="px-4 py-4 text-center w-24">Fator</th>
+                                <th class="px-4 py-2 text-center w-28 bg-slate-100/50 border-r border-slate-200">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <span class="text-[10px] text-slate-400">Ação em Massa</span>
+                                        <select id="bulk-fator" onchange="Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer hover:border-blue-400 focus:border-blue-500 transition">
+                                            <option value="">Aplicar...</option>
+                                            <option value="1">Todos 100%</option>
+                                            <option value="0.5">Todos 50%</option>
+                                            <option value="0">Todos Abonar</option>
+                                        </select>
+                                    </div>
+                                </th>
                                 <th class="px-6 py-4">Assistente</th>
                                 <th class="px-6 py-4 text-center">Dias Calc.</th>
                                 <th class="px-6 py-4 text-center">Total</th>
@@ -289,6 +299,10 @@
                 const isoDate = refDate.toISOString().split('T')[0];
                 this.dataVisualizada = isoDate; 
 
+                // Reset do seletor em massa visualmente
+                const bulkSelect = document.getElementById('bulk-fator');
+                if(bulkSelect) bulkSelect.value = "";
+
                 // Definição dos limites do período para cálculo de metas
                 let inicio, fim;
                 if (modo === 'dia') { 
@@ -309,14 +323,6 @@
                 if (modo === 'semana') {
                     const numSemana = parseInt(document.getElementById('select-semana').value);
                     dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
-                    
-                    // Ajustar inicio e fim do período para a semana selecionada (aproximado pelos dados ou lógica de semana)
-                    // Como não temos a lógica exata de limites da semana aqui, vamos filtrar os dias úteis na renderização
-                    // Mas precisamos garantir que this.periodoInicio/Fim reflitam a semana para o cálculo de meta
-                    // Simplificação: vamos calcular meta baseada nos dias encontrados OU recalcular limites da semana
-                    // Para precisão, o ideal seria ter uma função getDatesOfWeek(mes, semana).
-                    // Vou assumir que o filtro visual já basta, e no renderizar contaremos dias úteis entre o menor e maior dia da semana encontrada nos dados
-                    // Se não houver dados na semana, a meta será 0.
                 }
 
                 this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
@@ -348,6 +354,31 @@
                 this.carregarTela();
             },
 
+            // NOVA FUNÇÃO: Mudar fator de TODOS
+            mudarFatorTodos: function(valor) {
+                if (!valor) return; 
+                const modo = document.getElementById('view-mode').value;
+                if (modo !== 'dia') {
+                    alert("Atenção: A alteração em massa só é permitida na visão 'Apenas o Dia' para evitar erros em históricos.");
+                    document.getElementById('bulk-fator').value = ""; // Reset
+                    return;
+                }
+
+                if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas abaixo?")) {
+                    document.getElementById('bulk-fator').value = ""; // Reset
+                    return;
+                }
+
+                // Aplica para todos na lista atual (filtrada e ativa)
+                this.listaAtual.forEach(u => {
+                    if (!u.inativo) {
+                        Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor);
+                    }
+                });
+
+                this.carregarTela(); // Recarrega para persistir e atualizar KPIs
+            },
+
             selecionar: function(nome) {
                 if (this.selecionado === nome) this.selecionado = null; else this.selecionado = nome;
                 this.renderizar();
@@ -357,6 +388,20 @@
             renderizar: function() {
                 const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML = '';
                 const modo = document.getElementById('view-mode').value;
+
+                // Bloqueia o seletor em massa se não for dia
+                const bulkSelect = document.getElementById('bulk-fator');
+                if (bulkSelect) {
+                    if (modo !== 'dia') {
+                        bulkSelect.disabled = true;
+                        bulkSelect.classList.add('opacity-50', 'cursor-not-allowed');
+                        bulkSelect.title = "Disponível apenas na visão de Dia";
+                    } else {
+                        bulkSelect.disabled = false;
+                        bulkSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+                        bulkSelect.title = "Alterar todas";
+                    }
+                }
 
                 // 1. Filtragem de Ativos
                 const ativos = this.listaAtual.filter(u => !u.inativo);
@@ -374,32 +419,21 @@
                 } else if (modo === 'mes') {
                     diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
                 } else if (modo === 'semana') {
-                    // Para semana, tentamos pegar o range dos dados ou estimar 5 dias se tiver dados
-                    // Se houver dados, pegamos min e max data
                     if(this.listaAtual.length > 0) {
-                        // Encontrar todas as datas presentes
                         let todasDatas = new Set();
                         this.listaAtual.forEach(u => Object.keys(u.diasMap).forEach(d => todasDatas.add(d)));
                         let datasArr = Array.from(todasDatas).sort();
                         if(datasArr.length > 0) {
                             diasUteisPeriodo = this.contarDiasUteis(datasArr[0], datasArr[datasArr.length-1]);
-                        } else diasUteisPeriodo = 5; // Fallback
+                        } else diasUteisPeriodo = 5;
                     } else diasUteisPeriodo = 5;
                 }
 
                 const hcConsiderado = this.selecionado ? 1 : ativos.length;
                 const metaDiaria = 650;
                 
-                // Meta Total Esperada para o Período Selecionado
-                // Ex: Mês (22 dias) * 10 Pessoas * 650 = 143.000
                 const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
-
-                // Meta para Média Individual
-                // Ex: Mês (22 dias) * 650 = 14.300 por pessoa
                 const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
-
-                // Média Real (Por Analista)
-                // Quanto cada analista entregou em média neste período
                 const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
                 
                 // --- CARD 1: EQUIPE ---
@@ -467,7 +501,7 @@
                     iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
                 }
 
-                // Cabeçalho de seleção e Tabela (sem alterações lógicas, apenas renderização)
+                // Cabeçalho de seleção
                 const selHeader = document.getElementById('selection-header');
                 if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
                 else selHeader.classList.add('hidden');
