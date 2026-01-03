@@ -16,8 +16,29 @@ const Geral = {
     
     carregarTela: async function() {
         const modo = document.getElementById('view-mode').value;
-        const refDate = Sistema.Datas.lerInput('data-validacao');
-        const isoDate = refDate.toISOString().split('T')[0];
+        
+        // CORREÇÃO: Garante que pegamos a data corretamente e salvamos no Global
+        let refDate;
+        try {
+            refDate = Sistema.Datas.lerInput('data-validacao');
+        } catch (e) {
+            // Fallback se a data for inválida
+            refDate = new Date();
+        }
+
+        if (!refDate || isNaN(refDate.getTime())) {
+            refDate = new Date();
+        }
+
+        // Formata para ISO (YYYY-MM-DD) e SALVA NO STORAGE para persistência
+        const anoIso = refDate.getFullYear();
+        const mesIso = String(refDate.getMonth() + 1).padStart(2, '0');
+        const diaIso = String(refDate.getDate()).padStart(2, '0');
+        const isoDate = `${anoIso}-${mesIso}-${diaIso}`;
+        
+        // IMPORTANTE: Salva a data para as outras abas e para o F5
+        localStorage.setItem('data_sistema_global', isoDate);
+        
         this.dataVisualizada = isoDate; 
 
         // Reset UI
@@ -25,12 +46,18 @@ const Geral = {
         if(bulkSelect) bulkSelect.value = "";
 
         let inicio, fim;
+        // Ajuste de datas baseado no fuso horário para evitar problemas de "dia anterior"
         if (modo === 'dia') { 
             inicio = isoDate; fim = isoDate; 
         } else { 
+            // Mês: Do dia 1 até o último dia do mês
             const ano = refDate.getFullYear(); const mes = refDate.getMonth();
-            inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-            fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+            const dateIni = new Date(ano, mes, 1);
+            const dateFim = new Date(ano, mes + 1, 0);
+            
+            // Converte para YYYY-MM-DD local
+            inicio = dateIni.toLocaleDateString('en-CA'); // Formato ISO Local
+            fim = dateFim.toLocaleDateString('en-CA');
         }
 
         this.periodoInicio = inicio;
@@ -48,11 +75,14 @@ const Geral = {
         this.renderizar();
     },
 
+    // Função auxiliar simples para contar dias úteis
     contarDiasUteis: function(inicioStr, fimStr) {
         if(!inicioStr || !fimStr) return 1;
         let count = 0;
+        // Adiciona T12:00:00 para evitar problemas de fuso horário ao criar a data
         let cur = new Date(inicioStr + 'T12:00:00');
         const end = new Date(fimStr + 'T12:00:00');
+        
         while(cur <= end) {
             const d = cur.getDay();
             if(d !== 0 && d !== 6) count++;
@@ -156,6 +186,7 @@ const Geral = {
         } else if (modo === 'mes') {
             diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
         } else if (modo === 'semana') {
+            // Lógica simplificada para semana, tenta pegar range dos dados ou padrão 5
             if(this.listaAtual.length > 0) {
                 let todasDatas = new Set();
                 this.listaAtual.forEach(u => Object.keys(u.diasMap).forEach(d => todasDatas.add(d)));

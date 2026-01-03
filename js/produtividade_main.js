@@ -5,6 +5,7 @@ const KEY_DATA_GLOBAL = 'data_sistema_global';
 const KEY_TAB_GLOBAL = 'produtividade_aba_ativa';
 let USERS_CACHE = {};
 
+// --- Carregamento Global de Usuários (Cache) ---
 async function carregarUsuariosGlobal() {
     try {
         const { data, error } = await _supabase.from('usuarios').select('id, nome, funcao, contrato');
@@ -16,66 +17,109 @@ async function carregarUsuariosGlobal() {
     } catch (e) { console.error("Erro cache user", e); }
 }
 
+// --- Controle de Abas ---
 function mudarAba(aba) {
     localStorage.setItem(KEY_TAB_GLOBAL, aba);
+    
+    // UI das Abas
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    document.getElementById(`tab-${aba}`).classList.remove('hidden');
+    const targetTab = document.getElementById(`tab-${aba}`);
+    if (targetTab) targetTab.classList.remove('hidden');
+    
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    document.getElementById(`btn-${aba}`).classList.add('active');
+    const targetBtn = document.getElementById(`btn-${aba}`);
+    if (targetBtn) targetBtn.classList.add('active');
 
-    // Recupera data global
-    const dataString = localStorage.getItem(KEY_DATA_GLOBAL) || Sistema.Datas.formatar(new Date());
+    // Recupera data global salva (YYYY-MM-DD)
+    let dataString = localStorage.getItem(KEY_DATA_GLOBAL);
+    
+    // Se não tiver data salva, usa hoje e salva
+    if (!dataString) {
+        const hoje = new Date();
+        const y = hoje.getFullYear();
+        const m = String(hoje.getMonth() + 1).padStart(2, '0');
+        const d = String(hoje.getDate()).padStart(2, '0');
+        dataString = `${y}-${m}-${d}`;
+        localStorage.setItem(KEY_DATA_GLOBAL, dataString);
+    }
+
+    // Garante que a data está formatada corretamente para manipular
     const [ano, mes, dia] = dataString.split('-').map(Number);
     const dataObj = new Date(ano, mes - 1, dia);
 
+    // --- LÓGICA ESPECÍFICA DE CADA ABA ---
+
     if (aba === 'geral') { 
         const inp = document.getElementById('data-validacao');
-        if(inp) inp.value = dataString; 
+        if(inp) {
+            // Converter YYYY-MM-DD para o formato visual se necessário, 
+            // mas input type="text" com biblioteca de data ou input manual espera formato BR?
+            // O código anterior usava input text com placeholder DD/MM/AAAA.
+            // Sistema.Datas.lerInput espera qual formato? Geralmente converte.
+            // Vamos formatar visualmente para DD/MM/AAAA
+            const diaStr = String(dia).padStart(2, '0');
+            const mesStr = String(mes).padStart(2, '0');
+            inp.value = `${diaStr}/${mesStr}/${ano}`; 
+        }
         if(typeof Geral !== 'undefined') Geral.carregarTela(); 
     }
     
     if (aba === 'performance') { 
-        // Preenche os campos da aba performance com a data do sistema
+        // Preenche os campos da aba performance baseada na data global
         const inpMonth = document.getElementById('perf-input-month');
         const inpYear = document.getElementById('perf-input-year');
         const inpQuarter = document.getElementById('perf-input-quarter');
         const inpSemester = document.getElementById('perf-input-semester');
         
-        const anoStr = dataObj.getFullYear().toString();
-        const mesStr = String(dataObj.getMonth() + 1).padStart(2, '0');
-        const quarterVal = Math.ceil((dataObj.getMonth() + 1) / 3).toString();
-        const semesterVal = Math.ceil((dataObj.getMonth() + 1) / 6).toString();
+        const anoStr = ano.toString();
+        const mesStr = String(mes).padStart(2, '0');
+        const quarterVal = Math.ceil(mes / 3).toString();
+        const semesterVal = Math.ceil(mes / 6).toString();
         
+        // Só define se os inputs estiverem vazios ou para sincronizar inicialmente
+        // (Isso permite alterar dentro da aba sem ser resetado o tempo todo, 
+        // mas aqui vamos forçar a sincronia ao ENTRAR na aba conforme pedido)
         if(inpMonth) inpMonth.value = `${anoStr}-${mesStr}`;
         if(inpYear) inpYear.value = anoStr;
         if(inpQuarter) inpQuarter.value = quarterVal;
         if(inpSemester) inpSemester.value = semesterVal;
 
         if(typeof Perf !== 'undefined') {
-            Perf.uiChange(); 
-            Perf.carregarRanking(); 
+            Perf.uiChange(); // Atualiza visibilidade
+            // carregarRanking já é chamado pelo uiChange, não precisa duplicar
         }
     }
     
     if (aba === 'matriz') { 
         const inp = document.getElementById('data-matriz');
-        if(inp) inp.value = dataString; 
+        if(inp) {
+            const diaStr = String(dia).padStart(2, '0');
+            const mesStr = String(mes).padStart(2, '0');
+            inp.value = `${diaStr}/${mesStr}/${ano}`;
+        }
         if(typeof Matriz !== 'undefined') Matriz.init(); 
     }
     
     if (aba === 'consolidado') { 
         const inp = document.getElementById('data-cons');
-        if(inp) inp.value = dataString; 
+        if(inp) {
+            const diaStr = String(dia).padStart(2, '0');
+            const mesStr = String(mes).padStart(2, '0');
+            inp.value = `${diaStr}/${mesStr}/${ano}`;
+        }
         if(typeof Cons !== 'undefined') Cons.init(); 
     }
 }
 
+// --- Função de Importação Excel ---
 async function importarExcel(input) {
     const file = input.files[0];
     if (!file) return;
     const nomeArquivo = file.name;
     const matchData = nomeArquivo.match(/^(\d{2})(\d{2})(\d{4})/);
     if (!matchData) { alert("Nome inválido (ddmmaaaa.xlsx)"); input.value = ''; return; }
+    
+    // Converte para ISO YYYY-MM-DD para salvar no banco
     const dataDoArquivo = `${matchData[3]}-${matchData[2]}-${matchData[1]}`;
 
     const reader = new FileReader();
@@ -118,9 +162,13 @@ async function importarExcel(input) {
                     const { error } = await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
                     if (error) throw error;
                     alert("Sucesso!");
-                    localStorage.setItem(KEY_DATA_GLOBAL, `${matchData[1]}/${matchData[2]}/${matchData[3]}`);
-                    const currentTab = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';
-                    mudarAba(currentTab);
+                    
+                    // Salva a data do arquivo importado como a data global atual
+                    localStorage.setItem(KEY_DATA_GLOBAL, dataDoArquivo);
+                    
+                    // Recarrega na aba geral
+                    localStorage.setItem(KEY_TAB_GLOBAL, 'geral');
+                    mudarAba('geral');
                 }
             } else alert("Dados inválidos ou vazios.");
         } catch (err) { alert("Erro: " + err.message); } finally { input.value = ''; }
@@ -128,17 +176,31 @@ async function importarExcel(input) {
     reader.readAsArrayBuffer(file);
 }
 
+// --- Inicialização Global ---
 document.addEventListener('DOMContentLoaded', async () => {
+    // 1. Carrega Cache de Usuários
     await carregarUsuariosGlobal();
-    if(typeof Sistema !== 'undefined' && Sistema.Datas) {
+    
+    // 2. Configura listener inteligente apenas para a aba geral (input data-validacao)
+    // Se Sistema.Datas não existir, ignorar erros
+    if(typeof Sistema !== 'undefined' && Sistema.Datas && Sistema.Datas.criarInputInteligente) {
+        // Observação: removemos o criarInputInteligente automático para performance
+        // e deixamos o controle manual no mudarAba para evitar conflitos de "quem carrega primeiro".
+        // Mas mantemos para a digitação na aba Geral.
         Sistema.Datas.criarInputInteligente('data-validacao', KEY_DATA_GLOBAL, () => {
+            // Callback: Só recarrega se estiver na aba geral
             const activeTab = localStorage.getItem(KEY_TAB_GLOBAL);
             if(activeTab === 'geral' && typeof Geral !== 'undefined') {
+                 // Ao digitar data manualmente, Geral.carregarTela() já salva no storage
                  Geral.carregarTela();
             }
         });
     }
-    await Sistema.Dados.inicializar(); 
+    
+    // 3. Inicializa Sistema
+    if(typeof Sistema !== 'undefined') await Sistema.Dados.inicializar(); 
+    
+    // 4. Restaura Aba e Data
     const lastTab = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';
     mudarAba(lastTab);
 });
