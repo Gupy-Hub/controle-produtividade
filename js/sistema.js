@@ -1,6 +1,5 @@
 const Sistema = {
     Datas: {
-        // Lê data de string ou do próprio elemento
         lerInput: function(elementIdOrNode) {
             const el = typeof elementIdOrNode === 'string' ? document.getElementById(elementIdOrNode) : elementIdOrNode;
             if (!el || el.value.length !== 10) return new Date();
@@ -15,16 +14,13 @@ const Sistema = {
             return `${d}/${m}/${a}`;
         },
 
-        // --- INPUT SUPER INTELIGENTE (ATUALIZADO) ---
         criarInputInteligente: function(elementId, storageKey, callback) {
             const input = document.getElementById(elementId);
             if (!input) return;
 
-            // 1. Carregar Valor Inicial
             const salva = localStorage.getItem(storageKey);
             input.value = salva && salva.length === 10 ? salva : this.formatar(new Date());
 
-            // 2. Máscara de Digitação (Permite digitar livremente)
             input.addEventListener('input', function() {
                 let v = this.value.replace(/\D/g, '').slice(0, 8);
                 if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
@@ -32,55 +28,35 @@ const Sistema = {
                 this.value = v;
             });
 
-            // 3. SELEÇÃO INTELIGENTE AO CLICAR (CORREÇÃO PEDIDA)
             input.addEventListener('click', function() {
                 const cursor = this.selectionStart;
-                
-                // Define qual parte selecionar baseado no clique
-                if (cursor <= 2) {
-                    this.setSelectionRange(0, 2); // Seleciona DIA (dd)
-                } else if (cursor >= 3 && cursor <= 5) {
-                    this.setSelectionRange(3, 5); // Seleciona MÊS (mm)
-                } else {
-                    this.setSelectionRange(6, 10); // Seleciona ANO (aaaa)
-                }
+                if (cursor <= 2) this.setSelectionRange(0, 2);
+                else if (cursor >= 3 && cursor <= 5) this.setSelectionRange(3, 5);
+                else this.setSelectionRange(6, 10);
             });
 
-            // 4. Lógica Central de Alteração (Setas e Scroll)
             const alterarData = (e, delta) => {
                 e.preventDefault();
-                
-                // Detecta onde está a seleção/cursor
                 const cursor = input.selectionStart;
-                let mode = 'day'; 
-                let start = 0, end = 2;
-
+                let mode = 'day', start = 0, end = 2;
                 if (cursor >= 3 && cursor <= 5) { mode = 'month'; start = 3; end = 5; }
                 if (cursor >= 6) { mode = 'year'; start = 6; end = 10; }
 
                 let atual = Sistema.Datas.lerInput(input);
-                
-                // Altera apenas a parte onde o cursor está
                 if (mode === 'day') atual.setDate(atual.getDate() + delta);
                 if (mode === 'month') atual.setMonth(atual.getMonth() + delta);
                 if (mode === 'year') atual.setFullYear(atual.getFullYear() + delta);
 
                 input.value = Sistema.Datas.formatar(atual);
-                
-                // Mantém a seleção na parte que estava sendo editada
                 input.setSelectionRange(start, end);
-                
-                // Salva e atualiza a tela
                 input.dispatchEvent(new Event('change'));
             };
 
-            // Evento: Setas do Teclado
             input.addEventListener('keydown', (e) => {
                 if (e.key === 'ArrowUp') alterarData(e, 1);
                 if (e.key === 'ArrowDown') alterarData(e, -1);
             });
 
-            // Evento: Rodinha do Mouse (Scroll)
             input.addEventListener('wheel', (e) => {
                 if (document.activeElement === input) {
                     const delta = e.deltaY < 0 ? 1 : -1;
@@ -88,14 +64,12 @@ const Sistema = {
                 }
             });
 
-            // 5. Salvar ao Confirmar
             input.addEventListener('change', function() {
                 if (this.value.length === 10) {
                     localStorage.setItem(storageKey, this.value);
                     if (typeof callback === 'function') callback();
                 }
             });
-
             input.addEventListener('keypress', function(e) { if(e.key === 'Enter') this.blur(); });
         },
 
@@ -125,30 +99,61 @@ const Sistema = {
             return metaEncontrada ? metaEncontrada.valor_meta : 650;
         },
 
+        // Normalizar agora agrupa por NOME
         normalizar: function(listaProducao) {
             const agrupado = {};
+
             listaProducao.forEach(item => {
                 const uid = item.usuario_id;
                 const user = this.usuariosCache[uid];
+                
                 if (!user || user.funcao !== 'Assistente') return;
 
-                if (!agrupado[uid]) {
-                    agrupado[uid] = { nome: user.nome, diasSet: new Set(), total: 0, fifo: 0, gt: 0, gp: 0, metaAccum: 0, atingiu: false };
-                }
-                const qtd = Number(item.quantidade) || 0;
-                agrupado[uid].total += qtd;
-                agrupado[uid].fifo += Number(item.fifo) || 0;
-                agrupado[uid].gt += Number(item.gradual_total) || 0;
-                agrupado[uid].gp += Number(item.gradual_parcial) || 0;
-                agrupado[uid].diasSet.add(item.data_referencia);
+                // Chave de Agrupamento: Nome (para juntar IDs duplicados)
+                const chaveNome = user.nome.trim().toUpperCase();
 
+                if (!agrupado[chaveNome]) {
+                    agrupado[chaveNome] = {
+                        nome: user.nome, // Mantém a grafia original do primeiro encontrado
+                        ids: new Set(),
+                        diasSet: new Set(),
+                        total: 0,
+                        fifo: 0, gt: 0, gp: 0,
+                        metaAccum: 0, // Meta acumulada (Soma das metas diárias)
+                        atingiu: false,
+                        ignorado: false // Controle manual de exclusão
+                    };
+                }
+
+                // Adiciona o ID ao conjunto de IDs desta pessoa
+                agrupado[chaveNome].ids.add(uid);
+
+                const qtd = Number(item.quantidade) || 0;
+                agrupado[chaveNome].total += qtd;
+                agrupado[chaveNome].fifo += Number(item.fifo) || 0;
+                agrupado[chaveNome].gt += Number(item.gradual_total) || 0;
+                agrupado[chaveNome].gp += Number(item.gradual_parcial) || 0;
+                
+                // Evita somar meta duplicada se a pessoa tiver 2 IDs lançando produção no MESMO dia
+                // (Chave única dia+nome)
+                const diaUnico = item.data_referencia; 
+                agrupado[chaveNome].diasSet.add(diaUnico);
+
+                // Calcula a meta deste registro
                 const metaDoDia = this.obterMetaVigente(uid, item.data_referencia);
-                agrupado[uid].metaAccum += metaDoDia;
+                agrupado[chaveNome].metaAccum += metaDoDia;
             });
 
             return Object.values(agrupado).map(obj => {
                 return {
-                    nome: obj.nome, dias: obj.diasSet.size, total: obj.total, fifo: obj.fifo, gt: obj.gt, gp: obj.gp, meta: obj.metaAccum, atingiu: obj.total >= obj.metaAccum
+                    nome: obj.nome,
+                    ids: Array.from(obj.ids), // Lista de IDs reais
+                    dias: obj.diasSet.size,
+                    total: obj.total,
+                    fifo: obj.fifo, gt: obj.gt, gp: obj.gp,
+                    meta: obj.metaAccum,
+                    atingiu: obj.total >= obj.metaAccum,
+                    ignorado: false // Padrão
                 };
             }).sort((a, b) => b.total - a.total);
         }
