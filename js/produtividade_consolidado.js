@@ -8,6 +8,16 @@ const Cons = {
         } 
         setTimeout(() => this.carregar(false), 50); 
     },
+
+    mudarBase: function(novoValor) {
+        if(!novoValor) return;
+        let el = document.getElementById('global-date');
+        let val = el ? el.value : new Date().toISOString().split('T')[0];
+        
+        // Salva a base para o Mês de Referência Global
+        Sistema.Dados.definirBaseHC(val, novoValor);
+        this.carregar(true); // Recarrega para aplicar a nova base no cálculo
+    },
     
     carregar: async function(forcar = false) {
         const tbody = document.getElementById('cons-table-body'); 
@@ -23,8 +33,12 @@ const Cons = {
         if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
         else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
+        // Atualiza o input visual com a base do mês selecionado
         const inputHC = document.getElementById('cons-input-hc');
-        const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
+        if(inputHC) {
+            const baseDoMes = Sistema.Dados.obterBaseHC(val);
+            inputHC.value = baseDoMes;
+        }
 
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0'); const sDia = String(dia).padStart(2, '0');
         const dataSql = `${sAno}-${sMes}-${sDia}`;
@@ -34,7 +48,10 @@ const Cons = {
         else if (t === 'mes') { s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; }
         else if (t === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; e = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`; }
         else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; } 
-        else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; } // Para ano_mes e ano_trim
+        else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
+
+        // Calcula a Base Média do Período (Ex: Média das bases de Jan, Fev, Mar)
+        const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
 
         const cacheKey = `${t}_${s}_${e}_${HF}`;
 
@@ -67,10 +84,9 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body');
         if (!tbody) return;
 
-        // --- GERAÇÃO DINÂMICA DE COLUNAS ---
         const mesesNomes = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
         let cols = []; 
-        let startMonthIdx = 0; // 0-based
+        let startMonthIdx = 0; 
 
         if (t === 'dia') {
             cols = ['Dia Atual']; 
@@ -87,7 +103,7 @@ const Cons = {
         } else if (t === 'ano_trim') {
             cols = ['1º Trimestre', '2º Trimestre', '3º Trimestre', '4º Trimestre'];
         } else { // ano_mes
-            cols = mesesNomes; // Todos os 12
+            cols = mesesNomes; 
         }
         
         const numCols = cols.length; 
@@ -105,44 +121,30 @@ const Cons = {
                 let b = 1; 
                 const parts = r.data_referencia.split('-'); 
                 const dt = new Date(parts[0], parts[1]-1, parts[2]);
-                const mIdx = dt.getMonth(); // 0-11
+                const mIdx = dt.getMonth(); 
 
                 if (t === 'mes') { 
                     const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); 
                     b = Math.ceil((dt.getDate() + firstDay) / 7); 
                 } 
-                else if (t === 'trimestre') { 
-                    // Ajusta índice relativo ao trimestre (0, 1, 2)
-                    b = (mIdx % 3) + 1; 
-                } 
-                else if (t === 'semestre') { 
-                    // Ajusta índice relativo ao semestre (0 a 5)
-                    b = (mIdx % 6) + 1; 
-                } 
-                else if (t === 'ano_trim') {
-                    // Agrupa por trimestre (1 a 4)
-                    b = Math.ceil((mIdx + 1) / 3);
-                }
-                else if (t === 'ano_mes') { 
-                    b = mIdx + 1; 
-                }
+                else if (t === 'trimestre') { b = (mIdx % 3) + 1; } 
+                else if (t === 'semestre') { b = (mIdx % 6) + 1; } 
+                else if (t === 'ano_trim') { b = Math.ceil((mIdx + 1) / 3); }
+                else if (t === 'ano_mes') { b = mIdx + 1; }
                 
-                if(b > numCols) b = numCols; // Segurança
+                if(b > numCols) b = numCols;
 
                 const populate = (k) => {
                     if(!st[k]) return;
                     const x = st[k];
                     x.users.add(nome); 
-                    
                     if (!x.diasMap[r.data_referencia]) x.diasMap[r.data_referencia] = 0;
                     x.diasPonderados += fator; 
-
                     x.qty += sys; 
                     x.fifo += (Number(r.fifo)||0); 
                     x.gt += (Number(r.gradual_total)||0); 
                     x.gp += (Number(r.gradual_parcial)||0); 
                     x.fc += (Number(r.perfil_fc)||0);
-                    
                     if (user.contrato && user.contrato.includes('CLT')) { 
                         x.clt_users.add(nome); x.clt_qty += sys; x.clt_dias += fator;
                     } else { 
@@ -187,7 +189,6 @@ const Cons = {
                 const s = st[i]; 
                 const diasReais = s.diasPonderados; 
                 const ativos = s.users.size || 1; 
-                
                 let val = 0; 
                 if (!isCalc) { 
                     val = getter(s); 
@@ -195,12 +196,8 @@ const Cons = {
                 } else { 
                     val = getter(s, diasReais, ativos, s.clt_dias, s.pj_dias); 
                 }
-                
                 const txt = val ? Math.round(val).toLocaleString() : '-';
-                const cellClass = i === 99 
-                    ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` 
-                    : `px-4 py-4 text-center text-slate-500 font-medium`;
-                
+                const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
                 tr += `<td class="${cellClass}">${txt}</td>`;
             });
             return tr + '</tr>';
@@ -211,15 +208,9 @@ const Cons = {
         h += mkRow('Produção Total', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
         h += mkRow('Média (Time)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true); 
-        h += mkRow(`Média (Base ${HF})`, 'fas fa-user-tag', 'text-amber-600', (s) => s.qty / HF, true); 
+        h += mkRow(`Média (Base Config.)`, 'fas fa-user-tag', 'text-amber-600', (s) => s.qty / HF, true); 
         
-        h += `<tr><td colspan="${numCols + 2}" class="px-6 py-6 bg-slate-50/50">
-                <div class="flex items-center gap-4">
-                    <div class="h-px bg-slate-200 flex-1"></div>
-                    <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"><i class="fas fa-file-signature mr-2"></i>Segmentação por Contrato</span>
-                    <div class="h-px bg-slate-200 flex-1"></div>
-                </div>
-              </td></tr>`;
+        h += `<tr><td colspan="${numCols + 2}" class="px-6 py-6 bg-slate-50/50"><div class="flex items-center gap-4"><div class="h-px bg-slate-200 flex-1"></div><span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"><i class="fas fa-file-signature mr-2"></i>Segmentação por Contrato</span><div class="h-px bg-slate-200 flex-1"></div></div></td></tr>`;
 
         h += mkRow('Produção CLT', 'fas fa-building', 'text-blue-500', s => s.clt_qty); 
         h += mkRow('Média Diária CLT', 'fas fa-calculator', 'text-blue-400', (s, d, a, dc, dp) => dc > 0 ? s.clt_qty / dc : 0, true);
@@ -240,11 +231,11 @@ const Cons = {
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- ATUALIZADO: Mostra Contagem REAL de Ativas no Card ---
+        // Atualiza Card de Headcount com valor REAL de pessoas ativas
         setSafe('cons-p-headcount', tot.users.size); 
-        // Atualiza Badge do Input
-        const elBadge = document.getElementById('cons-badge-base');
-        if (elBadge) elBadge.innerText = `Base ${HF}`;
+        
+        const elLblBase = document.getElementById('cons-lbl-base-avg');
+        if(elLblBase) elLblBase.innerText = HF;
     },
     
     newStats: function() { 

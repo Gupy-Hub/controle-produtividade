@@ -4,7 +4,6 @@ const Sistema = {
             const input = document.getElementById(elementId);
             if (!input) return;
             const salva = localStorage.getItem(storageKey);
-            // Se houver valor salvo, usa; senão data de hoje
             input.value = salva && salva.length === 10 ? salva : new Date().toISOString().split('T')[0];
             
             input.addEventListener('change', function() {
@@ -19,20 +18,24 @@ const Sistema = {
     Dados: {
         usuariosCache: {},
         metasCache: [],
-        fatoresCache: {}, // Cache para os fatores (1, 0.5, 0)
+        fatoresCache: {}, 
+        basesHcCache: {}, // NOVA MEMÓRIA DE BASES
         inicializado: false,
 
         inicializar: async function() {
-            // Recarrega fatores do localStorage sempre que inicializar/reinicializar
-            const saved = localStorage.getItem('produtividade_fatores_v2');
-            this.fatoresCache = saved ? JSON.parse(saved) : {};
+            // Carrega Fatores (Abonos)
+            const savedFator = localStorage.getItem('produtividade_fatores_v2');
+            this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
+
+            // Carrega Bases HC (Histórico de Assistentes)
+            const savedBase = localStorage.getItem('produtividade_bases_hc');
+            this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
 
             if (this.inicializado) return; 
 
             if (!window._supabase) { console.error("Supabase Off"); return; }
             
             try {
-                // Carrega usuários
                 const { data: users, error: errUser } = await _supabase
                     .from('usuarios')
                     .select('id, nome, funcao, contrato, ativo')
@@ -42,7 +45,6 @@ const Sistema = {
                 this.usuariosCache = {};
                 if(users) users.forEach(u => this.usuariosCache[u.id] = u);
                 
-                // Carrega metas
                 const { data: metas, error: errMeta } = await _supabase
                     .from('metas')
                     .select('*')
@@ -52,12 +54,13 @@ const Sistema = {
                 this.metasCache = metas || [];
                 
                 this.inicializado = true;
-                console.log("Sistema: Dados iniciais carregados.");
+                console.log("Sistema: Dados carregados.");
             } catch (e) {
                 console.error("Erro Sistema:", e);
             }
         },
 
+        // --- GESTÃO DE FATORES (DIAS ABONADOS) ---
         definirFator: function(nome, dataRef, fator) {
             if (!this.fatoresCache[dataRef]) this.fatoresCache[dataRef] = {};
             this.fatoresCache[dataRef][nome] = parseFloat(fator);
@@ -65,11 +68,50 @@ const Sistema = {
         },
 
         obterFator: function(nome, dataRef) {
-            // Retorna 1.0 (Dia cheio) se não houver definição
             if (this.fatoresCache[dataRef] && this.fatoresCache[dataRef][nome] !== undefined) {
                 return this.fatoresCache[dataRef][nome];
             }
             return 1.0; 
+        },
+
+        // --- GESTÃO DE BASE HC (NOVO) ---
+        // Salva a base para o Mês de Referência (YYYY-MM)
+        definirBaseHC: function(dataRef, quantidade) {
+            const key = dataRef.substring(0, 7); // Pega apenas YYYY-MM
+            this.basesHcCache[key] = parseInt(quantidade);
+            localStorage.setItem('produtividade_bases_hc', JSON.stringify(this.basesHcCache));
+        },
+
+        // Obtém a base de um mês específico (Padrão 17 se não definido)
+        obterBaseHC: function(dataRef) {
+            const key = dataRef.substring(0, 7);
+            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
+        },
+
+        // Calcula a média das bases para um intervalo de datas (para trimestres/ano)
+        calcularMediaBasePeriodo: function(dataInicio, dataFim) {
+            let inicio = new Date(dataInicio);
+            const fim = new Date(dataFim);
+            let somaBases = 0;
+            let mesesContados = 0;
+            
+            // Itera mês a mês
+            while (inicio <= fim) {
+                const ano = inicio.getFullYear();
+                const mes = String(inicio.getMonth() + 1).padStart(2, '0');
+                const key = `${ano}-${mes}`;
+                
+                // Pega base salva ou 17
+                const base = this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
+                
+                somaBases += base;
+                mesesContados++;
+                
+                // Avança para o próximo mês (dia 1)
+                inicio = new Date(ano, inicio.getMonth() + 1, 1);
+            }
+
+            return mesesContados > 0 ? Math.round(somaBases / mesesContados) : 17;
         },
 
         obterMetaVigente: function(usuarioId, dataReferencia) {
@@ -78,14 +120,12 @@ const Sistema = {
             return metaEncontrada ? metaEncontrada.valor_meta : 650;
         },
 
-        // Normaliza dados para a aba GERAL
         normalizar: function(listaProducao) {
             const agrupado = {};
 
             listaProducao.forEach(item => {
                 const uid = item.usuario_id;
                 let user = this.usuariosCache[uid];
-                
                 if (!user || (user.funcao && user.funcao !== 'Assistente')) return;
 
                 const nomeChave = user.nome.trim();
@@ -97,7 +137,7 @@ const Sistema = {
                         diasMap: {}, 
                         total: 0, fifo: 0, gt: 0, gp: 0,
                         metaAcc: 0,
-                        inativo: !user.ativo // Marca se o usuário está inativo no cadastro
+                        inativo: !user.ativo
                     };
                 }
 
@@ -108,37 +148,31 @@ const Sistema = {
                 agrupado[nomeChave].gp += (Number(item.gradual_parcial) || 0);
 
                 const dia = item.data_referencia;
-                // Garante que o dia exista no mapa para buscar o fator depois
                 if (!agrupado[nomeChave].diasMap[dia]) {
                     agrupado[nomeChave].diasMap[dia] = { qtd: 0 };
                 }
                 agrupado[nomeChave].diasMap[dia].qtd += (Number(item.quantidade) || 0);
             });
 
-            // Processamento final: Aplica Fatores e Metas
             return Object.values(agrupado).map(obj => {
                 let diasContabilizados = 0;
                 let metaTotalAdjustada = 0;
 
-                // Itera sobre os dias que tiveram produção OU que foram registrados
                 Object.keys(obj.diasMap).forEach(dia => {
                     const fator = this.obterFator(obj.nome, dia);
-                    
-                    // Busca ID do usuário para meta (pega o primeiro ID associado ao nome)
                     const uid = obj.ids.values().next().value;
                     const metaBase = this.obterMetaVigente(uid, dia);
 
-                    diasContabilizados += fator; // Soma 1, 0.5 ou 0
-                    metaTotalAdjustada += (metaBase * fator); // Meta proporcional
+                    diasContabilizados += fator;
+                    metaTotalAdjustada += (metaBase * fator);
                     
-                    // Salva fator no objeto do dia para exibição no select
                     obj.diasMap[dia].fator = fator;
                     obj.diasMap[dia].meta = metaBase * fator;
                 });
 
                 return {
                     ...obj,
-                    dias: diasContabilizados, // Agora pode ser decimal (ex: 4.5)
+                    dias: diasContabilizados,
                     meta: Math.round(metaTotalAdjustada),
                     atingiu: obj.total >= metaTotalAdjustada
                 };
