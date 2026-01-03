@@ -2,165 +2,548 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Produtividade</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Produtividade</title>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
+    
+    <style> 
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
+        
+        /* Estilos de Abas */
+        .tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: #2563eb; border-color: #2563eb; background-color: #eff6ff; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        
+        /* Estilos Específicos Performance/Consolidado */
+        .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
+        .me-row { background-color: #f8fafc; border-left: 4px solid #94a3b8; }
+        .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
+        .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
+        .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
+        
+        /* Tabela Consolidada */
+        .row-total td { background-color: #eff6ff !important; font-weight: 800; color: #1e40af; border-top: 2px solid #bfdbfe; }
+        .row-sub td { background-color: #f8fafc; font-weight: 700; color: #64748b; font-size: 0.75rem; letter-spacing: 0.05em; text-transform: uppercase; padding-top: 20px; }
+        .col-fixed { position: sticky; left: 0; background: white; z-index: 10; border-right: 1px solid #e2e8f0; }
+        .row-total .col-fixed { background-color: #eff6ff; }
+        
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
 <body class="text-slate-800">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="max-w-7xl mx-auto px-4 py-8">
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <div class="flex flex-col md:flex-row justify-between items-end mb-6 gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Controle de Produção</h1>
-                <p class="text-sm text-slate-500" id="titulo-dinamico">Visão Geral</p>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">Painel de Gestão</h1>
+                <p class="text-slate-500 text-sm font-medium">Controle de produtividade, performance e indicadores.</p>
             </div>
             
-            <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg">
-                <div class="relative">
-                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
-                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
-                </div>
+            <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex overflow-x-auto max-w-full">
+                <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-chart-line"></i> Visão Geral
+                </button>
+                <button onclick="mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-trophy"></i> Performance
+                </button>
+                <button onclick="mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-table"></i> Consolidado
+                </button>
+            </div>
+        </div>
 
-                <select id="view-mode" onchange="toggleSemana()" class="py-2 px-4 border-2 border-slate-200 rounded-lg font-bold text-slate-600 outline-none bg-white">
+        <div id="tab-geral" class="view-section animate-fade-in space-y-6">
+            
+            <div class="flex flex-wrap items-center justify-end gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                    <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Data Ref</span>
+                    <input type="text" id="data-global" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" placeholder="DD/MM/AAAA" maxlength="10">
+                </div>
+                
+                <select id="view-mode" onchange="Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
                     <option value="dia">Dia Específico</option>
                     <option value="mes">Mês Completo</option>
                     <option value="semana">Por Semana</option>
                 </select>
 
-                <select id="select-semana" onchange="carregarTela()" class="hidden py-2 px-4 border-2 border-blue-200 bg-blue-50 text-blue-800 rounded-lg font-bold outline-none">
+                <select id="select-semana" onchange="Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-sm font-bold outline-none cursor-pointer">
                     <option value="1">Semana 1</option>
                     <option value="2">Semana 2</option>
                     <option value="3">Semana 3</option>
                     <option value="4">Semana 4</option>
                     <option value="5">Semana 5</option>
                 </select>
+                
+                <button onclick="Geral.carregarTela()" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg transition shadow-sm"><i class="fas fa-sync-alt"></i></button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-file-alt text-6xl text-blue-600"></i></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção Total</p>
+                    <p class="text-4xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
+                    <p class="text-xs text-slate-400 mt-2 font-medium" id="titulo-dinamico">--</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-chart-bar text-6xl text-slate-600"></i></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Geral</p>
+                    <p class="text-4xl font-black text-slate-800 tracking-tighter" id="kpi-media">--</p>
+                    <p class="text-xs text-slate-400 mt-2 font-medium">Docs / Dia</p>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-users text-6xl text-emerald-600"></i></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Ativos</p>
+                    <p class="text-4xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p>
+                    <p class="text-xs text-slate-400 mt-2 font-medium">Assistentes</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wide">
+                            <tr>
+                                <th class="px-6 py-4">Nome</th>
+                                <th class="px-6 py-4 text-center">Total</th>
+                                <th class="px-6 py-4 text-center">FIFO</th>
+                                <th class="px-6 py-4 text-center">Grad. Total</th>
+                                <th class="px-6 py-4 text-center">Grad. Parcial</th>
+                                <th class="px-6 py-4 text-center">Meta Calc.</th>
+                                <th class="px-6 py-4 text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase">Produção Total</p>
-                <p class="text-4xl font-extrabold text-blue-700" id="kpi-total">--</p>
+        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
+            
+            <div class="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex gap-2">
+                    <button onclick="Perf.switchMode('individual')" id="tab-perf-individual" class="px-4 py-2 text-sm font-bold rounded-lg transition text-blue-700 bg-blue-50">📊 Ranking</button>
+                    <button onclick="Perf.switchMode('matrix')" id="tab-perf-matrix" class="px-4 py-2 text-sm font-bold rounded-lg transition text-slate-500 hover:text-slate-700">🏆 Matriz Anual</button>
+                </div>
             </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase">Média Geral</p>
-                <p class="text-4xl font-extrabold text-slate-800" id="kpi-media">--</p>
+
+            <div id="perf-view-individual">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo Período</label>
+                        <select id="perf-period-type" onchange="Perf.atualizarOpcoes()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold w-32 outline-none focus:border-blue-500">
+                            <option value="mes">Mensal</option>
+                            <option value="trimestre">Trimestral</option>
+                            <option value="semestre">Semestral</option>
+                            <option value="ano">Anual</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ano</label>
+                        <select id="perf-year-selector" onchange="Perf.atualizarOpcoes()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold w-24 outline-none focus:border-blue-500"></select>
+                    </div>
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Referência</label>
+                        <select id="perf-period-value" onchange="Perf.carregarRanking()" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold outline-none focus:border-blue-500"></select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1" id="perf-label-total">Total Produzido</p><p class="text-3xl font-black text-blue-700" id="perf-card-total">0</p></div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p><p class="text-3xl font-black text-slate-800" id="perf-card-media">0</p></div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Meta do Período</p><p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p></div>
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white"><p class="text-xs font-bold text-slate-400 uppercase mb-1" id="perf-label-rank">Destaques</p><div id="perf-rank-content" class="text-sm font-medium text-slate-700"></div></div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
+                        <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">✕ Limpar Seleção</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left text-slate-600">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th class="px-6 py-3">#</th>
+                                    <th class="px-6 py-3">Assistente</th>
+                                    <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
+                                    <th class="px-6 py-3 text-center">Dias</th>
+                                    <th class="px-6 py-3 text-center">Média</th>
+                                    <th class="px-6 py-3 text-center">Meta Total</th>
+                                    <th class="px-6 py-3 text-center">% Meta</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
-                <p class="text-xs font-bold text-slate-400 uppercase">Headcount</p>
-                <p class="text-4xl font-extrabold text-slate-800" id="kpi-hc">--</p>
+
+            <div id="perf-view-matrix" class="hidden">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 mb-4">
+                    <label class="text-xs font-bold text-slate-500 uppercase mr-2">Ano Base:</label>
+                    <select id="perf-matrix-year" onchange="Perf.carregarMatriz()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold w-32"></select>
+                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
+                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                                <tr>
+                                    <th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Nome</th>
+                                    <th class="px-2 py-3 text-center">Jan</th><th class="px-2 py-3 text-center">Fev</th><th class="px-2 py-3 text-center">Mar</th>
+                                    <th class="px-2 py-3 col-tri">TRI 1</th>
+                                    <th class="px-2 py-3 text-center">Abr</th><th class="px-2 py-3 text-center">Mai</th><th class="px-2 py-3 text-center">Jun</th>
+                                    <th class="px-2 py-3 col-tri">TRI 2</th><th class="px-2 py-3 col-sem">SEM 1</th>
+                                    <th class="px-2 py-3 text-center">Jul</th><th class="px-2 py-3 text-center">Ago</th><th class="px-2 py-3 text-center">Set</th>
+                                    <th class="px-2 py-3 col-tri">TRI 3</th>
+                                    <th class="px-2 py-3 text-center">Out</th><th class="px-2 py-3 text-center">Nov</th><th class="px-2 py-3 text-center">Dez</th>
+                                    <th class="px-2 py-3 col-tri">TRI 4</th><th class="px-2 py-3 col-sem">SEM 2</th>
+                                    <th class="px-4 py-3 col-ano">ANUAL</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perf-matrix-body" class="divide-y divide-slate-100"></tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left">
-                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                        <tr>
-                            <th class="px-6 py-4">Nome</th>
-                            <th class="px-6 py-4 text-center">Total</th>
-                            <th class="px-6 py-4 text-center">FIFO</th>
-                            <th class="px-6 py-4 text-center">Grad. Total</th>
-                            <th class="px-6 py-4 text-center">Grad. Parcial</th>
-                            <th class="px-6 py-4 text-center">Meta Calc.</th>
-                            <th class="px-6 py-4 text-center">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
-                </table>
+        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Visão</label>
+                    <select id="cons-period-type" onchange="Cons.atualizarFiltros()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold min-w-[140px] outline-none focus:border-blue-500">
+                        <option value="mes">Mensal (Semanas)</option>
+                        <option value="trimestre">Trimestral</option>
+                        <option value="semestre">Semestral</option>
+                        <option value="ano_mes">Anual (Meses)</option>
+                        <option value="dia">Diário</option>
+                    </select>
+                </div>
+                <div id="cons-grp-ano">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Ano</label>
+                    <select id="cons-year-selector" onchange="Cons.atualizarFiltros()" class="bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold w-24 outline-none focus:border-blue-500"></select>
+                </div>
+                <div class="flex-1 min-w-[200px]">
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Período</label>
+                    <select id="cons-period-value" onchange="Cons.carregar()" class="w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold outline-none focus:border-blue-500"></select>
+                    <input type="date" id="cons-date-picker" onchange="Cons.carregar()" class="hidden w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg p-2 font-bold">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p><p class="text-3xl font-black text-blue-700" id="cons-p-total">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média do Time</p><p class="text-3xl font-black text-slate-800" id="cons-p-media-time">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden"><div class="absolute right-0 top-0 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-bl">Base 17</div><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média (Base Fixa)</p><p class="text-3xl font-black text-amber-600" id="cons-p-media-ind">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Ativos no Período</p><p class="text-3xl font-black text-slate-800" id="cons-p-headcount">0</p></div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600 whitespace-nowrap">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr id="cons-table-header"></tr>
+                        </thead>
+                        <tbody id="cons-table-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
             </div>
         </div>
+
     </div>
 
     <script>
+        const sessao = JSON.parse(localStorage.getItem('usuario'));
+        let currentTab = 'geral';
+
+        // --- CONTROLE DE ABAS ---
+        function mudarAba(aba) {
+            currentTab = aba;
+            
+            // UI Update
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`tab-${aba}`).classList.remove('hidden');
+            
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${aba}`).classList.add('active');
+
+            // Lazy Load
+            if (aba === 'geral') Geral.carregarTela();
+            if (aba === 'performance') Perf.init();
+            if (aba === 'consolidado') Cons.init();
+        }
+
+        // ===============================================
+        // MODULO 1: VISÃO GERAL
+        // ===============================================
+        const Geral = {
+            toggleSemana: function() {
+                const mode = document.getElementById('view-mode').value;
+                const selSemana = document.getElementById('select-semana');
+                if (mode === 'semana') selSemana.classList.remove('hidden'); else selSemana.classList.add('hidden');
+                this.carregarTela();
+            },
+            
+            carregarTela: async function() {
+                const modo = document.getElementById('view-mode').value;
+                const refDate = Sistema.Datas.obterDataObjeto();
+                let inicio, fim, titulo;
+
+                if (modo === 'dia') {
+                    const iso = refDate.toISOString().split('T')[0];
+                    inicio = iso; fim = iso;
+                    titulo = "Visão do Dia: " + iso.split('-').reverse().join('/');
+                } else {
+                    const ano = refDate.getFullYear(); const mes = refDate.getMonth();
+                    inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+                    fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+                    titulo = `Mês de ${mes+1}/${ano}`;
+                }
+
+                const { data } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+                let dadosFiltrados = data || [];
+
+                if (modo === 'semana') {
+                    const numSemana = parseInt(document.getElementById('select-semana').value);
+                    dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
+                    titulo += ` - Semana ${numSemana}`;
+                }
+
+                document.getElementById('titulo-dinamico').innerText = titulo;
+                const lista = Sistema.Dados.normalizar(dadosFiltrados);
+                
+                const total = lista.reduce((a, b) => a + b.total, 0);
+                const diasTotais = lista.reduce((a, b) => a + b.dias, 0);
+                const media = diasTotais ? Math.round(total/diasTotais) : 0;
+
+                document.getElementById('kpi-total').innerText = total.toLocaleString();
+                document.getElementById('kpi-media').innerText = media.toLocaleString();
+                document.getElementById('kpi-hc').innerText = lista.length;
+
+                const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML = '';
+                if(lista.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400">Sem dados.</td></tr>'; return; }
+
+                lista.forEach(u => {
+                    const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
+                    tbody.innerHTML += `<tr class="hover:bg-slate-50"><td class="px-6 py-4 font-bold text-slate-700">${u.nome} <span class="text-[10px] text-slate-400">(${u.dias} dias)</span></td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta}</td><td class="px-6 py-4 text-center">${badge}</td></tr>`;
+                });
+            }
+        };
+
+        // ===============================================
+        // MODULO 2: PERFORMANCE
+        // ===============================================
+        const Perf = {
+            selectedUserId: null,
+            dadosCarregados: [],
+            initialized: false,
+
+            init: function() {
+                if(this.initialized) return;
+                const cy = new Date().getFullYear();
+                const ys = document.getElementById('perf-year-selector');
+                const my = document.getElementById('perf-matrix-year');
+                [ys, my].forEach(sel => { sel.innerHTML = ''; for(let y=cy; y>=2024; y--) sel.innerHTML+=`<option value="${y}">${y}</option>`; });
+                this.atualizarOpcoes();
+                this.initialized = true;
+            },
+
+            switchMode: function(mode) {
+                const v1 = document.getElementById('perf-view-individual'); const v2 = document.getElementById('perf-view-matrix');
+                const b1 = document.getElementById('tab-perf-individual'); const b2 = document.getElementById('tab-perf-matrix');
+                if (mode === 'individual') {
+                    v1.classList.remove('hidden'); v2.classList.add('hidden');
+                    b1.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-blue-700 bg-blue-50"; b2.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-slate-500 hover:text-slate-700";
+                    this.carregarRanking();
+                } else {
+                    v1.classList.add('hidden'); v2.classList.remove('hidden');
+                    b2.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-blue-700 bg-blue-50"; b1.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-slate-500 hover:text-slate-700";
+                    this.carregarMatriz();
+                }
+            },
+
+            atualizarOpcoes: function() {
+                const tipo = document.getElementById('perf-period-type').value; const sel = document.getElementById('perf-period-value'); sel.innerHTML = '';
+                if (tipo === 'mes') { ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => { sel.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`; }); }
+                else if (tipo === 'trimestre') { sel.innerHTML = '<option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>'; }
+                else if (tipo === 'semestre') { sel.innerHTML = '<option value="1">1º Semestre</option><option value="2">2º Semestre</option>'; } else { sel.innerHTML = '<option value="1">Ano Completo</option>'; }
+                this.limparSelecao();
+            },
+
+            limparSelecao: function() { 
+                this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); this.carregarRanking(); 
+            },
+
+            toggleUsuario: function(id) { 
+                if (this.selectedUserId === id) { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); } 
+                else { this.selectedUserId = id; document.getElementById('perf-btn-limpar').classList.remove('hidden'); } 
+                this.renderRanking(); 
+            },
+
+            carregarRanking: async function() {
+                const tbody = document.getElementById('perf-ranking-body'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">A carregar dados...</td></tr>';
+                try {
+                    const tipo = document.getElementById('perf-period-type').value; const val = parseInt(document.getElementById('perf-period-value').value); const ano = document.getElementById('perf-year-selector').value; let s, e;
+                    if (tipo === 'mes') { s = `${ano}-${String(val).padStart(2,'0')}-01`; e = `${ano}-${String(val).padStart(2,'0')}-${new Date(ano, val, 0).getDate()}`; }
+                    else if (tipo === 'trimestre') { const mStart = ((val-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
+                    else if (tipo === 'semestre') { s = val === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = val === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
+                    
+                    const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', s).lte('data_referencia', e); if(error) throw error;
+                    let stats = {};
+                    prods.forEach(item => {
+                        if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
+                        const uid = item.usuario_id;
+                        if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, dias: new Set() };
+                        stats[uid].total += (Number(item.quantidade) || 0); stats[uid].dias.add(item.data_referencia);
+                    });
+                    this.dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
+                    this.renderRanking();
+                } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="7" class="text-center text-red-400">Erro.</td></tr>'; }
+            },
+
+            renderRanking: function() {
+                const tbody = document.getElementById('perf-ranking-body'); if (!this.dadosCarregados.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado.</td></tr>'; this.atualizarCards(null); return; }
+                let html = ''; let userStats = null;
+                this.dadosCarregados.forEach((u, idx) => {
+                    const dias = u.dias.size || 1; const media = Math.round(u.total / dias); const meta = 650 * dias; const pct = Math.round((u.total / meta) * 100);
+                    const isSelected = this.selectedUserId === u.id; if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
+                    const isMe = sessao && u.id === sessao.id; let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; if (isSelected) rowClass += "selected-row"; else if (isMe) rowClass += "me-row";
+                    let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+                    html += `<tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td><td class="px-6 py-4 font-medium">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
+                });
+                tbody.innerHTML = html; this.atualizarCards(userStats);
+            },
+
+            atualizarCards: function(userStats) {
+                if (userStats) {
+                    document.getElementById('perf-label-total').innerText = "Total (" + userStats.nome.split(' ')[0] + ")"; document.getElementById('perf-card-total').innerText = userStats.total.toLocaleString(); document.getElementById('perf-card-media').innerText = userStats.media.toLocaleString(); document.getElementById('perf-card-meta').innerText = userStats.meta.toLocaleString(); document.getElementById('perf-label-rank').innerText = "Ranking no Time"; document.getElementById('perf-rank-content').innerHTML = `<div class="text-3xl font-black text-blue-700">#${userStats.rank}</div>`;
+                } else {
+                    const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); const metaGeral = 650 * diasGeral; const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
+                    document.getElementById('perf-label-total').innerText = "Total (Time)"; document.getElementById('perf-card-total').innerText = totalGeral.toLocaleString(); document.getElementById('perf-card-media').innerText = mediaGeral.toLocaleString(); document.getElementById('perf-card-meta').innerText = metaGeral.toLocaleString(); document.getElementById('perf-label-rank').innerText = "Melhores";
+                    let topHtml = '<div class="flex flex-col gap-1">'; this.dadosCarregados.slice(0, 3).forEach((u, i) => { topHtml += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600 font-bold">${u.total.toLocaleString()}</span></div>`; }); topHtml += '</div>'; document.getElementById('perf-rank-content').innerHTML = topHtml;
+                }
+            },
+
+            carregarMatriz: async function() {
+                const tbody = document.getElementById('perf-matrix-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">A calcular...</td></tr>';
+                try {
+                    const ano = document.getElementById('perf-matrix-year').value; const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
+                    if(error) throw error;
+                    let map = {};
+                    prods.forEach(item => {
+                        if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
+                        const uid = item.usuario_id;
+                        if (!map[uid]) map[uid] = { nome: item.usuarios.nome, m: Array(12).fill(0), t: 0 };
+                        const mes = new Date(item.data_referencia + 'T12:00:00').getMonth(); map[uid].m[mes] += (Number(item.quantidade)||0); map[uid].t += (Number(item.quantidade)||0);
+                    });
+                    const lista = Object.values(map).sort((a, b) => b.t - a.t);
+                    let html = '';
+                    lista.forEach(u => {
+                        const q1 = u.m[0]+u.m[1]+u.m[2]; const q2 = u.m[3]+u.m[4]+u.m[5]; const s1 = q1+q2; const q3 = u.m[6]+u.m[7]+u.m[8]; const q4 = u.m[9]+u.m[10]+u.m[11]; const s2 = q3+q4; const cell = (v) => v ? v.toLocaleString() : '-';
+                        html += `<tr class="hover:bg-slate-50 border-b border-slate-100"><td class="px-4 py-3 font-bold text-slate-700 sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="col-tri">${cell(q1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="col-tri">${cell(q2)}</td><td class="col-sem">${cell(s1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="col-tri">${cell(q3)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="col-tri">${cell(q4)}</td><td class="col-sem">${cell(s2)}</td><td class="col-ano">${u.t.toLocaleString()}</td></tr>`;
+                    });
+                    tbody.innerHTML = html || '<tr><td colspan="20" class="text-center py-4">Sem dados.</td></tr>';
+                } catch(e) { console.error(e); }
+            }
+        };
+
+        // ===============================================
+        // MODULO 3: CONSOLIDADO
+        // ===============================================
+        const Cons = {
+            initialized: false,
+            init: function() {
+                if(this.initialized) return;
+                const y = document.getElementById('cons-year-selector'); const cy = new Date().getFullYear(); y.innerHTML = ''; for(let i=cy; i>=2024; i--) y.innerHTML += `<option value="${i}">${i}</option>`;
+                this.atualizarFiltros();
+                this.initialized = true;
+            },
+            
+            atualizarFiltros: function() {
+                const t = document.getElementById('cons-period-type').value; const v = document.getElementById('cons-period-value'); const d = document.getElementById('cons-date-picker'); const g = document.getElementById('cons-grp-ano');
+                v.innerHTML = ''; v.classList.remove('hidden'); d.classList.add('hidden'); g.classList.remove('hidden');
+                if (t === 'dia') { v.classList.add('hidden'); d.classList.remove('hidden'); g.classList.add('hidden'); if(!d.value) d.value = new Date().toISOString().split('T')[0]; }
+                else if (t === 'mes') { ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m,i) => { v.innerHTML += `<option value="${i+1}" ${i===new Date().getMonth()?'selected':''}>${m}</option>`; }); }
+                else if (t === 'trimestre') { v.innerHTML = '<option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>'; }
+                else if (t === 'semestre') { v.innerHTML = '<option value="1">1º Semestre</option><option value="2">2º Semestre</option>'; } else { v.innerHTML = '<option value="1">Ano Completo</option>'; }
+                this.carregar();
+            },
+
+            carregar: async function() {
+                const tbody = document.getElementById('cons-table-body'); tbody.innerHTML = '<tr><td colspan="15" class="text-center py-8 text-slate-400">A calcular indicadores...</td></tr>';
+                const t = document.getElementById('cons-period-type').value; const y = document.getElementById('cons-year-selector').value; const val = parseInt(document.getElementById('cons-period-value').value); let s, e;
+                
+                if (t === 'dia') { s = e = document.getElementById('cons-date-picker').value; }
+                else if (t === 'mes') { s = `${y}-${String(val).padStart(2,'0')}-01`; e = `${y}-${String(val).padStart(2,'0')}-${new Date(y, val, 0).getDate()}`; }
+                else if (t === 'trimestre') { const m = ((val-1)*3)+1; s = `${y}-${String(m).padStart(2,'0')}-01`; const mEnd = m+2; e = `${y}-${String(mEnd).padStart(2,'0')}-${new Date(y, mEnd, 0).getDate()}`; }
+                else if (t === 'semestre') { s = val===1 ? `${y}-01-01` : `${y}-07-01`; e = val===1 ? `${y}-06-30` : `${y}-12-31`; } else { s = `${y}-01-01`; e = `${y}-12-31`; }
+
+                try {
+                    const { data: rawData, error } = await _supabase.from('producao').select('*, usuarios(funcao, contrato)').gte('data_referencia', s).lte('data_referencia', e); if(error) throw error;
+                    
+                    let cols = []; if (t === 'dia') cols = ['Dia']; else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+                    const numCols = cols.length; let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
+                    
+                    rawData.forEach(r => {
+                        if(!r.usuarios || r.usuarios.funcao !== 'Assistente') return;
+                        let b = 1; const dt = new Date(r.data_referencia + 'T12:00:00');
+                        if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
+                        else if (t === 'trimestre') b = (dt.getMonth() % 3) + 1; else if (t === 'semestre') b = (dt.getMonth() % 6) + 1; else if (t === 'ano_mes') b = dt.getMonth() + 1;
+                        if(b > numCols) b = numCols;
+                        const sys = Number(r.quantidade) || 0;
+                        [b, 99].forEach(k => {
+                            if(!st[k]) return; const x = st[k];
+                            x.users.add(r.usuario_id); x.dates.add(r.data_referencia); x.qty += sys; x.fifo += (Number(r.fifo)||0); x.gt += (Number(r.gradual_total)||0); x.gp += (Number(r.gradual_parcial)||0); x.fc += (Number(r.perfil_fc)||0);
+                            if (r.usuarios.contrato && r.usuarios.contrato.includes('CLT')) { x.clt_users.add(r.usuario_id); x.clt_qty += sys; } else { x.pj_users.add(r.usuario_id); x.pj_qty += sys; }
+                        });
+                    });
+
+                    const hRow = document.getElementById('cons-table-header'); hRow.innerHTML = `<th class="px-4 py-3 sticky left-0 bg-slate-50 z-20 border-r border-slate-200">Indicadores</th>` + cols.map(c => `<th class="px-4 py-3 text-center border-l border-slate-100">${c}</th>`).join('') + `<th class="px-4 py-3 text-center bg-blue-50 text-blue-800 border-l border-blue-100">TOTAL</th>`;
+                    let h = ''; const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
+                    const mkRow = (label, getter, isCalc=false, isBold=false, isSub=false) => {
+                        const rowClass = isBold ? 'row-total' : (isSub ? 'row-sub' : 'hover:bg-slate-50'); let tr = `<tr class="${rowClass} border-b border-slate-100"><td class="px-4 py-3 font-medium col-fixed">${label}</td>`;
+                        idxs.forEach(i => {
+                            const s = st[i]; const dias = s.dates.size || 1; const ativos = s.users.size || 1; const ac = s.clt_users.size || 1; const ap = s.pj_users.size || 1;
+                            let val = 0; if (!isCalc) { val = getter(s); if (val instanceof Set) val = val.size; } else { val = getter(s, dias, ativos, ac, ap); }
+                            const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); const cellClass = i === 99 ? 'bg-blue-50 font-bold border-l border-blue-100 text-blue-900' : 'text-center border-l border-slate-50'; tr += `<td class="${cellClass} px-2 py-2">${txt}</td>`;
+                        });
+                        return tr + '</tr>';
+                    };
+                    const HF = 17; // Base Fixa
+                    h += mkRow('Ativos', s => s.users); h += mkRow('Dias Trabalhados', s => s.dates); h += mkRow('FIFO', s => s.fifo); h += mkRow('G. Parcial', s => s.gp); h += mkRow('G. Total', s => s.gt); h += mkRow('Perfil FC', s => s.fc); h += mkRow('Produção Total', s => s.qty, false, true);
+                    h += mkRow('Média Diária (Time)', (s, d) => s.qty / d, true); h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => s.qty / d / HF, true);
+                    h += `<tr><td colspan="${numCols + 2}" class="px-4 py-6 bg-slate-50 font-bold text-slate-400 text-xs uppercase tracking-widest text-center border-y border-slate-200">Segmentação por Contrato</td></tr>`;
+                    h += mkRow('Produção CLT', s => s.clt_qty); h += mkRow('Média Diária/CLT', (s, d, a, ac) => s.clt_qty / d / ac, true);
+                    h += mkRow('Produção PJ', s => s.pj_qty); h += mkRow('Média Diária/PJ', (s, d, a, ac, ap) => s.pj_qty / d / ap, true);
+                    tbody.innerHTML = h;
+                    
+                    const tot = st[99]; const dTot = tot.dates.size || 1; 
+                    document.getElementById('cons-p-total').innerText = tot.qty.toLocaleString(); 
+                    document.getElementById('cons-p-media-time').innerText = Math.round(tot.qty / dTot).toLocaleString(); 
+                    document.getElementById('cons-p-media-ind').innerText = Math.round(tot.qty / dTot / HF).toLocaleString(); 
+                    document.getElementById('cons-p-headcount').innerText = tot.users.size;
+
+                } catch (e) { console.error(e); }
+            },
+            newStats: function() { return { users: new Set(), dates: new Set(), qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, clt_users: new Set(), clt_qty: 0, pj_users: new Set(), pj_qty: 0 }; }
+        };
+
+        // --- INICIALIZAÇÃO GLOBAL ---
         document.addEventListener('DOMContentLoaded', async () => {
-    Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
-    
-    // Agora carregamos Usuários E Metas
-    await Sistema.Dados.inicializar(); 
-    
-    carregarTela();
-});
-
-        function toggleSemana() {
-            const mode = document.getElementById('view-mode').value;
-            const selSemana = document.getElementById('select-semana');
-            if (mode === 'semana') selSemana.classList.remove('hidden');
-            else selSemana.classList.add('hidden');
-            carregarTela();
-        }
-
-        async function carregarTela() {
-            const modo = document.getElementById('view-mode').value;
-            const refDate = Sistema.Datas.obterDataObjeto();
-            
-            let inicio, fim, titulo;
-
-            if (modo === 'dia') {
-                const iso = refDate.toISOString().split('T')[0];
-                inicio = iso; fim = iso;
-                titulo = "Visão do Dia: " + iso.split('-').reverse().join('/');
-            } else {
-                // Mês base para "Mes" e "Semana"
-                const ano = refDate.getFullYear();
-                const mes = refDate.getMonth();
-                inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-                fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-                titulo = `Mês de ${mes+1}/${ano}`;
-            }
-
-            const { data } = await _supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-
-            let dadosFiltrados = data || [];
-
-            // Filtro de Semana (Feito via JS pois a semana é relativa ao mês)
-            if (modo === 'semana') {
-                const numSemana = parseInt(document.getElementById('select-semana').value);
-                dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
-                titulo += ` - Semana ${numSemana}`;
-            }
-
-            document.getElementById('titulo-dinamico').innerText = titulo;
-
-            const lista = Sistema.Dados.normalizar(dadosFiltrados);
-            
-            const total = lista.reduce((a, b) => a + b.total, 0);
-            const diasTotais = lista.reduce((a, b) => a + b.dias, 0);
-            const media = diasTotais ? Math.round(total/diasTotais) : 0;
-
-            document.getElementById('kpi-total').innerText = total.toLocaleString();
-            document.getElementById('kpi-media').innerText = media.toLocaleString();
-            document.getElementById('kpi-hc').innerText = lista.length;
-
-            const tbody = document.getElementById('tabela-corpo');
-            tbody.innerHTML = '';
-            
-            if(lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400">Sem dados.</td></tr>';
-                return;
-            }
-
-            lista.forEach(u => {
-                const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
-                tbody.innerHTML += `
-                <tr class="hover:bg-slate-50">
-                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome} <span class="text-[10px] text-slate-400">(${u.dias} dias)</span></td>
-                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total}</td>
-                    <td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td>
-                    <td class="px-6 py-4 text-center text-slate-600">${u.gt}</td>
-                    <td class="px-6 py-4 text-center text-slate-600">${u.gp}</td>
-                    <td class="px-6 py-4 text-center text-slate-400">${u.meta}</td>
-                    <td class="px-6 py-4 text-center">${badge}</td>
-                </tr>`;
-            });
-        }
+            Sistema.Datas.configurarInputGlobal('data-global', Geral.carregarTela);
+            await Sistema.Dados.inicializar(); // Carrega Users + Metas do sistema.js
+            Geral.carregarTela();
+        });
     </script>
 </body>
 </html>
