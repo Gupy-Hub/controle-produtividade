@@ -43,10 +43,9 @@ function renderNavbar() {
         <div class="hidden md:flex items-center gap-1 h-full">
             ${createLink('Gestão', 'gestao.html')}
             ${createLink('Produtividade', 'produtividade.html')}
-            ${createLink('Performance', 'performance.html')}
-            ${createLink('Consolidado', 'consolidado.html')}
             ${createLink('Minha Área', 'minha_area.html')}
-            ${createLink('Biblioteca', 'ferramentas.html')} </div>
+            ${createLink('Biblioteca', 'ferramentas.html')} 
+        </div>
 
         <div class="flex items-center gap-4">
             <div class="text-right hidden sm:block">
