@@ -1,6 +1,5 @@
 const Sistema = {
     Datas: {
-        // Lê a data de um input ou elemento
         lerInput: function(elementIdOrNode) {
             const el = typeof elementIdOrNode === 'string' ? document.getElementById(elementIdOrNode) : elementIdOrNode;
             if (!el || el.value.length !== 10) return new Date();
@@ -8,7 +7,6 @@ const Sistema = {
             return new Date(parts[2], parts[1] - 1, parts[0]);
         },
 
-        // Formata data para DD/MM/AAAA
         formatar: function(date) {
             const d = String(date.getDate()).padStart(2, '0');
             const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -16,7 +14,6 @@ const Sistema = {
             return `${d}/${m}/${a}`;
         },
 
-        // --- INPUT SUPER INTELIGENTE ---
         criarInputInteligente: function(elementId, storageKey, callback) {
             const input = document.getElementById(elementId);
             if (!input) return;
@@ -24,7 +21,6 @@ const Sistema = {
             const salva = localStorage.getItem(storageKey);
             input.value = salva && salva.length === 10 ? salva : this.formatar(new Date());
 
-            // Seleção inteligente (Dia/Mês/Ano)
             input.addEventListener('click', function() {
                 const cursor = this.selectionStart;
                 if (cursor <= 2) this.setSelectionRange(0, 2);
@@ -43,7 +39,6 @@ const Sistema = {
                 e.preventDefault();
                 const cursor = input.selectionStart;
                 let mode = 'day', start = 0, end = 2;
-                
                 if (cursor >= 3 && cursor <= 5) { mode = 'month'; start = 3; end = 5; }
                 if (cursor >= 6) { mode = 'year'; start = 6; end = 10; }
 
@@ -130,9 +125,7 @@ const Sistema = {
                 const uid = item.usuario_id;
                 let user = this.usuariosCache[uid];
                 
-                // Proteção para usuário não cadastrado
                 if (!user) user = { id: uid, nome: `Desconhecido (ID ${uid})`, funcao: 'Assistente' };
-                
                 if (user.funcao && user.funcao !== 'Assistente') return;
 
                 const nomeChave = user.nome.trim();
@@ -155,7 +148,6 @@ const Sistema = {
                 agrupado[nomeChave].gp += Number(item.gradual_parcial) || 0;
 
                 const dia = item.data_referencia;
-                // Só processa o dia se ainda não foi processado para este NOME (evita duplicidade de meta no mesmo dia)
                 if (!agrupado[nomeChave].diasMap[dia]) {
                     agrupado[nomeChave].diasMap[dia] = {
                         metaBase: this.obterMetaVigente(uid, dia),
@@ -170,18 +162,19 @@ const Sistema = {
 
                 Object.values(obj.diasMap).forEach(d => {
                     diasContabilizados += d.fator; 
-                    metaTotalAdjustada += (d.metaBase * d.fator); // Meta * 0.5 ou Meta * 0
+                    metaTotalAdjustada += (d.metaBase * d.fator);
                 });
 
                 return {
                     nome: obj.nome,
                     ids: Array.from(obj.ids),
+                    diasMap: obj.diasMap, // --- IMPORTANTE: Retorna o mapa para contagem de dias únicos
                     dias: diasContabilizados,
                     total: obj.total,
                     fifo: obj.fifo, gt: obj.gt, gp: obj.gp,
                     meta: Math.round(metaTotalAdjustada),
                     atingiu: obj.total >= metaTotalAdjustada,
-                    inativo: diasContabilizados === 0 && obj.total === 0 // Só esconde se dias=0 E produção=0. Se produziu algo, mostra.
+                    inativo: diasContabilizados === 0 && obj.total === 0 
                 };
             }).sort((a, b) => b.total - a.total);
         }

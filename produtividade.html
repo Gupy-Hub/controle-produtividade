@@ -18,30 +18,27 @@
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
+        .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
-        .row-total td { background-color: #eff6ff !important; font-weight: 800; color: #1e40af; border-top: 2px solid #bfdbfe; }
         .col-fixed { position: sticky; left: 0; background: white; z-index: 10; border-right: 1px solid #e2e8f0; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Seletor de Fator */
         .status-select { 
             background: transparent; font-weight: bold; font-size: 0.75rem; 
             padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none;
             transition: all 0.2s;
         }
-        .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } /* 100% */
-        .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } /* 50% */
-        .st-0 { color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; } /* 0% */
-        
-        .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
+        .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } 
+        .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } 
+        .st-0 { color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; } 
     </style>
 </head>
 <body class="text-slate-800">
     <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script>
+    <script src="js/sistema.js"></script> 
     <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -87,13 +84,13 @@
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe Considerada</p>
-                    <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p><i class="fas fa-users text-4xl text-slate-100"></i></div>
-                    <p class="text-[10px] text-slate-400 mt-1">Assistentes Ativos</p>
+                    <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p><i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i></div>
+                    <p class="text-[10px] text-slate-400 mt-1">Assistentes Ativos no Período</p>
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Trab. (Ponderado)</p>
-                    <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p><i class="fas fa-calendar-day text-4xl text-slate-100"></i></div>
-                    <p class="text-[10px] text-slate-400 mt-1" id="kpi-dias-label">Soma com fatores (0.5/1.0)</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Trabalhados</p>
+                    <div class="flex items-end justify-between"><p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p><i class="fas fa-calendar-day text-4xl text-slate-100 group-hover:text-blue-50 transition"></i></div>
+                    <p class="text-[10px] text-slate-400 mt-1" id="kpi-dias-label">Geral ou Individual</p>
                 </div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção vs Meta</p>
@@ -108,8 +105,8 @@
             </div>
 
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
-                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> <span id="selected-name"></span></span>
-                <button onclick="Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold">Limpar Filtro</button>
+                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
+                <button onclick="Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar Filtro</button>
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -137,13 +134,8 @@
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
             <div class="flex flex-col md:flex-row justify-end items-center bg-white p-3 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div class="flex items-center gap-3">
-                    <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                        <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span>
-                        <input type="text" id="data-perf" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" placeholder="DD/MM/AAAA" maxlength="10">
-                    </div>
-                    <select id="perf-period-type" onchange="Perf.carregarRanking()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
-                        <option value="mes">Mensal</option><option value="trimestre">Trimestral</option><option value="semestre">Semestral</option><option value="ano">Anual</option>
-                    </select>
+                    <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100"><span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span><input type="text" id="data-perf" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" placeholder="DD/MM/AAAA" maxlength="10"></div>
+                    <select id="perf-period-type" onchange="Perf.carregarRanking()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer"><option value="mes">Mensal</option><option value="trimestre">Trimestral</option><option value="semestre">Semestral</option><option value="ano">Anual</option></select>
                 </div>
             </div>
             <div id="perf-view-individual">
@@ -154,13 +146,8 @@
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Top Ranking</p><div id="perf-rank-content" class="text-sm font-medium text-slate-700"></div></div>
                 </div>
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
-                        <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">✕ Limpar Seleção</button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">#</th><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th><th class="px-6 py-3 text-center">Dias</th><th class="px-6 py-3 text-center">Média</th><th class="px-6 py-3 text-center">Meta Total</th><th class="px-6 py-3 text-center">% Meta</th></tr></thead><tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody></table>
-                    </div>
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Ranking Detalhado</h3><button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden" id="perf-btn-limpar">✕ Limpar Seleção</button></div>
+                    <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">#</th><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th><th class="px-6 py-3 text-center">Dias</th><th class="px-6 py-3 text-center">Média</th><th class="px-6 py-3 text-center">Meta Total</th><th class="px-6 py-3 text-center">% Meta</th></tr></thead><tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody></table></div>
                 </div>
             </div>
         </div>
@@ -181,7 +168,7 @@
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p><p class="text-3xl font-black text-blue-700" id="cons-p-total">0</p></div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média do Time</p><p class="text-3xl font-black text-slate-800" id="cons-p-media-time">0</p></div>
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média (Base Fixa)</p><p class="text-3xl font-black text-amber-600" id="cons-p-media-ind">0</p></div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden"><div class="absolute right-0 top-0 bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-bl">Base 17</div><p class="text-xs font-bold text-slate-400 uppercase mb-1">Média (Base Fixa)</p><p class="text-3xl font-black text-amber-600" id="cons-p-media-ind">0</p></div>
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase mb-1">Ativos</p><p class="text-3xl font-black text-slate-800" id="cons-p-headcount">0</p></div>
             </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden"><div class="overflow-x-auto"><table class="w-full text-sm text-left"><thead id="cons-table-header"></thead><tbody id="cons-table-body"></tbody></table></div></div>
@@ -318,24 +305,53 @@
 
             renderizar: function() {
                 const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML = '';
+                
+                // Filtra apenas quem é ativo (dias > 0 ou produção > 0 para não sumir dados)
                 const ativos = this.listaAtual.filter(u => !u.inativo);
-                const baseCalculo = this.selecionado ? this.listaAtual.filter(u => u.nome === this.selecionado) : ativos;
+                
+                const baseCalculo = this.selecionado 
+                    ? this.listaAtual.filter(u => u.nome === this.selecionado) 
+                    : ativos;
 
-                // CÁLCULOS CORRETOS BASEADOS NA META JÁ AJUSTADA (u.meta)
                 const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
-                const totalMeta = baseCalculo.reduce((a, b) => a + b.meta, 0); // Soma das metas ajustadas (ex: 325 + 650)
+                const totalMeta = baseCalculo.reduce((a, b) => a + b.meta, 0);
+                // Dias já vem somado corretamente com fator no normalizar (ex: 10.5)
                 const totalDias = baseCalculo.reduce((a, b) => a + b.dias, 0); 
                 
+                // --- CÁLCULO DE DIAS DO TIME (GERAL) ---
+                let diasDisplay = 0;
+                let diasLabel = "";
+
+                if (this.selecionado) {
+                    diasDisplay = totalDias; // Para individual, mostra os dias dele (com fator)
+                    diasLabel = "Dias do Colaborador (Considera 50%)";
+                } else {
+                    // Para o time: Conta dias de CALENDÁRIO únicos onde houve trabalho
+                    const setDiasUnicos = new Set();
+                    ativos.forEach(u => {
+                        if (u.diasMap) {
+                            Object.entries(u.diasMap).forEach(([data, info]) => {
+                                // Só conta o dia para o time se alguém trabalhou nele (fator > 0)
+                                if (info.fator > 0) setDiasUnicos.add(data);
+                            });
+                        }
+                    });
+                    diasDisplay = setDiasUnicos.size;
+                    diasLabel = "Dias Úteis da Equipe (Calendário)";
+                }
+
+                // Médias
                 const mediaReal = totalDias ? Math.round(totalProd / totalDias) : 0;
-                // A meta média diária também deve considerar os dias ponderados
                 const mediaMeta = totalDias ? Math.round(totalMeta / totalDias) : 650;
 
                 document.getElementById('kpi-hc').innerText = this.selecionado ? "1" : ativos.length;
-                document.getElementById('kpi-dias').innerText = totalDias;
-                document.getElementById('kpi-dias-label').innerText = this.selecionado ? "Dias do Colaborador" : "Total Dias Equipe";
+                document.getElementById('kpi-dias').innerText = diasDisplay;
+                document.getElementById('kpi-dias-label').innerText = diasLabel;
+                
                 document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
                 document.getElementById('kpi-meta-total').innerText = totalMeta.toLocaleString();
                 document.getElementById('bar-prod').style.width = Math.min((totalProd/(totalMeta||1))*100, 100) + '%';
+
                 document.getElementById('kpi-media').innerText = mediaReal.toLocaleString();
                 document.getElementById('kpi-meta-media').innerText = mediaMeta.toLocaleString();
                 document.getElementById('bar-media').style.width = Math.min((mediaReal/(mediaMeta||1))*100, 100) + '%';
@@ -504,7 +520,7 @@
             newStats: function() { return { users: new Set(), dates: new Set(), qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, clt_users: new Set(), clt_qty: 0, pj_users: new Set(), pj_qty: 0 }; }
         };
 
-        // --- INICIALIZAÇÃO ---
+        // --- INICIALIZAÇÃO GLOBAL ---
         document.addEventListener('DOMContentLoaded', async () => {
             Sistema.Datas.criarInputInteligente('data-validacao', KEY_DATA_GLOBAL, Geral.carregarTela);
             await Sistema.Dados.inicializar(); 
