@@ -246,18 +246,31 @@
         const KEY_DATA_GLOBAL = 'data_sistema_global';
 
         function mudarAba(aba) {
+            // UI
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.getElementById(`tab-${aba}`).classList.remove('hidden');
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`btn-${aba}`).classList.add('active');
 
-            // Sincroniza Data Global
+            // Sincroniza Data Global e Força Atualização da Aba
             const dataAtual = localStorage.getItem(KEY_DATA_GLOBAL) || Sistema.Datas.formatar(new Date());
             
-            if (aba === 'geral') { document.getElementById('data-validacao').value = dataAtual; Geral.carregarTela(); }
-            if (aba === 'performance') { document.getElementById('data-perf').value = dataAtual; Perf.init(); }
-            if (aba === 'matriz') { document.getElementById('data-matriz').value = dataAtual; Matriz.init(); }
-            if (aba === 'consolidado') { document.getElementById('data-cons').value = dataAtual; Cons.init(); }
+            if (aba === 'geral') { 
+                document.getElementById('data-validacao').value = dataAtual; 
+                Geral.carregarTela(); 
+            }
+            if (aba === 'performance') { 
+                document.getElementById('data-perf').value = dataAtual; 
+                Perf.init(); 
+            }
+            if (aba === 'matriz') { 
+                document.getElementById('data-matriz').value = dataAtual; 
+                Matriz.init(); 
+            }
+            if (aba === 'consolidado') { 
+                document.getElementById('data-cons').value = dataAtual; 
+                Cons.init(); 
+            }
         }
 
         // --- IMPORTAÇÃO DE EXCEL ---
@@ -389,9 +402,13 @@
         const Perf = {
             selectedUserId: null, dadosCarregados: [], initialized: false,
             init: function() {
-                Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); });
-                if(this.initialized) this.carregarRanking();
-                this.initialized = true;
+                // Configura o input apenas se ainda não foi inicializado
+                if(!this.initialized) {
+                    Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); });
+                    this.initialized = true;
+                }
+                // --- CORREÇÃO: SEMPRE CARREGA OS DADOS AO ABRIR A ABA ---
+                this.carregarRanking();
             },
             limparSelecao: function() { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); this.carregarRanking(); },
             toggleUsuario: function(id) { 
@@ -448,9 +465,12 @@
         const Matriz = {
             initialized: false,
             init: function() {
-                Sistema.Datas.criarInputInteligente('data-matriz', KEY_DATA_GLOBAL, () => { this.carregar(); });
-                if(this.initialized) this.carregar();
-                this.initialized = true;
+                if(!this.initialized) {
+                    Sistema.Datas.criarInputInteligente('data-matriz', KEY_DATA_GLOBAL, () => { this.carregar(); });
+                    this.initialized = true;
+                }
+                // --- CORREÇÃO: SEMPRE CARREGA OS DADOS AO ABRIR A ABA ---
+                this.carregar();
             },
             carregar: async function() {
                 const tbody = document.getElementById('matriz-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">A calcular...</td></tr>';
@@ -479,9 +499,12 @@
         const Cons = {
             initialized: false,
             init: function() {
-                Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(); });
-                if (this.initialized) this.carregar();
-                this.initialized = true;
+                if(!this.initialized) {
+                    Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(); });
+                    this.initialized = true;
+                }
+                // --- CORREÇÃO: SEMPRE CARREGA OS DADOS AO ABRIR A ABA ---
+                this.carregar();
             },
             carregar: async function() {
                 const tbody = document.getElementById('cons-table-body'); tbody.innerHTML = '<tr><td colspan="15" class="text-center py-8 text-slate-400">A calcular indicadores...</td></tr>';
