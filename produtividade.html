@@ -23,6 +23,15 @@
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* TRUQUE PARA SCROLL NO TOPO (Tabela Diária) */
+        .scroll-top-wrapper {
+            transform: rotateX(180deg);
+        }
+        .scroll-top-wrapper table {
+            transform: rotateX(180deg);
+        }
+        
         .status-select { background: transparent; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none; transition: all 0.2s; }
         .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } 
         .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } 
@@ -330,8 +339,13 @@
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
-            <div class="flex justify-end p-3 bg-white rounded-xl shadow-sm border border-slate-200 gap-2">
-                <select id="cons-period-type" onchange="Cons.carregar()" class="text-sm font-bold text-slate-600 bg-transparent outline-none cursor-pointer">
+            <div class="flex justify-end p-3 bg-white rounded-xl shadow-sm border border-slate-200 gap-2 items-center">
+                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                    <span class="text-[10px] font-bold text-blue-500 uppercase">Definir Base do Mês</span>
+                    <input type="number" id="cons-input-hc" placeholder="17" class="w-12 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" onchange="Cons.mudarBase(this.value)">
+                </div>
+
+                <select id="cons-period-type" onchange="Cons.togglePeriodo()" class="text-sm font-bold text-slate-600 bg-transparent outline-none cursor-pointer">
                     <option value="mes">Mensal (Semanas)</option>
                     <option value="trimestre">Trimestre (Meses)</option>
                     <option value="semestre">Semestre (Meses)</option>
@@ -339,7 +353,20 @@
                     <option value="ano_trim">Anual (Trimestres)</option>
                     <option value="dia">Diário</option>
                 </select>
+
+                <select id="cons-select-quarter" onchange="Cons.carregar()" class="hidden text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded px-2 py-1 outline-none cursor-pointer">
+                    <option value="1">1º Trimestre</option>
+                    <option value="2">2º Trimestre</option>
+                    <option value="3">3º Trimestre</option>
+                    <option value="4">4º Trimestre</option>
+                </select>
+
+                <select id="cons-select-semester" onchange="Cons.carregar()" class="hidden text-sm font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded px-2 py-1 outline-none cursor-pointer">
+                    <option value="1">1º Semestre</option>
+                    <option value="2">2º Semestre</option>
+                </select>
             </div>
+
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                     <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
@@ -360,8 +387,8 @@
                 </div>
             </div>
             
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="overflow-x-auto">
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto custom-scrollbar">
                     <table class="w-full text-sm text-left">
                         <thead id="cons-table-header"></thead>
                         <tbody id="cons-table-body"></tbody>
