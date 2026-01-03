@@ -84,7 +84,6 @@ const Cons = {
         } 
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
-        // HF: Base Manual definida para o período
         const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
         const cacheKey = `${t}_${s}_${e}_${HF}`;
 
@@ -195,7 +194,6 @@ const Cons = {
             });
         }
 
-        // Dias Úteis
         for(let i=1; i<=numCols; i++) {
             if(datesMap[i]) st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
             else if (t === 'dia') st[i].diasUteis = this.calcularDiasUteisCalendario(`${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`, `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
@@ -233,48 +231,32 @@ const Cons = {
                 const s = st[i]; 
                 const diasCal = s.diasUteis; 
                 
-                // --- AQUI ESTÁ A CORREÇÃO CRUCIAL ---
-                // Para colunas 1..N (Semanas/Dias), usa o REAL (s.users.size).
-                // Para coluna 99 (Total Mês), usa o MANUAL (HF).
-                // Se s.users.size for 0 (ninguém trabalhou na semana), usa 1 para não dividir por zero.
+                // --- LÓGICA CRUCIAL DO PEDIDO ---
+                // Para cálculos (divisão): Usa o HF (Manual) na coluna 99.
+                // Para exibição da contagem (linha 1): O getter abaixo vai usar o s.users.size (Real).
                 const realHC = s.users.size || 0;
                 const hcDaColuna = (i === 99) ? HF : (realHC || 1); 
 
                 let val = 0; 
                 if (!isCalc) { 
-                    // Se for linha de contagem de assistentes, exibe o valor correto para a coluna
-                    if(label.includes('Assistentes')) {
-                        val = hcDaColuna;
-                        // Ajuste visual: Se for semana e valor for 0 (ninguém), mostra 0 mesmo
-                        if(i !== 99 && realHC === 0) val = 0;
-                    } else {
-                        val = getter(s); // Outras somas normais (produção, fifo, etc)
-                    }
+                    // Exibição normal (somas ou contagem pura)
+                    val = getter(s); 
                 } else { 
-                    // Cálculos de Média: Usa o hcDaColuna como divisor
+                    // Cálculos de Média: Força o uso do hcDaColuna (Manual no Total)
                     val = getter(s, diasCal, hcDaColuna); 
                 }
 
                 let txt = val ? Math.round(val).toLocaleString() : '-';
-                
-                // Aviso de Manual APENAS na coluna Total (99)
-                if (label.includes('Assistentes') && i === 99) {
-                    if (HF !== sysHC) {
-                        txt = `<span class="text-amber-600" title="Valor alterado manualmente">${HF}</span> <i class="fas fa-exclamation-circle text-amber-500 text-[10px] ml-1"></i><div class="text-[9px] text-amber-500 font-bold uppercase">(Manual)</div>`;
-                    }
-                }
-
                 const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
                 tr += `<td class="${cellClass}">${txt}</td>`;
             });
             return tr + '</tr>';
         };
         
-        // --- DEFINIÇÃO DAS LINHAS ---
-        
-        // Linha 1: Total de Assistentes
-        // Passamos null no getter pois a lógica de qual HC usar está dentro do mkRow agora
-        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => 0);
+        // Linha "Total de Assistentes":
+        // Getter agora retorna 's.users.size' (Total Real do Sistema). 
+        // Assim, na tabela aparece o número real (ex: 15), mesmo que a conta use 13.
+        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => s.users.size);
         
         h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
@@ -283,8 +265,8 @@ const Cons = {
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // Cálculos de Média
-        // 'a' será o HC decidido no mkRow (Real para semanas, Manual para total)
+        // Linhas de Média:
+        // O parâmetro 'a' recebido aqui será o 'hcDaColuna' definido acima (ou seja, HF no total).
         h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
         h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
@@ -298,9 +280,10 @@ const Cons = {
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         
-        // Cards do topo também respeitam a regra: Manual para o total do mês
+        // Cálculos do card: Usa HF (Manual)
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
+        // Card Headcount: Mostra HF (Manual) com aviso se for diferente do sistema
         if (HF !== sysHC) {
             setSafe('cons-p-headcount', `${HF} <span class="text-sm text-amber-500 block font-bold">(Manual)</span>`);
         } else {
