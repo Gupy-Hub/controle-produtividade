@@ -1,143 +1,156 @@
-// Variáveis globais para armazenar o estado
+// js/produtividade.js
+
 let usuarioLogado = null;
-let dataSelecionada = new Date().toISOString().split('T')[0]; // Hoje por padrão
+// Define data inicial como hoje (Formato YYYY-MM-DD)
+let dataSelecionada = new Date().toISOString().split('T')[0];
 
 document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        // 1. Verifica Login
-        const userStr = localStorage.getItem('usuario');
-        if (!userStr) {
-            window.location.href = 'index.html';
-            return;
-        }
-        usuarioLogado = JSON.parse(userStr);
+    // 1. Verificação de Segurança (Login)
+    const userStr = localStorage.getItem('usuario');
+    if (!userStr) {
+        window.location.href = 'index.html'; // Manda para login se não tiver sessão
+        return;
+    }
+    
+    usuarioLogado = JSON.parse(userStr);
+    
+    // Tenta atualizar o nome do usuário no layout, se existir o elemento
+    const nomeEl = document.getElementById('user-name');
+    if (nomeEl) nomeEl.innerText = usuarioLogado.nome;
 
-        // Atualiza nome no topo
-        const nomeEl = document.getElementById('user-name');
-        if (nomeEl) nomeEl.innerText = usuarioLogado.nome;
-
-        // 2. Define data inicial nos inputs
-        const dateInput = document.getElementById('filter-date');
-        if (dateInput) {
-            dateInput.value = dataSelecionada;
-            dateInput.addEventListener('change', (e) => {
+    // 2. Configura o Input de Data
+    const dateInput = document.getElementById('filter-date');
+    if (dateInput) {
+        dateInput.value = dataSelecionada;
+        dateInput.addEventListener('change', (e) => {
+            if(e.target.value) {
                 dataSelecionada = e.target.value;
                 carregarDados();
-            });
-        }
-
-        // 3. Carrega dados iniciais
-        await carregarDados();
-
-    } catch (e) {
-        console.error("Erro ao iniciar produtividade:", e);
-        alert("Erro ao carregar sistema.");
+            }
+        });
     }
+
+    // 3. Inicia o carregamento
+    await carregarDados();
 });
 
 async function carregarDados() {
     if (!usuarioLogado) return;
+    
+    // Verifica se Supabase está carregado
+    if (typeof _supabase === 'undefined') {
+        console.error("Supabase não inicializado.");
+        alert("Erro de conexão. Verifique o config.js");
+        return;
+    }
 
-    // Elementos da UI
+    // Elementos da Interface
     const elProducao = document.getElementById('stat-producao');
     const elMeta = document.getElementById('stat-meta');
     const elPercent = document.getElementById('stat-percent');
-    const elAssert = document.getElementById('stat-assertividade'); // Novo campo de assertividade
-    
-    // Mostra loading
+    const elAssert = document.getElementById('stat-assertividade');
+
+    // Feedback visual de carregamento
     if(elProducao) elProducao.innerText = "...";
     if(elMeta) elMeta.innerText = "...";
+    if(elPercent) elPercent.innerText = "...";
+    if(elAssert) elAssert.innerText = "...";
 
     try {
-        // --- A. BUSCAR META VIGENTE NA DATA SELECIONADA ---
-        // Lógica: Meta com data_inicio <= dataSelecionada. 
-        // Ordenamos por data (decrescente) e pegamos a primeira (a mais recente válida).
+        console.log("Buscando dados para:", dataSelecionada, "Usuário:", usuarioLogado.nome);
+
+        // --- 1. BUSCAR META DE PRODUÇÃO ---
+        // (Lógica corrigida: Pega a meta vigente mais recente)
         const { data: metas, error: errorMeta } = await _supabase
             .from('metas')
-            .select('valor_meta, data_inicio')
+            .select('*')
             .eq('usuario_id', usuarioLogado.id)
-            .lte('data_inicio', dataSelecionada) // Filtra metas futuras
-            .order('data_inicio', { ascending: false }) // Pega a mais recente dentro do filtro
+            .lte('data_inicio', dataSelecionada) // Apenas metas que já começaram
+            .order('data_inicio', { ascending: false }) // A mais recente primeiro
             .limit(1);
 
-        if (errorMeta) throw errorMeta;
+        if (errorMeta) throw new Error("Erro ao buscar metas: " + errorMeta.message);
 
-        // Se não tiver meta para essa data, assume 0
+        // Se não houver meta, assume 0
         const metaDoDia = (metas && metas.length > 0) ? metas[0].valor_meta : 0;
 
 
-        // --- B. BUSCAR PRODUÇÃO DO DIA ---
+        // --- 2. BUSCAR PRODUÇÃO REALIZADA ---
         const { data: producao, error: errorProd } = await _supabase
             .from('producao_diaria')
-            .select('quantidade_produzida, erros_cometidos')
+            .select('*')
             .eq('usuario_id', usuarioLogado.id)
             .eq('data_producao', dataSelecionada)
             .maybeSingle();
 
-        if (errorProd) throw errorProd;
+        if (errorProd) throw new Error("Erro ao buscar produção: " + errorProd.message);
 
         const qtdFeita = producao ? producao.quantidade_produzida : 0;
         const erros = producao ? producao.erros_cometidos : 0;
 
-        // --- C. CÁLCULOS E ATUALIZAÇÃO DA TELA ---
-        
-        // 1. Meta e Produção
+
+        // --- 3. ATUALIZAR TELA (PRODUÇÃO E META) ---
         if(elProducao) elProducao.innerText = qtdFeita;
         if(elMeta) elMeta.innerText = metaDoDia;
 
-        // 2. Percentual de Conclusão da Meta
+        // Cálculo Percentual
         let percent = 0;
-        if (metaDoDia > 0) {
-            percent = (qtdFeita / metaDoDia) * 100;
-        }
+        if (metaDoDia > 0) percent = (qtdFeita / metaDoDia) * 100;
         
         if(elPercent) {
             elPercent.innerText = percent.toFixed(1) + '%';
-            // Muda cor dependendo do atingimento
-            if(percent >= 100) {
-                elPercent.className = "text-2xl font-bold text-emerald-600";
-            } else if (percent >= 80) {
-                elPercent.className = "text-2xl font-bold text-yellow-500";
-            } else {
-                elPercent.className = "text-2xl font-bold text-red-500";
-            }
+            
+            // Definição de Cores
+            elPercent.className = "text-3xl font-black transition-colors duration-500"; // Reset classes
+            if (percent >= 100) elPercent.classList.add("text-emerald-500");
+            else if (percent >= 80) elPercent.classList.add("text-yellow-500");
+            else elPercent.classList.add("text-slate-300"); // Cor neutra para baixo desempenho ou 0
         }
 
-        // 3. Assertividade (Comparação com Meta Global)
-        // Assertividade = 100 - ( (Erros / Produção) * 100 )
-        let assertividade = 100;
-        if (qtdFeita > 0) {
-            const taxaErro = (erros / qtdFeita) * 100;
-            assertividade = 100 - taxaErro;
-        } else if (erros > 0) {
-            // Se produziu 0 mas teve erros, assertividade é 0
-            assertividade = 0; 
-        }
 
-        // Busca Meta de Assertividade Global VIGENTE
-        const { data: metaAssert, error: errAss } = await _supabase
-            .from('metas_assertividade')
-            .select('valor_minimo')
-            .lte('data_inicio', dataSelecionada)
-            .order('data_inicio', { ascending: false })
-            .limit(1);
-            
-        const metaAssertValor = (metaAssert && metaAssert.length > 0) ? metaAssert[0].valor_minimo : 97.0; // Padrão 97 se não houver
+        // --- 4. BUSCAR META DE ASSERTIVIDADE (Try/Catch Isolado) ---
+        // Isolamos isto para que, se falhar (tabela não existir), não trave o resto
+        try {
+            const { data: metaAssert, error: errAss } = await _supabase
+                .from('metas_assertividade')
+                .select('valor_minimo')
+                .lte('data_inicio', dataSelecionada)
+                .order('data_inicio', { ascending: false })
+                .limit(1);
 
-        if(elAssert) {
-            elAssert.innerText = assertividade.toFixed(2) + '%';
-            
-            // Cor baseada na meta global (verde se >= meta, vermelho se < meta)
-            if(assertividade >= metaAssertValor) {
-                elAssert.classList.remove('text-red-500');
-                elAssert.classList.add('text-emerald-600');
-            } else {
-                elAssert.classList.remove('text-emerald-600');
-                elAssert.classList.add('text-red-500');
+            if (errAss) throw errAss;
+
+            const metaAssertValor = (metaAssert && metaAssert.length > 0) ? metaAssert[0].valor_minimo : 97.0;
+
+            // Cálculo Assertividade Realizada
+            let assertividade = 100;
+            if (qtdFeita > 0) {
+                assertividade = 100 - ((erros / qtdFeita) * 100);
+            } else if (erros > 0) {
+                assertividade = 0; // Teve erros sem produção
             }
+
+            if(elAssert) {
+                elAssert.innerText = assertividade.toFixed(2) + '%';
+                
+                elAssert.className = "text-3xl font-black transition-colors duration-500";
+                if (assertividade >= metaAssertValor) {
+                    elAssert.classList.add("text-emerald-500");
+                } else {
+                    elAssert.classList.add("text-red-400");
+                }
+            }
+
+        } catch (erroAssert) {
+            console.warn("Aviso: Não foi possível carregar assertividade (tabela pode não existir).", erroAssert);
+            if(elAssert) elAssert.innerText = "-";
         }
 
     } catch (err) {
-        console.error("Erro ao carregar dados:", err);
+        console.error("ERRO CRÍTICO NO CARREGAMENTO:", err);
+        // Mostra erro na tela se falhar tudo
+        if(elProducao) elProducao.innerText = "Erro";
+        if(elMeta) elMeta.innerText = "Erro";
+        alert("Erro ao carregar dados: " + err.message);
     }
 }

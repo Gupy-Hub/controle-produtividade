@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Produtividade</title>
+    <title>Minha Produtividade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
@@ -15,44 +15,69 @@
     <script src="js/config.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-8 flex flex-wrap gap-4 items-center justify-between">
-            <div class="flex items-center gap-3"><div class="p-2 bg-blue-100 text-blue-700 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><h1 class="text-xl font-bold text-slate-800">Controlo de Produção</h1></div>
-            <div class="flex flex-wrap gap-3 items-center">
-                <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
-                    <option value="dia">📅 Dia Específico</option><option value="semana">📅 Por Semana</option><option value="mes">📊 Mês Completo</option>
-                </select>
-                
-                <input 
-                    type="text" 
-                    id="select-dia" 
-                    placeholder="DD/MM/AAAA" 
-                    maxlength="10" 
-                    data-sync="true"
-                    oninput="mascaraDataGlobal(this)" 
-                    onchange="carregarDados()" 
-                    class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5 w-32 text-center font-bold tracking-widest placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                
-                <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
-                <select id="select-semana" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
-                    <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
-                </select>
-                <input type="file" id="excel-files" accept=".xlsx" multiple class="hidden" onchange="importarArquivos()">
-                <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">📂 Importar Excel</button>
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800">Minha Produtividade</h1>
+                <p class="text-slate-500">Acompanhe o seu desempenho diário.</p>
+            </div>
+            <div class="bg-white p-1.5 rounded-lg shadow-sm border border-slate-200 flex items-center gap-2">
+                <span class="text-xs font-bold text-slate-400 uppercase px-2">Data:</span>
+                <input type="date" id="filter-date" class="bg-slate-50 border-none text-sm font-bold text-slate-700 outline-none rounded p-1 cursor-pointer hover:bg-slate-100 transition">
             </div>
         </div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total (Sistema)</p><p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p></div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média do Time</p><p class="text-3xl font-extrabold text-slate-800" id="p-media">0</p></div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assistentes Ativos</p><p class="text-3xl font-extrabold text-slate-800" id="p-headcount">0</p></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-blue-200 transition">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i class="fas fa-file-alt text-4xl text-blue-600"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Realizada</p>
+                <div class="flex items-baseline gap-1">
+                    <h3 class="text-3xl font-black text-slate-800" id="stat-producao">...</h3>
+                    <span class="text-xs font-bold text-slate-400">docs</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-purple-200 transition">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i class="fas fa-bullseye text-4xl text-purple-600"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Meta do Dia</p>
+                <div class="flex items-baseline gap-1">
+                    <h3 class="text-3xl font-black text-slate-800" id="stat-meta">...</h3>
+                    <span class="text-xs font-bold text-slate-400">docs</span>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-emerald-200 transition">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i class="fas fa-chart-pie text-4xl text-emerald-600"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Atingimento</p>
+                <h3 class="text-3xl font-black text-slate-300" id="stat-percent">...</h3>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:border-orange-200 transition">
+                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
+                    <i class="fas fa-check-double text-4xl text-orange-600"></i>
+                </div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assertividade</p>
+                <div class="flex items-baseline gap-1">
+                    <h3 class="text-3xl font-black text-slate-300" id="stat-assertividade">...</h3>
+                </div>
+            </div>
         </div>
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3><span id="panel-titulo" class="text-sm font-medium text-slate-500">A carregar...</span></div>
-            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th><th class="px-6 py-3 text-center">FIFO</th><th class="px-6 py-3 text-center">G. Total</th><th class="px-6 py-3 text-center">G. Parcial</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Estado</th></tr></thead><tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody></table></div>
+
+        <div class="bg-blue-50 border border-blue-100 rounded-xl p-6 text-center">
+            <p class="text-blue-800 font-medium text-sm">
+                <i class="fas fa-info-circle mr-2"></i>
+                Os dados são atualizados automaticamente conforme os lançamentos.
+            </p>
         </div>
     </div>
-    
+
     <script src="js/produtividade.js"></script>
 </body>
 </html>
