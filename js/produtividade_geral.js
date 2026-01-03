@@ -6,6 +6,7 @@ const Geral = {
     dataVisualizada: null,
     periodoInicio: null,
     periodoFim: null,
+    ultimoLoad: null, // Cache simples para evitar reload idêntico
 
     toggleSemana: function() {
         const mode = document.getElementById('view-mode').value;
@@ -17,53 +18,43 @@ const Geral = {
     carregarTela: async function() {
         const modo = document.getElementById('view-mode').value;
         
-        // CORREÇÃO: Garante que pegamos a data corretamente e salvamos no Global
         let refDate;
-        try {
-            refDate = Sistema.Datas.lerInput('data-validacao');
-        } catch (e) {
-            // Fallback se a data for inválida
-            refDate = new Date();
-        }
+        try { refDate = Sistema.Datas.lerInput('data-validacao'); } catch (e) { refDate = new Date(); }
+        if (!refDate || isNaN(refDate.getTime())) refDate = new Date();
 
-        if (!refDate || isNaN(refDate.getTime())) {
-            refDate = new Date();
-        }
-
-        // Formata para ISO (YYYY-MM-DD) e SALVA NO STORAGE para persistência
+        // Formata e salva
         const anoIso = refDate.getFullYear();
         const mesIso = String(refDate.getMonth() + 1).padStart(2, '0');
         const diaIso = String(refDate.getDate()).padStart(2, '0');
         const isoDate = `${anoIso}-${mesIso}-${diaIso}`;
         
-        // IMPORTANTE: Salva a data para as outras abas e para o F5
         localStorage.setItem('data_sistema_global', isoDate);
-        
         this.dataVisualizada = isoDate; 
 
-        // Reset UI
         const bulkSelect = document.getElementById('bulk-fator');
         if(bulkSelect) bulkSelect.value = "";
 
         let inicio, fim;
-        // Ajuste de datas baseado no fuso horário para evitar problemas de "dia anterior"
         if (modo === 'dia') { 
             inicio = isoDate; fim = isoDate; 
         } else { 
-            // Mês: Do dia 1 até o último dia do mês
             const ano = refDate.getFullYear(); const mes = refDate.getMonth();
             const dateIni = new Date(ano, mes, 1);
             const dateFim = new Date(ano, mes + 1, 0);
-            
-            // Converte para YYYY-MM-DD local
-            inicio = dateIni.toLocaleDateString('en-CA'); // Formato ISO Local
+            inicio = dateIni.toLocaleDateString('en-CA'); 
             fim = dateFim.toLocaleDateString('en-CA');
         }
 
         this.periodoInicio = inicio;
         this.periodoFim = fim;
 
-        const { data } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+        // OTIMIZAÇÃO: Select Específico para reduzir tráfego de rede
+        const { data } = await _supabase
+            .from('producao')
+            .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc') 
+            .gte('data_referencia', inicio)
+            .lte('data_referencia', fim);
+            
         let dadosFiltrados = data || [];
         
         if (modo === 'semana') {
@@ -75,14 +66,11 @@ const Geral = {
         this.renderizar();
     },
 
-    // Função auxiliar simples para contar dias úteis
     contarDiasUteis: function(inicioStr, fimStr) {
         if(!inicioStr || !fimStr) return 1;
         let count = 0;
-        // Adiciona T12:00:00 para evitar problemas de fuso horário ao criar a data
         let cur = new Date(inicioStr + 'T12:00:00');
         const end = new Date(fimStr + 'T12:00:00');
-        
         while(cur <= end) {
             const d = cur.getDay();
             if(d !== 0 && d !== 6) count++;
@@ -110,18 +98,15 @@ const Geral = {
             document.getElementById('bulk-fator').value = "";
             return;
         }
-
         if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas abaixo?")) {
             document.getElementById('bulk-fator').value = "";
             return;
         }
-
         this.listaAtual.forEach(u => {
             if (!u.inativo) {
                 Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor);
             }
         });
-
         this.carregarTela(); 
     },
 
@@ -137,7 +122,6 @@ const Geral = {
         tbody.innerHTML = '';
         const modo = document.getElementById('view-mode').value;
 
-        // Configura seletor em massa
         const bulkSelect = document.getElementById('bulk-fator');
         if (bulkSelect) {
             if (modo !== 'dia') {
@@ -152,26 +136,17 @@ const Geral = {
         }
 
         const ativos = this.listaAtual.filter(u => !u.inativo);
-        const baseCalculo = this.selecionado 
-            ? this.listaAtual.filter(u => u.nome === this.selecionado) 
-            : ativos;
-
+        const baseCalculo = this.selecionado ? this.listaAtual.filter(u => u.nome === this.selecionado) : ativos;
         const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
 
-        let qtdMeio = 0;
-        let qtdAbonado = 0;
-        
+        let qtdMeio = 0; let qtdAbonado = 0;
         if (modo === 'dia' && !this.selecionado) {
             this.listaAtual.forEach(u => {
                 const diaInfo = u.diasMap[this.dataVisualizada];
-                if (diaInfo) { 
-                    if (diaInfo.fator === 0.5) qtdMeio++; 
-                    else if (diaInfo.fator === 0) qtdAbonado++; 
-                }
+                if (diaInfo) { if (diaInfo.fator === 0.5) qtdMeio++; else if (diaInfo.fator === 0) qtdAbonado++; }
             });
         }
         
-        // Logica HC Efetivo
         let hcConsiderado = this.selecionado ? 1 : ativos.length;
         if (!this.selecionado && modo === 'dia') {
             const reducaoParesMeio = Math.floor(qtdMeio / 2);
@@ -179,14 +154,12 @@ const Geral = {
             hcConsiderado = ativos.length - reducaoAbonados - reducaoParesMeio;
         }
 
-        // Metas
         let diasUteisPeriodo = 1;
         if(modo === 'dia') {
             diasUteisPeriodo = 1;
         } else if (modo === 'mes') {
             diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
         } else if (modo === 'semana') {
-            // Lógica simplificada para semana, tenta pegar range dos dados ou padrão 5
             if(this.listaAtual.length > 0) {
                 let todasDatas = new Set();
                 this.listaAtual.forEach(u => Object.keys(u.diasMap).forEach(d => todasDatas.add(d)));
@@ -202,7 +175,6 @@ const Geral = {
         const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
         const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
         
-        // Card Dias
         let diasDisplay = 0;
         let diasLabel = "";
         if (this.selecionado) {
@@ -210,14 +182,11 @@ const Geral = {
             diasLabel = "Dias do Colaborador (Considera 50%)";
         } else {
             const setDiasUnicos = new Set();
-            ativos.forEach(u => {
-                if (u.diasMap) { Object.entries(u.diasMap).forEach(([data, info]) => { if (info.fator > 0) setDiasUnicos.add(data); }); }
-            });
+            ativos.forEach(u => { if (u.diasMap) { Object.entries(u.diasMap).forEach(([data, info]) => { if (info.fator > 0) setDiasUnicos.add(data); }); } });
             diasDisplay = setDiasUnicos.size;
             diasLabel = "Dias Úteis da Equipe (Calendário)";
         }
 
-        // Info Abonados
         const elInfoAbonados = document.getElementById('info-abonados');
         if(elInfoAbonados) {
             elInfoAbonados.classList.add('hidden'); 
@@ -230,15 +199,12 @@ const Geral = {
             }
         }
 
-        // Atualizar DOM
         document.getElementById('kpi-hc').innerText = hcConsiderado;
         document.getElementById('kpi-dias').innerText = diasDisplay;
         document.getElementById('kpi-dias-label').innerText = diasLabel;
-        
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
         document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
         document.getElementById('bar-prod').style.width = Math.min((totalProd/(metaTotalEsperada||1))*100, 100) + '%';
-
         document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
         document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
         document.getElementById('bar-media').style.width = Math.min((mediaRealAnalista/(metaMediaIndividual||1))*100, 100) + '%';
@@ -249,17 +215,17 @@ const Geral = {
         
         const cardPct = document.getElementById('card-pct');
         const iconPct = document.getElementById('icon-pct');
-        cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
-
-        if (percentual < 100) {
-            cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
-            iconPct.innerHTML = '<i class="fas fa-times-circle text-white/50"></i>';
-        } else {
-            cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
-            iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
+        if (cardPct) {
+            cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+            if (percentual < 100) {
+                cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-times-circle text-white/50"></i>';
+            } else {
+                cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-check-circle text-white/50"></i>';
+            }
         }
 
-        // Header Seleção
         const selHeader = document.getElementById('selection-header');
         if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
         else selHeader.classList.add('hidden');
@@ -282,14 +248,7 @@ const Geral = {
             const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
             const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
 
-            const selectHtml = `
-            <select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)">
-                <option value="1" ${fator===1?'selected':''}>100%</option>
-                <option value="0.5" ${fator===0.5?'selected':''}>50%</option>
-                <option value="0" ${fator===0?'selected':''}>0%</option>
-            </select>`;
-
-            // % Individual
+            const selectHtml = `<select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)"><option value="1" ${fator===1?'selected':''}>100%</option><option value="0.5" ${fator===0.5?'selected':''}>50%</option><option value="0" ${fator===0?'selected':''}>0%</option></select>`;
             const pctIndividual = u.meta > 0 ? Math.round((u.total / u.meta) * 100) : 0;
             let badgeClass = pctIndividual >= 100 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
             const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;

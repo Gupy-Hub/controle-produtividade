@@ -1,7 +1,7 @@
 // js/produtividade_performance.js
 
 const Perf = {
-    selectedUserId: null, // Armazena o ID principal ou Nome para seleção
+    selectedUserId: null,
     dadosCarregados: [],
     initialized: false,
 
@@ -22,17 +22,10 @@ const Perf = {
         inpSemester.classList.add('hidden');
         inpYear.classList.add('hidden');
 
-        if (tipo === 'mes') {
-            inpMonth.classList.remove('hidden');
-        } else if (tipo === 'trimestre') {
-            inpQuarter.classList.remove('hidden');
-            inpYear.classList.remove('hidden');
-        } else if (tipo === 'semestre') {
-            inpSemester.classList.remove('hidden');
-            inpYear.classList.remove('hidden');
-        } else if (tipo === 'ano') {
-            inpYear.classList.remove('hidden');
-        }
+        if (tipo === 'mes') inpMonth.classList.remove('hidden');
+        else if (tipo === 'trimestre') { inpQuarter.classList.remove('hidden'); inpYear.classList.remove('hidden'); }
+        else if (tipo === 'semestre') { inpSemester.classList.remove('hidden'); inpYear.classList.remove('hidden'); }
+        else if (tipo === 'ano') inpYear.classList.remove('hidden');
         
         this.carregarRanking(); 
     },
@@ -44,7 +37,6 @@ const Perf = {
     },
 
     toggleUsuario: function(id) { 
-        // id aqui será o ID principal do agrupamento
         if (this.selectedUserId === id) { 
             this.selectedUserId = null; 
             document.getElementById('perf-btn-limpar').classList.add('hidden'); 
@@ -79,7 +71,6 @@ const Perf = {
                 e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`;
                 const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
                 labelTexto = `Mensal: ${nomesMeses[mes-1]} de ${ano}`;
-
             } else if (tipo === 'trimestre') { 
                 const q = parseInt(valQuarter);
                 const mStart = ((q-1)*3)+1; 
@@ -87,13 +78,11 @@ const Perf = {
                 s = `${ano}-${String(mStart).padStart(2,'0')}-01`; 
                 e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`;
                 labelTexto = `${q}º Trimestre de ${ano}`;
-
             } else if (tipo === 'semestre') { 
                 const sem = parseInt(valSemester);
                 s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; 
                 e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
                 labelTexto = `${sem}º Semestre de ${ano}`;
-
             } else { 
                 s = `${ano}-01-01`; 
                 e = `${ano}-12-31`; 
@@ -103,16 +92,19 @@ const Perf = {
             const elLabel = document.getElementById('perf-range-label');
             if(elLabel) elLabel.innerText = labelTexto;
 
-            const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
+            // OTIMIZAÇÃO: Select Específico
+            const { data: prods, error } = await _supabase
+                .from('producao')
+                .select('usuario_id, data_referencia, quantidade') 
+                .gte('data_referencia', s)
+                .lte('data_referencia', e); 
+                
             if(error) throw error;
             
-            // --- LÓGICA DE AGRUPAMENTO (SOLUÇÃO DO PROBLEMA DE DUPLICIDADE) ---
-            let stats = {}; 
+            let stats = {};
             let prodTotalGeral = 0;
             let prodCLT = 0;
             let prodPJ = 0;
-            
-            // Sets para contar Headcount Único (baseado no nome)
             let uniqueNamesCLT = new Set();
             let uniqueNamesPJ = new Set();
 
@@ -122,12 +114,11 @@ const Perf = {
                 
                 if (!user || user.funcao !== 'Assistente') return;
 
-                const nomeChave = user.nome.trim(); // Chave de agrupamento é o NOME
+                const nomeChave = user.nome.trim(); 
                 const qtd = Number(item.quantidade) || 0;
                 
                 prodTotalGeral += qtd;
                 
-                // Contagem de Produção e Headcount por Contrato
                 if (user.contrato && user.contrato.includes('CLT')) {
                     prodCLT += qtd;
                     uniqueNamesCLT.add(nomeChave);
@@ -136,42 +127,32 @@ const Perf = {
                     uniqueNamesPJ.add(nomeChave);
                 }
 
-                // Se ainda não existe registro para esse NOME, cria
                 if (!stats[nomeChave]) {
                     stats[nomeChave] = { 
-                        id: uid, // Guarda um ID para referência (toggle)
+                        id: uid, 
                         nome: user.nome, 
                         total: 0, 
-                        dias: new Set() // Set evita contagem duplicada de dias
+                        dias: new Set() 
                     };
                 }
-                
-                // Soma a produção
                 stats[nomeChave].total += qtd; 
-                // Adiciona a data ao Set (se já existir data de outro ID para a mesma pessoa, o Set ignora)
                 stats[nomeChave].dias.add(item.data_referencia);
             });
             
-            // Atualiza Card CLT vs PJ
             const pctCLT = prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0;
             const pctPJ = prodTotalGeral > 0 ? Math.round((prodPJ / prodTotalGeral) * 100) : 0;
             
-            document.getElementById('perf-pct-clt').innerText = pctCLT + '%';
-            document.getElementById('perf-count-clt').innerText = uniqueNamesCLT.size; // Usa o tamanho do Set de Nomes
-            
-            document.getElementById('perf-pct-pj').innerText = pctPJ + '%';
-            document.getElementById('perf-count-pj').innerText = uniqueNamesPJ.size;
+            const elPctClt = document.getElementById('perf-pct-clt');
+            if(elPctClt) {
+                elPctClt.innerText = pctCLT + '%';
+                document.getElementById('perf-count-clt').innerText = uniqueNamesCLT.size;
+                document.getElementById('perf-pct-pj').innerText = pctPJ + '%';
+                document.getElementById('perf-count-pj').innerText = uniqueNamesPJ.size;
+            }
 
-            // Ordenação por % Meta
             this.dadosCarregados = Object.values(stats).sort((a, b) => {
-                const diasA = a.dias.size || 1;
-                const metaA = diasA * 650;
-                const pctA = metaA > 0 ? a.total / metaA : 0;
-
-                const diasB = b.dias.size || 1;
-                const metaB = diasB * 650;
-                const pctB = metaB > 0 ? b.total / metaB : 0;
-
+                const diasA = a.dias.size || 1; const metaA = diasA * 650; const pctA = metaA > 0 ? a.total / metaA : 0;
+                const diasB = b.dias.size || 1; const metaB = diasB * 650; const pctB = metaB > 0 ? b.total / metaB : 0;
                 return pctB - pctA; 
             });
 
@@ -194,7 +175,7 @@ const Perf = {
         let userStats = null;
         
         this.dadosCarregados.forEach((u, idx) => {
-            const dias = u.dias.size || 1; // Dias unificados pelo Set
+            const dias = u.dias.size || 1; 
             const media = Math.round(u.total / dias); 
             const meta = 650 * dias; 
             const pct = Math.round((u.total / meta) * 100);
@@ -202,7 +183,7 @@ const Perf = {
             const isSelected = this.selectedUserId === u.id; 
             if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
             
-            const isMe = (typeof sessao !== 'undefined' && sessao) && u.nome === sessao.nome; // Comparação por nome é mais segura aqui
+            const isMe = (typeof sessao !== 'undefined' && sessao) && u.nome === sessao.nome; 
             
             let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; 
             if (isSelected) rowClass += "selected-row"; 
@@ -216,16 +197,7 @@ const Perf = {
 
             let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
             
-            html += `
-            <tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})">
-                <td class="px-6 py-4 font-bold text-slate-600">${iconTrofeu} #${idx + 1}</td>
-                <td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '(Você)' : ''}</td>
-                <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
-                <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
-                <td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td>
-                <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
-                <td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td>
-            </tr>`;
+            html += `<tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-600">${iconTrofeu} #${idx + 1}</td><td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
         });
         
         if(tbody) tbody.innerHTML = html; 
@@ -245,16 +217,13 @@ const Perf = {
         const labelRealTotal = document.getElementById('perf-label-real-total');
 
         if (userStats) {
-            // Individual
             if(elTotal) elTotal.innerText = userStats.total.toLocaleString(); 
             if(elLabelMetaTotal) elLabelMetaTotal.innerText = userStats.meta.toLocaleString();
             if(elMedia) elMedia.innerText = userStats.media.toLocaleString(); 
             if(elCardMeta) elCardMeta.innerText = userStats.meta.toLocaleString(); 
             if(labelRealTotal) labelRealTotal.innerText = userStats.total.toLocaleString();
         } else {
-            // Geral (Time)
             const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
-            // Dias Gerais: Soma dos dias únicos de CADA pessoa
             const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); 
             
             let metaGeral = 0;
@@ -284,7 +253,6 @@ const Perf = {
                 }
             }
             
-            // Top 5
             let topHtml = '<div class="flex flex-col gap-1.5">'; 
             this.dadosCarregados.slice(0, 5).forEach((u, i) => { 
                 const dias = u.dias.size || 1;

@@ -18,7 +18,6 @@ const Cons = {
         const t = document.getElementById('cons-period-type').value; 
         const refDate = Sistema.Datas.lerInput('data-cons');
         
-        // Pega o valor da Base HC do input (padrão 17 se vazio)
         const inputHC = document.getElementById('cons-input-hc');
         const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
 
@@ -31,7 +30,13 @@ const Cons = {
         else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
 
         try {
-            const { data: rawData, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
+            // OTIMIZAÇÃO: Select Específico
+            const { data: rawData, error } = await _supabase
+                .from('producao')
+                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc') 
+                .gte('data_referencia', s)
+                .lte('data_referencia', e); 
+            
             if(error) throw error;
             
             let cols = []; if (t === 'dia') cols = ['Dia']; else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -79,7 +84,6 @@ const Cons = {
                 return tr + '</tr>';
             };
             
-            // Tabela com nomes atualizados e cálculo dinâmico de HF
             h += mkRow('Assistentes Ativas', s => s.users); 
             h += mkRow('Dias Trabalhados', s => s.dates); 
             h += mkRow('FIFO', s => s.fifo); 
@@ -99,7 +103,6 @@ const Cons = {
             const tot = st[99]; const dTot = tot.dates.size || 1; 
             document.getElementById('cons-p-total').innerText = tot.qty.toLocaleString(); 
             document.getElementById('cons-p-media-time').innerText = Math.round(tot.qty / dTot).toLocaleString(); 
-            // Atualiza card com valor dinâmico
             document.getElementById('cons-p-media-ind').innerText = Math.round(tot.qty / dTot / HF).toLocaleString(); 
             document.getElementById('cons-p-headcount').innerText = tot.users.size;
         } catch (e) { console.error(e); }

@@ -17,7 +17,14 @@ const Matriz = {
         
         try {
             const ano = Sistema.Datas.lerInput('data-matriz').getFullYear();
-            const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
+            
+            // OTIMIZAÇÃO CRÍTICA: Select apenas colunas necessárias
+            const { data: prods, error } = await _supabase
+                .from('producao')
+                .select('usuario_id, data_referencia, quantidade')
+                .gte('data_referencia', `${ano}-01-01`)
+                .lte('data_referencia', `${ano}-12-31`);
+                
             if(error) throw error;
             
             let map = {};
