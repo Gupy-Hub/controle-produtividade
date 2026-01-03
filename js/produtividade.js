@@ -1,143 +1,168 @@
-// Variáveis globais para armazenar o estado
-let usuarioLogado = null;
-let dataSelecionada = new Date().toISOString().split('T')[0]; // Hoje por padrão
+document.addEventListener('DOMContentLoaded', init);
 
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        // 1. Verifica Login
-        const userStr = localStorage.getItem('usuario');
-        if (!userStr) {
-            window.location.href = 'index.html';
-            return;
-        }
-        usuarioLogado = JSON.parse(userStr);
+let currentUser = null;
+let currentMetaProducao = 0;
+let currentMetaAssertividade = 0;
 
-        // Atualiza nome no topo
-        const nomeEl = document.getElementById('user-name');
-        if (nomeEl) nomeEl.innerText = usuarioLogado.nome;
-
-        // 2. Define data inicial nos inputs
-        const dateInput = document.getElementById('filter-date');
-        if (dateInput) {
-            dateInput.value = dataSelecionada;
-            dateInput.addEventListener('change', (e) => {
-                dataSelecionada = e.target.value;
-                carregarDados();
-            });
-        }
-
-        // 3. Carrega dados iniciais
-        await carregarDados();
-
-    } catch (e) {
-        console.error("Erro ao iniciar produtividade:", e);
-        alert("Erro ao carregar sistema.");
+async function init() {
+    // 1. Verificar Login
+    const session = localStorage.getItem('user_session');
+    if (!session) {
+        window.location.href = 'index.html';
+        return;
     }
-});
+    currentUser = JSON.parse(session);
 
-async function carregarDados() {
-    if (!usuarioLogado) return;
+    // 2. Definir data de hoje no input
+    const today = new Date().toISOString().split('T')[0];
+    const dateInput = document.getElementById('data-registo');
+    dateInput.value = today;
 
-    // Elementos da UI
-    const elProducao = document.getElementById('stat-producao');
-    const elMeta = document.getElementById('stat-meta');
-    const elPercent = document.getElementById('stat-percent');
-    const elAssert = document.getElementById('stat-assertividade'); // Novo campo de assertividade
-    
-    // Mostra loading
-    if(elProducao) elProducao.innerText = "...";
-    if(elMeta) elMeta.innerText = "...";
+    // 3. Adicionar evento de mudança de data
+    dateInput.addEventListener('change', carregarDadosDoDia);
+
+    // 4. Carregar dados iniciais
+    await carregarDadosDoDia();
+}
+
+async function carregarDadosDoDia() {
+    const dataSelecionada = document.getElementById('data-registo').value;
+    if (!dataSelecionada) return;
+
+    resetUI(); // Limpa os valores visuais enquanto carrega
 
     try {
-        // --- A. BUSCAR META VIGENTE NA DATA SELECIONADA ---
-        // Lógica: Meta com data_inicio <= dataSelecionada. 
-        // Ordenamos por data (decrescente) e pegamos a primeira (a mais recente válida).
-        const { data: metas, error: errorMeta } = await _supabase
+        // --- A. Buscar Meta de Produção (Histórico) ---
+        // Queremos a meta cuja data_inicio seja menor ou igual à data selecionada.
+        // Ordenamos descrescente e pegamos a primeira (a mais recente válida para aquele dia).
+        const { data: metasProd, error: errMeta } = await _supabase
             .from('metas')
-            .select('valor_meta, data_inicio')
-            .eq('usuario_id', usuarioLogado.id)
-            .lte('data_inicio', dataSelecionada) // Filtra metas futuras
-            .order('data_inicio', { ascending: false }) // Pega a mais recente dentro do filtro
+            .select('valor_meta')
+            .eq('usuario_id', currentUser.id)
+            .lte('data_inicio', dataSelecionada) 
+            .order('data_inicio', { ascending: false })
             .limit(1);
 
-        if (errorMeta) throw errorMeta;
-
-        // Se não tiver meta para essa data, assume 0
-        const metaDoDia = (metas && metas.length > 0) ? metas[0].valor_meta : 0;
-
-
-        // --- B. BUSCAR PRODUÇÃO DO DIA ---
-        const { data: producao, error: errorProd } = await _supabase
-            .from('producao_diaria')
-            .select('quantidade_produzida, erros_cometidos')
-            .eq('usuario_id', usuarioLogado.id)
-            .eq('data_producao', dataSelecionada)
-            .maybeSingle();
-
-        if (errorProd) throw errorProd;
-
-        const qtdFeita = producao ? producao.quantidade_produzida : 0;
-        const erros = producao ? producao.erros_cometidos : 0;
-
-        // --- C. CÁLCULOS E ATUALIZAÇÃO DA TELA ---
-        
-        // 1. Meta e Produção
-        if(elProducao) elProducao.innerText = qtdFeita;
-        if(elMeta) elMeta.innerText = metaDoDia;
-
-        // 2. Percentual de Conclusão da Meta
-        let percent = 0;
-        if (metaDoDia > 0) {
-            percent = (qtdFeita / metaDoDia) * 100;
-        }
-        
-        if(elPercent) {
-            elPercent.innerText = percent.toFixed(1) + '%';
-            // Muda cor dependendo do atingimento
-            if(percent >= 100) {
-                elPercent.className = "text-2xl font-bold text-emerald-600";
-            } else if (percent >= 80) {
-                elPercent.className = "text-2xl font-bold text-yellow-500";
-            } else {
-                elPercent.className = "text-2xl font-bold text-red-500";
-            }
+        if (metasProd && metasProd.length > 0) {
+            currentMetaProducao = metasProd[0].valor_meta;
+            document.getElementById('display-meta-prod').innerText = currentMetaProducao;
+        } else {
+            currentMetaProducao = 0;
+            document.getElementById('display-meta-prod').innerText = "N/D";
         }
 
-        // 3. Assertividade (Comparação com Meta Global)
-        // Assertividade = 100 - ( (Erros / Produção) * 100 )
-        let assertividade = 100;
-        if (qtdFeita > 0) {
-            const taxaErro = (erros / qtdFeita) * 100;
-            assertividade = 100 - taxaErro;
-        } else if (erros > 0) {
-            // Se produziu 0 mas teve erros, assertividade é 0
-            assertividade = 0; 
-        }
-
-        // Busca Meta de Assertividade Global VIGENTE
-        const { data: metaAssert, error: errAss } = await _supabase
+        // --- B. Buscar Meta de Assertividade (Global) ---
+        // Mesma lógica de datas
+        const { data: metasAss, error: errAss } = await _supabase
             .from('metas_assertividade')
             .select('valor_minimo')
             .lte('data_inicio', dataSelecionada)
             .order('data_inicio', { ascending: false })
             .limit(1);
-            
-        const metaAssertValor = (metaAssert && metaAssert.length > 0) ? metaAssert[0].valor_minimo : 97.0; // Padrão 97 se não houver
 
-        if(elAssert) {
-            elAssert.innerText = assertividade.toFixed(2) + '%';
-            
-            // Cor baseada na meta global (verde se >= meta, vermelho se < meta)
-            if(assertividade >= metaAssertValor) {
-                elAssert.classList.remove('text-red-500');
-                elAssert.classList.add('text-emerald-600');
-            } else {
-                elAssert.classList.remove('text-emerald-600');
-                elAssert.classList.add('text-red-500');
-            }
+        if (metasAss && metasAss.length > 0) {
+            currentMetaAssertividade = metasAss[0].valor_minimo;
+            document.getElementById('display-meta-assert').innerText = currentMetaAssertividade + "%";
+        } else {
+            currentMetaAssertividade = 0;
+            document.getElementById('display-meta-assert').innerText = "N/D";
         }
 
-    } catch (err) {
-        console.error("Erro ao carregar dados:", err);
+        // --- C. Buscar Produção Já Lançada ---
+        const { data: producao, error: errProd } = await _supabase
+            .from('producao') // Assumindo que a tabela se chama 'producao'
+            .select('*')
+            .eq('usuario_id', currentUser.id)
+            .eq('data', dataSelecionada)
+            .maybeSingle();
+
+        const statusIcon = document.getElementById('status-icon');
+        const statusText = document.getElementById('status-text');
+        const inputQtd = document.getElementById('input-qtd');
+        const btn = document.getElementById('btn-salvar');
+
+        if (producao) {
+            // Se já existe produção
+            inputQtd.value = producao.quantidade;
+            
+            // Verifica se bateu a meta
+            if (currentMetaProducao > 0 && producao.quantidade >= currentMetaProducao) {
+                statusIcon.innerHTML = '<i class="fas fa-check-circle text-emerald-500"></i>';
+                statusText.innerHTML = `<span class="text-emerald-600">Meta Atingida!</span>`;
+                statusText.className = "text-sm font-bold text-emerald-600";
+            } else {
+                statusIcon.innerHTML = '<i class="fas fa-adjust text-amber-500"></i>';
+                statusText.innerHTML = 'Registo encontrado.<br>Pode editar abaixo.';
+                statusText.className = "text-sm font-bold text-amber-600";
+            }
+            btn.innerHTML = '<span>✏️ Atualizar Registo</span>';
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            btn.classList.add('bg-amber-600', 'hover:bg-amber-700');
+
+        } else {
+            // Nada lançado ainda
+            inputQtd.value = '';
+            statusIcon.innerHTML = '<i class="fas fa-clock text-slate-300"></i>';
+            statusText.innerText = 'A aguardar lançamento...';
+            statusText.className = "text-sm font-bold text-slate-400";
+            
+            btn.innerHTML = '<span>💾 Salvar Produção</span>';
+            btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            btn.classList.remove('bg-amber-600', 'hover:bg-amber-700');
+        }
+
+    } catch (error) {
+        console.error("Erro ao carregar dados:", error);
+        alert("Ocorreu um erro ao carregar os dados do dia.");
+    }
+}
+
+function resetUI() {
+    document.getElementById('display-meta-prod').innerHTML = '<i class="fas fa-spinner fa-spin text-lg text-slate-300"></i>';
+    document.getElementById('display-meta-assert').innerHTML = '<i class="fas fa-spinner fa-spin text-lg text-slate-300"></i>';
+    document.getElementById('input-qtd').value = '';
+}
+
+async function salvarProducao() {
+    const dataSelecionada = document.getElementById('data-registo').value;
+    const qtd = document.getElementById('input-qtd').value;
+    const btn = document.getElementById('btn-salvar');
+
+    if (!dataSelecionada || qtd === '') {
+        alert("Por favor, preencha a quantidade.");
+        return;
+    }
+
+    const originalBtnContent = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A processar...';
+    btn.disabled = true;
+
+    try {
+        // Dados a salvar
+        const payload = {
+            usuario_id: currentUser.id,
+            data: dataSelecionada,
+            quantidade: parseInt(qtd),
+            // Se tiveres colunas extras como 'erros', adiciona aqui
+        };
+
+        // Usamos upsert: Se já existir (user + data), atualiza. Se não, cria.
+        // IMPORTANTE: A tabela 'producao' no Supabase deve ter uma constraint UNIQUE em (usuario_id, data)
+        const { error } = await _supabase
+            .from('producao')
+            .upsert(payload, { onConflict: 'usuario_id, data' });
+
+        if (error) throw error;
+
+        // Feedback visual
+        await carregarDadosDoDia(); // Recarrega para validar a meta visualmente
+        alert("Produção gravada com sucesso!");
+
+    } catch (error) {
+        console.error("Erro ao salvar:", error);
+        alert("Erro ao salvar: " + error.message);
+    } finally {
+        btn.innerHTML = originalBtnContent;
+        btn.disabled = false;
     }
 }
