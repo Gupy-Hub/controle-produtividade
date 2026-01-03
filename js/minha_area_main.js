@@ -9,8 +9,11 @@ const MA_Main = {
         this.sessao = JSON.parse(localStorage.getItem('usuario'));
         if(!this.sessao) { window.location.href='index.html'; return; }
         
-        this.isMgr = this.sessao.funcao === 'Gestora';
+        // ATUALIZAÇÃO: Verifica se é Gestora OU Auditora
+        const f = this.sessao.funcao;
+        this.isMgr = (f === 'Gestora' || f === 'Auditora');
         
+        // Configuração de Data (Input Inteligente ou Padrão)
         if (typeof Sistema !== 'undefined' && Sistema.Datas) {
             Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', () => this.atualizarDashboard());
         } else {
@@ -18,17 +21,39 @@ const MA_Main = {
             document.getElementById('filtro-data-manual').addEventListener('change', () => this.atualizarDashboard());
         }
 
+        // Lógica Específica para Gestão/Auditoria
         if (this.isMgr) {
             const elFiltro = document.getElementById('container-filtro-user');
             if(elFiltro) elFiltro.classList.remove('hidden');
+            
             const elAviso = document.getElementById('aviso-edicao');
-            if(elAviso) elAviso.classList.remove('hidden');
+            if(elAviso) {
+                elAviso.classList.remove('hidden');
+                // Ajusta o texto do badge caso seja Auditora
+                if(f === 'Auditora') elAviso.innerHTML = '<i class="fas fa-search"></i> Modo Auditoria';
+            }
             
             const selUser = document.getElementById('filtro-user');
-            if(selUser) selUser.addEventListener('change', () => this.atualizarDashboard());
+            if(selUser) {
+                // REGRA DE NEGÓCIO: Remove "Minha Visão" pois Gestora/Auditora não produz dados
+                const optMe = selUser.querySelector('option[value="me"]');
+                if(optMe) optMe.remove();
+                
+                // Força o padrão para "Time"
+                selUser.value = 'time';
+                
+                selUser.addEventListener('change', () => this.atualizarDashboard());
+            }
         }
 
         await this.carregarUsuarios();
+        
+        // Garante que a seleção permaneça no TIME após carregar usuários
+        if (this.isMgr) {
+             const selUser = document.getElementById('filtro-user');
+             if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
+        }
+
         this.atualizarDashboard();
     },
 
@@ -93,10 +118,14 @@ const MA_Main = {
         let targetName = this.usersMap[this.sessao.id];
         let viewingTime = false;
         
+        // Lógica de visualização
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
-            if (val === 'time') viewingTime = true;
-            else if (val !== 'me') targetName = this.usersMap[val];
+            if (val === 'time') {
+                viewingTime = true;
+            } else if (val && val !== 'me') {
+                targetName = this.usersMap[val];
+            }
         }
 
         const { data: rawData } = await _supabase
@@ -105,11 +134,12 @@ const MA_Main = {
             .gte('data_referencia', dataInicio)
             .lte('data_referencia', dataFim);
 
-        // ATUALIZADO: Chama MA_Diario ao invés de MA_Geral
+        // Chama MA_Diario (antigo Geral)
         const dadosNormalizados = MA_Diario.normalizarDadosPorNome(rawData || []);
         let dadosFinais = [];
 
         if (viewingTime) {
+            // Média do Time
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const prods = Object.values(dadosNormalizados[dia]);
                 const total = prods.reduce((a, b) => a + b.quantidade, 0);
@@ -120,6 +150,7 @@ const MA_Main = {
                 });
             });
         } else {
+            // Visão Individual (Logado ou Selecionado)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
                 if (dPessoa) {
