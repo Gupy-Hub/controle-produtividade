@@ -14,18 +14,13 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        
-        /* Estilos das Abas (Padrão produtividade.html) */
         .tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: #2563eb; border-color: #2563eb; background-color: #eff6ff; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
-
-        /* Estilos dos Botões de Gráfico */
         .btn-chart { @apply px-3 py-1 rounded text-xs font-bold transition-all border border-transparent; }
         .btn-chart.active { @apply bg-white text-blue-600 shadow-sm border-slate-200; }
         .btn-chart:not(.active) { @apply text-slate-400 hover:bg-white/50 hover:text-slate-600; }
-
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -45,24 +40,19 @@
             </div>
             
             <div class="flex flex-wrap gap-4 items-center">
-                
                 <div class="bg-white p-2 rounded-xl shadow-sm border border-blue-200 flex items-center gap-3">
-                    <div class="bg-blue-50 p-2 rounded-lg text-blue-600">
-                        <i class="fas fa-calendar-alt text-lg"></i>
-                    </div>
+                    <div class="bg-blue-50 p-2 rounded-lg text-blue-600"><i class="fas fa-calendar-alt text-lg"></i></div>
                     <div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mês de Referência</p>
-                        <input type="date" id="filtro-data-manual" onchange="aplicarDataManual()" class="text-sm font-black text-slate-700 outline-none bg-transparent cursor-pointer font-sans w-32">
+                        <input type="date" id="filtro-data-manual" class="text-sm font-black text-slate-700 outline-none bg-transparent cursor-pointer font-sans w-32">
                     </div>
                 </div>
 
                 <div id="container-filtro-user" class="hidden bg-white p-2 rounded-xl shadow-sm border border-purple-200 flex items-center gap-3">
-                    <div class="bg-purple-50 p-2 rounded-lg text-purple-600">
-                        <i class="fas fa-user-shield text-lg"></i>
-                    </div>
+                    <div class="bg-purple-50 p-2 rounded-lg text-purple-600"><i class="fas fa-user-shield text-lg"></i></div>
                     <div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Visão Gestora</p>
-                        <select id="filtro-user" onchange="atualizarDashboard()" class="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer w-40">
+                        <select id="filtro-user" class="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer w-40">
                             <option value="me">👤 Minha Visão</option>
                             <option value="time">👥 Time (Média)</option>
                             <option disabled>──────────</option>
@@ -70,89 +60,53 @@
                     </div>
                 </div>
 
-                <button onclick="atualizarDashboard()" class="bg-slate-800 text-white p-3 rounded-xl hover:bg-slate-700 transition shadow-sm h-[58px] w-[58px] flex items-center justify-center group" title="Recarregar Dados">
+                <button onclick="MA_Main.atualizarDashboard()" class="bg-slate-800 text-white p-3 rounded-xl hover:bg-slate-700 transition shadow-sm h-[58px] w-[58px] flex items-center justify-center group" title="Recarregar">
                     <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
                 </button>
             </div>
 
             <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex overflow-x-auto max-w-full">
-                <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-home"></i> Geral
-                </button>
-                <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-chart-line"></i> Evolução
-                </button>
-                <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-trophy"></i> Comparativo
-                </button>
-                <button onclick="mudarAba('feedback')" id="btn-feedback" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-comments"></i> Feedback
-                </button>
-                <button onclick="mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-check-double"></i> Assertividade
-                </button>
+                <button onclick="MA_Main.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap"><i class="fas fa-home"></i> Geral</button>
+                <button onclick="MA_Main.mudarAba('evolucao')" id="btn-evolucao" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap"><i class="fas fa-chart-line"></i> Evolução</button>
+                <button onclick="MA_Main.mudarAba('comparativo')" id="btn-comparativo" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap"><i class="fas fa-trophy"></i> Comparativo</button>
+                <button onclick="MA_Main.mudarAba('feedback')" id="btn-feedback" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap"><i class="fas fa-comments"></i> Feedback</button>
+                <button onclick="MA_Main.mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-double"></i> Assertividade</button>
             </div>
         </div>
 
         <div id="conteudo-principal" class="space-y-6">
             
             <div id="tab-geral" class="view-section animate-fade-in space-y-6">
-                
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                         <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-layer-group text-6xl text-blue-600"></i></div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção (Mês)</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2>
-                            <span class="text-xs font-bold text-slate-400">docs</span>
-                        </div>
-                        <div class="mt-2 text-[10px] font-bold text-slate-400">
-                            Meta Período: <span class="text-slate-600" id="kpi-meta-total">--</span>
-                        </div>
+                        <div class="flex items-baseline gap-2"><h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2><span class="text-xs font-bold text-slate-400">docs</span></div>
+                        <div class="mt-2 text-[10px] font-bold text-slate-400">Meta Período: <span class="text-slate-600" id="kpi-meta-total">--</span></div>
                     </div>
-
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                         <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-chart-pie text-6xl text-emerald-600"></i></div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Atingimento</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2>
-                            <i id="icon-status" class="fas fa-check-circle text-emerald-500 text-lg"></i>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden">
-                            <div id="bar-progress" class="bg-emerald-500 h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
-                        </div>
+                        <div class="flex items-baseline gap-2"><h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2><i id="icon-status" class="fas fa-check-circle text-emerald-500 text-lg"></i></div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden"><div id="bar-progress" class="bg-emerald-500 h-full rounded-full transition-all duration-1000" style="width: 0%"></div></div>
                     </div>
-
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
                         <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-stopwatch text-6xl text-purple-600"></i></div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Diária</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2>
-                            <span class="text-xs font-bold text-slate-400">/ dia trab.</span>
-                        </div>
-                        <div class="mt-2 text-[10px] font-bold text-slate-400">
-                            Meta Ideal: <span class="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">650</span>
-                        </div>
+                        <div class="flex items-baseline gap-2"><h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2><span class="text-xs font-bold text-slate-400">/ dia trab.</span></div>
+                        <div class="mt-2 text-[10px] font-bold text-slate-400">Meta Ideal: <span class="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">650</span></div>
                     </div>
                 </div>
 
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200">
                     <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                         <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico Detalhado</h3>
-                        <div id="aviso-edicao" class="hidden text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded flex items-center gap-1">
-                            <i class="fas fa-pen"></i> Modo Gestora
-                        </div>
+                        <div id="aviso-edicao" class="hidden text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded flex items-center gap-1"><i class="fas fa-pen"></i> Modo Gestora</div>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
                             <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider">
-                                <tr>
-                                    <th class="px-6 py-3">Data</th>
-                                    <th class="px-6 py-3 text-center">Produção</th>
-                                    <th class="px-6 py-3 text-center">Meta</th>
-                                    <th class="px-6 py-3 text-center">Status</th>
-                                    <th class="px-6 py-3">Obs / Histórico</th>
-                                </tr>
+                                <tr><th class="px-6 py-3">Data</th><th class="px-6 py-3 text-center">Produção</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Status</th><th class="px-6 py-3">Obs / Histórico</th></tr>
                             </thead>
                             <tbody id="tabela-diario" class="divide-y divide-slate-100 bg-white">
                                 <tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Carregando dados...</td></tr>
@@ -164,49 +118,27 @@
 
             <div id="tab-evolucao" class="view-section hidden animate-fade-in space-y-6">
                 <div class="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <div>
-                        <h3 class="font-bold text-slate-700">Curva de Performance</h3>
-                        <p class="text-xs text-slate-400">Análise temporal da produtividade.</p>
-                    </div>
+                    <div><h3 class="font-bold text-slate-700">Curva de Performance</h3><p class="text-xs text-slate-400">Análise temporal.</p></div>
                     <div class="flex bg-slate-100 p-1 rounded-lg">
-                        <button onclick="renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
-                        <button onclick="renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
-                        <button onclick="renderizarGraficos('semestre')" id="chart-btn-semestre" class="btn-chart">Semestre</button>
-                        <button onclick="renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
+                        <button onclick="MA_Evolucao.renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
+                        <button onclick="MA_Evolucao.renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
+                        <button onclick="MA_Evolucao.renderizarGraficos('semestre')" id="chart-btn-semestre" class="btn-chart">Semestre</button>
+                        <button onclick="MA_Evolucao.renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
                     </div>
                 </div>
-                
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-[350px]">
-                    <canvas id="chartPrincipal"></canvas>
-                </div>
-
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-[350px]"><canvas id="chartPrincipal"></canvas></div>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-calendar-check"></i></div>
-                        <div>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase">Dias Produtivos</span>
-                            <div class="flex items-baseline gap-1">
-                                <span id="evo-dias" class="text-xl font-black text-slate-800">--</span>
-                            </div>
-                        </div>
+                        <div><span class="text-[10px] font-bold text-slate-400 uppercase">Dias Produtivos</span><div class="flex items-baseline gap-1"><span id="evo-dias" class="text-xl font-black text-slate-800">--</span></div></div>
                     </div>
                     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-crosshairs"></i></div>
-                        <div>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase">Consistência (Meta)</span>
-                            <div class="flex items-baseline gap-1">
-                                <span id="evo-taxa" class="text-xl font-black text-slate-800">--%</span>
-                            </div>
-                        </div>
+                        <div><span class="text-[10px] font-bold text-slate-400 uppercase">Consistência</span><div class="flex items-baseline gap-1"><span id="evo-taxa" class="text-xl font-black text-slate-800">--%</span></div></div>
                     </div>
                     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
                         <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><i class="fas fa-trophy"></i></div>
-                        <div>
-                            <span class="text-[10px] font-bold text-slate-400 uppercase">Melhor Dia</span>
-                            <div class="flex items-baseline gap-1">
-                                <span id="evo-best" class="text-xl font-black text-slate-800">--</span> <span class="text-xs text-slate-400">docs</span>
-                            </div>
-                        </div>
+                        <div><span class="text-[10px] font-bold text-slate-400 uppercase">Melhor Dia</span><div class="flex items-baseline gap-1"><span id="evo-best" class="text-xl font-black text-slate-800">--</span></div></div>
                     </div>
                 </div>
             </div>
@@ -225,13 +157,11 @@
                        <span class="text-sm font-medium opacity-60">documentos / dia</span>
                    </div>
                </div>
-               <div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500 text-lg">Carregando comparativo...</div>
+               <div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500 text-lg">Carregando...</div>
            </div>
 
            <div id="tab-feedback" class="view-section hidden animate-fade-in flex flex-col h-[600px] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-600 text-sm">
-                    <i class="fas fa-comments mr-2 text-blue-500"></i> Mural de Feedback
-                </div>
+                <div class="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-600 text-sm"><i class="fas fa-comments mr-2 text-blue-500"></i> Mural de Feedback</div>
                 <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-6 space-y-4 bg-white scroll-smooth"></div>
                 <div class="p-4 bg-slate-50 border-t border-slate-200">
                     <div class="flex items-center gap-3 mb-3">
@@ -243,9 +173,7 @@
                     </div>
                     <div class="flex gap-2">
                         <input type="text" id="input-feedback" placeholder="Escreva sua mensagem..." class="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-3 outline-none focus:border-blue-500 transition text-sm">
-                        <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 font-bold transition shadow-sm">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
+                        <button onclick="MA_Feedback.enviar()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 font-bold transition shadow-sm"><i class="fas fa-paper-plane"></i></button>
                     </div>
                 </div>
             </div>
@@ -253,526 +181,38 @@
             <div id="tab-assertividade" class="view-section hidden animate-fade-in space-y-6">
                 <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
                     <div class="mb-4">
-                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 text-2xl mb-2">
-                            <i class="fas fa-file-excel"></i>
-                        </div>
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 text-2xl mb-2"><i class="fas fa-file-excel"></i></div>
                         <h3 class="text-lg font-bold text-slate-800">Importar Assertividade</h3>
-                        <p class="text-sm text-slate-500">Carregue a planilha com os resultados das auditorias.</p>
+                        <p class="text-sm text-slate-500">Carregue a planilha com os resultados.</p>
                     </div>
-                    
-                    <input type="file" id="input-excel-assertividade" accept=".xlsx, .csv" class="hidden" onchange="processarExcelAssertividade(this)">
+                    <input type="file" id="input-excel-assertividade" accept=".xlsx, .csv" class="hidden" onchange="MA_Assertividade.processarExcel(this)">
                     <button onclick="document.getElementById('input-excel-assertividade').click()" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-slate-200 inline-flex items-center gap-2">
                         <i class="fas fa-upload"></i> Selecionar Arquivo Excel
                     </button>
                 </div>
-
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
-                        <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Dados Importados</h3>
-                    </div>
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50"><h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Dados Importados</h3></div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
                             <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider">
-                                <tr>
-                                    <th class="px-6 py-3">Data</th>
-                                    <th class="px-6 py-3">Descrição / ID</th>
-                                    <th class="px-6 py-3 text-center">Erros</th>
-                                    <th class="px-6 py-3 text-center">Nota / %</th>
-                                    <th class="px-6 py-3 text-center">Status</th>
-                                </tr>
+                                <tr><th class="px-6 py-3">Data</th><th class="px-6 py-3">Descrição / ID</th><th class="px-6 py-3 text-center">Erros</th><th class="px-6 py-3 text-center">Nota / %</th><th class="px-6 py-3 text-center">Status</th></tr>
                             </thead>
                             <tbody id="tabela-assertividade" class="divide-y divide-slate-100 bg-white">
-                                <tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Nenhum dado carregado. Importe um arquivo Excel.</td></tr>
+                                <tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Nenhum dado carregado.</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <script>
-        // CONFIGURAÇÃO INICIAL
-        const sessao = JSON.parse(localStorage.getItem('usuario'));
-        const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
-        
-        let myChart = null;
-        let usersMap = {}; 
-        let userRoles = {};
-        let nameToIdsMap = {}; 
-        
-        document.addEventListener('DOMContentLoaded', async () => {
-            // Inicializa Data no Sistema
-            if (typeof Sistema !== 'undefined' && Sistema.Datas) {
-                Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', atualizarDashboard);
-            } else {
-                // Fallback caso sistema.js não tenha carregado
-                const hoje = new Date().toISOString().split('T')[0];
-                document.getElementById('filtro-data-manual').value = hoje;
-            }
+    <script src="js/minha_area_geral.js"></script>
+    <script src="js/minha_area_evolucao.js"></script>
+    <script src="js/minha_area_comparativo.js"></script>
+    <script src="js/minha_area_feedback.js"></script>
+    <script src="js/minha_area_assertividade.js"></script>
+    <script src="js/minha_area_main.js"></script>
 
-            await carregarUsuarios(); 
-
-            if (isMgr) {
-                document.getElementById('container-filtro-user').classList.remove('hidden');
-                document.getElementById('aviso-edicao').classList.remove('hidden');
-            }
-
-            atualizarDashboard();
-        });
-
-        function aplicarDataManual() { 
-            atualizarDashboard();
-        }
-        
-        function getDateFromInput() {
-            const val = document.getElementById('filtro-data-manual').value;
-            // Garante formato correto YYYY-MM-DD
-            if(!val) return new Date();
-            const parts = val.split('-');
-            return new Date(parts[0], parts[1]-1, parts[2]);
-        }
-
-        async function carregarUsuarios() {
-            const { data } = await _supabase.from('usuarios').select('id, nome, funcao').order('nome');
-            if(data) {
-                const selectFiltro = document.getElementById('filtro-user');
-                const selectFeedback = document.getElementById('feedback-destinatario');
-                
-                data.forEach(u => {
-                    usersMap[u.id] = u.nome;
-                    userRoles[u.id] = u.funcao; 
-
-                    if(!nameToIdsMap[u.nome]) nameToIdsMap[u.nome] = [];
-                    nameToIdsMap[u.nome].push(u.id);
-
-                    if(nameToIdsMap[u.nome][0] === u.id) {
-                        if(u.funcao === 'Assistente' && selectFiltro) {
-                            const opt = document.createElement('option');
-                            opt.value = u.id; opt.text = u.nome;
-                            selectFiltro.appendChild(opt);
-                        }
-                        if(u.id !== sessao.id) {
-                            const optF = document.createElement('option');
-                            optF.value = u.id; optF.text = `👤 ${u.nome}`;
-                            selectFeedback.appendChild(optF);
-                        }
-                    }
-                });
-            }
-        }
-
-        // --- SISTEMA DE ABAS ---
-        function mudarAba(aba) {
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
-            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-            
-            document.getElementById(`tab-${aba}`).classList.remove('hidden'); 
-            document.getElementById(`btn-${aba}`).classList.add('active');
-            
-            if(aba==='evolucao') renderizarGraficos('mes');
-            if(aba==='comparativo') atualizarDashboard(); // Recarrega comparativo
-        }
-
-        // --- LÓGICA DE DADOS (GERAL / DIÁRIO) ---
-        function normalizarDadosPorNome(rawData) {
-            const agrupado = {};
-            rawData.forEach(item => {
-                if (userRoles[item.usuario_id] !== 'Assistente') return;
-                const nome = usersMap[item.usuario_id] || 'Desconhecido';
-                const data = item.data_referencia;
-                if (!agrupado[data]) agrupado[data] = {};
-                if (!agrupado[data][nome]) {
-                    agrupado[data][nome] = {
-                        id_ref: item.id, quantidade: 0, meta_diaria: item.meta_diaria || 650,
-                        observacao: item.observacao || '', observacao_gestora: item.observacao_gestora || ''
-                    };
-                }
-                agrupado[data][nome].quantidade += item.quantidade;
-                if (item.observacao && !agrupado[data][nome].observacao.includes(item.observacao)) agrupado[data][nome].observacao += ` | ${item.observacao}`;
-            });
-            return agrupado;
-        }
-
-        async function atualizarDashboard() {
-            const refDate = getDateFromInput();
-            if (isNaN(refDate.getTime())) return;
-
-            const ano = refDate.getFullYear();
-            const mes = refDate.getMonth();
-            const dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-            const dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-
-            let targetName = usersMap[sessao.id];
-            let viewingTime = false;
-            
-            if (isMgr) {
-                const val = document.getElementById('filtro-user').value;
-                if (val === 'time') viewingTime = true;
-                else if (val !== 'me') targetName = usersMap[val];
-            }
-
-            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
-            const dadosNormalizados = normalizarDadosPorNome(rawData || []);
-            let dadosFinais = [];
-
-            if (viewingTime) {
-                Object.keys(dadosNormalizados).sort().forEach(dia => {
-                    const prods = Object.values(dadosNormalizados[dia]);
-                    const total = prods.reduce((a, b) => a + b.quantidade, 0);
-                    const headcount = prods.length;
-                    dadosFinais.push({
-                        data_referencia: dia, quantidade: headcount ? Math.round(total / headcount) : 0,
-                        meta_diaria: 650, observacao: `Média de ${headcount} assistentes`
-                    });
-                });
-            } else {
-                Object.keys(dadosNormalizados).sort().forEach(dia => {
-                    const dPessoa = dadosNormalizados[dia][targetName];
-                    if (dPessoa) {
-                        dadosFinais.push({
-                            id: dPessoa.id_ref, data_referencia: dia, quantidade: dPessoa.quantidade,
-                            meta_diaria: dPessoa.meta_diaria, observacao: dPessoa.observacao, observacao_gestora: dPessoa.observacao_gestora
-                        });
-                    }
-                });
-            }
-
-            atualizarKPIs(dadosFinais);
-            atualizarTabelaDiaria(dadosFinais, viewingTime);
-            
-            if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
-                const btnAtivo = document.querySelector('.btn-chart.active');
-                const periodo = btnAtivo ? (btnAtivo.id.replace('chart-btn-', '')) : 'mes';
-                renderizarGraficos(periodo);
-            }
-            
-            atualizarComparativoRapido(dadosFinais, viewingTime, targetName, dataInicio, dataFim);
-            carregarFeedbacks(); 
-        }
-
-        function atualizarKPIs(dados) {
-            const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-            const diasTrabalhados = dados.filter(d => d.quantidade > 0).length || 1; 
-            
-            let metaTotal = 0;
-            // Se tiver dados, soma as metas diárias reais. Se não, projeta 22 dias.
-            if(dados.length > 0) dados.forEach(d => metaTotal += (d.meta_diaria || 650)); else metaTotal = 650 * 22;
-
-            const media = Math.round(total / diasTrabalhados);
-            const atingimento = Math.round((total / metaTotal) * 100);
-
-            document.getElementById('kpi-total').innerText = total.toLocaleString();
-            document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
-            document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
-            document.getElementById('kpi-media-real').innerText = media.toLocaleString();
-            
-            const bar = document.getElementById('bar-progress');
-            const icon = document.getElementById('icon-status');
-            
-            bar.style.width = Math.min(atingimento, 100) + '%';
-            
-            if(atingimento>=100) { 
-                bar.className="bg-emerald-500 h-full rounded-full"; 
-                icon.className="fas fa-check-circle text-emerald-500 text-lg"; 
-            } else if(atingimento>=80) { 
-                bar.className="bg-amber-400 h-full rounded-full"; 
-                icon.className="fas fa-exclamation-circle text-amber-500 text-lg"; 
-            } else { 
-                bar.className="bg-rose-500 h-full rounded-full"; 
-                icon.className="fas fa-times-circle text-rose-500 text-lg"; 
-            }
-        }
-
-        function atualizarTabelaDiaria(dados, viewingTime) {
-            const tbody = document.getElementById('tabela-diario');
-            if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registo encontrado neste mês.</td></tr>'; return; }
-            
-            let html = '';
-            // Ordenar por data (recente primeiro)
-            dados.sort((a,b) => new Date(b.data_referencia) - new Date(a.data_referencia));
-
-            dados.forEach(item => {
-                const meta = item.meta_diaria || 650; const atingiu = item.quantidade >= meta;
-                const badge = atingiu ? '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-emerald-200">Meta Batida</span>' : '<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-rose-200">Abaixo</span>';
-                const dFmt = item.data_referencia.split('-').reverse().join('/');
-                
-                let inputMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
-                if(isMgr && !viewingTime && item.id) inputMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-200 rounded px-1 py-1 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">`;
-                
-                let obs = item.observacao || '<span class="text-slate-300">-</span>';
-                if(item.observacao_gestora) obs += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100"><i class="fas fa-user-shield mr-1"></i>${item.observacao_gestora}</div>`;
-                
-                html += `<tr class="hover:bg-slate-50 border-b border-slate-50 transition">
-                            <td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td>
-                            <td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade}</td>
-                            <td class="px-6 py-4 text-center">${inputMeta}</td>
-                            <td class="px-6 py-4 text-center">${badge}</td>
-                            <td class="px-6 py-4 text-xs text-slate-500 max-w-xs break-words">${obs}</td>
-                        </tr>`;
-            });
-            tbody.innerHTML = html;
-        }
-
-        async function atualizarMeta(id, nv, av) { 
-            if(nv==av) return; 
-            const m = prompt("Motivo da alteração de meta:"); 
-            if(!m){ atualizarDashboard(); return;} 
-            const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; 
-            await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); 
-            atualizarDashboard(); 
-        }
-
-        // --- GRÁFICOS DE EVOLUÇÃO ---
-        async function renderizarGraficos(periodo) {
-            document.querySelectorAll('.btn-chart').forEach(b => b.classList.remove('active'));
-            const btn = document.getElementById(`chart-btn-${periodo}`);
-            if(btn) btn.classList.add('active');
-
-            const refDate = getDateFromInput();
-            const ano = refDate.getFullYear();
-            const mes = refDate.getMonth();
-            let dInicio, dFim;
-
-            if (periodo === 'mes') {
-                dInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-                dFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-            } else if (periodo === 'trimestre') {
-                const trimStart = Math.floor(mes / 3) * 3;
-                dInicio = new Date(ano, trimStart, 1).toISOString().split('T')[0];
-                dFim = new Date(ano, trimStart + 3, 0).toISOString().split('T')[0];
-            } else if (periodo === 'semestre') {
-                const semStart = mes < 6 ? 0 : 6;
-                dInicio = new Date(ano, semStart, 1).toISOString().split('T')[0];
-                dFim = new Date(ano, semStart + 6, 0).toISOString().split('T')[0];
-            } else if (periodo === 'ano') {
-                dInicio = `${ano}-01-01`;
-                dFim = `${ano}-12-31`;
-            }
-
-            let targetName = usersMap[sessao.id];
-            let viewingTime = false;
-            if(isMgr) {
-                const val = document.getElementById('filtro-user').value;
-                if(val === 'time') viewingTime = true; else if(val !== 'me') targetName = usersMap[val];
-            }
-
-            const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dInicio).lte('data_referencia', dFim).order('data_referencia');
-            const grouped = normalizarDadosPorNome(rawData || []);
-            const agruparPorMes = (periodo === 'ano');
-
-            const processedTime = {}, processedMain = {}, metaMap = {};
-            Object.keys(grouped).sort().forEach(date => {
-                let label = agruparPorMes ? date.substring(0, 7) : date;
-                const prods = Object.values(grouped[date]);
-                const total = prods.reduce((a,b)=>a+b.quantidade,0); const count = prods.length;
-                const avg = count ? Math.round(total/count) : 0;
-
-                if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; metaMap[label] = 0; }
-                processedTime[label].sum += avg; processedTime[label].cnt++;
-
-                let valUser = 0; 
-                if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; }
-                processedMain[label] += valUser; 
-            });
-
-            const labels = Object.keys(processedTime).sort();
-            const dataMain = [], dataBench = [];
-            let statsDias = 0, statsBest = 0, statsBatida = 0;
-
-            labels.forEach(k => {
-                const valTime = Math.round(processedTime[k].sum / processedTime[k].cnt);
-                let valMainFinal = processedMain[k];
-                if (agruparPorMes) valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); 
-                
-                const displayMain = viewingTime ? valTime : valMainFinal;
-                dataMain.push(displayMain);
-                dataBench.push(viewingTime ? 650 : valTime); // Meta ou Média Time
-
-                if(displayMain > 0) {
-                    statsDias++;
-                    if(displayMain > statsBest) statsBest = displayMain;
-                    if(displayMain >= 650) statsBatida++;
-                }
-            });
-
-            document.getElementById('evo-dias').innerText = statsDias;
-            document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%';
-            document.getElementById('evo-best').innerText = statsBest;
-
-            const ctx = document.getElementById('chartPrincipal').getContext('2d');
-            if(myChart) myChart.destroy();
-            
-            const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-            gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)');
-            gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
-
-            myChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/')),
-                    datasets: [
-                        { label: viewingTime ? 'Média Equipa' : targetName, data: dataMain, borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#fff', pointBorderColor: '#2563eb' },
-                        { label: viewingTime ? 'Meta (650)' : 'Média Equipa', data: dataBench, borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, pointRadius: 0, fill: false }
-                    ]
-                },
-                options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8, font: { weight: 'bold' }, padding: 20 } } }, scales: { y: { beginAtZero: true, grid: { borderDash: [4, 4] } }, x: { grid: { display: false } } } }
-            });
-        }
-
-        // --- COMPARATIVO ---
-        async function atualizarComparativoRapido(dadosFinais, viewingTime, targetName, inicio, fim) {
-            const cardL = document.getElementById('card-comp-left');
-            const cardR = document.getElementById('card-comp-right');
-            const labelL = document.getElementById('label-media-selecionada');
-            const labelR = document.getElementById('label-media-benchmark');
-            const valL = document.getElementById('comp-media-user');
-            const valR = document.getElementById('comp-media-time');
-
-            const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-            const norm = normalizarDadosPorNome(all||[]);
-            let sumMedias=0, cntDias=0;
-            
-            Object.values(norm).forEach(diaObj => {
-                const arr = Object.values(diaObj);
-                const tot = arr.reduce((a,b)=>a+b.quantidade,0);
-                const headCount = arr.filter(p => p.quantidade > 0).length;
-                if(headCount > 0) { sumMedias += (tot/headCount); cntDias++; }
-            });
-            const mediaGeral = cntDias ? Math.round(sumMedias/cntDias) : 0;
-            
-            const diasTrabUser = dadosFinais.filter(d => d.quantidade > 0);
-            const totUser = diasTrabUser.reduce((a,b)=>a+b.quantidade,0);
-            const mediaUser = diasTrabUser.length ? Math.round(totUser/diasTrabUser.length) : 0;
-
-            valL.innerText = mediaUser;
-            valR.innerText = viewingTime ? 650 : mediaGeral; 
-
-            labelL.innerText = viewingTime ? "Média da Equipa" : `Média ${targetName}`;
-            labelR.innerText = viewingTime ? "Meta Esperada" : "Média Geral da Equipa";
-
-            if (mediaUser < 650) {
-                cardL.className = "flex-1 bg-rose-500 border border-rose-600 rounded-3xl p-8 text-center shadow-lg relative overflow-hidden transition-colors duration-300 text-white";
-                labelL.className = "block text-xs font-bold text-rose-200 uppercase tracking-widest mb-4";
-            } else {
-                cardL.className = "flex-1 bg-gradient-to-br from-blue-600 to-indigo-700 border border-transparent rounded-3xl p-8 text-center shadow-xl relative overflow-hidden transition-colors duration-300 text-white";
-                labelL.className = "block text-xs font-bold text-blue-200 uppercase tracking-widest mb-4";
-            }
-
-            const valRight = viewingTime ? 650 : mediaGeral;
-            
-            // Ajuste visual do card da direita
-            cardR.className = "flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
-            labelR.className = "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4";
-            valR.className = "text-5xl font-black text-slate-700 tracking-tighter mb-2";
-
-            const diff = mediaUser - valRight;
-            const elMsg = document.getElementById('comp-mensagem');
-            if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`;
-            else if (diff < 0) elMsg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo do esperado</span>`;
-            else elMsg.innerHTML = `<span class="text-slate-500">Exatamente na média.</span>`;
-        }
-
-        // --- FEEDBACK ---
-        async function carregarFeedbacks() {
-            const el = document.getElementById('lista-feedbacks');
-            const { data } = await _supabase.from('feedbacks').select('*').order('created_at', {ascending:true});
-            if(!data || !data.length) { el.innerHTML = '<div class="text-center text-slate-300 py-12 italic">Nenhum feedback encontrado.</div>'; return; }
-            
-            let html='';
-            data.forEach(m => {
-                const isPub = m.usuario_alvo_id===null; 
-                const isMe = m.usuario_alvo_id==sessao.id; 
-                const isMine = m.autor_nome===sessao.nome;
-                
-                if(isPub || isMe || isMine) {
-                    const align = isMine ? 'ml-auto bg-blue-50 border-blue-100' : 'mr-auto bg-slate-50 border-slate-100';
-                    const badge = isPub ? '📢 TIME' : (isMine && m.usuario_alvo_id ? `🔒 ${usersMap[m.usuario_alvo_id]}` : '🔒 PRIVADO');
-                    
-                    html += `<div class="w-[85%] p-4 rounded-xl border mb-3 shadow-sm ${align}">
-                                <div class="flex justify-between items-center mb-1 text-[10px] font-bold uppercase tracking-wide opacity-70">
-                                    <span>${m.autor_nome} <span class="ml-1 bg-white border px-1 rounded text-[9px]">${badge}</span></span>
-                                    <span>${new Date(m.created_at).toLocaleDateString()}</span>
-                                </div>
-                                <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">${m.mensagem}</p>
-                             </div>`;
-                }
-            });
-            el.innerHTML = html; el.scrollTop = el.scrollHeight;
-        }
-
-        async function enviarFeedback() {
-            const txt = document.getElementById('input-feedback').value; const dest = document.getElementById('feedback-destinatario').value;
-            if(!txt.trim()) return;
-            const aid = dest!=='time' ? parseInt(dest) : null;
-            await _supabase.from('feedbacks').insert({ usuario_alvo_id: aid, autor_nome: sessao.nome, autor_funcao: sessao.funcao, mensagem: txt });
-            document.getElementById('input-feedback').value=''; carregarFeedbacks();
-        }
-
-        // --- ASSERTIVIDADE (EXCEL) ---
-        function processarExcelAssertividade(input) {
-            const file = input.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const firstSheet = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheet];
-                const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
-
-                renderizarTabelaAssertividade(json);
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        function renderizarTabelaAssertividade(rows) {
-            const tbody = document.getElementById('tabela-assertividade');
-            if (!rows || rows.length <= 1) { 
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-red-500">Arquivo vazio ou formato inválido.</td></tr>'; 
-                return; 
-            }
-
-            // Assume que a linha 0 é cabeçalho.
-            // Tenta identificar colunas automaticamente ou usa índices fixos (0: Data, 1: Desc, 2: Erros, 3: Nota)
-            let html = '';
-            
-            // Pula o cabeçalho (i=1)
-            for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (!row || row.length === 0) continue;
-
-                // Tenta formatar data do Excel (número serial) ou texto
-                let dataVal = row[0];
-                if (typeof dataVal === 'number') {
-                    // Conversão simples Excel Date -> JS Date
-                    const dateInfo = new Date((dataVal - (25567 + 2))*86400*1000); 
-                    dataVal = dateInfo.toLocaleDateString();
-                }
-
-                const desc = row[1] || '-';
-                const erros = row[2] || 0;
-                const nota = row[3]; 
-
-                // Lógica de Status (exemplo: se nota < 90 ou erros > 0)
-                let statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">OK</span>';
-                if (erros > 0 || (typeof nota === 'number' && nota < 100)) {
-                    statusBadge = '<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold">Atenção</span>';
-                }
-
-                html += `<tr class="hover:bg-slate-50 border-b border-slate-50">
-                            <td class="px-6 py-3 font-bold text-slate-600">${dataVal || '-'}</td>
-                            <td class="px-6 py-3 text-slate-600">${desc}</td>
-                            <td class="px-6 py-3 text-center text-slate-800 font-bold">${erros}</td>
-                            <td class="px-6 py-3 text-center font-black text-blue-600">${nota || '-'}</td>
-                            <td class="px-6 py-3 text-center">${statusBadge}</td>
-                         </tr>`;
-            }
-            tbody.innerHTML = html;
-        }
-
-    </script>
 </body>
 </html>
