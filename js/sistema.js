@@ -101,8 +101,11 @@ const Sistema = {
         },
 
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
-            let inicio = new Date(dataInicio);
-            const fim = new Date(dataFim);
+            // CORREÇÃO CRÍTICA: Adiciona hora fixa (12:00) para evitar que o fuso horário
+            // recue a data para o mês anterior (bug que causava média errada entre 17 e 13 -> 15)
+            let inicio = new Date(dataInicio + 'T12:00:00');
+            const fim = new Date(dataFim + 'T12:00:00');
+            
             let somaBases = 0;
             let mesesContados = 0;
             
