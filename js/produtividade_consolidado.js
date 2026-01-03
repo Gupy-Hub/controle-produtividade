@@ -17,6 +17,11 @@ const Cons = {
         
         const t = document.getElementById('cons-period-type').value; 
         const refDate = Sistema.Datas.lerInput('data-cons');
+        
+        // Pega o valor da Base HC do input (padrão 17 se vazio)
+        const inputHC = document.getElementById('cons-input-hc');
+        const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
+
         const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
         let s, e;
         
@@ -29,15 +34,8 @@ const Cons = {
             const { data: rawData, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
             if(error) throw error;
             
-            let cols = []; 
-            if (t === 'dia') cols = ['Dia']; 
-            else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; 
-            else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; 
-            else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; 
-            else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-            
-            const numCols = cols.length; 
-            let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
+            let cols = []; if (t === 'dia') cols = ['Dia']; else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+            const numCols = cols.length; let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
             
             rawData.forEach(r => {
                 const uid = r.usuario_id;
@@ -81,9 +79,17 @@ const Cons = {
                 return tr + '</tr>';
             };
             
-            const HF = 17;
-            h += mkRow('Ativos', s => s.users); h += mkRow('Dias Trabalhados', s => s.dates); h += mkRow('FIFO', s => s.fifo); h += mkRow('G. Parcial', s => s.gp); h += mkRow('G. Total', s => s.gt); h += mkRow('Perfil FC', s => s.fc); h += mkRow('Produção Total', s => s.qty, false, true);
-            h += mkRow('Média Diária (Time)', (s, d) => s.qty / d, true); h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => s.qty / d / HF, true);
+            // Tabela com nomes atualizados e cálculo dinâmico de HF
+            h += mkRow('Assistentes Ativas', s => s.users); 
+            h += mkRow('Dias Trabalhados', s => s.dates); 
+            h += mkRow('FIFO', s => s.fifo); 
+            h += mkRow('G. Parcial', s => s.gp); 
+            h += mkRow('G. Total', s => s.gt); 
+            h += mkRow('Perfil FC', s => s.fc); 
+            h += mkRow('Produção Total', s => s.qty, false, true);
+            h += mkRow('Média Diária (Time)', (s, d) => s.qty / d, true); 
+            h += mkRow(`Média/Assist (Base ${HF})`, (s) => s.qty / HF, true); 
+            h += mkRow(`Média Dia/Assist (Base ${HF})`, (s, d) => s.qty / d / HF, true);
             h += `<tr><td colspan="${numCols + 2}" class="px-4 py-6 bg-slate-50 font-bold text-slate-400 text-xs uppercase tracking-widest text-center border-y border-slate-200">Segmentação por Contrato</td></tr>`;
             h += mkRow('Produção CLT', s => s.clt_qty); h += mkRow('Média Diária/CLT', (s, d, a, ac) => s.clt_qty / d / ac, true);
             h += mkRow('Produção PJ', s => s.pj_qty); h += mkRow('Média Diária/PJ', (s, d, a, ac, ap) => s.pj_qty / d / ap, true);
@@ -93,6 +99,7 @@ const Cons = {
             const tot = st[99]; const dTot = tot.dates.size || 1; 
             document.getElementById('cons-p-total').innerText = tot.qty.toLocaleString(); 
             document.getElementById('cons-p-media-time').innerText = Math.round(tot.qty / dTot).toLocaleString(); 
+            // Atualiza card com valor dinâmico
             document.getElementById('cons-p-media-ind').innerText = Math.round(tot.qty / dTot / HF).toLocaleString(); 
             document.getElementById('cons-p-headcount').innerText = tot.users.size;
         } catch (e) { console.error(e); }
