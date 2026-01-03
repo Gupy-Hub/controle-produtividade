@@ -2,29 +2,42 @@ const sessao = JSON.parse(localStorage.getItem('usuario'));
 const KEY_DATA_GLOBAL = 'data_sistema_global';
 const KEY_TAB_GLOBAL = 'produtividade_aba_ativa';
 
-// Atualiza Data Global e sincroniza o input de Base HC
 function atualizarDataGlobal(novaData) {
     if(!novaData) return;
     localStorage.setItem(KEY_DATA_GLOBAL, novaData);
     
-    // Atualiza o input de Base HC com o valor salvo para este mês
     sincronizarInputBaseHC(novaData);
 
-    // Recarrega a aba atual
     const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';
     mudarAba(abaAtual);
 }
 
-// Atualiza a Base HC Globalmente
+// --- LÓGICA DE CONFIRMAÇÃO DA BASE MANUAL ---
 function atualizarBaseGlobal(novoValor) {
     const globalInput = document.getElementById('global-date');
     const dataRef = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
     
-    // Salva no Sistema
     if (typeof Sistema !== 'undefined' && Sistema.Dados) {
+        // Pega quantos assistentes o sistema realmente tem cadastrados
+        const ativasSistema = Sistema.Dados.contarAssistentesAtivos();
+        const valorInserido = parseInt(novoValor);
+
+        // Se o valor inserido for diferente do real, pede confirmação
+        if (valorInserido && valorInserido !== ativasSistema) {
+            const [ano, mes] = dataRef.split('-');
+            const msg = `⚠️ ATENÇÃO\n\nO sistema encontrou ${ativasSistema} assistentes ativas cadastradas.\n\nDeseja realmente substituir essa informação e forçar o cálculo com base em ${valorInserido} assistentes para o mês ${mes}/${ano}?`;
+            
+            if (!confirm(msg)) {
+                // Se cancelar, volta o valor para o do sistema
+                sincronizarInputBaseHC(dataRef);
+                return;
+            }
+        }
+
+        // Salva (ou deleta se for igual ao sistema para usar o padrão)
         Sistema.Dados.definirBaseHC(dataRef, novoValor);
         
-        // Se a aba ativa for Consolidado, recarrega ela
+        // Recarrega a aba se for consolidado
         const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL);
         if (abaAtual === 'consolidado' && typeof Cons !== 'undefined') {
             Cons.carregar(true);
@@ -35,8 +48,19 @@ function atualizarBaseGlobal(novoValor) {
 function sincronizarInputBaseHC(dataRef) {
     const inputBase = document.getElementById('global-base-hc');
     if (inputBase && Sistema.Dados) {
+        // Obtém a base (que pode ser a manual ou a do sistema se não houver manual)
         const base = Sistema.Dados.obterBaseHC(dataRef);
         inputBase.value = base;
+        
+        // Dica visual: Se for diferente do sistema, destaca levemente
+        const real = Sistema.Dados.contarAssistentesAtivos();
+        if (base !== real) {
+            inputBase.style.color = '#d97706'; // Amber-600 (Aviso de manual)
+            inputBase.title = `Valor manual (Sistema: ${real})`;
+        } else {
+            inputBase.style.color = '#334155'; // Slate-700 (Padrão)
+            inputBase.title = "Valor automático do sistema";
+        }
     }
 }
 
@@ -51,23 +75,19 @@ function mudarAba(aba) {
     const btn = document.getElementById(`btn-${aba}`);
     if(btn) btn.classList.add('active');
 
-    // Recupera data global
     let dataString = localStorage.getItem(KEY_DATA_GLOBAL);
     if (!dataString) {
         dataString = new Date().toISOString().split('T')[0];
         localStorage.setItem(KEY_DATA_GLOBAL, dataString);
     }
     
-    // Atualiza Inputs Globais
     const globalInput = document.getElementById('global-date');
     if(globalInput) globalInput.value = dataString;
     
-    // Garante que o input de Base HC esteja correto para a data
     if (typeof Sistema !== 'undefined' && Sistema.Dados) {
         sincronizarInputBaseHC(dataString);
     }
 
-    // Inicialização Específica por Aba
     if (aba === 'geral') { 
         if(typeof Geral !== 'undefined') Geral.carregarTela(); 
     }

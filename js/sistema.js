@@ -19,15 +19,13 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {}, 
-        basesHcCache: {}, // ARMAZENA AS BASES POR MÊS (ex: "2023-10": 13)
+        basesHcCache: {}, 
         inicializado: false,
 
         inicializar: async function() {
-            // Carrega Fatores (Abonos)
             const savedFator = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
 
-            // Carrega Bases HC (Histórico de Assistentes)
             const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
             this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
 
@@ -60,7 +58,12 @@ const Sistema = {
             }
         },
 
-        // --- GESTÃO DE FATORES (DIAS ABONADOS) ---
+        // Conta quantos assistentes estão marcados como 'ativo' no cadastro
+        contarAssistentesAtivos: function() {
+            if (!this.usuariosCache) return 0;
+            return Object.values(this.usuariosCache).filter(u => u.funcao === 'Assistente' && u.ativo).length;
+        },
+
         definirFator: function(nome, dataRef, fator) {
             if (!this.fatoresCache[dataRef]) this.fatoresCache[dataRef] = {};
             this.fatoresCache[dataRef][nome] = parseFloat(fator);
@@ -74,15 +77,15 @@ const Sistema = {
             return 1.0; 
         },
 
-        // --- GESTÃO DE BASE HC (GLOBAL POR MÊS) ---
-        // Salva a base para o Mês da data informada (YYYY-MM)
         definirBaseHC: function(dataRef, quantidade) {
             if(!dataRef) return;
-            const key = dataRef.substring(0, 7); // Pega apenas YYYY-MM
+            const key = dataRef.substring(0, 7); 
             
-            // Se for vazio ou 17, remove do cache para economizar (assume padrão)
-            if (!quantidade || parseInt(quantidade) === 17) {
-                delete this.basesHcCache[key];
+            // Se o valor for vazio ou igual ao count do sistema, remove o override
+            const countSistema = this.contarAssistentesAtivos();
+            
+            if (!quantidade || parseInt(quantidade) === countSistema) {
+                delete this.basesHcCache[key]; // Usa o padrão
             } else {
                 this.basesHcCache[key] = parseInt(quantidade);
             }
@@ -90,22 +93,20 @@ const Sistema = {
             localStorage.setItem('produtividade_bases_hc_v2', JSON.stringify(this.basesHcCache));
         },
 
-        // Obtém a base de um mês específico (Padrão 17 se não definido)
         obterBaseHC: function(dataRef) {
-            if(!dataRef) return 17;
+            if(!dataRef) return this.contarAssistentesAtivos() || 17;
             const key = dataRef.substring(0, 7);
-            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
+            
+            // Retorna o manual se existir, senão retorna o count atual do sistema
+            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : (this.contarAssistentesAtivos() || 17);
         },
 
-        // Calcula a média das bases para um intervalo (ex: Trimestre)
-        // Se Jan=17, Fev=13, Mar=17 -> Média ponderada
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
             let inicio = new Date(dataInicio);
             const fim = new Date(dataFim);
             let somaBases = 0;
             let mesesContados = 0;
             
-            // Ajusta para o dia 1 para iterar meses corretamente
             inicio.setDate(1);
 
             while (inicio <= fim) {
@@ -118,11 +119,10 @@ const Sistema = {
                 somaBases += base;
                 mesesContados++;
                 
-                // Avança para o próximo mês
                 inicio.setMonth(inicio.getMonth() + 1);
             }
 
-            return mesesContados > 0 ? Math.round(somaBases / mesesContados) : 17;
+            return mesesContados > 0 ? Math.round(somaBases / mesesContados) : (this.contarAssistentesAtivos() || 17);
         },
 
         obterMetaVigente: function(usuarioId, dataReferencia) {
