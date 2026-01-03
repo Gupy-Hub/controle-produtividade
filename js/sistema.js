@@ -15,7 +15,7 @@ const Sistema = {
             return `${d}/${m}/${a}`;
         },
 
-        // --- INPUT SUPER INTELIGENTE ---
+        // --- INPUT SUPER INTELIGENTE (ATUALIZADO) ---
         criarInputInteligente: function(elementId, storageKey, callback) {
             const input = document.getElementById(elementId);
             if (!input) return;
@@ -24,7 +24,7 @@ const Sistema = {
             const salva = localStorage.getItem(storageKey);
             input.value = salva && salva.length === 10 ? salva : this.formatar(new Date());
 
-            // 2. Máscara de Digitação
+            // 2. Máscara de Digitação (Permite digitar livremente)
             input.addEventListener('input', function() {
                 let v = this.value.replace(/\D/g, '').slice(0, 8);
                 if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
@@ -32,18 +32,31 @@ const Sistema = {
                 this.value = v;
             });
 
-            // 3. Selecionar tudo ao clicar
-            input.addEventListener('focus', function() { this.select(); });
+            // 3. SELEÇÃO INTELIGENTE AO CLICAR (CORREÇÃO PEDIDA)
+            input.addEventListener('click', function() {
+                const cursor = this.selectionStart;
+                
+                // Define qual parte selecionar baseado no clique
+                if (cursor <= 2) {
+                    this.setSelectionRange(0, 2); // Seleciona DIA (dd)
+                } else if (cursor >= 3 && cursor <= 5) {
+                    this.setSelectionRange(3, 5); // Seleciona MÊS (mm)
+                } else {
+                    this.setSelectionRange(6, 10); // Seleciona ANO (aaaa)
+                }
+            });
 
             // 4. Lógica Central de Alteração (Setas e Scroll)
             const alterarData = (e, delta) => {
                 e.preventDefault();
                 
-                // Detecta onde o cursor está (Dia, Mês ou Ano?)
+                // Detecta onde está a seleção/cursor
                 const cursor = input.selectionStart;
-                let mode = 'day'; // Padrão
-                if (cursor >= 3 && cursor <= 5) mode = 'month';
-                if (cursor >= 6) mode = 'year';
+                let mode = 'day'; 
+                let start = 0, end = 2;
+
+                if (cursor >= 3 && cursor <= 5) { mode = 'month'; start = 3; end = 5; }
+                if (cursor >= 6) { mode = 'year'; start = 6; end = 10; }
 
                 let atual = Sistema.Datas.lerInput(input);
                 
@@ -54,8 +67,8 @@ const Sistema = {
 
                 input.value = Sistema.Datas.formatar(atual);
                 
-                // Mantém o cursor no lugar e a seleção para facilitar múltiplos cliques
-                input.setSelectionRange(cursor, cursor);
+                // Mantém a seleção na parte que estava sendo editada
+                input.setSelectionRange(start, end);
                 
                 // Salva e atualiza a tela
                 input.dispatchEvent(new Event('change'));
@@ -67,10 +80,10 @@ const Sistema = {
                 if (e.key === 'ArrowDown') alterarData(e, -1);
             });
 
-            // Evento: Rodinha do Mouse (Scroll) - Funciona quando o campo está focado/ativo
+            // Evento: Rodinha do Mouse (Scroll)
             input.addEventListener('wheel', (e) => {
                 if (document.activeElement === input) {
-                    const delta = e.deltaY < 0 ? 1 : -1; // Roda pra cima (+), Roda pra baixo (-)
+                    const delta = e.deltaY < 0 ? 1 : -1;
                     alterarData(e, delta);
                 }
             });
