@@ -211,19 +211,29 @@ const Cons = {
         
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
-        const sysHC = uniqueUsers.size;
-
-        // --- CONTAGEM DE CLT / PJ ---
+        
+        // --- CÁLCULO REAL E CONTAGEM CLT / PJ ---
+        const sysHC = uniqueUsers.size; // Total Real
         let countCLT = 0;
         let countPJ = 0;
+        let countOutros = 0;
+        
         uniqueUsers.forEach(uid => {
             const u = Sistema.Dados.usuariosCache[uid];
             if (u) {
                 const c = (u.contrato || '').toUpperCase();
                 if (c.includes('CLT')) countCLT++;
                 else if (c.includes('PJ')) countPJ++;
+                else countOutros++;
+            } else {
+                countOutros++; // Usuário não encontrado no cache mas está na produção
             }
         });
+
+        // Força a soma bater com o total
+        if ((countCLT + countPJ + countOutros) !== sysHC) {
+            countOutros = sysHC - (countCLT + countPJ);
+        }
 
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
             const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
@@ -243,26 +253,35 @@ const Cons = {
                 const s = st[i]; 
                 const diasCal = s.diasUteis; 
                 
-                // --- LÓGICA CRUCIAL ---
+                // --- LÓGICA CRUCIAL CORRIGIDA ---
                 const realHC = s.users.size || 0;
-                // Coluna 99 (Total) usa HF (Manual). Outras colunas usam Real (ou 1 se zero)
-                const hcDaColuna = (i === 99) ? HF : (realHC || 1); 
+                
+                // IMPORTANTE:
+                // Para a linha "Total de Assistentes", mostramos o REAL (sysHC/realHC).
+                // Para cálculos de MÉDIA (isCalc=true), usamos o MANUAL (HF) se estiver na coluna total.
+                const hcParaCalculo = (i === 99) ? HF : (realHC || 1); 
 
                 let val = 0; 
                 if (!isCalc) { 
-                    // Na tabela (contagem simples), sempre mostra o valor REAL
-                    // CORREÇÃO: Se for linha de Assistentes e for TOTAL (99), usa HF para bater com o Card.
                     if (label.includes('Assistentes')) {
-                        val = (i === 99) ? HF : realHC;
+                        // FIX: Na linha VISUAL de assistentes, sempre mostra o REAL.
+                        val = (i === 99) ? sysHC : realHC;
                     } else {
                         val = getter(s); 
                     }
                 } else { 
-                    // Nos cálculos de média, usa a base manual (HF) se estiver no total.
-                    val = getter(s, diasCal, hcDaColuna); 
+                    // Nos cálculos matemáticos, usa a base manual (HF).
+                    val = getter(s, diasCal, hcParaCalculo); 
                 }
 
                 let txt = val ? Math.round(val).toLocaleString() : '-';
+                
+                // Destaque visual se o número exibido for diferente da base de cálculo
+                let extraStyle = '';
+                if (!isCalc && label.includes('Assistentes') && i === 99 && sysHC !== HF) {
+                    txt += `<span class="block text-[9px] text-amber-500 font-normal mt-1" title="Base para cálculo das médias">Base Calc: ${HF}</span>`;
+                }
+
                 const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
                 tr += `<td class="${cellClass}">${txt}</td>`;
             });
@@ -293,35 +312,35 @@ const Cons = {
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT (COM CLT / PJ) ---
-        let cardHTML = '';
+        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT ---
+        // Agora mostra o REAL como destaque, e a BASE MANUAL como detalhe secundário se for diferente.
         
-        // 1. Valor Principal: HF (Manual)
+        let cardHTML = '';
+        const somaCheck = countCLT + countPJ + countOutros; // 23
+
         if (HF !== sysHC) {
-            cardHTML = `<div class="flex items-center gap-2">
-                            <span class="text-3xl font-black text-amber-600">${HF}</span>
-                            <span class="text-[10px] font-bold text-amber-500 uppercase bg-amber-50 border border-amber-100 px-2 py-1 rounded">Manual</span>
+            // Se houver diferença (Ex: Manual 13, Real 23), mostra o REAL com aviso.
+            cardHTML = `<div class="flex flex-col items-center">
+                            <span class="text-3xl font-black text-slate-800">${somaCheck}</span>
+                            <span class="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded mt-1" title="Valor usado para dividir a meta">Base Meta: ${HF}</span>
                         </div>`;
         } else {
-            cardHTML = `<span class="text-3xl font-black text-slate-800">${HF}</span>`;
+            // Se forem iguais (ou padrão), mostra normal
+            cardHTML = `<span class="text-3xl font-black text-slate-800">${somaCheck}</span>`;
         }
         
-        // 2. Detalhe CLT/PJ (Baseado no Real)
-        cardHTML += `<div class="flex items-center gap-3 mt-3 pt-3 border-t border-slate-100 w-full justify-between">
+        // Detalhe CLT/PJ
+        cardHTML += `<div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 w-full justify-between">
                         <div class="flex flex-col items-center">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">CLT</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase">CLT</span>
                             <span class="text-sm font-black text-blue-600">${countCLT}</span>
                         </div>
                         <div class="w-px h-6 bg-slate-100"></div>
                         <div class="flex flex-col items-center">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">PJ</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase">PJ</span>
                             <span class="text-sm font-black text-indigo-600">${countPJ}</span>
                         </div>
-                        <div class="w-px h-6 bg-slate-100"></div>
-                         <div class="flex flex-col items-center">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Real</span>
-                            <span class="text-sm font-black text-slate-500">${sysHC}</span>
-                        </div>
+                        ${countOutros > 0 ? `<div class="w-px h-6 bg-slate-100"></div><div class="flex flex-col items-center"><span class="text-[9px] font-bold text-slate-400 uppercase">Out</span><span class="text-sm font-black text-slate-500">${countOutros}</span></div>` : ''}
                      </div>`;
 
         setSafe('cons-p-headcount', cardHTML);
