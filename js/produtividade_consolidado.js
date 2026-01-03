@@ -6,26 +6,20 @@ const Cons = {
         if(!this.initialized) { 
             this.initialized = true; 
         } 
-        // Inicializa o estado dos seletores
         this.togglePeriodo();
         setTimeout(() => this.carregar(false), 50); 
     },
-
-    // REMOVIDO: function mudarBase(...) pois o input foi removido
 
     togglePeriodo: function() {
         const t = document.getElementById('cons-period-type').value;
         const selQ = document.getElementById('cons-select-quarter');
         const selS = document.getElementById('cons-select-semester');
         
-        // Esconde todos
         if(selQ) selQ.classList.add('hidden');
         if(selS) selS.classList.add('hidden');
 
-        // Mostra o específico
         if (t === 'trimestre' && selQ) {
             selQ.classList.remove('hidden');
-            // Auto-seleciona trimestre do mês atual se necessário
             const globalDate = document.getElementById('global-date').value;
             if(globalDate) {
                 const m = parseInt(globalDate.split('-')[1]);
@@ -44,12 +38,10 @@ const Cons = {
         this.carregar(false); 
     },
     
-    // Função auxiliar para contar dias úteis (Seg-Sex)
     calcularDiasUteisCalendario: function(dataInicio, dataFim) {
         let count = 0;
         let cur = new Date(dataInicio + 'T12:00:00'); 
         const end = new Date(dataFim + 'T12:00:00');
-        
         while (cur <= end) {
             const day = cur.getDay();
             if (day !== 0 && day !== 6) count++;
@@ -72,44 +64,27 @@ const Cons = {
         if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
         else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
-        // REMOVIDO: Sincronização do cons-input-hc que foi deletado
-
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
-        
         let s, e;
         
-        // --- LÓGICA DE DATAS COM SUB-SELETORES ---
-        if (t === 'dia') { 
-            s = `${sAno}-${sMes}-01`; 
-            e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        }
-        else if (t === 'mes') { 
-            s = `${sAno}-${sMes}-01`; 
-            e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        }
+        if (t === 'dia') { s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; }
+        else if (t === 'mes') { s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; }
         else if (t === 'trimestre') { 
-            // Pega o valor do seletor específico
             const selQ = document.getElementById('cons-select-quarter');
             const trim = selQ ? parseInt(selQ.value) : Math.ceil(mes / 3); 
-            
             const mStart = ((trim-1)*3)+1; 
             s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; 
             e = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`; 
         }
         else if (t === 'semestre') { 
-            // Pega o valor do seletor específico
             const selS = document.getElementById('cons-select-semester');
             const sem = selS ? parseInt(selS.value) : (mes <= 6 ? 1 : 2);
-            
             s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
             e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
         } 
-        else { 
-            s = `${sAno}-01-01`; 
-            e = `${sAno}-12-31`; 
-        }
+        else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
-        // Calcula Base HC Média do Período
+        // HF: Base Manual definida para o período
         const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
         const cacheKey = `${t}_${s}_${e}_${HF}`;
 
@@ -142,13 +117,9 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body');
         if (!tbody) return;
 
-        // --- TRUQUE DE SCROLL INVERTIDO (TOPO) ---
         const tableWrapper = document.getElementById('cons-table-wrapper');
-        if (t === 'dia') {
-            tableWrapper.classList.add('scroll-top-wrapper');
-        } else {
-            tableWrapper.classList.remove('scroll-top-wrapper');
-        }
+        if (t === 'dia') tableWrapper.classList.add('scroll-top-wrapper');
+        else tableWrapper.classList.remove('scroll-top-wrapper');
 
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
@@ -158,10 +129,7 @@ const Cons = {
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) {
                 cols.push(String(d).padStart(2,'0'));
-                datesMap[d] = { 
-                    ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
-                    fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-                };
+                datesMap[d] = { ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`, fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}` };
             }
         } 
         else if (t === 'mes') { cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; } 
@@ -170,14 +138,10 @@ const Cons = {
             const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
             const idxStart = (trim - 1) * 3;
             cols = [mesesNomes[idxStart], mesesNomes[idxStart+1], mesesNomes[idxStart+2]];
-            
             for(let i=0; i<3; i++) {
                 const m = idxStart + i + 1;
                 const ultimoDia = new Date(currentYear, m, 0).getDate();
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}`
-                };
+                datesMap[i+1] = { ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}` };
             }
         } else if (t === 'semestre') {
             const selS = document.getElementById('cons-select-semester');
@@ -187,10 +151,7 @@ const Cons = {
             for(let i=0; i<6; i++) {
                 const m = idxStart + i + 1;
                 const ultimoDia = new Date(currentYear, m, 0).getDate();
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}`
-                };
+                datesMap[i+1] = { ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}` };
             }
         } else if (t === 'ano_trim') {
             cols = ['1º Trim', '2º Trim', '3º Trim', '4º Trim'];
@@ -199,10 +160,7 @@ const Cons = {
             for(let i=0; i<12; i++) {
                 const m = i + 1;
                 const ultimoDia = new Date(currentYear, m, 0).getDate();
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}`
-                };
+                datesMap[i+1] = { ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}` };
             }
         }
         
@@ -210,99 +168,51 @@ const Cons = {
         let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
         
         const uniqueUsers = new Set();
-
         if(rawData) {
             rawData.forEach(r => {
                 uniqueUsers.add(r.usuario_id);
                 const user = Sistema.Dados.usuariosCache[r.usuario_id];
                 if(!user || user.funcao !== 'Assistente') return;
-
-                const nome = user.nome;
-                const sys = Number(r.quantidade) || 0;
-                
+                const nome = user.nome; const sys = Number(r.quantidade) || 0;
                 let b = 1; 
-                const parts = r.data_referencia.split('-'); 
-                const dt = new Date(parts[0], parts[1]-1, parts[2]);
-                const mIdx = dt.getMonth(); 
-                const dDia = dt.getDate();
+                const parts = r.data_referencia.split('-'); const dt = new Date(parts[0], parts[1]-1, parts[2]); const mIdx = dt.getMonth(); const dDia = dt.getDate();
 
-                if (t === 'dia') { b = dDia; }
-                else if (t === 'mes') { 
-                    const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); 
-                    b = Math.ceil((dt.getDate() + firstDay) / 7); 
-                } 
-                else if (t === 'trimestre') { 
-                    const selQ = document.getElementById('cons-select-quarter');
-                    const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
-                    const startM = (trim-1)*3;
-                    b = (mIdx - startM) + 1;
-                } 
-                else if (t === 'semestre') { 
-                    const selS = document.getElementById('cons-select-semester');
-                    const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2);
-                    const startM = (sem-1)*6;
-                    b = (mIdx - startM) + 1;
-                } 
-                else if (t === 'ano_trim') { b = Math.ceil((mIdx + 1) / 3); }
-                else if (t === 'ano_mes') { b = mIdx + 1; }
+                if (t === 'dia') b = dDia;
+                else if (t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); } 
+                else if (t === 'trimestre') { const selQ = document.getElementById('cons-select-quarter'); const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3); const startM = (trim-1)*3; b = (mIdx - startM) + 1; } 
+                else if (t === 'semestre') { const selS = document.getElementById('cons-select-semester'); const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2); const startM = (sem-1)*6; b = (mIdx - startM) + 1; } 
+                else if (t === 'ano_trim') b = Math.ceil((mIdx + 1) / 3);
+                else if (t === 'ano_mes') b = mIdx + 1;
                 
                 if(b >= 1 && b <= numCols) {
                     const populate = (k) => {
                         if(!st[k]) return;
-                        const x = st[k];
-                        x.users.add(nome); 
-                        x.dates.add(r.data_referencia);
-                        
-                        x.qty += sys; 
-                        x.fifo += (Number(r.fifo)||0); 
-                        x.gt += (Number(r.gradual_total)||0); 
-                        x.gp += (Number(r.gradual_parcial)||0); 
-                        x.fc += (Number(r.perfil_fc)||0);
+                        st[k].users.add(nome); st[k].dates.add(r.data_referencia);
+                        st[k].qty += sys; st[k].fifo += (Number(r.fifo)||0); st[k].gt += (Number(r.gradual_total)||0); st[k].gp += (Number(r.gradual_parcial)||0); st[k].fc += (Number(r.perfil_fc)||0);
                     };
-                    populate(b);
-                    populate(99); 
+                    populate(b); populate(99); 
                 }
             });
         }
 
         // Dias Úteis
         for(let i=1; i<=numCols; i++) {
-            if(datesMap[i]) {
-                st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
-            } else if (t === 'dia') {
-                st[i].diasUteis = this.calcularDiasUteisCalendario(
-                    `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`,
-                    `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`
-                );
-            } else {
-                st[i].diasUteis = st[i].dates.size; 
-            }
+            if(datesMap[i]) st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
+            else if (t === 'dia') st[i].diasUteis = this.calcularDiasUteisCalendario(`${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`, `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
+            else st[i].diasUteis = st[i].dates.size; 
         }
-        
         if (t === 'mes' || t === 'dia') {
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-            st[99].diasUteis = this.calcularDiasUteisCalendario(
-                `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`,
-                `${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`
-            );
+            st[99].diasUteis = this.calcularDiasUteisCalendario(`${currentYear}-${String(currentMonth).padStart(2,'0')}-01`, `${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`);
         } else {
-            st[99].diasUteis = 0;
-            for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
+            st[99].diasUteis = 0; for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
         }
 
         const hRow = document.getElementById('cons-table-header'); 
-        if(hRow) hRow.innerHTML = `
-            <th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]">
-                <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
-            </th>` + 
-            cols.map(c => `<th class="px-4 py-4 text-center border-b-2 border-slate-100"><span class="text-xs font-bold text-slate-500 uppercase">${c}</span></th>`).join('') + 
-            `<th class="px-6 py-4 text-center bg-slate-50 border-b-2 border-slate-100 border-l border-slate-100 min-w-[120px]">
-                <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
-            </th>`;
+        if(hRow) hRow.innerHTML = `<th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>` + cols.map(c => `<th class="px-4 py-4 text-center border-b-2 border-slate-100"><span class="text-xs font-bold text-slate-500 uppercase">${c}</span></th>`).join('') + `<th class="px-6 py-4 text-center bg-slate-50 border-b-2 border-slate-100 border-l border-slate-100 min-w-[120px]"><span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span></th>`;
         
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
-        
         const sysHC = uniqueUsers.size;
 
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
@@ -314,9 +224,7 @@ const Cons = {
             let tr = `<tr class="${rowBg} border-b border-slate-50 last:border-0 group">
                 <td class="px-6 py-4 sticky left-0 bg-white z-10 border-r border-slate-50 group-hover:bg-slate-50 transition-colors shadow-[4px_0_10px_-5px_rgba(0,0,0,0.05)]">
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100">
-                            <i class="${icon} ${iconColor} text-sm"></i>
-                        </div>
+                        <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100"><i class="${icon} ${iconColor} text-sm"></i></div>
                         <span class="${textColor} ${fontWeight} text-xs uppercase tracking-wide">${label}</span>
                     </div>
                 </td>`;
@@ -324,22 +232,33 @@ const Cons = {
             idxs.forEach(i => {
                 const s = st[i]; 
                 const diasCal = s.diasUteis; 
-                const ativos = s.users.size || 1; 
                 
+                // --- AQUI ESTÁ A CORREÇÃO CRUCIAL ---
+                // Para colunas 1..N (Semanas/Dias), usa o REAL (s.users.size).
+                // Para coluna 99 (Total Mês), usa o MANUAL (HF).
+                // Se s.users.size for 0 (ninguém trabalhou na semana), usa 1 para não dividir por zero.
+                const realHC = s.users.size || 0;
+                const hcDaColuna = (i === 99) ? HF : (realHC || 1); 
+
                 let val = 0; 
                 if (!isCalc) { 
-                    val = getter(s); 
-                    if (val instanceof Set) val = val.size; 
+                    // Se for linha de contagem de assistentes, exibe o valor correto para a coluna
+                    if(label.includes('Assistentes')) {
+                        val = hcDaColuna;
+                        // Ajuste visual: Se for semana e valor for 0 (ninguém), mostra 0 mesmo
+                        if(i !== 99 && realHC === 0) val = 0;
+                    } else {
+                        val = getter(s); // Outras somas normais (produção, fifo, etc)
+                    }
                 } else { 
-                    val = getter(s, diasCal, ativos); 
+                    // Cálculos de Média: Usa o hcDaColuna como divisor
+                    val = getter(s, diasCal, hcDaColuna); 
                 }
 
                 let txt = val ? Math.round(val).toLocaleString() : '-';
                 
-                // --- LÓGICA DE ALERTA DE MANUAL ---
-                // Se for a linha de Total de Assistentes e coluna Total (99)
+                // Aviso de Manual APENAS na coluna Total (99)
                 if (label.includes('Assistentes') && i === 99) {
-                    // Se o manual (HF) for diferente do sistema, mostra aviso
                     if (HF !== sysHC) {
                         txt = `<span class="text-amber-600" title="Valor alterado manualmente">${HF}</span> <i class="fas fa-exclamation-circle text-amber-500 text-[10px] ml-1"></i><div class="text-[9px] text-amber-500 font-bold uppercase">(Manual)</div>`;
                     }
@@ -351,9 +270,11 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // --- AQUI: PREVALÊNCIA DA BASE MANUAL (HF) ---
-        // Exibe HF (Base Manual) se estivermos falando do total de assistentes
-        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => HF);
+        // --- DEFINIÇÃO DAS LINHAS ---
+        
+        // Linha 1: Total de Assistentes
+        // Passamos null no getter pois a lógica de qual HC usar está dentro do mkRow agora
+        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => 0);
         
         h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
@@ -361,21 +282,25 @@ const Cons = {
         h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
+        
+        // Cálculos de Média
+        // 'a' será o HC decidido no mkRow (Real para semanas, Manual para total)
         h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
-        h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d) => d > 0 ? s.qty / d / HF : 0, true);
+        h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
         
         tbody.innerHTML = h;
         
         const tot = st[99]; 
         const dTot = tot.diasUteis || 1; 
-        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; }; // Usar innerHTML para aceitar html do card
+        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
+        
+        // Cards do topo também respeitam a regra: Manual para o total do mês
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- CARD DE HEADCOUNT TAMBÉM MOSTRA HF (MANUAL) COM AVISO ---
         if (HF !== sysHC) {
             setSafe('cons-p-headcount', `${HF} <span class="text-sm text-amber-500 block font-bold">(Manual)</span>`);
         } else {
@@ -384,14 +309,9 @@ const Cons = {
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
         if(elLblBase) elLblBase.innerText = HF;
-        const elBadge = document.getElementById('cons-badge-base');
-        if (elBadge) elBadge.innerText = `Base ${HF}`;
     },
     
     newStats: function() { 
-        return { 
-            users: new Set(), dates: new Set(), diasUteis: 0,
-            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0
-        }; 
+        return { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
     }
 };
