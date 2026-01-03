@@ -155,18 +155,20 @@ const Geral = {
         }
 
         const ativos = this.listaAtual.filter(u => !u.inativo);
+        
+        // Total Produção: Soma de TODOS que estão na lista, independente da base manual
         const totalProd = this.selecionado 
             ? this.listaAtual.filter(u => u.nome === this.selecionado).reduce((a, b) => a + b.total, 0)
             : ativos.reduce((a, b) => a + b.total, 0);
 
-        // --- LÓGICA DE HEADCOUNT (SISTEMA vs MANUAL) ---
+        // --- LÓGICA DE HEADCOUNT CRÍTICA ---
         let hcConsiderado = 0;
         let diasDisplay = 0;
         let diasLabel = "";
         const diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
 
-        // Lógica Dia: Usa sistema (Ativos - Abonos)
         if (modo === 'dia') {
+            // Lógica Dia: Mantemos a lógica de presença real (desconta abonados do dia)
             let qtdMeio = 0; let qtdAbonado = 0;
             this.listaAtual.forEach(u => {
                 const diaInfo = u.diasMap[this.dataVisualizada];
@@ -186,10 +188,9 @@ const Geral = {
             }
             diasDisplay = diasUteisPeriodo;
 
-            // Mostra KPI Simples
             document.getElementById('kpi-hc').innerText = hcConsiderado;
-
-            // Info de abonados
+            
+            // Info de abonados (apenas no dia)
             const elInfoAbonados = document.getElementById('info-abonados');
             if(elInfoAbonados) {
                 elInfoAbonados.classList.add('hidden'); 
@@ -201,9 +202,12 @@ const Geral = {
                     elInfoAbonados.classList.remove('hidden');
                 }
             }
-        } 
-        // Lógica Mês/Semana: Usa Manual
-        else {
+
+        } else {
+            // LÓGICA MENSAL/SEMANAL: SOBERANIA MANUAL
+            // Aqui aplicamos a regra solicitada: Se está 13 no input, a conta é com 13.
+            
+            // Pega o valor manual (ou 17 padrão)
             const hcManual = Sistema.Dados.obterBaseHC(this.dataVisualizada);
             
             if (this.selecionado) {
@@ -212,13 +216,14 @@ const Geral = {
                 diasLabel = "Dias do Colaborador";
                 document.getElementById('kpi-hc').innerText = "1";
             } else {
+                // Se não selecionou ninguém, o HC é OBRIGATORIAMENTE o valor manual
                 hcConsiderado = hcManual;
                 diasDisplay = diasUteisPeriodo;
                 diasLabel = "Dias Úteis (Calendário)";
                 
-                // Mostra KPI Duplo (Sistema vs Manual)
-                const sysReal = ativos.length;
-                document.getElementById('kpi-hc').innerHTML = `<span class="text-lg">${sysReal}</span> <span class="text-[9px] text-slate-400 uppercase">Sys</span> <span class="text-slate-300 mx-1">|</span> <span class="text-lg text-blue-600">${hcManual}</span> <span class="text-[9px] text-blue-400 uppercase">Man</span>`;
+                // Exibe no card apenas o valor manual (base considerada) para não confundir
+                // Adicionei um indicador visual de que é uma base definida
+                document.getElementById('kpi-hc').innerHTML = `${hcManual} <span class="text-[10px] text-slate-400 font-normal">Base Definida</span>`;
             }
             
             const elInfoAbonados = document.getElementById('info-abonados');
@@ -228,12 +233,14 @@ const Geral = {
         document.getElementById('kpi-dias').innerText = diasDisplay;
         document.getElementById('kpi-dias-label').innerText = diasLabel;
         
-        // --- CÁLCULOS FINAIS ---
+        // --- CÁLCULOS FINANCEIROS/METAS ---
         const metaDiaria = 650;
-        // Meta Total usa o HC Considerado (Manual no mês, Real no dia)
+        
+        // A Meta Total agora obedece cegamente ao hcConsiderado (que veio do manual no modo mês)
         const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
         const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
         
+        // A Média Real também obedece cegamente ao hcConsiderado
         const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
 
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString();

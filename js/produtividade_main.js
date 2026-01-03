@@ -12,23 +12,22 @@ function atualizarDataGlobal(novaData) {
     mudarAba(abaAtual);
 }
 
-// --- LÓGICA DE BASE MANUAL (SIMPLIFICADA) ---
 function atualizarBaseGlobal(novoValor) {
     const globalInput = document.getElementById('global-date');
     const dataRef = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
     
     if (typeof Sistema !== 'undefined' && Sistema.Dados) {
-        // Define diretamente sem confirmação (Manual é soberano para o mês)
+        // Define o valor manual. Este valor será usado como VERDADE ABSOLUTA nos cálculos mensais.
         Sistema.Dados.definirBaseHC(dataRef, novoValor);
         
-        // Feedback visual leve
+        // Feedback visual
         const inputBase = document.getElementById('global-base-hc');
         if(inputBase) {
-            inputBase.style.color = '#2563eb'; // Azul para indicar alteração manual salva
+            inputBase.style.color = '#2563eb';
             setTimeout(() => inputBase.style.color = '#334155', 1000);
         }
 
-        // Recarrega a aba atual
+        // Recarrega IMEDIATAMENTE a tela para refazer as contas com o novo número
         const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL);
         if (abaAtual === 'geral' && typeof Geral !== 'undefined') Geral.carregarTela();
         if (abaAtual === 'consolidado' && typeof Cons !== 'undefined') Cons.carregar(true);
@@ -38,18 +37,8 @@ function atualizarBaseGlobal(novoValor) {
 function sincronizarInputBaseHC(dataRef) {
     const inputBase = document.getElementById('global-base-hc');
     if (inputBase && Sistema.Dados) {
-        // Obtém a base (Manual ou Padrão 17)
         const base = Sistema.Dados.obterBaseHC(dataRef);
         inputBase.value = base;
-        
-        // Dica visual: Se for diferente do padrão 17, destaca levemente
-        if (base !== 17) {
-            inputBase.style.fontWeight = '900';
-            inputBase.style.color = '#2563eb'; // Azul
-        } else {
-            inputBase.style.fontWeight = 'bold';
-            inputBase.style.color = '#334155'; // Slate
-        }
     }
 }
 

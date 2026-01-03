@@ -338,7 +338,7 @@ const Cons = {
                     val = getter(s); 
                     if (val instanceof Set) val = val.size; 
                 } else { 
-                    // USA HF (Manual) ao invés de 'ativos' (Sistema) para os cálculos de média
+                    // USA HF (Valor Manual) ao invés de 'ativos' (Valor do Sistema) para os cálculos de média
                     val = getter(s, diasCal, HF); 
                 }
                 const txt = val ? Math.round(val).toLocaleString() : '-';
@@ -349,8 +349,8 @@ const Cons = {
         };
         
         // --- BASE MANUAL (HF) ---
-        // Mostra HF (Base Manual) na linha de Total
-        h += mkRow('Total de Assistentes (Manual)', 'fas fa-users-cog', 'text-indigo-500', s => HF);
+        // Mostra HF (Base Manual) na linha de Total, ignorando a contagem do sistema
+        h += mkRow('Total de Assistentes (Considerado)', 'fas fa-users-cog', 'text-indigo-500', s => HF);
         
         h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
@@ -366,22 +366,17 @@ const Cons = {
         
         const tot = st[99]; 
         const dTot = tot.diasUteis || 1; 
-        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
+        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- CARD DE HEADCOUNT (DUPLO) ---
-        // Calcula o real do sistema
-        const uniqueUsers = new Set();
-        if(rawData) rawData.forEach(r => uniqueUsers.add(r.usuario_id));
-        const hcSystem = uniqueUsers.size;
-
-        setSafe('cons-p-headcount', `<span class="text-slate-500 text-lg">${hcSystem}</span> <span class="text-[9px] text-slate-400 uppercase">Sys</span> <span class="text-slate-300 mx-1">|</span> <span class="text-blue-600 text-2xl">${HF}</span> <span class="text-[9px] text-blue-400 uppercase">Man</span>`); 
+        // No Card de Headcount, mostramos apenas o MANUAL para não confundir, pois é ele que manda na conta
+        setSafe('cons-p-headcount', HF); 
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
-        if(elLblBase) elLblBase.innerHTML = `Sys: ${hcSystem} | Man: ${HF}`;
+        if(elLblBase) elLblBase.innerText = `Base Manual: ${HF}`;
     },
     
     newStats: function() { 
