@@ -8,142 +8,150 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
-        .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
         
-        .btn-tab { @apply px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 border border-transparent; }
-        .btn-tab.active { @apply bg-white text-blue-600 shadow-sm border-slate-100; }
-        .btn-tab:not(.active) { @apply text-slate-500 hover:bg-white/60 hover:text-slate-700; }
+        /* Estilos das Abas (Padrão produtividade.html) */
+        .tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .tab-btn.active { color: #2563eb; border-color: #2563eb; background-color: #eff6ff; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
 
-        .btn-chart { @apply px-4 py-1.5 rounded-lg text-xs font-bold transition-all; }
-        .btn-chart.active { @apply bg-blue-600 text-white shadow-md shadow-blue-200; }
-        .btn-chart:not(.active) { @apply bg-white text-slate-500 hover:bg-slate-50 border border-slate-100; }
+        /* Estilos dos Botões de Gráfico */
+        .btn-chart { @apply px-3 py-1 rounded text-xs font-bold transition-all border border-transparent; }
+        .btn-chart.active { @apply bg-white text-blue-600 shadow-sm border-slate-200; }
+        .btn-chart:not(.active) { @apply text-slate-400 hover:bg-white/50 hover:text-slate-600; }
+
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-slate-50">
 
     <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <div class="flex flex-col lg:flex-row justify-between items-end gap-6 mb-8">
+        <div class="flex flex-col xl:flex-row justify-between items-end gap-6 mb-8">
             <div>
-                <h1 class="text-3xl font-black text-slate-800 tracking-tight">Minha Área</h1>
-                <p class="text-slate-500 font-medium mt-1">Painel de controle e evolução de performance.</p>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">Minha Área</h1>
+                <p class="text-slate-500 text-sm font-medium">Painel de controle e evolução pessoal.</p>
             </div>
             
-            <div class="flex flex-wrap gap-3 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm items-center">
+            <div class="flex flex-wrap gap-4 items-center">
                 
-                <div class="relative group">
-                    <div class="absolute -top-2.5 left-2 bg-white px-1 text-[10px] font-bold text-blue-500 uppercase tracking-wider">Data Ref.</div>
-                    <input type="text" id="filtro-data-manual" 
-                           onclick="this.select()" 
-                           placeholder="DD/MM/AAAA" maxlength="10" 
-                           data-sync="true"
-                           oninput="mascaraDataGlobal(this)" 
-                           onblur="aplicarDataManual()" 
-                           onkeypress="verificarEnter(event)" 
-                           class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 block w-36 py-2.5 px-3 font-bold outline-none tracking-wide transition-all hover:border-blue-300 text-center">
+                <div class="bg-white p-2 rounded-xl shadow-sm border border-blue-200 flex items-center gap-3">
+                    <div class="bg-blue-50 p-2 rounded-lg text-blue-600">
+                        <i class="fas fa-calendar-alt text-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Mês de Referência</p>
+                        <input type="date" id="filtro-data-manual" onchange="aplicarDataManual()" class="text-sm font-black text-slate-700 outline-none bg-transparent cursor-pointer font-sans w-32">
+                    </div>
                 </div>
 
-                <div id="container-filtro-user" class="relative hidden group border-l border-slate-100 pl-3">
-                    <div class="absolute -top-2.5 left-4 bg-white px-1 text-[10px] font-bold text-purple-500 uppercase tracking-wider">Visão Gestora</div>
-                    <select id="filtro-user" onchange="atualizarDashboard()" class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-purple-100 focus:border-purple-500 block w-48 py-2.5 pl-3 pr-8 font-bold outline-none cursor-pointer h-[42px] transition-all hover:border-purple-300">
-                        <option value="me">👤 Minha Visão (Admin)</option>
-                        <option value="time">👥 Time (Média Geral)</option>
-                        <option disabled>──────────</option>
-                    </select>
+                <div id="container-filtro-user" class="hidden bg-white p-2 rounded-xl shadow-sm border border-purple-200 flex items-center gap-3">
+                    <div class="bg-purple-50 p-2 rounded-lg text-purple-600">
+                        <i class="fas fa-user-shield text-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Visão Gestora</p>
+                        <select id="filtro-user" onchange="atualizarDashboard()" class="text-sm font-bold text-slate-700 outline-none bg-transparent cursor-pointer w-40">
+                            <option value="me">👤 Minha Visão</option>
+                            <option value="time">👥 Time (Média)</option>
+                            <option disabled>──────────</option>
+                        </select>
+                    </div>
                 </div>
-                
-                <button onclick="aplicarDataManual()" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-blue-600 transition shadow-md h-[42px] w-[42px] flex items-center justify-center group" title="Atualizar Dados">
+
+                <button onclick="atualizarDashboard()" class="bg-slate-800 text-white p-3 rounded-xl hover:bg-slate-700 transition shadow-sm h-[58px] w-[58px] flex items-center justify-center group" title="Recarregar Dados">
                     <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
+                </button>
+            </div>
+
+            <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex overflow-x-auto max-w-full">
+                <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-home"></i> Geral
+                </button>
+                <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-chart-line"></i> Evolução
+                </button>
+                <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-trophy"></i> Comparativo
+                </button>
+                <button onclick="mudarAba('feedback')" id="btn-feedback" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-comments"></i> Feedback
+                </button>
+                <button onclick="mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-check-double"></i> Assertividade
                 </button>
             </div>
         </div>
 
-        <div id="aviso-gestora-view" class="hidden mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-8 rounded-3xl text-center shadow-sm animate-fade-in">
-            <div class="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm text-blue-500 text-2xl"><i class="fas fa-user-shield"></i></div>
-            <h3 class="font-black text-xl text-slate-800 mb-1">Modo Administrativo</h3>
-            <p class="text-slate-500 max-w-md mx-auto">Para visualizar dados de produção, selecione "Time Todo" ou uma Assistente específica no menu superior.</p>
-        </div>
-
         <div id="conteudo-principal" class="space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
-                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
-                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-layer-group text-6xl text-blue-600"></i></div>
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Produção (Mês Ref)</p>
-                    <div class="flex items-baseline gap-2">
-                        <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2>
-                        <span class="text-sm font-bold text-slate-400">docs</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span class="text-slate-500">Meta Período</span>
-                        <span class="text-slate-800" id="kpi-meta-total">--</span>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
-                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-chart-pie text-6xl text-emerald-600"></i></div>
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Atingimento</p>
-                    <div class="flex items-baseline gap-2">
-                        <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2>
-                        <i id="icon-status" class="fas fa-check-circle text-emerald-500"></i>
-                    </div>
-                    <div class="w-full bg-slate-100 rounded-full h-2 mt-4 overflow-hidden">
-                        <div id="bar-progress" class="bg-gradient-to-r from-blue-500 to-indigo-600 h-full rounded-full transition-all duration-1000 shadow-sm" style="width: 0%"></div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-2xl shadow-[0_2px_10px_-3px_rgba(6,81,237,0.1)] border border-slate-100 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
-                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-stopwatch text-6xl text-purple-600"></i></div>
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média Diária</p>
-                    <div class="flex items-baseline gap-2">
-                        <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2>
-                        <span class="text-sm font-bold text-slate-400">/ dia trab.</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-xs font-bold bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <span class="text-slate-500">Ideal</span>
-                        <span class="text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded" id="kpi-media-ideal">650</span>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex gap-2 bg-slate-200/50 p-1 rounded-2xl w-fit mx-auto sm:mx-0 overflow-x-auto max-w-full">
-                <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active whitespace-nowrap"><i class="fas fa-calendar-alt mr-2"></i>Diário</button>
-                <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="btn-tab whitespace-nowrap"><i class="fas fa-chart-line mr-2"></i>Evolução</button>
-                <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab whitespace-nowrap"><i class="fas fa-trophy mr-2"></i>Comparativo</button>
-                <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab whitespace-nowrap"><i class="fas fa-comments mr-2"></i>Feedback</button>
-            </div>
-
-            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[500px] relative overflow-hidden">
+            <div id="tab-geral" class="view-section animate-fade-in space-y-6">
                 
-                <div id="tab-diario" class="view-tab p-8 animate-fade-in">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="font-bold text-slate-800 text-lg">Histórico (Mês Selecionado)</h3>
-                        <div id="aviso-edicao" class="hidden flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full">
-                            <span class="relative flex h-2 w-2">
-                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                              <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-                            </span>
-                            Modo de Edição
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-layer-group text-6xl text-blue-600"></i></div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção (Mês)</p>
+                        <div class="flex items-baseline gap-2">
+                            <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2>
+                            <span class="text-xs font-bold text-slate-400">docs</span>
+                        </div>
+                        <div class="mt-2 text-[10px] font-bold text-slate-400">
+                            Meta Período: <span class="text-slate-600" id="kpi-meta-total">--</span>
                         </div>
                     </div>
-                    <div class="overflow-x-auto rounded-xl border border-slate-100">
+
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-chart-pie text-6xl text-emerald-600"></i></div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Atingimento</p>
+                        <div class="flex items-baseline gap-2">
+                            <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2>
+                            <i id="icon-status" class="fas fa-check-circle text-emerald-500 text-lg"></i>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5 mt-3 overflow-hidden">
+                            <div id="bar-progress" class="bg-emerald-500 h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:-translate-y-1 transition duration-300">
+                        <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition"><i class="fas fa-stopwatch text-6xl text-purple-600"></i></div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Diária</p>
+                        <div class="flex items-baseline gap-2">
+                            <h2 class="text-3xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2>
+                            <span class="text-xs font-bold text-slate-400">/ dia trab.</span>
+                        </div>
+                        <div class="mt-2 text-[10px] font-bold text-slate-400">
+                            Meta Ideal: <span class="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">650</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200">
+                    <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Histórico Detalhado</h3>
+                        <div id="aviso-edicao" class="hidden text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-2 py-1 rounded flex items-center gap-1">
+                            <i class="fas fa-pen"></i> Modo Gestora
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
                             <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider">
                                 <tr>
-                                    <th class="px-6 py-4">Data</th>
-                                    <th class="px-6 py-4 text-center">Produção</th>
-                                    <th class="px-6 py-4 text-center">Meta</th>
-                                    <th class="px-6 py-4 text-center">Status</th>
-                                    <th class="px-6 py-4">Obs / Histórico</th>
+                                    <th class="px-6 py-3">Data</th>
+                                    <th class="px-6 py-3 text-center">Produção</th>
+                                    <th class="px-6 py-3 text-center">Meta</th>
+                                    <th class="px-6 py-3 text-center">Status</th>
+                                    <th class="px-6 py-3">Obs / Histórico</th>
                                 </tr>
                             </thead>
                             <tbody id="tabela-diario" class="divide-y divide-slate-100 bg-white">
@@ -152,89 +160,140 @@
                         </table>
                     </div>
                 </div>
-
-                <div id="tab-evolucao" class="view-tab hidden p-8 animate-fade-in">
-                    <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
-                        <div>
-                            <h3 class="font-bold text-slate-800 text-lg">Curva de Performance</h3>
-                            <p class="text-sm text-slate-500">Referente ao ano/mês da data escolhida.</p>
-                        </div>
-                        <div class="flex bg-slate-100 p-1 rounded-xl flex-wrap justify-center">
-                            <button onclick="renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
-                            <button onclick="renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
-                            <button onclick="renderizarGraficos('semestre')" id="chart-btn-semestre" class="btn-chart">Semestre</button>
-                            <button onclick="renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
-                        </div>
-                    </div>
-                    <div class="relative h-[320px] w-full bg-gradient-to-b from-white to-slate-50/50 rounded-2xl border border-slate-100 p-4 mb-8">
-                        <canvas id="chartPrincipal"></canvas>
-                    </div>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
-                        <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                            <div class="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl"><i class="fas fa-calendar-check"></i></div>
-                            <div>
-                                <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Dias Trabalhados</span>
-                                <span id="evo-dias" class="text-xl font-black text-slate-800">--</span> <span id="evo-label-dias" class="text-xs text-slate-400 ml-1">no período</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                            <div class="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl"><i class="fas fa-crosshairs"></i></div>
-                            <div>
-                                <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Consistência</span>
-                                <span id="evo-taxa" class="text-xl font-black text-slate-800">--%</span> <span class="text-xs font-bold text-slate-400">na meta</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                            <div class="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xl"><i class="fas fa-trophy"></i></div>
-                            <div>
-                                <span class="block text-xs font-extrabold text-slate-400 uppercase tracking-widest">Melhor Dia</span>
-                                <span id="evo-best" class="text-xl font-black text-slate-800">--</span> <span class="text-xs font-bold text-slate-400">docs</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="tab-comparativo" class="view-tab hidden p-8 animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
-                     <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl">
-                        <div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
-                            <span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span>
-                            <h2 id="comp-media-user" class="text-6xl font-black tracking-tighter mb-2">--</h2>
-                            <span class="text-sm font-medium opacity-60">documentos / dia</span>
-                        </div>
-                        <div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div>
-                        <div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
-                            <span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span>
-                            <h2 id="comp-media-time" class="text-6xl font-black tracking-tighter mb-2">--</h2>
-                            <span class="text-sm font-medium opacity-60">documentos / dia</span>
-                        </div>
-                    </div>
-                    <div id="comp-mensagem" class="mt-10 text-center font-bold text-slate-500 text-lg">Carregando comparativo...</div>
-                </div>
-
-                <div id="tab-feedback" class="view-tab hidden flex flex-col h-[550px]">
-                     <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-8 space-y-6 bg-slate-50 scroll-smooth"></div>
-                    <div class="p-6 bg-white border-t border-slate-100 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.05)] z-10">
-                        <div class="flex items-center gap-3 mb-3">
-                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Destinatário:</span>
-                            <select id="feedback-destinatario" class="text-sm font-bold text-slate-700 border-none bg-slate-100 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-blue-500 cursor-pointer hover:bg-slate-200 transition">
-                                <option value="time">📢 Time (Todos)</option>
-                                <option disabled>──────────</option>
-                            </select>
-                        </div>
-                        <div class="flex gap-3">
-                            <input type="text" id="input-feedback" placeholder="Escreva uma mensagem de feedback..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition font-medium text-slate-700 placeholder-slate-400">
-                            <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 font-bold transition shadow-lg shadow-blue-200 flex items-center gap-2">
-                                <span>Enviar</span> <i class="fas fa-paper-plane"></i>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
             </div>
+
+            <div id="tab-evolucao" class="view-section hidden animate-fade-in space-y-6">
+                <div class="flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h3 class="font-bold text-slate-700">Curva de Performance</h3>
+                        <p class="text-xs text-slate-400">Análise temporal da produtividade.</p>
+                    </div>
+                    <div class="flex bg-slate-100 p-1 rounded-lg">
+                        <button onclick="renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
+                        <button onclick="renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
+                        <button onclick="renderizarGraficos('semestre')" id="chart-btn-semestre" class="btn-chart">Semestre</button>
+                        <button onclick="renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-[350px]">
+                    <canvas id="chartPrincipal"></canvas>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-calendar-check"></i></div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Dias Produtivos</span>
+                            <div class="flex items-baseline gap-1">
+                                <span id="evo-dias" class="text-xl font-black text-slate-800">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-crosshairs"></i></div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Consistência (Meta)</span>
+                            <div class="flex items-baseline gap-1">
+                                <span id="evo-taxa" class="text-xl font-black text-slate-800">--%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><i class="fas fa-trophy"></i></div>
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Melhor Dia</span>
+                            <div class="flex items-baseline gap-1">
+                                <span id="evo-best" class="text-xl font-black text-slate-800">--</span> <span class="text-xs text-slate-400">docs</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-comparativo" class="view-section hidden animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
+                <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl">
+                   <div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
+                       <span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span>
+                       <h2 id="comp-media-user" class="text-5xl font-black tracking-tighter mb-2">--</h2>
+                       <span class="text-sm font-medium opacity-60">documentos / dia</span>
+                   </div>
+                   <div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div>
+                   <div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300">
+                       <span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span>
+                       <h2 id="comp-media-time" class="text-5xl font-black tracking-tighter mb-2">--</h2>
+                       <span class="text-sm font-medium opacity-60">documentos / dia</span>
+                   </div>
+               </div>
+               <div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500 text-lg">Carregando comparativo...</div>
+           </div>
+
+           <div id="tab-feedback" class="view-section hidden animate-fade-in flex flex-col h-[600px] bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 font-bold text-slate-600 text-sm">
+                    <i class="fas fa-comments mr-2 text-blue-500"></i> Mural de Feedback
+                </div>
+                <div id="lista-feedbacks" class="flex-1 overflow-y-auto p-6 space-y-4 bg-white scroll-smooth"></div>
+                <div class="p-4 bg-slate-50 border-t border-slate-200">
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Enviar para:</span>
+                        <select id="feedback-destinatario" class="text-xs font-bold text-slate-700 border border-slate-200 bg-white rounded px-2 py-1 outline-none">
+                            <option value="time">📢 Time (Todos)</option>
+                            <option disabled>──────────</option>
+                        </select>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="text" id="input-feedback" placeholder="Escreva sua mensagem..." class="flex-1 bg-white border border-slate-200 rounded-lg px-4 py-3 outline-none focus:border-blue-500 transition text-sm">
+                        <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 font-bold transition shadow-sm">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-assertividade" class="view-section hidden animate-fade-in space-y-6">
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                    <div class="mb-4">
+                        <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 text-2xl mb-2">
+                            <i class="fas fa-file-excel"></i>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-800">Importar Assertividade</h3>
+                        <p class="text-sm text-slate-500">Carregue a planilha com os resultados das auditorias.</p>
+                    </div>
+                    
+                    <input type="file" id="input-excel-assertividade" accept=".xlsx, .csv" class="hidden" onchange="processarExcelAssertividade(this)">
+                    <button onclick="document.getElementById('input-excel-assertividade').click()" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-3 rounded-xl font-bold transition shadow-lg shadow-slate-200 inline-flex items-center gap-2">
+                        <i class="fas fa-upload"></i> Selecionar Arquivo Excel
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
+                        <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Dados Importados</h3>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider">
+                                <tr>
+                                    <th class="px-6 py-3">Data</th>
+                                    <th class="px-6 py-3">Descrição / ID</th>
+                                    <th class="px-6 py-3 text-center">Erros</th>
+                                    <th class="px-6 py-3 text-center">Nota / %</th>
+                                    <th class="px-6 py-3 text-center">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-assertividade" class="divide-y divide-slate-100 bg-white">
+                                <tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Nenhum dado carregado. Importe um arquivo Excel.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <script>
+        // CONFIGURAÇÃO INICIAL
         const sessao = JSON.parse(localStorage.getItem('usuario'));
         const isMgr = sessao ? sessao.funcao === 'Gestora' : false;
         
@@ -244,9 +303,14 @@
         let nameToIdsMap = {}; 
         
         document.addEventListener('DOMContentLoaded', async () => {
-            // USANDO DATA GLOBAL
-            const dataSalva = DataGlobal.obter();
-            document.getElementById('filtro-data-manual').value = dataSalva;
+            // Inicializa Data no Sistema
+            if (typeof Sistema !== 'undefined' && Sistema.Datas) {
+                Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', atualizarDashboard);
+            } else {
+                // Fallback caso sistema.js não tenha carregado
+                const hoje = new Date().toISOString().split('T')[0];
+                document.getElementById('filtro-data-manual').value = hoje;
+            }
 
             await carregarUsuarios(); 
 
@@ -258,22 +322,16 @@
             atualizarDashboard();
         });
 
-        function verificarEnter(e) { if(e.key === 'Enter') aplicarDataManual(); }
-        
         function aplicarDataManual() { 
-            const val = document.getElementById('filtro-data-manual').value;
-            if(val.length === 10) {
-                // Sincroniza via DataGlobal
-                DataGlobal.definir(val);
-                atualizarDashboard(); 
-            }
+            atualizarDashboard();
         }
         
         function getDateFromInput() {
             const val = document.getElementById('filtro-data-manual').value;
-            // Parse manual porque o Date(string) as vezes falha com DD/MM/AAAA
-            const parts = val.split('/');
-            return new Date(parts[2], parts[1]-1, parts[0]);
+            // Garante formato correto YYYY-MM-DD
+            if(!val) return new Date();
+            const parts = val.split('-');
+            return new Date(parts[0], parts[1]-1, parts[2]);
         }
 
         async function carregarUsuarios() {
@@ -305,6 +363,19 @@
             }
         }
 
+        // --- SISTEMA DE ABAS ---
+        function mudarAba(aba) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            
+            document.getElementById(`tab-${aba}`).classList.remove('hidden'); 
+            document.getElementById(`btn-${aba}`).classList.add('active');
+            
+            if(aba==='evolucao') renderizarGraficos('mes');
+            if(aba==='comparativo') atualizarDashboard(); // Recarrega comparativo
+        }
+
+        // --- LÓGICA DE DADOS (GERAL / DIÁRIO) ---
         function normalizarDadosPorNome(rawData) {
             const agrupado = {};
             rawData.forEach(item => {
@@ -335,22 +406,11 @@
 
             let targetName = usersMap[sessao.id];
             let viewingTime = false;
-            let isGestoraViewSelf = false;
-
+            
             if (isMgr) {
                 const val = document.getElementById('filtro-user').value;
                 if (val === 'time') viewingTime = true;
-                else if (val === 'me') isGestoraViewSelf = true;
-                else targetName = usersMap[val];
-            }
-
-            if (isGestoraViewSelf) {
-                document.getElementById('conteudo-principal').classList.add('hidden');
-                document.getElementById('aviso-gestora-view').classList.remove('hidden');
-                carregarFeedbacks(); return;
-            } else {
-                document.getElementById('conteudo-principal').classList.remove('hidden');
-                document.getElementById('aviso-gestora-view').classList.add('hidden');
+                else if (val !== 'me') targetName = usersMap[val];
             }
 
             const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
@@ -397,6 +457,7 @@
             const diasTrabalhados = dados.filter(d => d.quantidade > 0).length || 1; 
             
             let metaTotal = 0;
+            // Se tiver dados, soma as metas diárias reais. Se não, projeta 22 dias.
             if(dados.length > 0) dados.forEach(d => metaTotal += (d.meta_diaria || 650)); else metaTotal = 650 * 22;
 
             const media = Math.round(total / diasTrabalhados);
@@ -406,37 +467,68 @@
             document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
             document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
             document.getElementById('kpi-media-real').innerText = media.toLocaleString();
-            document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
             
             const bar = document.getElementById('bar-progress');
             const icon = document.getElementById('icon-status');
-            if(atingimento>=100) { bar.className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full"; icon.className="fas fa-check-circle text-emerald-500"; }
-            else if(atingimento>=80) { bar.className="bg-gradient-to-r from-yellow-400 to-orange-400 h-full rounded-full"; icon.className="fas fa-exclamation-circle text-yellow-500"; }
-            else { bar.className="bg-gradient-to-r from-red-500 to-rose-600 h-full rounded-full"; icon.className="fas fa-times-circle text-red-500"; }
+            
+            bar.style.width = Math.min(atingimento, 100) + '%';
+            
+            if(atingimento>=100) { 
+                bar.className="bg-emerald-500 h-full rounded-full"; 
+                icon.className="fas fa-check-circle text-emerald-500 text-lg"; 
+            } else if(atingimento>=80) { 
+                bar.className="bg-amber-400 h-full rounded-full"; 
+                icon.className="fas fa-exclamation-circle text-amber-500 text-lg"; 
+            } else { 
+                bar.className="bg-rose-500 h-full rounded-full"; 
+                icon.className="fas fa-times-circle text-rose-500 text-lg"; 
+            }
         }
 
         function atualizarTabelaDiaria(dados, viewingTime) {
             const tbody = document.getElementById('tabela-diario');
-            if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registo encontrado.</td></tr>'; return; }
+            if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registo encontrado neste mês.</td></tr>'; return; }
+            
             let html = '';
+            // Ordenar por data (recente primeiro)
+            dados.sort((a,b) => new Date(b.data_referencia) - new Date(a.data_referencia));
+
             dados.forEach(item => {
                 const meta = item.meta_diaria || 650; const atingiu = item.quantidade >= meta;
-                const badge = atingiu ? '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold uppercase">Meta Batida</span>' : '<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-xs font-bold uppercase">Abaixo</span>';
+                const badge = atingiu ? '<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-emerald-200">Meta Batida</span>' : '<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-rose-200">Abaixo</span>';
                 const dFmt = item.data_referencia.split('-').reverse().join('/');
+                
                 let inputMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
                 if(isMgr && !viewingTime && item.id) inputMeta = `<input type="number" value="${meta}" onchange="atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-200 rounded px-1 py-1 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">`;
+                
                 let obs = item.observacao || '<span class="text-slate-300">-</span>';
                 if(item.observacao_gestora) obs += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100"><i class="fas fa-user-shield mr-1"></i>${item.observacao_gestora}</div>`;
-                html += `<tr class="hover:bg-slate-50 border-b border-slate-50 transition"><td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td><td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade}</td><td class="px-6 py-4 text-center">${inputMeta}</td><td class="px-6 py-4 text-center">${badge}</td><td class="px-6 py-4 text-xs text-slate-500 max-w-xs break-words">${obs}</td></tr>`;
+                
+                html += `<tr class="hover:bg-slate-50 border-b border-slate-50 transition">
+                            <td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td>
+                            <td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade}</td>
+                            <td class="px-6 py-4 text-center">${inputMeta}</td>
+                            <td class="px-6 py-4 text-center">${badge}</td>
+                            <td class="px-6 py-4 text-xs text-slate-500 max-w-xs break-words">${obs}</td>
+                        </tr>`;
             });
             tbody.innerHTML = html;
         }
 
-        async function atualizarMeta(id, nv, av) { if(nv==av) return; const m = prompt("Motivo:"); if(!m){ atualizarDashboard(); return;} const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); atualizarDashboard(); }
+        async function atualizarMeta(id, nv, av) { 
+            if(nv==av) return; 
+            const m = prompt("Motivo da alteração de meta:"); 
+            if(!m){ atualizarDashboard(); return;} 
+            const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; 
+            await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); 
+            atualizarDashboard(); 
+        }
 
+        // --- GRÁFICOS DE EVOLUÇÃO ---
         async function renderizarGraficos(periodo) {
             document.querySelectorAll('.btn-chart').forEach(b => b.classList.remove('active'));
-            document.getElementById(`chart-btn-${periodo}`).classList.add('active');
+            const btn = document.getElementById(`chart-btn-${periodo}`);
+            if(btn) btn.classList.add('active');
 
             const refDate = getDateFromInput();
             const ano = refDate.getFullYear();
@@ -480,9 +572,9 @@
                 if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; metaMap[label] = 0; }
                 processedTime[label].sum += avg; processedTime[label].cnt++;
 
-                let valUser = 0; let metaUser = 650;
-                if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; metaUser = grouped[date][targetName].meta_diaria || 650; }
-                processedMain[label] += valUser; metaMap[label] = metaUser;
+                let valUser = 0; 
+                if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; }
+                processedMain[label] += valUser; 
             });
 
             const labels = Object.keys(processedTime).sort();
@@ -496,17 +588,16 @@
                 
                 const displayMain = viewingTime ? valTime : valMainFinal;
                 dataMain.push(displayMain);
-                dataBench.push(viewingTime ? 650 : valTime);
+                dataBench.push(viewingTime ? 650 : valTime); // Meta ou Média Time
 
                 if(displayMain > 0) {
                     statsDias++;
                     if(displayMain > statsBest) statsBest = displayMain;
-                    if(displayMain >= (viewingTime ? 650 : 650)) statsBatida++;
+                    if(displayMain >= 650) statsBatida++;
                 }
             });
 
             document.getElementById('evo-dias').innerText = statsDias;
-            document.getElementById('evo-label-dias').innerText = agruparPorMes ? "meses ativos" : "dias trabalhados";
             document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%';
             document.getElementById('evo-best').innerText = statsBest;
 
@@ -530,6 +621,7 @@
             });
         }
 
+        // --- COMPARATIVO ---
         async function atualizarComparativoRapido(dadosFinais, viewingTime, targetName, inicio, fim) {
             const cardL = document.getElementById('card-comp-left');
             const cardR = document.getElementById('card-comp-right');
@@ -541,6 +633,7 @@
             const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
             const norm = normalizarDadosPorNome(all||[]);
             let sumMedias=0, cntDias=0;
+            
             Object.values(norm).forEach(diaObj => {
                 const arr = Object.values(diaObj);
                 const tot = arr.reduce((a,b)=>a+b.quantidade,0);
@@ -560,8 +653,8 @@
             labelR.innerText = viewingTime ? "Meta Esperada" : "Média Geral da Equipa";
 
             if (mediaUser < 650) {
-                cardL.className = "flex-1 bg-red-500 border border-red-600 rounded-3xl p-8 text-center shadow-lg relative overflow-hidden transition-colors duration-300 text-white";
-                labelL.className = "block text-xs font-bold text-red-200 uppercase tracking-widest mb-4";
+                cardL.className = "flex-1 bg-rose-500 border border-rose-600 rounded-3xl p-8 text-center shadow-lg relative overflow-hidden transition-colors duration-300 text-white";
+                labelL.className = "block text-xs font-bold text-rose-200 uppercase tracking-widest mb-4";
             } else {
                 cardL.className = "flex-1 bg-gradient-to-br from-blue-600 to-indigo-700 border border-transparent rounded-3xl p-8 text-center shadow-xl relative overflow-hidden transition-colors duration-300 text-white";
                 labelL.className = "block text-xs font-bold text-blue-200 uppercase tracking-widest mb-4";
@@ -569,15 +662,10 @@
 
             const valRight = viewingTime ? 650 : mediaGeral;
             
-            if (valRight < 650) {
-                cardR.className = "flex-1 bg-red-50 border border-red-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
-                labelR.className = "block text-xs font-bold text-red-400 uppercase tracking-widest mb-4";
-                valR.className = "text-6xl font-black text-red-600 tracking-tighter mb-2";
-            } else {
-                cardR.className = "flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
-                labelR.className = "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4";
-                valR.className = "text-6xl font-black text-slate-700 tracking-tighter mb-2";
-            }
+            // Ajuste visual do card da direita
+            cardR.className = "flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300";
+            labelR.className = "block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4";
+            valR.className = "text-5xl font-black text-slate-700 tracking-tighter mb-2";
 
             const diff = mediaUser - valRight;
             const elMsg = document.getElementById('comp-mensagem');
@@ -586,24 +674,29 @@
             else elMsg.innerHTML = `<span class="text-slate-500">Exatamente na média.</span>`;
         }
 
-        function mudarAba(aba) {
-            document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden')); document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
-            document.getElementById(`tab-${aba}`).classList.remove('hidden'); document.getElementById(`btn-${aba}`).classList.add('active');
-            if(aba==='evolucao') renderizarGraficos('mes');
-        }
-
+        // --- FEEDBACK ---
         async function carregarFeedbacks() {
             const el = document.getElementById('lista-feedbacks');
             const { data } = await _supabase.from('feedbacks').select('*').order('created_at', {ascending:true});
-            if(!data || !data.length) { el.innerHTML = '<div class="text-center text-slate-300 py-12">Nenhum feedback encontrado.</div>'; return; }
+            if(!data || !data.length) { el.innerHTML = '<div class="text-center text-slate-300 py-12 italic">Nenhum feedback encontrado.</div>'; return; }
+            
             let html='';
             data.forEach(m => {
-                const isPub = m.usuario_alvo_id===null; const isMe=m.usuario_alvo_id==sessao.id; const isMine=m.autor_nome===sessao.nome;
+                const isPub = m.usuario_alvo_id===null; 
+                const isMe = m.usuario_alvo_id==sessao.id; 
+                const isMine = m.autor_nome===sessao.nome;
+                
                 if(isPub || isMe || isMine) {
-                    const align = isMine ? 'ml-auto bg-blue-600 text-white rounded-tr-none' : 'mr-auto bg-white text-slate-700 border border-slate-100 rounded-tl-none';
-                    const subColor = isMine ? 'text-blue-200' : 'text-slate-400';
+                    const align = isMine ? 'ml-auto bg-blue-50 border-blue-100' : 'mr-auto bg-slate-50 border-slate-100';
                     const badge = isPub ? '📢 TIME' : (isMine && m.usuario_alvo_id ? `🔒 ${usersMap[m.usuario_alvo_id]}` : '🔒 PRIVADO');
-                    html += `<div class="max-w-[80%] p-4 rounded-2xl shadow-sm mb-4 ${align}"><div class="flex justify-between items-center mb-2 text-xs font-bold uppercase tracking-wide opacity-90"><span>${m.autor_nome} <span class="opacity-70 ml-1 scale-75 inline-block border border-current px-1 rounded">${badge}</span></span><span class="${subColor}">${new Date(m.created_at).toLocaleDateString()}</span></div><p class="leading-relaxed whitespace-pre-wrap font-medium">${m.mensagem}</p></div>`;
+                    
+                    html += `<div class="w-[85%] p-4 rounded-xl border mb-3 shadow-sm ${align}">
+                                <div class="flex justify-between items-center mb-1 text-[10px] font-bold uppercase tracking-wide opacity-70">
+                                    <span>${m.autor_nome} <span class="ml-1 bg-white border px-1 rounded text-[9px]">${badge}</span></span>
+                                    <span>${new Date(m.created_at).toLocaleDateString()}</span>
+                                </div>
+                                <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">${m.mensagem}</p>
+                             </div>`;
                 }
             });
             el.innerHTML = html; el.scrollTop = el.scrollHeight;
@@ -616,6 +709,70 @@
             await _supabase.from('feedbacks').insert({ usuario_alvo_id: aid, autor_nome: sessao.nome, autor_funcao: sessao.funcao, mensagem: txt });
             document.getElementById('input-feedback').value=''; carregarFeedbacks();
         }
+
+        // --- ASSERTIVIDADE (EXCEL) ---
+        function processarExcelAssertividade(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheet];
+                const json = XLSX.utils.sheet_to_json(worksheet, {header: 1});
+
+                renderizarTabelaAssertividade(json);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function renderizarTabelaAssertividade(rows) {
+            const tbody = document.getElementById('tabela-assertividade');
+            if (!rows || rows.length <= 1) { 
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-6 text-red-500">Arquivo vazio ou formato inválido.</td></tr>'; 
+                return; 
+            }
+
+            // Assume que a linha 0 é cabeçalho.
+            // Tenta identificar colunas automaticamente ou usa índices fixos (0: Data, 1: Desc, 2: Erros, 3: Nota)
+            let html = '';
+            
+            // Pula o cabeçalho (i=1)
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (!row || row.length === 0) continue;
+
+                // Tenta formatar data do Excel (número serial) ou texto
+                let dataVal = row[0];
+                if (typeof dataVal === 'number') {
+                    // Conversão simples Excel Date -> JS Date
+                    const dateInfo = new Date((dataVal - (25567 + 2))*86400*1000); 
+                    dataVal = dateInfo.toLocaleDateString();
+                }
+
+                const desc = row[1] || '-';
+                const erros = row[2] || 0;
+                const nota = row[3]; 
+
+                // Lógica de Status (exemplo: se nota < 90 ou erros > 0)
+                let statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">OK</span>';
+                if (erros > 0 || (typeof nota === 'number' && nota < 100)) {
+                    statusBadge = '<span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold">Atenção</span>';
+                }
+
+                html += `<tr class="hover:bg-slate-50 border-b border-slate-50">
+                            <td class="px-6 py-3 font-bold text-slate-600">${dataVal || '-'}</td>
+                            <td class="px-6 py-3 text-slate-600">${desc}</td>
+                            <td class="px-6 py-3 text-center text-slate-800 font-bold">${erros}</td>
+                            <td class="px-6 py-3 text-center font-black text-blue-600">${nota || '-'}</td>
+                            <td class="px-6 py-3 text-center">${statusBadge}</td>
+                         </tr>`;
+            }
+            tbody.innerHTML = html;
+        }
+
     </script>
 </body>
 </html>
