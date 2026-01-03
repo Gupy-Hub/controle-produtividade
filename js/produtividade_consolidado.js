@@ -13,9 +13,8 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body'); 
         const t = document.getElementById('cons-period-type').value; 
         
-        // Garante Sistema carregado para usar os Fatores
         if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
-        Sistema.Dados.inicializar(); // Force reload
+        Sistema.Dados.inicializar(); 
 
         let el = document.getElementById('global-date');
         let val = el ? el.value : new Date().toISOString().split('T')[0];
@@ -27,7 +26,6 @@ const Cons = {
         const inputHC = document.getElementById('cons-input-hc');
         const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
 
-        // Intervalos
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0'); const sDia = String(dia).padStart(2, '0');
         const dataSql = `${sAno}-${sMes}-${sDia}`;
         
@@ -45,10 +43,9 @@ const Cons = {
             return;
         }
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Consolidação (com Fatores)...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Consolidação...</td></tr>';
 
         try {
-            // Busca dados brutos para processar no JS (necessário para aplicar Fatores do LocalStorage)
             const { data: rawData, error } = await _supabase
                 .from('producao')
                 .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
@@ -88,7 +85,6 @@ const Cons = {
                 const nome = user.nome;
                 const sys = Number(r.quantidade) || 0;
                 
-                // APLICANDO FATOR (Abonado = 0, Meio = 0.5)
                 const fator = Sistema.Dados.obterFator(nome, r.data_referencia);
                 
                 let b = 1; 
@@ -107,10 +103,7 @@ const Cons = {
                     const x = st[k];
                     x.users.add(nome); 
                     
-                    // Acumula dias ponderados pelo fator
                     if (!x.diasMap[r.data_referencia]) x.diasMap[r.data_referencia] = 0;
-                    // Se houver múltiplos registros no mesmo dia (raro, mas possível), soma apenas uma vez o fator do dia
-                    // Aqui simplificamos: somamos o fator. Nota: isso assume 1 registro por dia por user.
                     x.diasPonderados += fator; 
 
                     x.qty += sys; 
@@ -145,7 +138,7 @@ const Cons = {
             let tr = `<tr class="${rowClass} border-b border-slate-100"><td class="px-4 py-3 font-medium col-fixed">${label}</td>`;
             idxs.forEach(i => {
                 const s = st[i]; 
-                const diasReais = s.diasPonderados; // Soma dos fatores (ex: 10.5 dias)
+                const diasReais = s.diasPonderados; 
                 const ativos = s.users.size || 1; 
                 
                 let val = 0; 
@@ -153,7 +146,6 @@ const Cons = {
                     val = getter(s); 
                     if (val instanceof Set) val = val.size; 
                 } else { 
-                    // Passa os dias já ajustados pelo fator
                     val = getter(s, diasReais, ativos, s.clt_dias, s.pj_dias); 
                 }
                 const txt = val ? Math.round(val).toLocaleString() : (isBold ? '0' : '-'); 
@@ -163,7 +155,7 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        h += mkRow('Assistentes Ativas', s => s.users); 
+        h += mkRow('Assistentes Ativas (Produção)', s => s.users); 
         h += mkRow('Dias Trabalhados (Fator)', s => s.diasPonderados); 
         h += mkRow('FIFO', s => s.fifo); 
         h += mkRow('G. Parcial', s => s.gp); 
@@ -183,19 +175,28 @@ const Cons = {
         
         const tot = st[99]; 
         const dTot = tot.diasPonderados || 1; 
+        
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString()); 
-        setSafe('cons-p-headcount', tot.users.size);
+        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
+        
+        // --- ATUALIZAÇÕES SOLICITADAS ---
+        // 1. Atualiza Badge Base
+        const elBadge = document.getElementById('cons-badge-base');
+        if (elBadge) elBadge.innerText = `Base ${HF}`;
+        
+        // 2. Card "Assistentes Ativas" agora mostra o valor digitado (HF)
+        setSafe('cons-p-headcount', HF); 
+        // -------------------------------
     },
     
     newStats: function() { 
         return { 
             users: new Set(), 
-            diasMap: {}, // Para controle se necessário
-            diasPonderados: 0, // Soma dos fatores (0, 0.5, 1)
+            diasMap: {}, 
+            diasPonderados: 0,
             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, 
             clt_users: new Set(), clt_qty: 0, clt_dias: 0,
             pj_users: new Set(), pj_qty: 0, pj_dias: 0
