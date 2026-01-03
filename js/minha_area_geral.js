@@ -18,6 +18,35 @@ const MA_Diario = {
         return agrupado;
     },
 
+    togglePeriodo: function() {
+        const type = document.getElementById('diario-period-type').value;
+        const q = document.getElementById('diario-select-quarter');
+        const s = document.getElementById('diario-select-semester');
+        
+        if(!q || !s) return;
+
+        q.classList.add('hidden');
+        s.classList.add('hidden');
+        
+        // Sincroniza automaticamente na primeira seleção
+        const dt = MA_Main.getDateFromInput();
+        const m = dt.getMonth() + 1;
+
+        if(type === 'trimestre') {
+            q.classList.remove('hidden');
+            if (q.value === '1' && m > 3) { // Pequena lógica para setar padrão
+                q.value = Math.ceil(m/3);
+            }
+        } else if (type === 'semestre') {
+            s.classList.remove('hidden');
+            if (s.value === '1' && m > 6) {
+                s.value = 2;
+            }
+        }
+        
+        MA_Main.atualizarDashboard();
+    },
+
     atualizarKPIs: function(dados) {
         const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
         const diasTrabalhados = dados.filter(d => d.quantidade > 0).length || 1; 
@@ -56,7 +85,7 @@ const MA_Diario = {
         const tbody = document.getElementById('tabela-diario');
         if (!tbody) return;
         
-        if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registo encontrado neste mês.</td></tr>'; return; }
+        if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registo encontrado neste período.</td></tr>'; return; }
         
         let html = '';
         dados.sort((a,b) => new Date(b.data_referencia) - new Date(a.data_referencia));

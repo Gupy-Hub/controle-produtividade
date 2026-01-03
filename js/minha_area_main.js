@@ -9,11 +9,9 @@ const MA_Main = {
         this.sessao = JSON.parse(localStorage.getItem('usuario'));
         if(!this.sessao) { window.location.href='index.html'; return; }
         
-        // ATUALIZAÇÃO: Verifica se é Gestora OU Auditora
         const f = this.sessao.funcao;
         this.isMgr = (f === 'Gestora' || f === 'Auditora');
         
-        // Configuração de Data (Input Inteligente ou Padrão)
         if (typeof Sistema !== 'undefined' && Sistema.Datas) {
             Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', () => this.atualizarDashboard());
         } else {
@@ -21,7 +19,6 @@ const MA_Main = {
             document.getElementById('filtro-data-manual').addEventListener('change', () => this.atualizarDashboard());
         }
 
-        // Lógica Específica para Gestão/Auditoria
         if (this.isMgr) {
             const elFiltro = document.getElementById('container-filtro-user');
             if(elFiltro) elFiltro.classList.remove('hidden');
@@ -29,26 +26,20 @@ const MA_Main = {
             const elAviso = document.getElementById('aviso-edicao');
             if(elAviso) {
                 elAviso.classList.remove('hidden');
-                // Ajusta o texto do badge caso seja Auditora
                 if(f === 'Auditora') elAviso.innerHTML = '<i class="fas fa-search"></i> Modo Auditoria';
             }
             
             const selUser = document.getElementById('filtro-user');
             if(selUser) {
-                // REGRA DE NEGÓCIO: Remove "Minha Visão" pois Gestora/Auditora não produz dados
                 const optMe = selUser.querySelector('option[value="me"]');
                 if(optMe) optMe.remove();
-                
-                // Força o padrão para "Time"
                 selUser.value = 'time';
-                
                 selUser.addEventListener('change', () => this.atualizarDashboard());
             }
         }
 
         await this.carregarUsuarios();
         
-        // Garante que a seleção permaneça no TIME após carregar usuários
         if (this.isMgr) {
              const selUser = document.getElementById('filtro-user');
              if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
@@ -111,14 +102,41 @@ const MA_Main = {
         if (isNaN(refDate.getTime())) return;
 
         const ano = refDate.getFullYear();
-        const mes = refDate.getMonth();
-        const dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-        const dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+        // A lógica do seletor só se aplica se ele existir na tela
+        const elType = document.getElementById('diario-period-type');
+        const type = elType ? elType.value : 'mes';
+        
+        let dataInicio, dataFim;
+
+        if (type === 'mes') {
+            const mes = refDate.getMonth();
+            dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+            dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+        } else if (type === 'trimestre') {
+            const elQ = document.getElementById('diario-select-quarter');
+            const q = elQ ? parseInt(elQ.value) : 1;
+            const mStart = (q - 1) * 3;
+            dataInicio = new Date(ano, mStart, 1).toISOString().split('T')[0];
+            dataFim = new Date(ano, mStart + 3, 0).toISOString().split('T')[0];
+        } else if (type === 'semestre') {
+            const elS = document.getElementById('diario-select-semester');
+            const s = elS ? parseInt(elS.value) : 1;
+            const mStart = (s - 1) * 6;
+            dataInicio = new Date(ano, mStart, 1).toISOString().split('T')[0];
+            dataFim = new Date(ano, mStart + 6, 0).toISOString().split('T')[0];
+        } else if (type === 'ano') {
+            dataInicio = `${ano}-01-01`;
+            dataFim = `${ano}-12-31`;
+        } else {
+             // Fallback
+             const mes = refDate.getMonth();
+             dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+             dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+        }
 
         let targetName = this.usersMap[this.sessao.id];
         let viewingTime = false;
         
-        // Lógica de visualização
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
             if (val === 'time') {
@@ -134,12 +152,10 @@ const MA_Main = {
             .gte('data_referencia', dataInicio)
             .lte('data_referencia', dataFim);
 
-        // Chama MA_Diario (antigo Geral)
         const dadosNormalizados = MA_Diario.normalizarDadosPorNome(rawData || []);
         let dadosFinais = [];
 
         if (viewingTime) {
-            // Média do Time
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const prods = Object.values(dadosNormalizados[dia]);
                 const total = prods.reduce((a, b) => a + b.quantidade, 0);
@@ -150,7 +166,6 @@ const MA_Main = {
                 });
             });
         } else {
-            // Visão Individual (Logado ou Selecionado)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
                 if (dPessoa) {
