@@ -30,12 +30,10 @@ const Cons = {
         else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
 
         try {
-            // OTIMIZAÇÃO: Select Específico
+            // OTIMIZAÇÃO: Chama a função RPC do banco
+            // Traz dados já agregados por Nome/Dia, resolvendo duplicidade e performance
             const { data: rawData, error } = await _supabase
-                .from('producao')
-                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc') 
-                .gte('data_referencia', s)
-                .lte('data_referencia', e); 
+                .rpc('get_consolidado_dados', { data_ini: s, data_fim: e });
             
             if(error) throw error;
             
@@ -43,11 +41,12 @@ const Cons = {
             const numCols = cols.length; let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
             
             rawData.forEach(r => {
-                const uid = r.usuario_id;
-                const user = USERS_CACHE[uid];
-                if (!user || user.funcao !== 'Assistente') return;
+                // Aqui 'r' já é o dado agrupado
+                let b = 1; 
+                // Precisamos parsear a data que vem do banco (YYYY-MM-DD)
+                const dtParts = r.data_ref.split('-');
+                const dt = new Date(dtParts[0], dtParts[1]-1, dtParts[2]);
 
-                let b = 1; const dt = new Date(r.data_referencia + 'T12:00:00');
                 if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
                 else if (t === 'trimestre') b = (dt.getMonth() % 3) + 1; 
                 else if (t === 'semestre') b = (dt.getMonth() % 6) + 1; 
@@ -55,16 +54,33 @@ const Cons = {
                 
                 if(b > numCols) b = numCols;
                 
-                const sys = Number(r.quantidade) || 0;
-                [b, 99].forEach(k => {
-                    if(!st[k]) return; 
+                const sys = Number(r.soma_quantidade) || 0;
+                
+                // Função auxiliar para popular stats
+                const populate = (k) => {
+                    if(!st[k]) return;
                     const x = st[k];
-                    x.users.add(r.usuario_id); x.dates.add(r.data_referencia); 
-                    x.qty += sys; x.fifo += (Number(r.fifo)||0); x.gt += (Number(r.gradual_total)||0); x.gp += (Number(r.gradual_parcial)||0); x.fc += (Number(r.perfil_fc)||0);
+                    // Usa o nome como chave única para contagem de pessoas
+                    x.users.add(r.nome_assistente); 
+                    x.dates.add(r.data_ref); 
                     
-                    if (user.contrato && user.contrato.includes('CLT')) { x.clt_users.add(r.usuario_id); x.clt_qty += sys; } 
-                    else { x.pj_users.add(r.usuario_id); x.pj_qty += sys; }
-                });
+                    x.qty += sys; 
+                    x.fifo += (Number(r.soma_fifo)||0); 
+                    x.gt += (Number(r.soma_gradual_total)||0); 
+                    x.gp += (Number(r.soma_gradual_parcial)||0); 
+                    x.fc += (Number(r.soma_perfil_fc)||0);
+                    
+                    if (r.contrato && r.contrato.includes('CLT')) { 
+                        x.clt_users.add(r.nome_assistente); 
+                        x.clt_qty += sys; 
+                    } else { 
+                        x.pj_users.add(r.nome_assistente); 
+                        x.pj_qty += sys; 
+                    }
+                };
+
+                populate(b);
+                populate(99);
             });
 
             const hRow = document.getElementById('cons-table-header'); 

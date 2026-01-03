@@ -18,26 +18,29 @@ const Matriz = {
         try {
             const ano = Sistema.Datas.lerInput('data-matriz').getFullYear();
             
-            // OTIMIZAÇÃO CRÍTICA: Select apenas colunas necessárias
-            const { data: prods, error } = await _supabase
-                .from('producao')
-                .select('usuario_id, data_referencia, quantidade')
-                .gte('data_referencia', `${ano}-01-01`)
-                .lte('data_referencia', `${ano}-12-31`);
+            // OTIMIZAÇÃO: Chama a função RPC do banco
+            // Isso substitui o download de milhares de linhas por uma chamada rápida
+            const { data: dadosAgrupados, error } = await _supabase
+                .rpc('get_matriz_dados', { ano_ref: ano });
                 
             if(error) throw error;
             
+            // Processa os dados (que já vêm somados e agrupados por nome)
             let map = {};
-            prods.forEach(item => {
-                const uid = item.usuario_id;
-                const user = USERS_CACHE[uid];
-                if (!user || user.funcao !== 'Assistente') return;
+            
+            dadosAgrupados.forEach(item => {
+                const nome = item.nome_assistente;
+                const mesIndex = item.mes - 1; // SQL retorna 1-12, array usa 0-11
+                const qtd = Number(item.total_quantidade) || 0;
 
-                if (!map[uid]) map[uid] = { nome: user.nome, m: Array(12).fill(0), t: 0 };
-                const mes = new Date(item.data_referencia + 'T12:00:00').getMonth(); 
-                map[uid].m[mes] += (Number(item.quantidade)||0); 
-                map[uid].t += (Number(item.quantidade)||0);
+                if (!map[nome]) {
+                    map[nome] = { nome: nome, m: Array(12).fill(0), t: 0 };
+                }
+                
+                map[nome].m[mesIndex] = qtd;
+                map[nome].t += qtd;
             });
+
             const lista = Object.values(map).sort((a, b) => b.t - a.t);
             
             let html = '';
@@ -49,7 +52,10 @@ const Matriz = {
                 html += `<tr class="hover:bg-slate-50 border-b border-slate-100"><td class="px-4 py-3 font-bold text-slate-700 sticky left-0 bg-white border-r border-slate-200 z-10">${u.nome}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[0])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[1])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[2])}</td><td class="col-tri">${cell(q1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[3])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[4])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[5])}</td><td class="col-tri">${cell(q2)}</td><td class="col-sem">${cell(s1)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[6])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[7])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[8])}</td><td class="col-tri">${cell(q3)}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[9])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[10])}</td><td class="px-2 py-3 text-center text-slate-600">${cell(u.m[11])}</td><td class="col-tri">${cell(q4)}</td><td class="col-sem">${cell(s2)}</td><td class="col-ano">${u.t.toLocaleString()}</td></tr>`;
             });
             
-            if(tbody) tbody.innerHTML = html || '<tr><td colspan="20" class="text-center py-4">Sem dados.</td></tr>';
-        } catch(e) { console.error(e); }
+            if(tbody) tbody.innerHTML = html || '<tr><td colspan="20" class="text-center py-4">Sem dados para este ano.</td></tr>';
+        } catch(e) { 
+            console.error(e);
+            if(tbody) tbody.innerHTML = '<tr><td colspan="20" class="text-center py-4 text-red-500">Erro ao carregar dados. Verifique a conexão.</td></tr>';
+        }
     }
 };
