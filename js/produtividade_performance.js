@@ -58,41 +58,68 @@ const Perf = {
                 e = `${ano}-12-31`; 
             }
             
-            // Busca apenas producao
-            const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
+            const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao, contrato)').gte('data_referencia', s).lte('data_referencia', e); 
             if(error) throw error;
             
             let stats = {};
-            let countCLT = 0;
-            let countPJ = 0;
-            let processedUsers = new Set(); 
+            
+            // Variáveis para o Card CLT vs PJ
+            let prodTotalGeral = 0;
+            let prodCLT = 0;
+            let prodPJ = 0;
+            let usersCLT = new Set();
+            let usersPJ = new Set();
 
             prods.forEach(item => {
+                // Tenta pegar usuario do join ou do cache
+                let user = item.usuarios;
                 const uid = item.usuario_id;
-                const user = USERS_CACHE[uid];
                 
-                // Filtra usuários sem cadastro ou que não são Assistentes
+                // Fallback para cache se o join falhar (devido a estrutura do supabase)
+                if (!user && USERS_CACHE[uid]) user = USERS_CACHE[uid];
+                
                 if (!user || user.funcao !== 'Assistente') return;
 
-                // Contagem CLT/PJ
-                if (!processedUsers.has(uid)) {
-                    if (user.contrato && user.contrato.includes('CLT')) countCLT++;
-                    else countPJ++;
-                    processedUsers.add(uid);
+                const qtd = Number(item.quantidade) || 0;
+                
+                // Lógica CLT vs PJ
+                prodTotalGeral += qtd;
+                if (user.contrato && user.contrato.includes('CLT')) {
+                    prodCLT += qtd;
+                    usersCLT.add(uid);
+                } else {
+                    prodPJ += qtd;
+                    usersPJ.add(uid);
                 }
 
                 if (!stats[uid]) stats[uid] = { id: uid, nome: user.nome, total: 0, dias: new Set() };
-                stats[uid].total += (Number(item.quantidade) || 0); 
+                stats[uid].total += qtd; 
                 stats[uid].dias.add(item.data_referencia);
             });
             
-            // Atualiza Card Mix
-            const elClt = document.getElementById('perf-clt');
-            const elPj = document.getElementById('perf-pj');
-            if(elClt) elClt.innerText = countCLT;
-            if(elPj) elPj.innerText = countPJ;
+            // Atualiza Card CLT vs PJ (Visual)
+            const pctCLT = prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0;
+            const pctPJ = prodTotalGeral > 0 ? Math.round((prodPJ / prodTotalGeral) * 100) : 0;
+            
+            document.getElementById('perf-pct-clt').innerText = pctCLT + '%';
+            document.getElementById('perf-count-clt').innerText = usersCLT.size;
+            
+            document.getElementById('perf-pct-pj').innerText = pctPJ + '%';
+            document.getElementById('perf-count-pj').innerText = usersPJ.size;
 
-            this.dadosCarregados = Object.values(stats).sort((a, b) => b.total - a.total);
+            // Ordenação: Agora por % de Atingimento da Meta, não Total Bruto
+            this.dadosCarregados = Object.values(stats).sort((a, b) => {
+                const diasA = a.dias.size || 1;
+                const metaA = diasA * 650;
+                const pctA = a.total / metaA;
+
+                const diasB = b.dias.size || 1;
+                const metaB = diasB * 650;
+                const pctB = b.total / metaB;
+
+                return pctB - pctA; // Decrescente por %
+            });
+
             this.renderRanking();
         } catch (err) { 
             console.error(err); 
@@ -120,7 +147,6 @@ const Perf = {
             const isSelected = this.selectedUserId === u.id; 
             if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
             
-            // Usa 'sessao' global
             const isMe = (typeof sessao !== 'undefined' && sessao) && u.id === sessao.id; 
             
             let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; 
@@ -135,7 +161,17 @@ const Perf = {
             else if (idx < 5) { rowClass += " rank-top"; iconTrofeu = '🏅'; }
 
             let badgeClass = pct >= 100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
-            html += `<tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})"><td class="px-6 py-4 font-bold text-slate-600">${iconTrofeu} #${idx + 1}</td><td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '(Você)' : ''}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-500">${dias}</td><td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td></tr>`;
+            
+            html += `
+            <tr class="${rowClass}" onclick="Perf.toggleUsuario(${u.id})">
+                <td class="px-6 py-4 font-bold text-slate-600">${iconTrofeu} #${idx + 1}</td>
+                <td class="px-6 py-4 font-bold text-slate-800">${u.nome} ${isMe ? '(Você)' : ''}</td>
+                <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td>
+                <td class="px-6 py-4 text-center text-slate-500">${dias}</td>
+                <td class="px-6 py-4 text-center font-medium">${media.toLocaleString()}</td>
+                <td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td>
+                <td class="px-6 py-4 text-center"><span class="${badgeClass} text-xs font-bold px-2 py-1 rounded-full">${pct}%</span></td>
+            </tr>`;
         });
         
         if(tbody) tbody.innerHTML = html; 
@@ -151,7 +187,7 @@ const Perf = {
         const elRankContent = document.getElementById('perf-rank-content');
 
         if (userStats) {
-            // Individual
+            // Visão Individual
             if(elTotal) elTotal.innerText = userStats.total.toLocaleString(); 
             if(labelMetaTotal) labelMetaTotal.innerText = userStats.meta.toLocaleString();
 
@@ -160,10 +196,16 @@ const Perf = {
             if(elMeta) elMeta.innerText = userStats.meta.toLocaleString(); 
             if(labelRealTotal) labelRealTotal.innerText = userStats.total.toLocaleString();
         } else {
-            // Geral
+            // Visão Geral do Time
             const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
             const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); 
-            const metaGeral = 650 * diasGeral; 
+            
+            // Meta Geral = Soma das Metas Individuais (Dias trabalhados * 650)
+            let metaGeral = 0;
+            this.dadosCarregados.forEach(u => {
+                metaGeral += (u.dias.size || 0) * 650;
+            });
+
             const mediaGeral = diasGeral ? Math.round(totalGeral / diasGeral) : 0;
             
             if(elTotal) elTotal.innerText = totalGeral.toLocaleString(); 
@@ -174,12 +216,27 @@ const Perf = {
             if(elMeta) elMeta.innerText = metaGeral.toLocaleString(); 
             if(labelRealTotal) labelRealTotal.innerText = totalGeral.toLocaleString();
             
-            // Top 5 Mini List
+            // Top 5 Mini List (Visual do Card)
             let topHtml = '<div class="flex flex-col gap-1.5">'; 
             this.dadosCarregados.slice(0, 5).forEach((u, i) => { 
+                const dias = u.dias.size || 1;
+                const meta = dias * 650;
+                const pct = Math.round((u.total / meta) * 100);
+
                 let color = i===0 ? 'text-amber-500' : (i===1 ? 'text-slate-400' : (i===2 ? 'text-orange-400' : 'text-slate-600'));
                 let icon = i < 3 ? '<i class="fas fa-trophy text-[9px]"></i>' : '<i class="fas fa-medal text-[9px]"></i>';
-                topHtml += `<div class="flex justify-between items-center text-xs border-b border-slate-100 pb-1 last:border-0"><div class="flex items-center gap-1.5"><span class="${color}">${icon}</span> <span class="font-bold text-slate-700 truncate max-w-[80px]">${u.nome.split(' ')[0]}</span></div> <span class="text-blue-600 font-bold bg-blue-50 px-1.5 rounded">${u.total.toLocaleString()}</span></div>`; 
+                
+                // Cor da porcentagem no card pequeno
+                let pctColor = pct >= 100 ? 'text-emerald-600 bg-emerald-50' : 'text-rose-600 bg-rose-50';
+
+                topHtml += `
+                <div class="flex justify-between items-center text-xs border-b border-slate-100 pb-1 last:border-0">
+                    <div class="flex items-center gap-1.5">
+                        <span class="${color}">${icon}</span> 
+                        <span class="font-bold text-slate-700 truncate max-w-[80px]">${u.nome.split(' ')[0]}</span>
+                    </div> 
+                    <span class="${pctColor} font-bold px-1.5 rounded">${pct}%</span>
+                </div>`; 
             }); 
             topHtml += '</div>'; 
             if(elRankContent) elRankContent.innerHTML = topHtml;
