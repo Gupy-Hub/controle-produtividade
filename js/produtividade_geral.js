@@ -1,35 +1,22 @@
-// js/produtividade_geral.js
-
 const Geral = {
     listaAtual: [],
     selecionado: null,
     dataVisualizada: null,
     periodoInicio: null,
     periodoFim: null,
-    ultimoLoad: null, // Cache simples para evitar reload idêntico
 
     toggleSemana: function() {
-        const mode = document.getElementById('view-mode').value;
-        const selSemana = document.getElementById('select-semana');
-        if (mode === 'semana') selSemana.classList.remove('hidden'); else selSemana.classList.add('hidden');
         this.carregarTela();
     },
     
     carregarTela: async function() {
         const modo = document.getElementById('view-mode').value;
+        const globalInput = document.getElementById('global-date');
+        const isoDate = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
         
-        let refDate;
-        try { refDate = Sistema.Datas.lerInput('data-validacao'); } catch (e) { refDate = new Date(); }
-        if (!refDate || isNaN(refDate.getTime())) refDate = new Date();
-
-        // Formata e salva
-        const anoIso = refDate.getFullYear();
-        const mesIso = String(refDate.getMonth() + 1).padStart(2, '0');
-        const diaIso = String(refDate.getDate()).padStart(2, '0');
-        const isoDate = `${anoIso}-${mesIso}-${diaIso}`;
-        
-        localStorage.setItem('data_sistema_global', isoDate);
         this.dataVisualizada = isoDate; 
+        const [ano, mes, dia] = isoDate.split('-').map(Number);
+        const refDate = new Date(ano, mes - 1, dia);
 
         const bulkSelect = document.getElementById('bulk-fator');
         if(bulkSelect) bulkSelect.value = "";
@@ -37,18 +24,25 @@ const Geral = {
         let inicio, fim;
         if (modo === 'dia') { 
             inicio = isoDate; fim = isoDate; 
-        } else { 
-            const ano = refDate.getFullYear(); const mes = refDate.getMonth();
-            const dateIni = new Date(ano, mes, 1);
-            const dateFim = new Date(ano, mes + 1, 0);
+        } else if (modo === 'mes') { 
+            const dateIni = new Date(ano, mes - 1, 1);
+            const dateFim = new Date(ano, mes, 0);
             inicio = dateIni.toLocaleDateString('en-CA'); 
+            fim = dateFim.toLocaleDateString('en-CA');
+        } else if (modo === 'semana') {
+            // Calcula inicio e fim da semana (domingo a sabado)
+            const dayOfWeek = refDate.getDay(); 
+            const diffIni = refDate.getDate() - dayOfWeek;
+            const diffFim = refDate.getDate() + (6 - dayOfWeek);
+            const dateIni = new Date(refDate); dateIni.setDate(diffIni);
+            const dateFim = new Date(refDate); dateFim.setDate(diffFim);
+            inicio = dateIni.toLocaleDateString('en-CA');
             fim = dateFim.toLocaleDateString('en-CA');
         }
 
         this.periodoInicio = inicio;
         this.periodoFim = fim;
 
-        // OTIMIZAÇÃO: Select Específico para reduzir tráfego de rede
         const { data } = await _supabase
             .from('producao')
             .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc') 
@@ -56,12 +50,6 @@ const Geral = {
             .lte('data_referencia', fim);
             
         let dadosFiltrados = data || [];
-        
-        if (modo === 'semana') {
-            const numSemana = parseInt(document.getElementById('select-semana').value);
-            dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
-        }
-
         this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
         this.renderizar();
     },
@@ -94,11 +82,11 @@ const Geral = {
         if (!valor) return; 
         const modo = document.getElementById('view-mode').value;
         if (modo !== 'dia') {
-            alert("Atenção: A alteração em massa só é permitida na visão 'Apenas o Dia' para evitar erros em históricos.");
+            alert("Atenção: A alteração em massa só é permitida na visão 'Apenas o Dia'.");
             document.getElementById('bulk-fator').value = "";
             return;
         }
-        if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas abaixo?")) {
+        if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes?")) {
             document.getElementById('bulk-fator').value = "";
             return;
         }
@@ -127,11 +115,9 @@ const Geral = {
             if (modo !== 'dia') {
                 bulkSelect.disabled = true;
                 bulkSelect.classList.add('opacity-50', 'cursor-not-allowed');
-                bulkSelect.title = "Disponível apenas na visão de Dia";
             } else {
                 bulkSelect.disabled = false;
                 bulkSelect.classList.remove('opacity-50', 'cursor-not-allowed');
-                bulkSelect.title = "Alterar todas";
             }
         }
 
@@ -154,22 +140,8 @@ const Geral = {
             hcConsiderado = ativos.length - reducaoAbonados - reducaoParesMeio;
         }
 
-        let diasUteisPeriodo = 1;
-        if(modo === 'dia') {
-            diasUteisPeriodo = 1;
-        } else if (modo === 'mes') {
-            diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
-        } else if (modo === 'semana') {
-            if(this.listaAtual.length > 0) {
-                let todasDatas = new Set();
-                this.listaAtual.forEach(u => Object.keys(u.diasMap).forEach(d => todasDatas.add(d)));
-                let datasArr = Array.from(todasDatas).sort();
-                if(datasArr.length > 0) {
-                    diasUteisPeriodo = this.contarDiasUteis(datasArr[0], datasArr[datasArr.length-1]);
-                } else diasUteisPeriodo = 5;
-            } else diasUteisPeriodo = 5;
-        }
-
+        let diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
+        
         const metaDiaria = 650;
         const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
         const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
@@ -179,12 +151,12 @@ const Geral = {
         let diasLabel = "";
         if (this.selecionado) {
             diasDisplay = baseCalculo.length ? baseCalculo[0].dias : 0; 
-            diasLabel = "Dias do Colaborador (Considera 50%)";
+            diasLabel = "Dias do Colaborador";
         } else {
             const setDiasUnicos = new Set();
             ativos.forEach(u => { if (u.diasMap) { Object.entries(u.diasMap).forEach(([data, info]) => { if (info.fator > 0) setDiasUnicos.add(data); }); } });
             diasDisplay = setDiasUnicos.size;
-            diasLabel = "Dias Úteis da Equipe (Calendário)";
+            diasLabel = "Dias Úteis da Equipe";
         }
 
         const elInfoAbonados = document.getElementById('info-abonados');
@@ -236,14 +208,14 @@ const Geral = {
             const isSelected = this.selecionado === u.nome;
             const rowClass = isSelected ? "selected-row" : "hover:bg-slate-50";
             const opacity = u.inativo ? "row-ignored" : "";
-            const subIds = u.ids.length > 1 ? `<br><span class="text-[9px] text-slate-400">IDs: ${u.ids.join(', ')}</span>` : '';
-
+            
             let fator = 1;
             if (modo === 'dia') {
                  const infoDia = u.diasMap[this.dataVisualizada];
                  fator = infoDia ? infoDia.fator : 1;
             } else {
-                 if (u.dias === 0) fator = 0; else if (u.dias % 1 !== 0) fator = 0.5;
+                 // Em modos agregados, mostra 100% ou calcula média
+                 fator = 1; 
             }
             const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
             const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
@@ -253,7 +225,7 @@ const Geral = {
             let badgeClass = pctIndividual >= 100 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
             const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;
 
-            tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome} ${subIds}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${pctBadge}</td></tr>`;
+            tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${pctBadge}</td></tr>`;
         });
     }
 };

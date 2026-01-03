@@ -2,84 +2,35 @@ const Perf = {
     selectedUserId: null,
     dadosCarregados: [],
     initialized: false,
-    cacheFiltros: null,
-
-    init: function() { 
-        if(!this.initialized) {
-            this.uiChange();
-            this.initialized = true;
-        }
-    },
-
-    syncData: function(dataString) {
-        const [ano, mes] = dataString.split('-').map(Number);
-        const inpMonth = document.getElementById('perf-input-month');
-        const inpYear = document.getElementById('perf-input-year');
-        
-        if(inpMonth) inpMonth.value = `${ano}-${String(mes).padStart(2,'0')}`;
-        if(inpYear) inpYear.value = ano;
-        
-        this.carregarRanking(true); 
-    },
-
-    uiChange: function() {
-        const tipo = document.getElementById('perf-period-type').value;
-        const inputs = {
-            mes: document.getElementById('perf-input-month'),
-            trim: document.getElementById('perf-input-quarter'),
-            sem: document.getElementById('perf-input-semester'),
-            ano: document.getElementById('perf-input-year')
-        };
-
-        Object.values(inputs).forEach(el => el && el.classList.add('hidden'));
-
-        if (tipo === 'mes') inputs.mes.classList.remove('hidden');
-        else if (tipo === 'trimestre') { inputs.trim.classList.remove('hidden'); inputs.ano.classList.remove('hidden'); }
-        else if (tipo === 'semestre') { inputs.sem.classList.remove('hidden'); inputs.ano.classList.remove('hidden'); }
-        else if (tipo === 'ano') inputs.ano.classList.remove('hidden');
-        
-        this.carregarRanking(); 
-    },
 
     carregarRanking: async function(forcar = false) {
         const tbody = document.getElementById('perf-ranking-body'); 
         
-        // Garante inicialização se algo deu errado no main
         if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
 
         const tipo = document.getElementById('perf-period-type').value; 
-        const valMonth = document.getElementById('perf-input-month').value; 
-        const valYear = document.getElementById('perf-input-year').value;
-        const valQuarter = document.getElementById('perf-input-quarter').value;
-        const valSemester = document.getElementById('perf-input-semester').value;
-
-        if((tipo === 'mes' && !valMonth) || (tipo !== 'mes' && !valYear)) return;
-
-        const queryKey = `${tipo}-${valMonth}-${valYear}-${valQuarter}-${valSemester}`;
-        if(!forcar && this.cacheFiltros === queryKey && this.dadosCarregados.length > 0) {
-            this.renderRanking();
-            return;
-        }
+        const globalInput = document.getElementById('global-date');
+        const dataGlobal = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
+        const [gAno, gMes] = dataGlobal.split('-').map(Number);
 
         if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Performance...</td></tr>';
         
         try {
             let s, e, labelTexto;
-            let ano = parseInt(valYear);
+            const ano = gAno;
 
             if (tipo === 'mes') { 
-                const [y, m] = valMonth.split('-').map(Number);
-                s = `${y}-${String(m).padStart(2,'0')}-01`; 
-                e = `${y}-${String(m).padStart(2,'0')}-${new Date(y, m, 0).getDate()}`;
-                labelTexto = `Mensal: ${m}/${y}`;
+                s = `${ano}-${String(gMes).padStart(2,'0')}-01`; 
+                e = `${ano}-${String(gMes).padStart(2,'0')}-${new Date(ano, gMes, 0).getDate()}`;
+                labelTexto = `Mensal: ${gMes}/${ano}`;
             } else if (tipo === 'trimestre') { 
-                const q = parseInt(valQuarter);
-                const mStart = ((q-1)*3)+1; 
+                const tri = Math.ceil(gMes / 3);
+                const mStart = ((tri-1)*3)+1; 
                 s = `${ano}-${String(mStart).padStart(2,'0')}-01`; 
                 e = `${ano}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`;
-                labelTexto = `${q}º Trimestre de ${ano}`;
+                labelTexto = `${tri}º Trimestre de ${ano}`;
             } else if (tipo === 'semestre') { 
-                const sem = parseInt(valSemester);
+                const sem = gMes <= 6 ? 1 : 2;
                 s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; 
                 e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
                 labelTexto = `${sem}º Semestre de ${ano}`;
@@ -104,20 +55,15 @@ const Perf = {
             let namesCLT = new Set(), namesPJ = new Set();
 
             prods.forEach(item => {
-                // CORREÇÃO: Usa apenas o cache central do Sistema
                 const user = Sistema.Dados.usuariosCache[item.usuario_id];
-                
                 if (!user || user.funcao !== 'Assistente') return;
 
                 const nome = user.nome.trim(); 
                 const qtd = Number(item.quantidade) || 0;
-                
-                // Meta Dinâmica
                 const metaDoDia = Sistema.Dados.obterMetaVigente(item.usuario_id, item.data_referencia);
 
                 prodTotalGeral += qtd;
                 
-                // Agora 'contrato' existe no objeto user vindo do Sistema
                 if (user.contrato && user.contrato.includes('CLT')) { 
                     prodCLT += qtd; namesCLT.add(nome); 
                 } else { 
@@ -143,7 +89,6 @@ const Perf = {
                 return pctB - pctA; 
             });
 
-            this.cacheFiltros = queryKey;
             this.renderRanking();
         } catch (err) { 
             console.error(err); 
@@ -265,7 +210,6 @@ const Perf = {
         safeSet('perf-label-real-total', total.toLocaleString());
         safeSet('perf-label-meta-total', meta.toLocaleString());
 
-        // Atualização de card de percentual se existente
         const txtPct = document.getElementById('perf-txt-pct');
         const cardPct = document.getElementById('perf-card-pct');
         const iconPct = document.getElementById('perf-icon-pct');
