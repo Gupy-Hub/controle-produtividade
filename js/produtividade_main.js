@@ -12,54 +12,43 @@ function atualizarDataGlobal(novaData) {
     mudarAba(abaAtual);
 }
 
-// --- LÓGICA DE CONFIRMAÇÃO DA BASE MANUAL ---
+// --- LÓGICA DE BASE MANUAL (SIMPLIFICADA) ---
 function atualizarBaseGlobal(novoValor) {
     const globalInput = document.getElementById('global-date');
     const dataRef = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
     
     if (typeof Sistema !== 'undefined' && Sistema.Dados) {
-        // Pega quantos assistentes o sistema realmente tem cadastrados
-        const ativasSistema = Sistema.Dados.contarAssistentesAtivos();
-        const valorInserido = parseInt(novoValor);
-
-        // Se o valor inserido for diferente do real, pede confirmação
-        if (valorInserido && valorInserido !== ativasSistema) {
-            const [ano, mes] = dataRef.split('-');
-            const msg = `⚠️ ATENÇÃO\n\nO sistema encontrou ${ativasSistema} assistentes ativas cadastradas.\n\nDeseja realmente substituir essa informação e forçar o cálculo com base em ${valorInserido} assistentes para o mês ${mes}/${ano}?`;
-            
-            if (!confirm(msg)) {
-                // Se cancelar, volta o valor para o do sistema
-                sincronizarInputBaseHC(dataRef);
-                return;
-            }
-        }
-
-        // Salva (ou deleta se for igual ao sistema para usar o padrão)
+        // Define diretamente sem confirmação (Manual é soberano para o mês)
         Sistema.Dados.definirBaseHC(dataRef, novoValor);
         
-        // Recarrega a aba se for consolidado
-        const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL);
-        if (abaAtual === 'consolidado' && typeof Cons !== 'undefined') {
-            Cons.carregar(true);
+        // Feedback visual leve
+        const inputBase = document.getElementById('global-base-hc');
+        if(inputBase) {
+            inputBase.style.color = '#2563eb'; // Azul para indicar alteração manual salva
+            setTimeout(() => inputBase.style.color = '#334155', 1000);
         }
+
+        // Recarrega a aba atual
+        const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL);
+        if (abaAtual === 'geral' && typeof Geral !== 'undefined') Geral.carregarTela();
+        if (abaAtual === 'consolidado' && typeof Cons !== 'undefined') Cons.carregar(true);
     }
 }
 
 function sincronizarInputBaseHC(dataRef) {
     const inputBase = document.getElementById('global-base-hc');
     if (inputBase && Sistema.Dados) {
-        // Obtém a base (que pode ser a manual ou a do sistema se não houver manual)
+        // Obtém a base (Manual ou Padrão 17)
         const base = Sistema.Dados.obterBaseHC(dataRef);
         inputBase.value = base;
         
-        // Dica visual: Se for diferente do sistema, destaca levemente
-        const real = Sistema.Dados.contarAssistentesAtivos();
-        if (base !== real) {
-            inputBase.style.color = '#d97706'; // Amber-600 (Aviso de manual)
-            inputBase.title = `Valor manual (Sistema: ${real})`;
+        // Dica visual: Se for diferente do padrão 17, destaca levemente
+        if (base !== 17) {
+            inputBase.style.fontWeight = '900';
+            inputBase.style.color = '#2563eb'; // Azul
         } else {
-            inputBase.style.color = '#334155'; // Slate-700 (Padrão)
-            inputBase.title = "Valor automático do sistema";
+            inputBase.style.fontWeight = 'bold';
+            inputBase.style.color = '#334155'; // Slate
         }
     }
 }

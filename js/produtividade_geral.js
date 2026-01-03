@@ -142,6 +142,7 @@ const Geral = {
         tbody.innerHTML = '';
         const modo = document.getElementById('view-mode').value;
 
+        // Configuração do Bulk Select
         const bulkSelect = document.getElementById('bulk-fator');
         if (bulkSelect) {
             if (modo !== 'dia') {
@@ -154,11 +155,19 @@ const Geral = {
         }
 
         const ativos = this.listaAtual.filter(u => !u.inativo);
-        const baseCalculo = this.selecionado ? this.listaAtual.filter(u => u.nome === this.selecionado) : ativos;
-        const totalProd = baseCalculo.reduce((a, b) => a + b.total, 0);
+        const totalProd = this.selecionado 
+            ? this.listaAtual.filter(u => u.nome === this.selecionado).reduce((a, b) => a + b.total, 0)
+            : ativos.reduce((a, b) => a + b.total, 0);
 
-        let qtdMeio = 0; let qtdAbonado = 0;
-        if (modo === 'dia' && !this.selecionado) {
+        // --- LÓGICA DE HEADCOUNT (SISTEMA vs MANUAL) ---
+        let hcConsiderado = 0;
+        let diasDisplay = 0;
+        let diasLabel = "";
+        const diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
+
+        // Lógica Dia: Usa sistema (Ativos - Abonos)
+        if (modo === 'dia') {
+            let qtdMeio = 0; let qtdAbonado = 0;
             this.listaAtual.forEach(u => {
                 const diaInfo = u.diasMap[this.dataVisualizada];
                 if (diaInfo) { 
@@ -166,56 +175,72 @@ const Geral = {
                     else if (diaInfo.fator === 0) qtdAbonado++; 
                 }
             });
-        }
-        
-        let hcConsiderado = this.selecionado ? 1 : ativos.length;
-        if (!this.selecionado && modo === 'dia') {
-            const reducaoParesMeio = Math.floor(qtdMeio / 2);
-            const reducaoAbonados = qtdAbonado;
-            hcConsiderado = ativos.length - reducaoAbonados - reducaoParesMeio;
-        }
-
-        let diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
-
-        const metaDiaria = 650;
-        const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
-        const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
-        const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
-        
-        let diasDisplay = 0;
-        let diasLabel = "";
-        if (this.selecionado) {
-            diasDisplay = baseCalculo.length ? baseCalculo[0].dias : 0; 
-            diasLabel = "Dias do Colaborador";
-        } else {
-            diasDisplay = diasUteisPeriodo;
-            diasLabel = "Dias Úteis (Calendário)";
-        }
-
-        const elInfoAbonados = document.getElementById('info-abonados');
-        if(elInfoAbonados) {
-            elInfoAbonados.classList.add('hidden'); 
-            if ((qtdMeio > 0 || qtdAbonado > 0) && modo === 'dia' && !this.selecionado) {
-                let texto = [];
-                if (qtdMeio > 0) texto.push(`${qtdMeio} Meio Período`);
-                if (qtdAbonado > 0) texto.push(`${qtdAbonado} Abonado(s)`);
-                elInfoAbonados.innerText = texto.join(', ');
-                elInfoAbonados.classList.remove('hidden');
+            
+            if (this.selecionado) {
+                hcConsiderado = 1;
+                diasLabel = "Assistente Selecionada";
+            } else {
+                const reducaoParesMeio = Math.floor(qtdMeio / 2);
+                hcConsiderado = ativos.length - qtdAbonado - reducaoParesMeio;
+                diasLabel = "Ativos (Dia)";
             }
+            diasDisplay = diasUteisPeriodo;
+
+            // Mostra KPI Simples
+            document.getElementById('kpi-hc').innerText = hcConsiderado;
+
+            // Info de abonados
+            const elInfoAbonados = document.getElementById('info-abonados');
+            if(elInfoAbonados) {
+                elInfoAbonados.classList.add('hidden'); 
+                if ((qtdMeio > 0 || qtdAbonado > 0) && !this.selecionado) {
+                    let texto = [];
+                    if (qtdMeio > 0) texto.push(`${qtdMeio} Meio Período`);
+                    if (qtdAbonado > 0) texto.push(`${qtdAbonado} Abonado(s)`);
+                    elInfoAbonados.innerText = texto.join(', ');
+                    elInfoAbonados.classList.remove('hidden');
+                }
+            }
+        } 
+        // Lógica Mês/Semana: Usa Manual
+        else {
+            const hcManual = Sistema.Dados.obterBaseHC(this.dataVisualizada);
+            
+            if (this.selecionado) {
+                hcConsiderado = 1;
+                diasDisplay = this.listaAtual.filter(u => u.nome === this.selecionado)[0]?.dias || 0;
+                diasLabel = "Dias do Colaborador";
+                document.getElementById('kpi-hc').innerText = "1";
+            } else {
+                hcConsiderado = hcManual;
+                diasDisplay = diasUteisPeriodo;
+                diasLabel = "Dias Úteis (Calendário)";
+                
+                // Mostra KPI Duplo (Sistema vs Manual)
+                const sysReal = ativos.length;
+                document.getElementById('kpi-hc').innerHTML = `<span class="text-lg">${sysReal}</span> <span class="text-[9px] text-slate-400 uppercase">Sys</span> <span class="text-slate-300 mx-1">|</span> <span class="text-lg text-blue-600">${hcManual}</span> <span class="text-[9px] text-blue-400 uppercase">Man</span>`;
+            }
+            
+            const elInfoAbonados = document.getElementById('info-abonados');
+            if(elInfoAbonados) elInfoAbonados.classList.add('hidden');
         }
 
-        document.getElementById('kpi-hc').innerText = hcConsiderado;
         document.getElementById('kpi-dias').innerText = diasDisplay;
         document.getElementById('kpi-dias-label').innerText = diasLabel;
+        
+        // --- CÁLCULOS FINAIS ---
+        const metaDiaria = 650;
+        // Meta Total usa o HC Considerado (Manual no mês, Real no dia)
+        const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
+        const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
+        
+        const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
+
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
         document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
         
-        // CORREÇÃO: Removido controle de largura da barra que não existe mais
-        
         document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
         document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
-        
-        // CORREÇÃO: Removido controle de largura da barra que não existe mais
 
         const percentual = metaTotalEsperada > 0 ? Math.round((totalProd / metaTotalEsperada) * 100) : 0;
         document.getElementById('kpi-pct').innerText = percentual + '%';

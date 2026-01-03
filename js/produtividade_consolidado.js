@@ -16,7 +16,7 @@ const Cons = {
         let el = document.getElementById('global-date');
         let val = el ? el.value : new Date().toISOString().split('T')[0];
         
-        // Define no sistema (confirmação já feita no main.js)
+        // Define no sistema (sem confirmação)
         Sistema.Dados.definirBaseHC(val, novoValor);
         this.carregar(true); 
     },
@@ -121,7 +121,7 @@ const Cons = {
             e = `${sAno}-12-31`; 
         }
 
-        // Calcula Base HC Média do Período
+        // Calcula Base HC Média do Período (Manual/Default 17)
         const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
         const cacheKey = `${t}_${s}_${e}_${HF}`;
 
@@ -338,7 +338,8 @@ const Cons = {
                     val = getter(s); 
                     if (val instanceof Set) val = val.size; 
                 } else { 
-                    val = getter(s, diasCal, ativos); 
+                    // USA HF (Manual) ao invés de 'ativos' (Sistema) para os cálculos de média
+                    val = getter(s, diasCal, HF); 
                 }
                 const txt = val ? Math.round(val).toLocaleString() : '-';
                 const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
@@ -347,9 +348,9 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // --- AQUI: PREVALÊNCIA DA BASE MANUAL (HF) ---
-        // Exibe HF (Base Manual) se estivermos falando do total de assistentes
-        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => HF);
+        // --- BASE MANUAL (HF) ---
+        // Mostra HF (Base Manual) na linha de Total
+        h += mkRow('Total de Assistentes (Manual)', 'fas fa-users-cog', 'text-indigo-500', s => HF);
         
         h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
@@ -365,19 +366,22 @@ const Cons = {
         
         const tot = st[99]; 
         const dTot = tot.diasUteis || 1; 
-        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
+        const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- CARD DE HEADCOUNT TAMBÉM MOSTRA HF (MANUAL) ---
-        setSafe('cons-p-headcount', HF); 
+        // --- CARD DE HEADCOUNT (DUPLO) ---
+        // Calcula o real do sistema
+        const uniqueUsers = new Set();
+        if(rawData) rawData.forEach(r => uniqueUsers.add(r.usuario_id));
+        const hcSystem = uniqueUsers.size;
+
+        setSafe('cons-p-headcount', `<span class="text-slate-500 text-lg">${hcSystem}</span> <span class="text-[9px] text-slate-400 uppercase">Sys</span> <span class="text-slate-300 mx-1">|</span> <span class="text-blue-600 text-2xl">${HF}</span> <span class="text-[9px] text-blue-400 uppercase">Man</span>`); 
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
-        if(elLblBase) elLblBase.innerText = HF;
-        const elBadge = document.getElementById('cons-badge-base');
-        if (elBadge) elBadge.innerText = `Base ${HF}`;
+        if(elLblBase) elLblBase.innerHTML = `Sys: ${hcSystem} | Man: ${HF}`;
     },
     
     newStats: function() { 
