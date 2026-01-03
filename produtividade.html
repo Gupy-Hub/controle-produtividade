@@ -21,9 +21,6 @@
         .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
         .top-row { background-color: #fffbeb; border-left: 4px solid #f59e0b; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
-        .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
-        .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
-        .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .status-select { background: transparent; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none; transition: all 0.2s; }
@@ -325,15 +322,16 @@
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
             <div class="flex justify-end p-3 bg-white rounded-xl shadow-sm border border-slate-200 gap-2">
                 <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                    <span class="text-[10px] font-bold text-blue-500 uppercase">Total de Assistentes</span>
+                    <span class="text-[10px] font-bold text-blue-500 uppercase">Base de Cálculo</span>
                     <input type="number" id="cons-input-hc" value="17" class="w-12 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" onchange="Cons.carregar()">
                 </div>
 
                 <select id="cons-period-type" onchange="Cons.carregar()" class="text-sm font-bold text-slate-600 bg-transparent outline-none cursor-pointer">
-                    <option value="mes">Mensal</option>
-                    <option value="trimestre">Trimestral</option>
-                    <option value="semestre">Semestral</option>
-                    <option value="ano_mes">Anual</option>
+                    <option value="mes">Mensal (Semanas)</option>
+                    <option value="trimestre">Trimestre (Meses)</option>
+                    <option value="semestre">Semestre (Meses)</option>
+                    <option value="ano_mes">Anual (Meses)</option>
+                    <option value="ano_trim">Anual (Trimestres)</option>
                     <option value="dia">Diário</option>
                 </select>
             </div>
