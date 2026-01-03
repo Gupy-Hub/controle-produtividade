@@ -3,21 +3,29 @@ const KEY_DATA_GLOBAL = 'data_sistema_global';
 const KEY_TAB_GLOBAL = 'produtividade_aba_ativa';
 let USERS_CACHE = {};
 
-// Cache de Usuários - Leve e Rápido
-async function carregarUsuariosGlobal() {
-    if (Object.keys(USERS_CACHE).length > 0) return; // Se já carregou, não carrega de novo
+// Promessa para controlar o carregamento dos utilizadores
+let userLoadPromise = null;
 
-    try {
-        // Seleciona APENAS colunas necessárias para o cache
-        const { data, error } = await _supabase
+async function carregarUsuariosGlobal() {
+    if (Object.keys(USERS_CACHE).length > 0) return USERS_CACHE; // Já carregado
+
+    if (!userLoadPromise) {
+        userLoadPromise = _supabase
             .from('usuarios')
             .select('id, nome, funcao, contrato')
-            .eq('ativo', true); // Traz apenas ativos para leveza
-        
-        if (data) {
-            data.forEach(u => USERS_CACHE[u.id] = u);
-        }
-    } catch (e) { console.error("Erro cache user", e); }
+            .eq('ativo', true)
+            .then(({ data, error }) => {
+                if (data) {
+                    data.forEach(u => USERS_CACHE[u.id] = u);
+                }
+                return USERS_CACHE;
+            })
+            .catch(err => {
+                console.error("Erro cache user", err);
+                return {};
+            });
+    }
+    return userLoadPromise;
 }
 
 function mudarAba(aba) {
@@ -42,7 +50,7 @@ function mudarAba(aba) {
     // Inicialização Específica por Aba (Lazy Load)
     if (aba === 'geral') { 
         const inp = document.getElementById('data-validacao');
-        if(inp && !inp.value) { // Só preenche se estiver vazio para não sobrescrever edição
+        if(inp && !inp.value) { 
              const dStr = String(dia).padStart(2,'0');
              const mStr = String(mes).padStart(2,'0');
              inp.value = `${dStr}/${mStr}/${ano}`;
@@ -52,13 +60,13 @@ function mudarAba(aba) {
     
     if (aba === 'performance') { 
         if(typeof Perf !== 'undefined') {
-            Perf.syncData(dataString); // Nova função para sincronizar sem recarregar tudo
+            Perf.syncData(dataString); 
         }
     }
     
     if (aba === 'matriz') { 
         const inp = document.getElementById('data-matriz');
-        if(inp) {
+        if(inp && !inp.value) { // Só preenche se vazio
              const dStr = String(dia).padStart(2,'0');
              const mStr = String(mes).padStart(2,'0');
              inp.value = `${dStr}/${mStr}/${ano}`;
@@ -68,7 +76,7 @@ function mudarAba(aba) {
     
     if (aba === 'consolidado') { 
         const inp = document.getElementById('data-cons');
-        if(inp) {
+        if(inp && !inp.value) {
              const dStr = String(dia).padStart(2,'0');
              const mStr = String(mes).padStart(2,'0');
              inp.value = `${dStr}/${mStr}/${ano}`;
@@ -78,8 +86,6 @@ function mudarAba(aba) {
 }
 
 async function importarExcel(input) {
-    // ... (Código de importação mantido igual, pois não afeta performance de leitura) ...
-    // Apenas certifique-se de chamar mudarAba('geral') ao final.
     const file = input.files[0];
     if (!file) return;
     const nomeArquivo = file.name;
@@ -96,23 +102,27 @@ async function importarExcel(input) {
             const json = XLSX.utils.sheet_to_json(sheet);
             if (json.length === 0) return alert("Vazia.");
 
-            await carregarUsuariosGlobal(); // Garante cache
+            await carregarUsuariosGlobal(); 
             const usersMap = {};
+            // Normaliza nomes para busca
             Object.values(USERS_CACHE).forEach(u => usersMap[u.nome.trim().toLowerCase()] = u.id);
 
             let inserts = [];
             for (let row of json) {
                 const nomeCsv = row['assistente'];
                 const idCsv = row['id_assistente'];
-                if (!idCsv && !nomeCsv) continue;
-                if (String(nomeCsv).toLowerCase().includes('total')) continue;
+                
+                // Pula linhas de total ou vazias
+                if ((!idCsv && !nomeCsv) || String(nomeCsv).toLowerCase().includes('total')) continue;
 
                 let uid = idCsv;
+                // Tenta encontrar ID pelo nome se não vier no Excel
                 if (!uid && nomeCsv && usersMap[nomeCsv.trim().toLowerCase()]) uid = usersMap[nomeCsv.trim().toLowerCase()];
 
                 if (uid) {
                     inserts.push({
-                        usuario_id: uid, data_referencia: dataDoArquivo,
+                        usuario_id: uid, 
+                        data_referencia: dataDoArquivo,
                         quantidade: row['documentos_validados'] || 0,
                         fifo: row['documentos_validados_fifo'] || 0,
                         gradual_total: row['documentos_validados_gradual_total'] || 0,
@@ -124,12 +134,15 @@ async function importarExcel(input) {
 
             if (inserts.length > 0) {
                 if(confirm(`Importar ${inserts.length} registros para ${matchData[1]}/${matchData[2]}/${matchData[3]}?`)) {
-                    await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
+                    const { error } = await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
+                    if(error) throw error;
                     alert("Sucesso!");
                     localStorage.setItem(KEY_DATA_GLOBAL, dataDoArquivo);
                     localStorage.setItem(KEY_TAB_GLOBAL, 'geral');
                     mudarAba('geral');
                 }
+            } else {
+                alert("Nenhum registro válido encontrado para importar.");
             }
         } catch (err) { alert("Erro: " + err.message); } finally { input.value = ''; }
     };
@@ -137,14 +150,14 @@ async function importarExcel(input) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    // Carrega usuários em background, mas não bloqueia a UI totalmente
-    carregarUsuariosGlobal().then(() => {
-        // Se a aba ativa precisar de nomes, ela vai atualizar
-        const currentTab = localStorage.getItem(KEY_TAB_GLOBAL);
-        if(currentTab === 'performance' && typeof Perf !== 'undefined') Perf.renderRanking();
-    });
+    // Inicia carregamento de dados críticos
+    const promises = [carregarUsuariosGlobal()];
+    if(typeof Sistema !== 'undefined' && Sistema.Dados) {
+        promises.push(Sistema.Dados.inicializar());
+    }
 
-    if(typeof Sistema !== 'undefined' && Sistema.Dados) await Sistema.Dados.inicializar();
+    // Aguarda carregamento inicial para evitar falhas nas abas
+    await Promise.all(promises);
     
     // Restaura última aba
     const lastTab = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';

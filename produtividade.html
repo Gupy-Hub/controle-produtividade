@@ -13,31 +13,19 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
-        
-        /* Estilos de Abas */
         .tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
         .tab-btn.active { color: #2563eb; border-color: #2563eb; background-color: #eff6ff; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
-        
-        /* Estilos de Tabela */
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
-        
-        /* Animações */
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Select de Status Customizado */
-        .status-select { 
-            background: transparent; font-weight: bold; font-size: 0.75rem; 
-            padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none;
-            transition: all 0.2s;
-        }
+        .status-select { background: transparent; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none; transition: all 0.2s; }
         .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } 
         .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } 
         .st-0 { color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; } 
@@ -103,7 +91,6 @@
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe Considerada</p>
@@ -248,12 +235,15 @@
                         <p class="text-sm text-slate-500 mt-2 font-bold">Esperado: <span class="text-slate-700">650</span></p>
                     </div>
                     
-                    <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-2">Meta do Período</p>
-                            <p class="text-3xl font-black text-slate-500" id="perf-card-meta">0</p>
+                    <div id="perf-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between transition-colors duration-300">
+                         <div>
+                            <p class="text-xs font-bold text-white/70 uppercase mb-2">Atingimento</p>
+                             <div class="flex items-center justify-between">
+                                <p class="text-3xl font-black" id="perf-txt-pct">0%</p>
+                                <i id="perf-icon-pct" class="fas fa-chart-line text-2xl text-white/80"></i>
+                             </div>
                         </div>
-                        <p class="text-sm text-slate-500 mt-2 font-bold">Realizado: <span id="perf-label-real-total" class="text-blue-600">--</span></p>
+                        <p class="text-[10px] text-white/60 mt-2 font-medium">Real vs Meta do Período</p>
                     </div>
                     
                     <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
@@ -274,7 +264,7 @@
                     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 bg-gradient-to-br from-slate-50 to-white overflow-hidden relative flex flex-col">
                         <p class="text-xs font-bold text-slate-400 uppercase mb-3">Top 5 (% Meta)</p>
                         <div id="perf-rank-content" class="text-[11px] font-medium text-slate-700 space-y-1.5 flex-1 overflow-y-auto custom-scrollbar">
-                            </div>
+                        </div>
                     </div>
                 </div>
 
