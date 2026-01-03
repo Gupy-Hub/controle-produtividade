@@ -1,100 +1,163 @@
 <!DOCTYPE html>
-<html lang="pt-pt">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Produção</title>
+    <title>Produtividade</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } </style>
 </head>
 <body class="text-slate-800">
-    
     <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        <div class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-8 gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Registo Diário</h1>
-                <p class="text-slate-500">Lance a sua produção e acompanhe o seu desempenho.</p>
+                <h1 class="text-2xl font-bold text-slate-800">Controle de Produção</h1>
+                <p class="text-sm text-slate-500" id="titulo-dinamico">Visão Geral</p>
             </div>
-            <div class="bg-white p-2 rounded-lg shadow-sm border border-slate-200 flex items-center gap-3">
-                <span class="text-xs font-bold text-slate-400 uppercase px-2">Data do Registo:</span>
-                <input type="date" id="data-registo" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm font-bold rounded-md p-2 outline-none focus:border-blue-500 transition cursor-pointer">
+            
+            <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg">
+                <div class="relative">
+                    <span class="absolute -top-2 left-2 bg-white px-1 text-[10px] font-bold text-blue-500">DATA REF</span>
+                    <input type="text" id="data-global" class="w-32 py-2 text-center border-2 border-slate-200 rounded-lg font-bold text-slate-700 outline-none focus:border-blue-500" placeholder="DD/MM/AAAA">
+                </div>
+
+                <select id="view-mode" onchange="toggleSemana()" class="py-2 px-4 border-2 border-slate-200 rounded-lg font-bold text-slate-600 outline-none bg-white">
+                    <option value="dia">Dia Específico</option>
+                    <option value="mes">Mês Completo</option>
+                    <option value="semana">Por Semana</option>
+                </select>
+
+                <select id="select-semana" onchange="carregarTela()" class="hidden py-2 px-4 border-2 border-blue-200 bg-blue-50 text-blue-800 rounded-lg font-bold outline-none">
+                    <option value="1">Semana 1</option>
+                    <option value="2">Semana 2</option>
+                    <option value="3">Semana 3</option>
+                    <option value="4">Semana 4</option>
+                    <option value="5">Semana 5</option>
+                </select>
             </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group">
-                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
-                    <i class="fas fa-chart-line text-6xl text-blue-600"></i>
-                </div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Meta de Produção</p>
-                <div class="flex items-baseline gap-1">
-                    <h3 id="display-meta-prod" class="text-3xl font-black text-slate-800">--</h3>
-                    <span class="text-sm font-medium text-slate-500">docs/dia</span>
-                </div>
-                <p class="text-xs text-blue-600 mt-2 font-medium bg-blue-50 w-fit px-2 py-1 rounded">
-                    <i class="fas fa-info-circle mr-1"></i> Vigente na data
-                </p>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                <p class="text-xs font-bold text-slate-400 uppercase">Produção Total</p>
+                <p class="text-4xl font-extrabold text-blue-700" id="kpi-total">--</p>
             </div>
-
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group">
-                <div class="absolute right-0 top-0 p-4 opacity-10 group-hover:opacity-20 transition">
-                    <i class="fas fa-check-double text-6xl text-purple-600"></i>
-                </div>
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Meta Qualidade</p>
-                <div class="flex items-baseline gap-1">
-                    <h3 id="display-meta-assert" class="text-3xl font-black text-slate-800">--</h3>
-                    <span class="text-sm font-medium text-slate-500">% min.</span>
-                </div>
-                <p class="text-xs text-purple-600 mt-2 font-medium bg-purple-50 w-fit px-2 py-1 rounded">
-                    <i class="fas fa-bullseye mr-1"></i> Global equipa
-                </p>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                <p class="text-xs font-bold text-slate-400 uppercase">Média Geral</p>
+                <p class="text-4xl font-extrabold text-slate-800" id="kpi-media">--</p>
             </div>
-
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-                <div id="status-icon" class="mb-2 text-4xl text-slate-300"><i class="fas fa-calendar-day"></i></div>
-                <p id="status-text" class="text-sm font-bold text-slate-500">Selecione uma data para lançar</p>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 text-center">
+                <p class="text-xs font-bold text-slate-400 uppercase">Headcount</p>
+                <p class="text-4xl font-extrabold text-slate-800" id="kpi-hc">--</p>
             </div>
         </div>
 
-        <div class="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-            <div class="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                <h3 class="font-bold text-slate-700"><i class="fas fa-edit mr-2"></i>Lançamento de Produção</h3>
-                <button onclick="carregarDadosDoDia()" class="text-slate-400 hover:text-blue-600 transition"><i class="fas fa-sync-alt"></i></button>
-            </div>
-            
-            <div class="p-8">
-                <div class="max-w-lg mx-auto space-y-6">
-                    
-                    <div>
-                        <label class="block text-sm font-bold text-slate-700 mb-2">Quantidade Produzida (Documentos)</label>
-                        <div class="relative">
-                            <input type="number" id="input-qtd" placeholder="0" class="w-full bg-white border-2 border-slate-200 rounded-xl px-4 py-4 text-2xl font-bold text-slate-800 focus:border-blue-500 focus:ring-0 outline-none transition placeholder-slate-300">
-                            <span class="absolute right-4 top-5 text-slate-400 font-bold text-sm">DOCS</span>
-                        </div>
-                        <p class="text-xs text-slate-400 mt-2 ml-1">Insira o total de documentos finalizados hoje.</p>
-                    </div>
-
-                    <button onclick="salvarProducao()" id="btn-salvar" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-lg font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transform active:scale-95 transition-all flex items-center justify-center gap-2">
-                        <span>💾 Salvar Produção</span>
-                    </button>
-
-                </div>
-            </div>
-            
-            <div class="bg-slate-50 p-4 text-center border-t border-slate-100">
-                <p class="text-xs text-slate-400">Os dados são salvos automaticamente para a data selecionada.</p>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                        <tr>
+                            <th class="px-6 py-4">Nome</th>
+                            <th class="px-6 py-4 text-center">Total</th>
+                            <th class="px-6 py-4 text-center">FIFO</th>
+                            <th class="px-6 py-4 text-center">Grad. Total</th>
+                            <th class="px-6 py-4 text-center">Grad. Parcial</th>
+                            <th class="px-6 py-4 text-center">Meta Calc.</th>
+                            <th class="px-6 py-4 text-center">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
+                </table>
             </div>
         </div>
-
     </div>
 
-    <script src="js/produtividade.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            Sistema.Datas.configurarInputGlobal('data-global', carregarTela);
+            await Sistema.Dados.carregarUsuarios();
+            carregarTela();
+        });
+
+        function toggleSemana() {
+            const mode = document.getElementById('view-mode').value;
+            const selSemana = document.getElementById('select-semana');
+            if (mode === 'semana') selSemana.classList.remove('hidden');
+            else selSemana.classList.add('hidden');
+            carregarTela();
+        }
+
+        async function carregarTela() {
+            const modo = document.getElementById('view-mode').value;
+            const refDate = Sistema.Datas.obterDataObjeto();
+            
+            let inicio, fim, titulo;
+
+            if (modo === 'dia') {
+                const iso = refDate.toISOString().split('T')[0];
+                inicio = iso; fim = iso;
+                titulo = "Visão do Dia: " + iso.split('-').reverse().join('/');
+            } else {
+                // Mês base para "Mes" e "Semana"
+                const ano = refDate.getFullYear();
+                const mes = refDate.getMonth();
+                inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+                fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+                titulo = `Mês de ${mes+1}/${ano}`;
+            }
+
+            const { data } = await _supabase.from('producao')
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+
+            let dadosFiltrados = data || [];
+
+            // Filtro de Semana (Feito via JS pois a semana é relativa ao mês)
+            if (modo === 'semana') {
+                const numSemana = parseInt(document.getElementById('select-semana').value);
+                dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
+                titulo += ` - Semana ${numSemana}`;
+            }
+
+            document.getElementById('titulo-dinamico').innerText = titulo;
+
+            const lista = Sistema.Dados.normalizar(dadosFiltrados);
+            
+            const total = lista.reduce((a, b) => a + b.total, 0);
+            const diasTotais = lista.reduce((a, b) => a + b.dias, 0);
+            const media = diasTotais ? Math.round(total/diasTotais) : 0;
+
+            document.getElementById('kpi-total').innerText = total.toLocaleString();
+            document.getElementById('kpi-media').innerText = media.toLocaleString();
+            document.getElementById('kpi-hc').innerText = lista.length;
+
+            const tbody = document.getElementById('tabela-corpo');
+            tbody.innerHTML = '';
+            
+            if(lista.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400">Sem dados.</td></tr>';
+                return;
+            }
+
+            lista.forEach(u => {
+                const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
+                tbody.innerHTML += `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-6 py-4 font-bold text-slate-700">${u.nome} <span class="text-[10px] text-slate-400">(${u.dias} dias)</span></td>
+                    <td class="px-6 py-4 text-center font-bold text-blue-700">${u.total}</td>
+                    <td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td>
+                    <td class="px-6 py-4 text-center text-slate-600">${u.gt}</td>
+                    <td class="px-6 py-4 text-center text-slate-600">${u.gp}</td>
+                    <td class="px-6 py-4 text-center text-slate-400">${u.meta}</td>
+                    <td class="px-6 py-4 text-center">${badge}</td>
+                </tr>`;
+            });
+        }
+    </script>
 </body>
 </html>
