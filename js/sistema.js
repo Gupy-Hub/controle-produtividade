@@ -1,15 +1,13 @@
 const Sistema = {
     Datas: {
-        // Lê a data de um input e devolve um objeto Date
-        lerInput: function(elementId) {
-            const el = document.getElementById(elementId);
+        // Lê data de string ou do próprio elemento
+        lerInput: function(elementIdOrNode) {
+            const el = typeof elementIdOrNode === 'string' ? document.getElementById(elementIdOrNode) : elementIdOrNode;
             if (!el || el.value.length !== 10) return new Date();
             const parts = el.value.split('/');
-            // Mês no JS começa em 0 (Janeiro = 0)
             return new Date(parts[2], parts[1] - 1, parts[0]);
         },
 
-        // Formata objeto Date para string DD/MM/AAAA
         formatar: function(date) {
             const d = String(date.getDate()).padStart(2, '0');
             const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -17,16 +15,16 @@ const Sistema = {
             return `${d}/${m}/${a}`;
         },
 
-        // CRIA O COMPORTAMENTO DE DATA INTELIGENTE
+        // --- INPUT SUPER INTELIGENTE ---
         criarInputInteligente: function(elementId, storageKey, callback) {
             const input = document.getElementById(elementId);
             if (!input) return;
 
-            // 1. Carregar valor inicial (do Storage ou Hoje)
+            // 1. Carregar Valor Inicial
             const salva = localStorage.getItem(storageKey);
             input.value = salva && salva.length === 10 ? salva : this.formatar(new Date());
 
-            // 2. Máscara de digitação
+            // 2. Máscara de Digitação
             input.addEventListener('input', function() {
                 let v = this.value.replace(/\D/g, '').slice(0, 8);
                 if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
@@ -34,40 +32,60 @@ const Sistema = {
                 this.value = v;
             });
 
-            // 3. Selecionar tudo ao clicar (foco)
-            input.addEventListener('focus', function() {
-                this.select();
+            // 3. Selecionar tudo ao clicar
+            input.addEventListener('focus', function() { this.select(); });
+
+            // 4. Lógica Central de Alteração (Setas e Scroll)
+            const alterarData = (e, delta) => {
+                e.preventDefault();
+                
+                // Detecta onde o cursor está (Dia, Mês ou Ano?)
+                const cursor = input.selectionStart;
+                let mode = 'day'; // Padrão
+                if (cursor >= 3 && cursor <= 5) mode = 'month';
+                if (cursor >= 6) mode = 'year';
+
+                let atual = Sistema.Datas.lerInput(input);
+                
+                // Altera apenas a parte onde o cursor está
+                if (mode === 'day') atual.setDate(atual.getDate() + delta);
+                if (mode === 'month') atual.setMonth(atual.getMonth() + delta);
+                if (mode === 'year') atual.setFullYear(atual.getFullYear() + delta);
+
+                input.value = Sistema.Datas.formatar(atual);
+                
+                // Mantém o cursor no lugar e a seleção para facilitar múltiplos cliques
+                input.setSelectionRange(cursor, cursor);
+                
+                // Salva e atualiza a tela
+                input.dispatchEvent(new Event('change'));
+            };
+
+            // Evento: Setas do Teclado
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp') alterarData(e, 1);
+                if (e.key === 'ArrowDown') alterarData(e, -1);
             });
 
-            // 4. Setas do Teclado (Alterar Dias)
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    let atual = this.lerInput(elementId);
-                    // Seta Cima (+1 dia), Seta Baixo (-1 dia)
-                    atual.setDate(atual.getDate() + (e.key === 'ArrowUp' ? 1 : -1));
-                    input.value = this.formatar(atual);
-                    
-                    // Dispara evento de mudança para salvar/recarregar
-                    input.dispatchEvent(new Event('change'));
+            // Evento: Rodinha do Mouse (Scroll) - Funciona quando o campo está focado/ativo
+            input.addEventListener('wheel', (e) => {
+                if (document.activeElement === input) {
+                    const delta = e.deltaY < 0 ? 1 : -1; // Roda pra cima (+), Roda pra baixo (-)
+                    alterarData(e, delta);
                 }
             });
 
-            // 5. Salvar e Executar Callback ao mudar
+            // 5. Salvar ao Confirmar
             input.addEventListener('change', function() {
                 if (this.value.length === 10) {
                     localStorage.setItem(storageKey, this.value);
                     if (typeof callback === 'function') callback();
                 }
             });
-            
-            // Enter para confirmar (tirar o foco)
-            input.addEventListener('keypress', function(e) {
-                if(e.key === 'Enter') this.blur();
-            });
+
+            input.addEventListener('keypress', function(e) { if(e.key === 'Enter') this.blur(); });
         },
 
-        // Utilitário para pegar a semana do mês
         getSemanaDoMes: function(dataIsoStr) {
             const date = new Date(dataIsoStr + 'T12:00:00');
             const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay();
@@ -79,49 +97,31 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
 
-        // Carrega Usuários e Metas do Supabase
         inicializar: async function() {
             if (!window._supabase) { console.error("Supabase Off"); return; }
-            
-            // Busca Usuários
             const { data: users } = await _supabase.from('usuarios').select('id, nome, funcao');
             this.usuariosCache = {};
             if(users) users.forEach(u => this.usuariosCache[u.id] = u);
-            
-            // Busca Metas (Ordenadas por data para facilitar a busca da vigente)
             const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false });
             this.metasCache = metas || [];
         },
 
-        // Lógica de Histórico de Metas
         obterMetaVigente: function(usuarioId, dataReferencia) {
             const metasUsuario = this.metasCache.filter(m => m.usuario_id == usuarioId);
-            // Pega a primeira meta cuja data de inicio é anterior ou igual à data do registro
             const metaEncontrada = metasUsuario.find(m => m.data_inicio <= dataReferencia);
             return metaEncontrada ? metaEncontrada.valor_meta : 650;
         },
 
-        // Prepara os dados para a tabela
         normalizar: function(listaProducao) {
             const agrupado = {};
             listaProducao.forEach(item => {
                 const uid = item.usuario_id;
                 const user = this.usuariosCache[uid];
-                
-                // Filtra apenas Assistentes
                 if (!user || user.funcao !== 'Assistente') return;
 
                 if (!agrupado[uid]) {
-                    agrupado[uid] = {
-                        nome: user.nome,
-                        diasSet: new Set(),
-                        total: 0,
-                        fifo: 0, gt: 0, gp: 0,
-                        metaAccum: 0,
-                        atingiu: false
-                    };
+                    agrupado[uid] = { nome: user.nome, diasSet: new Set(), total: 0, fifo: 0, gt: 0, gp: 0, metaAccum: 0, atingiu: false };
                 }
-
                 const qtd = Number(item.quantidade) || 0;
                 agrupado[uid].total += qtd;
                 agrupado[uid].fifo += Number(item.fifo) || 0;
@@ -129,19 +129,13 @@ const Sistema = {
                 agrupado[uid].gp += Number(item.gradual_parcial) || 0;
                 agrupado[uid].diasSet.add(item.data_referencia);
 
-                // Aplica a meta correta daquela data específica
                 const metaDoDia = this.obterMetaVigente(uid, item.data_referencia);
                 agrupado[uid].metaAccum += metaDoDia;
             });
 
             return Object.values(agrupado).map(obj => {
                 return {
-                    nome: obj.nome,
-                    dias: obj.diasSet.size,
-                    total: obj.total,
-                    fifo: obj.fifo, gt: obj.gt, gp: obj.gp,
-                    meta: obj.metaAccum,
-                    atingiu: obj.total >= obj.metaAccum
+                    nome: obj.nome, dias: obj.diasSet.size, total: obj.total, fifo: obj.fifo, gt: obj.gt, gp: obj.gp, meta: obj.metaAccum, atingiu: obj.total >= obj.metaAccum
                 };
             }).sort((a, b) => b.total - a.total);
         }

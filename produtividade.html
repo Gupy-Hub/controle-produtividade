@@ -297,19 +297,16 @@
                     let erros = 0;
 
                     for (let row of json) {
-                        // Tenta achar colunas comuns
                         const nome = row['Nome'] || row['nome'] || row['Colaborador'];
-                        const dataRef = row['Data'] || row['data'] || row['Data Referencia']; // Deve ser AAAA-MM-DD ou Date do Excel
+                        const dataRef = row['Data'] || row['data'] || row['Data Referencia'];
                         const qtd = row['Quantidade'] || row['quantidade'] || row['Total'];
                         
-                        // Normaliza data (se vier numero do Excel)
                         let dataFinal = dataRef;
                         if (typeof dataRef === 'number') {
                             const dateObj = new Date((dataRef - (25567 + 2)) * 86400 * 1000);
                             dataFinal = dateObj.toISOString().split('T')[0];
                         }
 
-                        // Busca ID
                         let uid = row['ID'] || row['id'];
                         if (!uid && nome && usersMap[nome.trim().toLowerCase()]) {
                             uid = usersMap[nome.trim().toLowerCase()];
@@ -337,14 +334,14 @@
                             Geral.carregarTela();
                         }
                     } else {
-                        alert("Nenhum dado válido encontrado. Verifique as colunas (Nome, Data, Quantidade).");
+                        alert("Nenhum dado válido encontrado.");
                     }
 
                 } catch (err) {
                     console.error(err);
                     alert("Erro ao importar: " + err.message);
                 } finally {
-                    input.value = ''; // Limpa input
+                    input.value = '';
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -402,12 +399,10 @@
         const Perf = {
             selectedUserId: null, dadosCarregados: [], initialized: false,
             init: function() {
-                // Configura o input apenas se ainda não foi inicializado
                 if(!this.initialized) {
                     Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); });
                     this.initialized = true;
                 }
-                // --- CORREÇÃO: SEMPRE CARREGA OS DADOS AO ABRIR A ABA ---
                 this.carregarRanking();
             },
             limparSelecao: function() { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); this.carregarRanking(); },
@@ -469,7 +464,6 @@
                     Sistema.Datas.criarInputInteligente('data-matriz', KEY_DATA_GLOBAL, () => { this.carregar(); });
                     this.initialized = true;
                 }
-                // --- CORREÇÃO: SEMPRE CARREGA OS DADOS AO ABRIR A ABA ---
                 this.carregar();
             },
             carregar: async function() {
@@ -503,7 +497,6 @@
                     Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(); });
                     this.initialized = true;
                 }
-                // --- CORREÇÃO: SEMPRE CARREGA OS DADOS AO ABRIR A ABA ---
                 this.carregar();
             },
             carregar: async function() {
