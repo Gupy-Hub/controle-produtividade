@@ -1,7 +1,7 @@
 // js/produtividade_performance.js
 
 const Perf = {
-    selectedUserId: null,
+    selectedUserId: null, // Armazena o ID principal ou Nome para seleção
     dadosCarregados: [],
     initialized: false,
 
@@ -17,13 +17,11 @@ const Perf = {
         const inpSemester = document.getElementById('perf-input-semester');
         const inpYear = document.getElementById('perf-input-year');
 
-        // Esconde tudo primeiro
         inpMonth.classList.add('hidden');
         inpQuarter.classList.add('hidden');
         inpSemester.classList.add('hidden');
         inpYear.classList.add('hidden');
 
-        // Mostra o necessário
         if (tipo === 'mes') {
             inpMonth.classList.remove('hidden');
         } else if (tipo === 'trimestre') {
@@ -46,6 +44,7 @@ const Perf = {
     },
 
     toggleUsuario: function(id) { 
+        // id aqui será o ID principal do agrupamento
         if (this.selectedUserId === id) { 
             this.selectedUserId = null; 
             document.getElementById('perf-btn-limpar').classList.add('hidden'); 
@@ -67,9 +66,7 @@ const Perf = {
             const valQuarter = document.getElementById('perf-input-quarter').value;
             const valSemester = document.getElementById('perf-input-semester').value;
 
-            // Validação simples
-            if(tipo === 'mes' && !valMonth) return;
-            if(tipo !== 'mes' && !valYear) return;
+            if((tipo === 'mes' && !valMonth) || (tipo !== 'mes' && !valYear)) return;
 
             let s, e, labelTexto;
             let ano = parseInt(valYear);
@@ -97,7 +94,7 @@ const Perf = {
                 e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
                 labelTexto = `${sem}º Semestre de ${ano}`;
 
-            } else { // Anual
+            } else { 
                 s = `${ano}-01-01`; 
                 e = `${ano}-12-31`; 
                 labelTexto = `Ano de ${ano}`;
@@ -109,12 +106,15 @@ const Perf = {
             const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
             if(error) throw error;
             
-            let stats = {};
+            // --- LÓGICA DE AGRUPAMENTO (SOLUÇÃO DO PROBLEMA DE DUPLICIDADE) ---
+            let stats = {}; 
             let prodTotalGeral = 0;
             let prodCLT = 0;
             let prodPJ = 0;
-            let usersCLT = new Set();
-            let usersPJ = new Set();
+            
+            // Sets para contar Headcount Único (baseado no nome)
+            let uniqueNamesCLT = new Set();
+            let uniqueNamesPJ = new Set();
 
             prods.forEach(item => {
                 const uid = item.usuario_id;
@@ -122,31 +122,47 @@ const Perf = {
                 
                 if (!user || user.funcao !== 'Assistente') return;
 
+                const nomeChave = user.nome.trim(); // Chave de agrupamento é o NOME
                 const qtd = Number(item.quantidade) || 0;
+                
                 prodTotalGeral += qtd;
                 
+                // Contagem de Produção e Headcount por Contrato
                 if (user.contrato && user.contrato.includes('CLT')) {
                     prodCLT += qtd;
-                    usersCLT.add(uid);
+                    uniqueNamesCLT.add(nomeChave);
                 } else {
                     prodPJ += qtd;
-                    usersPJ.add(uid);
+                    uniqueNamesPJ.add(nomeChave);
                 }
 
-                if (!stats[uid]) stats[uid] = { id: uid, nome: user.nome, total: 0, dias: new Set() };
-                stats[uid].total += qtd; 
-                stats[uid].dias.add(item.data_referencia);
+                // Se ainda não existe registro para esse NOME, cria
+                if (!stats[nomeChave]) {
+                    stats[nomeChave] = { 
+                        id: uid, // Guarda um ID para referência (toggle)
+                        nome: user.nome, 
+                        total: 0, 
+                        dias: new Set() // Set evita contagem duplicada de dias
+                    };
+                }
+                
+                // Soma a produção
+                stats[nomeChave].total += qtd; 
+                // Adiciona a data ao Set (se já existir data de outro ID para a mesma pessoa, o Set ignora)
+                stats[nomeChave].dias.add(item.data_referencia);
             });
             
+            // Atualiza Card CLT vs PJ
             const pctCLT = prodTotalGeral > 0 ? Math.round((prodCLT / prodTotalGeral) * 100) : 0;
             const pctPJ = prodTotalGeral > 0 ? Math.round((prodPJ / prodTotalGeral) * 100) : 0;
             
             document.getElementById('perf-pct-clt').innerText = pctCLT + '%';
-            document.getElementById('perf-count-clt').innerText = usersCLT.size;
+            document.getElementById('perf-count-clt').innerText = uniqueNamesCLT.size; // Usa o tamanho do Set de Nomes
             
             document.getElementById('perf-pct-pj').innerText = pctPJ + '%';
-            document.getElementById('perf-count-pj').innerText = usersPJ.size;
+            document.getElementById('perf-count-pj').innerText = uniqueNamesPJ.size;
 
+            // Ordenação por % Meta
             this.dadosCarregados = Object.values(stats).sort((a, b) => {
                 const diasA = a.dias.size || 1;
                 const metaA = diasA * 650;
@@ -178,7 +194,7 @@ const Perf = {
         let userStats = null;
         
         this.dadosCarregados.forEach((u, idx) => {
-            const dias = u.dias.size || 1; 
+            const dias = u.dias.size || 1; // Dias unificados pelo Set
             const media = Math.round(u.total / dias); 
             const meta = 650 * dias; 
             const pct = Math.round((u.total / meta) * 100);
@@ -186,7 +202,7 @@ const Perf = {
             const isSelected = this.selectedUserId === u.id; 
             if (isSelected) userStats = { ...u, media, meta, rank: idx + 1 };
             
-            const isMe = (typeof sessao !== 'undefined' && sessao) && u.id === sessao.id; 
+            const isMe = (typeof sessao !== 'undefined' && sessao) && u.nome === sessao.nome; // Comparação por nome é mais segura aqui
             
             let rowClass = "hover:bg-slate-50 transition border-b border-slate-100 cursor-pointer "; 
             if (isSelected) rowClass += "selected-row"; 
@@ -236,8 +252,9 @@ const Perf = {
             if(elCardMeta) elCardMeta.innerText = userStats.meta.toLocaleString(); 
             if(labelRealTotal) labelRealTotal.innerText = userStats.total.toLocaleString();
         } else {
-            // Geral
+            // Geral (Time)
             const totalGeral = this.dadosCarregados.reduce((acc, curr) => acc + curr.total, 0); 
+            // Dias Gerais: Soma dos dias únicos de CADA pessoa
             const diasGeral = this.dadosCarregados.reduce((acc, curr) => acc + (curr.dias.size||1), 0); 
             
             let metaGeral = 0;
@@ -267,6 +284,7 @@ const Perf = {
                 }
             }
             
+            // Top 5
             let topHtml = '<div class="flex flex-col gap-1.5">'; 
             this.dadosCarregados.slice(0, 5).forEach((u, i) => { 
                 const dias = u.dias.size || 1;
