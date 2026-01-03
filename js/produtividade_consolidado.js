@@ -213,6 +213,18 @@ const Cons = {
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
         const sysHC = uniqueUsers.size;
 
+        // --- CONTAGEM DE CLT / PJ ---
+        let countCLT = 0;
+        let countPJ = 0;
+        uniqueUsers.forEach(uid => {
+            const u = Sistema.Dados.usuariosCache[uid];
+            if (u) {
+                const c = (u.contrato || '').toUpperCase();
+                if (c.includes('CLT')) countCLT++;
+                else if (c.includes('PJ')) countPJ++;
+            }
+        });
+
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
             const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
             const iconColor = colorInfo || 'text-slate-400';
@@ -231,18 +243,23 @@ const Cons = {
                 const s = st[i]; 
                 const diasCal = s.diasUteis; 
                 
-                // --- LÓGICA CRUCIAL DO PEDIDO ---
-                // Para cálculos (divisão): Usa o HF (Manual) na coluna 99.
-                // Para exibição da contagem (linha 1): O getter abaixo vai usar o s.users.size (Real).
+                // --- LÓGICA CRUCIAL ---
+                // Para cálculo de média (isCalc=true), na coluna 99, usa HF (Manual).
                 const realHC = s.users.size || 0;
                 const hcDaColuna = (i === 99) ? HF : (realHC || 1); 
 
                 let val = 0; 
                 if (!isCalc) { 
-                    // Exibição normal (somas ou contagem pura)
-                    val = getter(s); 
+                    // Na tabela (contagem simples), sempre mostra o valor REAL (s.users.size)
+                    // mesmo na coluna 99, para o usuário ver o total real de pessoas.
+                    if (label.includes('Assistentes')) {
+                        // Se for semana vazia, mostra 0. Se for total, mostra total do sistema.
+                        val = (i === 99) ? sysHC : realHC;
+                    } else {
+                        val = getter(s); 
+                    }
                 } else { 
-                    // Cálculos de Média: Força o uso do hcDaColuna (Manual no Total)
+                    // Nos cálculos de média, usa a base manual (HF) se estiver no total.
                     val = getter(s, diasCal, hcDaColuna); 
                 }
 
@@ -253,9 +270,8 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // Linha "Total de Assistentes":
-        // Getter agora retorna 's.users.size' (Total Real do Sistema). 
-        // Assim, na tabela aparece o número real (ex: 15), mesmo que a conta use 13.
+        // Linha 1: "Total de Assistentes" na tabela
+        // Mostrará o SYS_HC (Real) na coluna Total, para histórico correto.
         h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => s.users.size);
         
         h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
@@ -265,8 +281,7 @@ const Cons = {
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // Linhas de Média:
-        // O parâmetro 'a' recebido aqui será o 'hcDaColuna' definido acima (ou seja, HF no total).
+        // Linhas de Média (Usam HF para dividir no Total)
         h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
         h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
@@ -279,16 +294,26 @@ const Cons = {
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        
-        // Cálculos do card: Usa HF (Manual)
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // Card Headcount: Mostra HF (Manual) com aviso se for diferente do sistema
+        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT ---
+        // Mostra o Manual (se houver) + Detalhamento CLT/PJ
+        let cardHTML = '';
+        
+        // Número principal (Manual se diferente, ou Sistema)
         if (HF !== sysHC) {
-            setSafe('cons-p-headcount', `${HF} <span class="text-sm text-amber-500 block font-bold">(Manual)</span>`);
+            cardHTML = `${HF} <span class="text-sm text-amber-500 font-bold">(Manual)</span>`;
         } else {
-            setSafe('cons-p-headcount', HF);
+            cardHTML = `${HF}`;
         }
+        
+        // Detalhe CLT/PJ
+        cardHTML += `<div class="flex items-center gap-2 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        <span class="bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">CLT: ${countCLT}</span>
+                        <span class="bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">PJ: ${countPJ}</span>
+                     </div>`;
+
+        setSafe('cons-p-headcount', cardHTML);
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
         if(elLblBase) elLblBase.innerText = HF;
