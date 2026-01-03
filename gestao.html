@@ -382,12 +382,10 @@
         async function loadMetasAtuais() {
             const container = document.getElementById('meta-list');
             try { 
-                // Buscar TODAS as metas ordenadas por data (mais recente primeiro)
                 const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false }); 
                 
                 if (!metas) return;
                 
-                // Agrupar por usuário e pegar a VIGENTE (data_inicio <= hoje) e a FUTURA (se houver)
                 const assistentes = allUsers.filter(u => u.funcao === 'Assistente' && u.ativo !== false);
                 const hoje = new Date().toISOString().split('T')[0];
                 let html = '';
@@ -398,27 +396,39 @@
                 }
 
                 assistentes.forEach(u => {
-                    // Metas deste usuário
                     const metasUser = metas.filter(m => m.usuario_id === u.id);
                     
-                    // Encontrar a vigente (a primeira que é <= hoje, já que a lista está desc)
+                    // Meta Vigente (A que vale HOJE)
                     const metaAtual = metasUser.find(m => m.data_inicio <= hoje);
-                    // Encontrar futura (a primeira que é > hoje)
-                    const metaFutura = metasUser.find(m => m.data_inicio > hoje); // Pegará a mais distante se houver várias, ou a mais próxima? Como está desc, pega a mais distante. Vamos reverter lógica para futura se quisermos a mais próxima, mas ok.
+                    
+                    // Metas Futuras (Todas as agendadas)
+                    // Filtramos as maiores que hoje e ordenamos da mais próxima para a mais distante para visualização
+                    const metasFuturas = metasUser
+                        .filter(m => m.data_inicio > hoje)
+                        .sort((a, b) => a.data_inicio.localeCompare(b.data_inicio));
                     
                     const valorAtual = metaAtual ? metaAtual.valor_meta : '-';
                     const dataAtual = metaAtual ? metaAtual.data_inicio.split('-').reverse().join('/') : '-';
                     
+                    // Monta lista de futuras
                     let extraInfo = '';
-                    if (metaFutura) {
-                         extraInfo = `<div class="text-[9px] text-orange-500 mt-1 font-bold"><i class="fas fa-clock mr-1"></i>Futura: ${metaFutura.valor_meta} (${metaFutura.data_inicio.split('-').reverse().join('/')})</div>`;
+                    if (metasFuturas.length > 0) {
+                        extraInfo = '<div class="mt-1 space-y-1 border-l-2 border-orange-200 pl-2">';
+                        metasFuturas.forEach(mf => {
+                            extraInfo += `
+                            <div class="text-[10px] text-orange-600 font-bold flex justify-between">
+                                <span><i class="fas fa-clock mr-1"></i>${mf.data_inicio.split('-').reverse().join('/')}</span>
+                                <span>${mf.valor_meta}</span>
+                            </div>`;
+                        });
+                        extraInfo += '</div>';
                     }
 
                     html += `
                     <div class="flex justify-between items-start border-b border-slate-100 py-3 last:border-0 hover:bg-slate-50 px-2 transition">
                         <div>
                             <div class="font-bold text-sm text-slate-700">${u.nome}</div>
-                            <div class="text-[10px] text-slate-400 font-medium">Vigência desde: ${dataAtual}</div>
+                            <div class="text-[10px] text-slate-400 font-medium">Vigência: ${dataAtual}</div>
                             ${extraInfo}
                         </div>
                         <div class="text-right">

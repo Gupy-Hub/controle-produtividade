@@ -42,7 +42,7 @@ async function carregarDados() {
     const elProducao = document.getElementById('stat-producao');
     const elMeta = document.getElementById('stat-meta');
     const elPercent = document.getElementById('stat-percent');
-    const elAssert = document.getElementById('stat-assertividade'); // Novo campo se houver
+    const elAssert = document.getElementById('stat-assertividade'); // Novo campo de assertividade
     
     // Mostra loading
     if(elProducao) elProducao.innerText = "...";
@@ -50,12 +50,13 @@ async function carregarDados() {
 
     try {
         // --- A. BUSCAR META VIGENTE NA DATA SELECIONADA ---
-        // Correção: Busca a meta que começou antes ou na data selecionada, ordenada pela mais recente
+        // Lógica: Meta com data_inicio <= dataSelecionada. 
+        // Ordenamos por data (decrescente) e pegamos a primeira (a mais recente válida).
         const { data: metas, error: errorMeta } = await _supabase
             .from('metas')
             .select('valor_meta, data_inicio')
             .eq('usuario_id', usuarioLogado.id)
-            .lte('data_inicio', dataSelecionada) // Menor ou igual à data do filtro
+            .lte('data_inicio', dataSelecionada) // Filtra metas futuras
             .order('data_inicio', { ascending: false }) // Pega a mais recente dentro do filtro
             .limit(1);
 
@@ -102,18 +103,18 @@ async function carregarDados() {
             }
         }
 
-        // 3. Assertividade (Novo Cálculo Global)
+        // 3. Assertividade (Comparação com Meta Global)
         // Assertividade = 100 - ( (Erros / Produção) * 100 )
         let assertividade = 100;
         if (qtdFeita > 0) {
             const taxaErro = (erros / qtdFeita) * 100;
             assertividade = 100 - taxaErro;
         } else if (erros > 0) {
-            // Se produziu 0 mas teve erros (correções de dias anteriores?), assertividade cai
+            // Se produziu 0 mas teve erros, assertividade é 0
             assertividade = 0; 
         }
 
-        // Busca Meta de Assertividade Global para comparar
+        // Busca Meta de Assertividade Global VIGENTE
         const { data: metaAssert, error: errAss } = await _supabase
             .from('metas_assertividade')
             .select('valor_minimo')
@@ -125,7 +126,8 @@ async function carregarDados() {
 
         if(elAssert) {
             elAssert.innerText = assertividade.toFixed(2) + '%';
-            // Cor baseada na meta global
+            
+            // Cor baseada na meta global (verde se >= meta, vermelho se < meta)
             if(assertividade >= metaAssertValor) {
                 elAssert.classList.remove('text-red-500');
                 elAssert.classList.add('text-emerald-600');
@@ -135,20 +137,7 @@ async function carregarDados() {
             }
         }
 
-        // --- D. ATUALIZAR GRÁFICO (Se existir na tela) ---
-        if (typeof renderChart === 'function') {
-            // Se tiveres um gráfico no dashboard, chamaria aqui passando (qtdFeita, metaDoDia)
-            // renderChart(qtdFeita, metaDoDia); 
-        }
-
     } catch (err) {
         console.error("Erro ao carregar dados:", err);
     }
-}
-
-// Função para salvar dados (caso o usuário digite na própria tela de produtividade, se houver inputs)
-async function salvarProducao() {
-    // Esta função depende se tens inputs de edição nesta tela.
-    // Como a descrição foca na visualização da meta correta, mantive a leitura como prioridade.
-    alert("Funcionalidade de registo direto na dashboard em desenvolvimento.");
 }
