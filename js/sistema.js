@@ -21,47 +21,11 @@ const Sistema = {
             const salva = localStorage.getItem(storageKey);
             input.value = salva && salva.length === 10 ? salva : this.formatar(new Date());
 
-            input.addEventListener('click', function() {
-                const cursor = this.selectionStart;
-                if (cursor <= 2) this.setSelectionRange(0, 2);
-                else if (cursor >= 3 && cursor <= 5) this.setSelectionRange(3, 5);
-                else this.setSelectionRange(6, 10);
-            });
-
             input.addEventListener('input', function() {
                 let v = this.value.replace(/\D/g, '').slice(0, 8);
                 if (v.length >= 5) v = v.replace(/(\d{2})(\d{2})(\d{1,4})/, '$1/$2/$3');
                 else if (v.length >= 3) v = v.replace(/(\d{2})(\d{1,2})/, '$1/$2');
                 this.value = v;
-            });
-
-            const alterarData = (e, delta) => {
-                e.preventDefault();
-                const cursor = input.selectionStart;
-                let mode = 'day', start = 0, end = 2;
-                if (cursor >= 3 && cursor <= 5) { mode = 'month'; start = 3; end = 5; }
-                if (cursor >= 6) { mode = 'year'; start = 6; end = 10; }
-
-                let atual = Sistema.Datas.lerInput(input);
-                if (mode === 'day') atual.setDate(atual.getDate() + delta);
-                if (mode === 'month') atual.setMonth(atual.getMonth() + delta);
-                if (mode === 'year') atual.setFullYear(atual.getFullYear() + delta);
-
-                input.value = Sistema.Datas.formatar(atual);
-                input.setSelectionRange(start, end);
-                input.dispatchEvent(new Event('change'));
-            };
-
-            input.addEventListener('keydown', (e) => {
-                if (e.key === 'ArrowUp') alterarData(e, 1);
-                if (e.key === 'ArrowDown') alterarData(e, -1);
-            });
-
-            input.addEventListener('wheel', (e) => {
-                if (document.activeElement === input) {
-                    const delta = e.deltaY < 0 ? 1 : -1;
-                    alterarData(e, delta);
-                }
             });
 
             input.addEventListener('change', function() {
@@ -70,7 +34,6 @@ const Sistema = {
                     if (typeof callback === 'function') callback();
                 }
             });
-            input.addEventListener('keypress', function(e) { if(e.key === 'Enter') this.blur(); });
         },
 
         getSemanaDoMes: function(dataIsoStr) {
@@ -84,19 +47,43 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {},
+        inicializado: false,
 
         inicializar: async function() {
+            if (this.inicializado) return; // Evita recarregar à toa
+
             const saved = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = saved ? JSON.parse(saved) : {};
 
             if (!window._supabase) { console.error("Supabase Off"); return; }
             
-            const { data: users } = await _supabase.from('usuarios').select('id, nome, funcao');
-            this.usuariosCache = {};
-            if(users) users.forEach(u => this.usuariosCache[u.id] = u);
-            
-            const { data: metas } = await _supabase.from('metas').select('*').order('data_inicio', { ascending: false });
-            this.metasCache = metas || [];
+            try {
+                // CORREÇÃO: Busca colunas essenciais para todas as abas (incluindo contrato)
+                const { data: users, error: errUser } = await _supabase
+                    .from('usuarios')
+                    .select('id, nome, funcao, contrato, ativo')
+                    .order('nome');
+                
+                if (errUser) throw errUser;
+
+                this.usuariosCache = {};
+                if(users) {
+                    users.forEach(u => this.usuariosCache[u.id] = u);
+                }
+                
+                const { data: metas, error: errMeta } = await _supabase
+                    .from('metas')
+                    .select('*')
+                    .order('data_inicio', { ascending: false });
+                    
+                if (errMeta) throw errMeta;
+                this.metasCache = metas || [];
+                
+                this.inicializado = true;
+                console.log("Sistema inicializado com sucesso.");
+            } catch (e) {
+                console.error("Erro ao inicializar Sistema:", e);
+            }
         },
 
         definirFator: function(nome, dataRef, fator) {
@@ -135,7 +122,8 @@ const Sistema = {
                         nome: user.nome,
                         ids: new Set(),
                         diasMap: {}, 
-                        total: 0, fifo: 0, gt: 0, gp: 0
+                        total: 0, fifo: 0, gt: 0, gp: 0,
+                        metaAcc: 0 // Acumulador de meta
                     };
                 }
 
@@ -148,9 +136,12 @@ const Sistema = {
                 agrupado[nomeChave].gp += Number(item.gradual_parcial) || 0;
 
                 const dia = item.data_referencia;
+                // Busca meta correta do dia
+                const metaDoDia = this.obterMetaVigente(uid, dia);
+                
                 if (!agrupado[nomeChave].diasMap[dia]) {
                     agrupado[nomeChave].diasMap[dia] = {
-                        metaBase: this.obterMetaVigente(uid, dia),
+                        metaBase: metaDoDia,
                         fator: this.obterFator(user.nome, dia)
                     };
                 }
@@ -168,7 +159,7 @@ const Sistema = {
                 return {
                     nome: obj.nome,
                     ids: Array.from(obj.ids),
-                    diasMap: obj.diasMap, // --- IMPORTANTE: Retorna o mapa para contagem de dias únicos
+                    diasMap: obj.diasMap,
                     dias: diasContabilizados,
                     total: obj.total,
                     fifo: obj.fifo, gt: obj.gt, gp: obj.gp,
