@@ -19,7 +19,7 @@
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
-        .top-row { background-color: #fffbeb; border-left: 4px solid #f59e0b; } /* Destaque Top 5 */
+        .top-row { background-color: #fffbeb; border-left: 4px solid #f59e0b; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
@@ -102,57 +102,61 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe Considerada</p>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Equipe</p>
                         <div class="flex items-end justify-between">
-                            <p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p>
-                            <i class="fas fa-users text-4xl text-slate-100 group-hover:text-blue-50 transition"></i>
+                            <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-hc">--</p>
+                            <i class="fas fa-users text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
                         </div>
                     </div>
-                    <div id="info-abonados" class="mt-2 text-[10px] font-bold bg-amber-50 text-amber-700 px-2 py-1 rounded hidden border border-amber-100"></div>
-                    <p class="text-[10px] text-slate-400 mt-1" id="label-hc-desc">Ativos no Período</p>
+                    <div id="info-abonados" class="mt-1 text-[9px] font-bold bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded hidden border border-amber-100"></div>
+                    <p class="text-[10px] text-slate-400 mt-1 font-bold" id="label-hc-desc">Ativos no Período</p>
                 </div>
 
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Trabalhados</p>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
                     <div class="flex items-end justify-between">
-                        <p class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p>
-                        <i class="fas fa-calendar-day text-4xl text-slate-100 group-hover:text-blue-50 transition"></i>
+                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p>
+                        <i class="fas fa-calendar-day text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-1" id="kpi-dias-label">Geral ou Individual</p>
+                    <p class="text-[10px] text-slate-400 mt-1 font-bold" id="kpi-dias-label">Geral ou Individual</p>
                 </div>
 
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção vs Meta</p>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção Total</p>
                     <div class="flex items-end gap-2">
-                        <p class="text-3xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
-                        <span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-total">--</span></span>
+                        <p class="text-2xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
                     </div>
-                    <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
-                        <div id="bar-prod" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                    <div>
+                         <p class="text-[10px] text-slate-400 mt-1 font-bold mb-1">Meta: <span id="kpi-meta-total" class="text-slate-600">--</span></p>
+                         <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                            <div id="bar-prod" class="bg-blue-500 h-full transition-all duration-500" style="width: 0%"></div>
+                         </div>
                     </div>
                 </div>
 
-                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 group relative">
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média / Analista</p>
                     <div class="flex items-end gap-2">
-                        <p class="text-3xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p>
-                        <span class="text-xs font-bold text-slate-400 mb-1">/ <span id="kpi-meta-media">--</span></span>
+                        <p class="text-2xl font-black text-emerald-600 tracking-tighter" id="kpi-media">--</p>
                     </div>
-                    <div class="w-full bg-slate-100 h-1.5 mt-2 rounded-full overflow-hidden">
-                        <div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+                     <div>
+                         <p class="text-[10px] text-slate-400 mt-1 font-bold mb-1">Meta: <span id="kpi-meta-media" class="text-slate-600">--</span></p>
+                         <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                            <div id="bar-media" class="bg-emerald-500 h-full transition-all duration-500" style="width: 0%"></div>
+                         </div>
                     </div>
                 </div>
 
-                <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-5 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500">
+                <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500 flex flex-col justify-between">
                     <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
                     <div class="flex items-center justify-between">
-                        <p class="text-4xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                        <div id="icon-pct" class="text-2xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                        <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
+                        <div id="icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
                     </div>
-                    <p class="text-[10px] text-white/60 mt-2 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
+                    <p class="text-[10px] text-white/60 mt-1 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
             </div>
 
