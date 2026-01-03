@@ -7,6 +7,7 @@
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
@@ -23,7 +24,7 @@
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .me-row { background-color: #f8fafc; border-left: 4px solid #94a3b8; }
         
-        /* Colunas Especiais (Performance) */
+        /* Colunas Especiais (Matriz) */
         .col-tri { background-color: #f0f9ff; color: #0369a1; font-weight: bold; text-align: center; border-left: 1px solid #e0f2fe; }
         .col-sem { background-color: #e0f2fe; color: #075985; font-weight: 800; text-align: center; border-left: 2px solid #bae6fd; }
         .col-ano { background-color: #0f172a; color: #ffffff; font-weight: 800; text-align: center; border-left: 2px solid #cbd5e1; }
@@ -58,6 +59,9 @@
                 <button onclick="mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
                     <i class="fas fa-trophy"></i> Performance
                 </button>
+                <button onclick="mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
+                    <i class="fas fa-th"></i> Matriz Anual
+                </button>
                 <button onclick="mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 text-sm font-bold rounded-lg flex items-center gap-2">
                     <i class="fas fa-table"></i> Consolidado
                 </button>
@@ -65,26 +69,36 @@
         </div>
 
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
-            <div class="flex flex-wrap items-center justify-end gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                    <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span>
-                    <input type="text" id="data-validacao" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm cursor-pointer" placeholder="DD/MM/AAAA" maxlength="10">
-                    <i class="fas fa-calendar-alt text-slate-400"></i>
-                </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
                 
-                <select id="view-mode" onchange="Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
-                    <option value="dia">Apenas o Dia</option>
-                    <option value="mes">Mês Inteiro</option>
-                    <option value="semana">Por Semana</option>
-                </select>
+                <div>
+                    <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
+                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                        <i class="fas fa-file-excel"></i> Importar Excel
+                    </button>
+                </div>
 
-                <select id="select-semana" onchange="Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-sm font-bold outline-none cursor-pointer">
-                    <option value="1">Semana 1</option>
-                    <option value="2">Semana 2</option>
-                    <option value="3">Semana 3</option>
-                    <option value="4">Semana 4</option>
-                    <option value="5">Semana 5</option>
-                </select>
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                        <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span>
+                        <input type="text" id="data-validacao" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm cursor-pointer" placeholder="DD/MM/AAAA" maxlength="10">
+                        <i class="fas fa-calendar-alt text-slate-400"></i>
+                    </div>
+                    
+                    <select id="view-mode" onchange="Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
+                        <option value="dia">Apenas o Dia</option>
+                        <option value="mes">Mês Inteiro</option>
+                        <option value="semana">Por Semana</option>
+                    </select>
+
+                    <select id="select-semana" onchange="Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-sm font-bold outline-none cursor-pointer">
+                        <option value="1">Semana 1</option>
+                        <option value="2">Semana 2</option>
+                        <option value="3">Semana 3</option>
+                        <option value="4">Semana 4</option>
+                        <option value="5">Semana 5</option>
+                    </select>
+                </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -129,18 +143,12 @@
         </div>
 
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            <div class="flex flex-col md:flex-row justify-between items-center bg-white p-3 rounded-xl shadow-sm border border-slate-200 gap-4">
-                <div class="flex gap-2">
-                    <button onclick="Perf.switchMode('individual')" id="tab-perf-individual" class="px-4 py-2 text-sm font-bold rounded-lg transition text-blue-700 bg-blue-50">📊 Ranking</button>
-                    <button onclick="Perf.switchMode('matrix')" id="tab-perf-matrix" class="px-4 py-2 text-sm font-bold rounded-lg transition text-slate-500 hover:text-slate-700">🏆 Matriz Anual</button>
-                </div>
-                
+            <div class="flex flex-col md:flex-row justify-end items-center bg-white p-3 rounded-xl shadow-sm border border-slate-200 gap-4">
                 <div class="flex items-center gap-3">
                     <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
                         <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span>
                         <input type="text" id="data-perf" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm cursor-pointer" placeholder="DD/MM/AAAA" maxlength="10">
                     </div>
-                    
                     <select id="perf-period-type" onchange="Perf.carregarRanking()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
                         <option value="mes">Mensal</option>
                         <option value="trimestre">Trimestral</option>
@@ -173,29 +181,37 @@
                     </div>
                 </div>
             </div>
+        </div>
 
-            <div id="perf-view-matrix" class="hidden">
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
-                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                                <tr><th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Nome</th><th class="px-2 py-3 text-center">Jan</th><th class="px-2 py-3 text-center">Fev</th><th class="px-2 py-3 text-center">Mar</th><th class="px-2 py-3 col-tri">TRI 1</th><th class="px-2 py-3 text-center">Abr</th><th class="px-2 py-3 text-center">Mai</th><th class="px-2 py-3 text-center">Jun</th><th class="px-2 py-3 col-tri">TRI 2</th><th class="px-2 py-3 col-sem">SEM 1</th><th class="px-2 py-3 text-center">Jul</th><th class="px-2 py-3 text-center">Ago</th><th class="px-2 py-3 text-center">Set</th><th class="px-2 py-3 col-tri">TRI 3</th><th class="px-2 py-3 text-center">Out</th><th class="px-2 py-3 text-center">Nov</th><th class="px-2 py-3 text-center">Dez</th><th class="px-2 py-3 col-tri">TRI 4</th><th class="px-2 py-3 col-sem">SEM 2</th><th class="px-4 py-3 col-ano">ANUAL</th></tr>
-                            </thead>
-                            <tbody id="perf-matrix-body" class="divide-y divide-slate-100"></tbody>
-                        </table>
-                    </div>
+        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
+            <div class="flex flex-col md:flex-row items-center justify-between bg-white p-3 rounded-xl shadow-sm border border-slate-200 gap-3">
+                <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-slate-700">Visão Panorâmica</h3>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                    <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ano Ref</span>
+                    <input type="text" id="data-matriz" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm cursor-pointer" placeholder="DD/MM/AAAA" maxlength="10">
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr><th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">Nome</th><th class="px-2 py-3 text-center">Jan</th><th class="px-2 py-3 text-center">Fev</th><th class="px-2 py-3 text-center">Mar</th><th class="px-2 py-3 col-tri">TRI 1</th><th class="px-2 py-3 text-center">Abr</th><th class="px-2 py-3 text-center">Mai</th><th class="px-2 py-3 text-center">Jun</th><th class="px-2 py-3 col-tri">TRI 2</th><th class="px-2 py-3 col-sem">SEM 1</th><th class="px-2 py-3 text-center">Jul</th><th class="px-2 py-3 text-center">Ago</th><th class="px-2 py-3 text-center">Set</th><th class="px-2 py-3 col-tri">TRI 3</th><th class="px-2 py-3 text-center">Out</th><th class="px-2 py-3 text-center">Nov</th><th class="px-2 py-3 text-center">Dez</th><th class="px-2 py-3 col-tri">TRI 4</th><th class="px-2 py-3 col-sem">SEM 2</th><th class="px-4 py-3 col-ano">ANUAL</th></tr>
+                        </thead>
+                        <tbody id="matriz-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
             <div class="flex flex-col md:flex-row items-center justify-end bg-white p-3 rounded-xl shadow-sm border border-slate-200 gap-3">
-                
                 <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
                     <span class="text-[10px] font-bold text-blue-500 uppercase tracking-wider">Ref</span>
                     <input type="text" id="data-cons" class="w-24 bg-transparent text-center font-bold text-slate-700 outline-none text-sm cursor-pointer" placeholder="DD/MM/AAAA" maxlength="10">
                 </div>
-
                 <select id="cons-period-type" onchange="Cons.carregar()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-sm font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer">
                     <option value="mes">Mensal (Semanas)</option>
                     <option value="trimestre">Trimestral</option>
@@ -227,36 +243,98 @@
 
     <script>
         const sessao = JSON.parse(localStorage.getItem('usuario'));
-        let currentTab = 'geral';
-
-        // CHAVE ÚNICA PARA TODAS AS ABAS COMPARTILHAREM A DATA
         const KEY_DATA_GLOBAL = 'data_sistema_global';
 
         function mudarAba(aba) {
-            currentTab = aba;
-            
-            // 1. Atualiza UI das Abas
             document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
             document.getElementById(`tab-${aba}`).classList.remove('hidden');
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.getElementById(`btn-${aba}`).classList.add('active');
 
-            // 2. Sincronização de Data:
-            // Ao entrar na aba, atualizamos o input dela com o valor mais recente gravado no LocalStorage
+            // Sincroniza Data Global
             const dataAtual = localStorage.getItem(KEY_DATA_GLOBAL) || Sistema.Datas.formatar(new Date());
             
-            if (aba === 'geral') {
-                document.getElementById('data-validacao').value = dataAtual;
-                Geral.carregarTela();
-            }
-            if (aba === 'performance') {
-                document.getElementById('data-perf').value = dataAtual;
-                Perf.init(); // Init recarrega os dados com a data certa
-            }
-            if (aba === 'consolidado') {
-                document.getElementById('data-cons').value = dataAtual;
-                Cons.init();
-            }
+            if (aba === 'geral') { document.getElementById('data-validacao').value = dataAtual; Geral.carregarTela(); }
+            if (aba === 'performance') { document.getElementById('data-perf').value = dataAtual; Perf.init(); }
+            if (aba === 'matriz') { document.getElementById('data-matriz').value = dataAtual; Matriz.init(); }
+            if (aba === 'consolidado') { document.getElementById('data-cons').value = dataAtual; Cons.init(); }
+        }
+
+        // --- IMPORTAÇÃO DE EXCEL ---
+        async function importarExcel(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+
+                    if (json.length === 0) return alert("Planilha vazia.");
+
+                    // Mapeia usuários para buscar ID pelo Nome
+                    const usersMap = {};
+                    const { data: users } = await _supabase.from('usuarios').select('id, nome');
+                    users.forEach(u => usersMap[u.nome.trim().toLowerCase()] = u.id);
+
+                    let inserts = [];
+                    let erros = 0;
+
+                    for (let row of json) {
+                        // Tenta achar colunas comuns
+                        const nome = row['Nome'] || row['nome'] || row['Colaborador'];
+                        const dataRef = row['Data'] || row['data'] || row['Data Referencia']; // Deve ser AAAA-MM-DD ou Date do Excel
+                        const qtd = row['Quantidade'] || row['quantidade'] || row['Total'];
+                        
+                        // Normaliza data (se vier numero do Excel)
+                        let dataFinal = dataRef;
+                        if (typeof dataRef === 'number') {
+                            const dateObj = new Date((dataRef - (25567 + 2)) * 86400 * 1000);
+                            dataFinal = dateObj.toISOString().split('T')[0];
+                        }
+
+                        // Busca ID
+                        let uid = row['ID'] || row['id'];
+                        if (!uid && nome && usersMap[nome.trim().toLowerCase()]) {
+                            uid = usersMap[nome.trim().toLowerCase()];
+                        }
+
+                        if (uid && dataFinal && qtd !== undefined) {
+                            inserts.push({
+                                usuario_id: uid,
+                                data_referencia: dataFinal,
+                                quantidade: qtd,
+                                fifo: row['FIFO'] || row['fifo'] || 0,
+                                gradual_total: row['Gradual Total'] || 0,
+                                gradual_parcial: row['Gradual Parcial'] || 0
+                            });
+                        } else {
+                            erros++;
+                        }
+                    }
+
+                    if (inserts.length > 0) {
+                        if(confirm(`Encontrados ${inserts.length} registros válidos. Deseja importar?`)) {
+                            const { error } = await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
+                            if (error) throw error;
+                            alert(`Importação concluída! ${inserts.length} salvos.`);
+                            Geral.carregarTela();
+                        }
+                    } else {
+                        alert("Nenhum dado válido encontrado. Verifique as colunas (Nome, Data, Quantidade).");
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    alert("Erro ao importar: " + err.message);
+                } finally {
+                    input.value = ''; // Limpa input
+                }
+            };
+            reader.readAsArrayBuffer(file);
         }
 
         const Geral = {
@@ -266,7 +344,6 @@
                 if (mode === 'semana') selSemana.classList.remove('hidden'); else selSemana.classList.add('hidden');
                 this.carregarTela();
             },
-            
             carregarTela: async function() {
                 const modo = document.getElementById('view-mode').value;
                 const refDate = Sistema.Datas.lerInput('data-validacao');
@@ -285,27 +362,23 @@
 
                 const { data } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
                 let dadosFiltrados = data || [];
-
                 if (modo === 'semana') {
                     const numSemana = parseInt(document.getElementById('select-semana').value);
                     dadosFiltrados = dadosFiltrados.filter(d => Sistema.Datas.getSemanaDoMes(d.data_referencia) === numSemana);
                     titulo += ` - Semana ${numSemana}`;
                 }
-
                 document.getElementById('titulo-dinamico').innerText = titulo;
                 const lista = Sistema.Dados.normalizar(dadosFiltrados);
                 
                 const total = lista.reduce((a, b) => a + b.total, 0);
                 const diasTotais = lista.reduce((a, b) => a + b.dias, 0);
                 const media = diasTotais ? Math.round(total/diasTotais) : 0;
-
                 document.getElementById('kpi-total').innerText = total.toLocaleString();
                 document.getElementById('kpi-media').innerText = media.toLocaleString();
                 document.getElementById('kpi-hc').innerText = lista.length;
 
                 const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML = '';
                 if(lista.length === 0) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400">Sem dados.</td></tr>'; return; }
-
                 lista.forEach(u => {
                     const badge = u.atingiu ? '<span class="bg-emerald-100 text-emerald-800 px-2 py-1 rounded text-xs font-bold">Atingida</span>' : '<span class="bg-rose-100 text-rose-800 px-2 py-1 rounded text-xs font-bold">Abaixo</span>';
                     tbody.innerHTML += `<tr class="hover:bg-slate-50"><td class="px-6 py-4 font-bold text-slate-700">${u.nome} <span class="text-[10px] text-slate-400">(${u.dias} dias)</span></td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta}</td><td class="px-6 py-4 text-center">${badge}</td></tr>`;
@@ -315,69 +388,27 @@
 
         const Perf = {
             selectedUserId: null, dadosCarregados: [], initialized: false,
-
             init: function() {
-                // Configura o input para usar a CHAVE GLOBAL
-                Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { 
-                    this.carregarRanking(); 
-                    this.carregarMatriz(); 
-                });
-                
-                if(this.initialized) {
-                    this.carregarRanking();
-                    this.carregarMatriz();
-                }
+                Sistema.Datas.criarInputInteligente('data-perf', KEY_DATA_GLOBAL, () => { this.carregarRanking(); });
+                if(this.initialized) this.carregarRanking();
                 this.initialized = true;
             },
-
-            switchMode: function(mode) {
-                const v1 = document.getElementById('perf-view-individual'); const v2 = document.getElementById('perf-view-matrix');
-                const b1 = document.getElementById('tab-perf-individual'); const b2 = document.getElementById('tab-perf-matrix');
-                if (mode === 'individual') {
-                    v1.classList.remove('hidden'); v2.classList.add('hidden');
-                    b1.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-blue-700 bg-blue-50"; b2.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-slate-500 hover:text-slate-700";
-                    this.carregarRanking();
-                } else {
-                    v1.classList.add('hidden'); v2.classList.remove('hidden');
-                    b2.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-blue-700 bg-blue-50"; b1.className = "px-4 py-2 text-sm font-bold rounded-lg transition text-slate-500 hover:text-slate-700";
-                    this.carregarMatriz();
-                }
-            },
-
             limparSelecao: function() { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); this.carregarRanking(); },
-
             toggleUsuario: function(id) { 
                 if (this.selectedUserId === id) { this.selectedUserId = null; document.getElementById('perf-btn-limpar').classList.add('hidden'); } 
                 else { this.selectedUserId = id; document.getElementById('perf-btn-limpar').classList.remove('hidden'); } 
                 this.renderRanking(); 
             },
-
             carregarRanking: async function() {
                 const tbody = document.getElementById('perf-ranking-body'); tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">A carregar dados...</td></tr>';
                 try {
                     const tipo = document.getElementById('perf-period-type').value; 
-                    
-                    // LÓGICA DE DATA BASEADA NO INPUT UNIFICADO
                     const refDate = Sistema.Datas.lerInput('data-perf');
-                    const ano = refDate.getFullYear();
-                    const mes = refDate.getMonth() + 1;
-
+                    const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
                     let s, e;
-                    if (tipo === 'mes') { 
-                        s = `${ano}-${String(mes).padStart(2,'0')}-01`; 
-                        e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; 
-                    } else if (tipo === 'trimestre') { 
-                        const trim = Math.ceil(mes / 3);
-                        const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; 
-                        s = `${ano}-${String(mStart).padStart(2,'0')}-01`; 
-                        e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; 
-                    } else if (tipo === 'semestre') { 
-                        const sem = Math.ceil(mes / 6);
-                        s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; 
-                        e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
-                    } else { 
-                        s = `${ano}-01-01`; e = `${ano}-12-31`; 
-                    }
+                    if (tipo === 'mes') { s = `${ano}-${String(mes).padStart(2,'0')}-01`; e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; }
+                    else if (tipo === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
+                    else if (tipo === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
                     
                     const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', s).lte('data_referencia', e); if(error) throw error;
                     let stats = {};
@@ -391,7 +422,6 @@
                     this.renderRanking();
                 } catch (err) { console.error(err); tbody.innerHTML = '<tr><td colspan="7" class="text-center text-red-400">Erro.</td></tr>'; }
             },
-
             renderRanking: function() {
                 const tbody = document.getElementById('perf-ranking-body'); if (!this.dadosCarregados.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado.</td></tr>'; this.atualizarCards(null); return; }
                 let html = ''; let userStats = null;
@@ -404,7 +434,6 @@
                 });
                 tbody.innerHTML = html; this.atualizarCards(userStats);
             },
-
             atualizarCards: function(userStats) {
                 if (userStats) {
                     document.getElementById('perf-label-total').innerText = "Total (" + userStats.nome.split(' ')[0] + ")"; document.getElementById('perf-card-total').innerText = userStats.total.toLocaleString(); document.getElementById('perf-card-media').innerText = userStats.media.toLocaleString(); document.getElementById('perf-card-meta').innerText = userStats.meta.toLocaleString(); 
@@ -413,12 +442,20 @@
                     document.getElementById('perf-label-total').innerText = "Total (Time)"; document.getElementById('perf-card-total').innerText = totalGeral.toLocaleString(); document.getElementById('perf-card-media').innerText = mediaGeral.toLocaleString(); document.getElementById('perf-card-meta').innerText = metaGeral.toLocaleString(); 
                     let topHtml = '<div class="flex flex-col gap-1">'; this.dadosCarregados.slice(0, 3).forEach((u, i) => { topHtml += `<div class="flex justify-between text-xs"><span class="font-bold text-slate-600">#${i+1} ${u.nome.split(' ')[0]}</span> <span class="text-blue-600 font-bold">${u.total.toLocaleString()}</span></div>`; }); topHtml += '</div>'; document.getElementById('perf-rank-content').innerHTML = topHtml;
                 }
-            },
+            }
+        };
 
-            carregarMatriz: async function() {
-                const tbody = document.getElementById('perf-matrix-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">A calcular...</td></tr>';
+        const Matriz = {
+            initialized: false,
+            init: function() {
+                Sistema.Datas.criarInputInteligente('data-matriz', KEY_DATA_GLOBAL, () => { this.carregar(); });
+                if(this.initialized) this.carregar();
+                this.initialized = true;
+            },
+            carregar: async function() {
+                const tbody = document.getElementById('matriz-body'); tbody.innerHTML = '<tr><td colspan="20" class="text-center py-8 text-slate-400">A calcular...</td></tr>';
                 try {
-                    const ano = Sistema.Datas.lerInput('data-perf').getFullYear();
+                    const ano = Sistema.Datas.lerInput('data-matriz').getFullYear();
                     const { data: prods, error } = await _supabase.from('producao').select('*, usuarios(nome, funcao)').gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
                     if(error) throw error;
                     let map = {};
@@ -442,43 +479,20 @@
         const Cons = {
             initialized: false,
             init: function() {
-                // Configura o input para usar a CHAVE GLOBAL
                 Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(); });
-                
                 if (this.initialized) this.carregar();
                 this.initialized = true;
             },
-            
             carregar: async function() {
                 const tbody = document.getElementById('cons-table-body'); tbody.innerHTML = '<tr><td colspan="15" class="text-center py-8 text-slate-400">A calcular indicadores...</td></tr>';
                 const t = document.getElementById('cons-period-type').value; 
-                
                 const refDate = Sistema.Datas.lerInput('data-cons');
-                const ano = refDate.getFullYear();
-                const mes = refDate.getMonth() + 1;
-
+                const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
                 let s, e;
-                if (t === 'dia') { 
-                    const iso = refDate.toISOString().split('T')[0];
-                    s = iso; e = iso; 
-                }
-                else if (t === 'mes') { 
-                    s = `${ano}-${String(mes).padStart(2,'0')}-01`; 
-                    e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; 
-                }
-                else if (t === 'trimestre') { 
-                    const trim = Math.ceil(mes / 3);
-                    const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; 
-                    s = `${ano}-${String(mStart).padStart(2,'0')}-01`; 
-                    e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; 
-                }
-                else if (t === 'semestre') { 
-                    const sem = Math.ceil(mes / 6);
-                    s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; 
-                    e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; 
-                } else { 
-                    s = `${ano}-01-01`; e = `${ano}-12-31`; 
-                }
+                if (t === 'dia') { const iso = refDate.toISOString().split('T')[0]; s = iso; e = iso; }
+                else if (t === 'mes') { s = `${ano}-${String(mes).padStart(2,'0')}-01`; e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; }
+                else if (t === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
+                else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
 
                 try {
                     const { data: rawData, error } = await _supabase.from('producao').select('*, usuarios(funcao, contrato)').gte('data_referencia', s).lte('data_referencia', e); if(error) throw error;
@@ -531,7 +545,6 @@
 
         // --- INICIALIZAÇÃO GLOBAL ---
         document.addEventListener('DOMContentLoaded', async () => {
-            // Inicializa a primeira aba com o input inteligente GLOBAL
             Sistema.Datas.criarInputInteligente('data-validacao', KEY_DATA_GLOBAL, Geral.carregarTela);
             await Sistema.Dados.inicializar(); 
             Geral.carregarTela();
