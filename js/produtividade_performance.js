@@ -1,5 +1,3 @@
-// js/produtividade_performance.js
-
 const Perf = {
     selectedUserId: null,
     dadosCarregados: [],
@@ -8,8 +6,25 @@ const Perf = {
     init: function() { 
         this.uiChange();
         this.carregarRanking(); 
+        this.initialized = true;
     },
 
+    // Nova função chamada ao trocar de aba para sincronizar data
+    syncData: function(dataString) {
+        const [ano, mes] = dataString.split('-').map(Number);
+        
+        const inpMonth = document.getElementById('perf-input-month');
+        const inpYear = document.getElementById('perf-input-year');
+        
+        // Só atualiza se estiver vazio para respeitar seleção do usuário
+        if(inpMonth && !inpMonth.value) inpMonth.value = `${ano}-${String(mes).padStart(2,'0')}`;
+        if(inpYear && !inpYear.value) inpYear.value = ano;
+        
+        this.uiChange(); // Recarrega com a nova data
+    },
+
+    // ... (restante do código igual ao anterior, uiChange, toggleUsuario, carregarRanking, renderRanking, atualizarCards) ...
+    // Certifique-se de que carregarRanking use a lógica de agrupamento por nome que fiz na resposta anterior.
     uiChange: function() {
         const tipo = document.getElementById('perf-period-type').value;
         const inpMonth = document.getElementById('perf-input-month');
@@ -29,7 +44,8 @@ const Perf = {
         
         this.carregarRanking(); 
     },
-
+    
+    // ... [Mantenha as funções carregarRanking, renderRanking e atualizarCards da resposta anterior que já estavam corretas]
     limparSelecao: function() { 
         this.selectedUserId = null; 
         document.getElementById('perf-btn-limpar').classList.add('hidden'); 
@@ -69,8 +85,7 @@ const Perf = {
                 const mes = parseInt(parts[1]); 
                 s = `${ano}-${String(mes).padStart(2,'0')}-01`; 
                 e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`;
-                const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
-                labelTexto = `Mensal: ${nomesMeses[mes-1]} de ${ano}`;
+                labelTexto = `Mensal: ${mes}/${ano}`;
             } else if (tipo === 'trimestre') { 
                 const q = parseInt(valQuarter);
                 const mStart = ((q-1)*3)+1; 
@@ -92,13 +107,9 @@ const Perf = {
             const elLabel = document.getElementById('perf-range-label');
             if(elLabel) elLabel.innerText = labelTexto;
 
-            // OTIMIZAÇÃO: Select Específico
-            const { data: prods, error } = await _supabase
-                .from('producao')
-                .select('usuario_id, data_referencia, quantidade') 
-                .gte('data_referencia', s)
-                .lte('data_referencia', e); 
-                
+            // OBS: Aqui continuamos usando o select direto pois o ranking é dinâmico e leve para períodos curtos
+            // Se ainda estiver lento, podemos criar um RPC para Ranking também, mas geralmente não precisa.
+            const { data: prods, error } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e); 
             if(error) throw error;
             
             let stats = {};
@@ -111,12 +122,10 @@ const Perf = {
             prods.forEach(item => {
                 const uid = item.usuario_id;
                 const user = USERS_CACHE[uid];
-                
                 if (!user || user.funcao !== 'Assistente') return;
 
                 const nomeChave = user.nome.trim(); 
                 const qtd = Number(item.quantidade) || 0;
-                
                 prodTotalGeral += qtd;
                 
                 if (user.contrato && user.contrato.includes('CLT')) {
@@ -128,12 +137,7 @@ const Perf = {
                 }
 
                 if (!stats[nomeChave]) {
-                    stats[nomeChave] = { 
-                        id: uid, 
-                        nome: user.nome, 
-                        total: 0, 
-                        dias: new Set() 
-                    };
+                    stats[nomeChave] = { id: uid, nome: user.nome, total: 0, dias: new Set() };
                 }
                 stats[nomeChave].total += qtd; 
                 stats[nomeChave].dias.add(item.data_referencia);
@@ -159,14 +163,14 @@ const Perf = {
             this.renderRanking();
         } catch (err) { 
             console.error(err); 
-            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-red-400">Erro ao carregar ranking.</td></tr>'; 
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-red-400">Erro ao carregar.</td></tr>'; 
         }
     },
 
     renderRanking: function() {
         const tbody = document.getElementById('perf-ranking-body'); 
         if (!this.dadosCarregados.length) { 
-            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado para o período.</td></tr>'; 
+            if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>'; 
             this.atualizarCards(null); 
             return; 
         }

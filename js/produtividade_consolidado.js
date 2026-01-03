@@ -1,5 +1,3 @@
-// js/produtividade_consolidado.js
-
 const Cons = {
     initialized: false,
     
@@ -8,80 +6,78 @@ const Cons = {
             Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(); }); 
             this.initialized = true; 
         } 
-        this.carregar(); 
+        setTimeout(() => this.carregar(), 50); 
     },
     
     carregar: async function() {
         const tbody = document.getElementById('cons-table-body'); 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-8 text-slate-400">A calcular indicadores...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</td></tr>';
         
         const t = document.getElementById('cons-period-type').value; 
         const refDate = Sistema.Datas.lerInput('data-cons');
-        
         const inputHC = document.getElementById('cons-input-hc');
         const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
 
         const ano = refDate.getFullYear(); const mes = refDate.getMonth() + 1;
         let s, e;
         
+        // Definição de Datas (igual anterior)
         if (t === 'dia') { const iso = refDate.toISOString().split('T')[0]; s = iso; e = iso; }
         else if (t === 'mes') { s = `${ano}-${String(mes).padStart(2,'0')}-01`; e = `${ano}-${String(mes).padStart(2,'0')}-${new Date(ano, mes, 0).getDate()}`; }
         else if (t === 'trimestre') { const trim = Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; const mEnd = mStart+2; s = `${ano}-${String(mStart).padStart(2,'0')}-01`; e = `${ano}-${String(mEnd).padStart(2,'0')}-${new Date(ano, mEnd, 0).getDate()}`; }
-        else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
+        else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${ano}-01-01` : `${ano}-07-01`; e = sem === 1 ? `${ano}-06-30` : `${ano}-12-31`; } 
+        else { s = `${ano}-01-01`; e = `${ano}-12-31`; }
 
         try {
-            // OTIMIZAÇÃO: Chama a função RPC do banco
-            // Traz dados já agregados por Nome/Dia, resolvendo duplicidade e performance
-            const { data: rawData, error } = await _supabase
-                .rpc('get_consolidado_dados', { data_ini: s, data_fim: e });
+            // CHAMADA RPC OTIMIZADA
+            const { data: rawData, error } = await _supabase.rpc('get_consolidado_dados', { data_ini: s, data_fim: e });
             
             if(error) throw error;
             
-            let cols = []; if (t === 'dia') cols = ['Dia']; else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-            const numCols = cols.length; let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
+            let cols = []; 
+            if (t === 'dia') cols = ['Dia']; 
+            else if (t === 'mes') cols = ['S1','S2','S3','S4','S5']; 
+            else if (t === 'trimestre') cols = ['Mês 1','Mês 2','Mês 3']; 
+            else if (t === 'semestre') cols = ['M1','M2','M3','M4','M5','M6']; 
+            else cols = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
             
-            rawData.forEach(r => {
-                // Aqui 'r' já é o dado agrupado
-                let b = 1; 
-                // Precisamos parsear a data que vem do banco (YYYY-MM-DD)
-                const dtParts = r.data_ref.split('-');
-                const dt = new Date(dtParts[0], dtParts[1]-1, dtParts[2]);
+            const numCols = cols.length; 
+            let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
+            
+            if(rawData) {
+                rawData.forEach(r => {
+                    let b = 1; 
+                    // Conversão segura de data
+                    const parts = r.data_ref.split('-'); // YYYY-MM-DD
+                    const dt = new Date(parts[0], parts[1]-1, parts[2]);
 
-                if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
-                else if (t === 'trimestre') b = (dt.getMonth() % 3) + 1; 
-                else if (t === 'semestre') b = (dt.getMonth() % 6) + 1; 
-                else if (t === 'ano_mes') b = dt.getMonth() + 1;
-                
-                if(b > numCols) b = numCols;
-                
-                const sys = Number(r.soma_quantidade) || 0;
-                
-                // Função auxiliar para popular stats
-                const populate = (k) => {
-                    if(!st[k]) return;
-                    const x = st[k];
-                    // Usa o nome como chave única para contagem de pessoas
-                    x.users.add(r.nome_assistente); 
-                    x.dates.add(r.data_ref); 
+                    if(t === 'mes') { const firstDay = new Date(dt.getFullYear(), dt.getMonth(), 1).getDay(); b = Math.ceil((dt.getDate() + firstDay) / 7); }
+                    else if (t === 'trimestre') b = (dt.getMonth() % 3) + 1; 
+                    else if (t === 'semestre') b = (dt.getMonth() % 6) + 1; 
+                    else if (t === 'ano_mes') b = dt.getMonth() + 1;
                     
-                    x.qty += sys; 
-                    x.fifo += (Number(r.soma_fifo)||0); 
-                    x.gt += (Number(r.soma_gradual_total)||0); 
-                    x.gp += (Number(r.soma_gradual_parcial)||0); 
-                    x.fc += (Number(r.soma_perfil_fc)||0);
+                    if(b > numCols) b = numCols;
                     
-                    if (r.contrato && r.contrato.includes('CLT')) { 
-                        x.clt_users.add(r.nome_assistente); 
-                        x.clt_qty += sys; 
-                    } else { 
-                        x.pj_users.add(r.nome_assistente); 
-                        x.pj_qty += sys; 
-                    }
-                };
-
-                populate(b);
-                populate(99);
-            });
+                    const sys = Number(r.soma_quantidade) || 0;
+                    
+                    const populate = (k) => {
+                        if(!st[k]) return;
+                        const x = st[k];
+                        x.users.add(r.nome_assistente); 
+                        x.dates.add(r.data_ref); 
+                        x.qty += sys; 
+                        x.fifo += (Number(r.soma_fifo)||0); 
+                        x.gt += (Number(r.soma_gradual_total)||0); 
+                        x.gp += (Number(r.soma_gradual_parcial)||0); 
+                        x.fc += (Number(r.soma_perfil_fc)||0);
+                        
+                        if (r.contrato && r.contrato.includes('CLT')) { x.clt_users.add(r.nome_assistente); x.clt_qty += sys; } 
+                        else { x.pj_users.add(r.nome_assistente); x.pj_qty += sys; }
+                    };
+                    populate(b);
+                    populate(99);
+                });
+            }
 
             const hRow = document.getElementById('cons-table-header'); 
             if(hRow) hRow.innerHTML = `<th class="px-4 py-3 sticky left-0 bg-slate-50 z-20 border-r border-slate-200">Indicadores</th>` + cols.map(c => `<th class="px-4 py-3 text-center border-l border-slate-100">${c}</th>`).join('') + `<th class="px-4 py-3 text-center bg-blue-50 text-blue-800 border-l border-blue-100">TOTAL</th>`;
@@ -114,7 +110,7 @@ const Cons = {
             h += mkRow('Produção CLT', s => s.clt_qty); h += mkRow('Média Diária/CLT', (s, d, a, ac) => s.clt_qty / d / ac, true);
             h += mkRow('Produção PJ', s => s.pj_qty); h += mkRow('Média Diária/PJ', (s, d, a, ac, ap) => s.pj_qty / d / ap, true);
             
-            if(tbody) tbody.innerHTML = h;
+            tbody.innerHTML = h;
             
             const tot = st[99]; const dTot = tot.dates.size || 1; 
             document.getElementById('cons-p-total').innerText = tot.qty.toLocaleString(); 
