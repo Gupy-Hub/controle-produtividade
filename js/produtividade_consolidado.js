@@ -1,10 +1,9 @@
 const Cons = {
     initialized: false,
-    ultimoCache: { key: null, data: null }, // Cache local
+    ultimoCache: { key: null, data: null },
 
     init: function() { 
         if(!this.initialized) { 
-            // Se mudar o input, força recarregamento (true)
             Sistema.Datas.criarInputInteligente('data-cons', KEY_DATA_GLOBAL, () => { this.carregar(true); }); 
             this.initialized = true; 
         } 
@@ -15,24 +14,39 @@ const Cons = {
         const tbody = document.getElementById('cons-table-body'); 
         const t = document.getElementById('cons-period-type').value; 
         
-        // --- 1. LEITURA SEGURA DA DATA ---
-        let refDate = Sistema.Datas.lerInput('data-cons');
-        if (!refDate || isNaN(refDate.getTime())) refDate = new Date();
+        // --- CORREÇÃO DE LEITURA (DATA MANUAL) ---
+        // Evita usar new Date(string) direto para não ter problema de fuso horário ou formato inválido
+        let el = document.getElementById('data-cons');
+        let val = el ? el.value : '';
+        let dia, mes, ano;
 
-        // --- 2. FORMATAÇÃO MANUAL (LOCAL TIME) ---
-        // Garante YYYY-MM-DD baseado na hora do computador, sem conversão UTC que muda o dia
-        const anoLocal = refDate.getFullYear();
-        const mesLocal = String(refDate.getMonth() + 1).padStart(2, '0');
-        const diaLocal = String(refDate.getDate()).padStart(2, '0');
-        const dataFormatadaISO = `${anoLocal}-${mesLocal}-${diaLocal}`;
+        if (val.includes('/')) { 
+            // Formato PT-BR: dd/mm/yyyy
+            [dia, mes, ano] = val.split('/').map(Number);
+        } else if (val.includes('-')) {
+            // Formato US: yyyy-mm-dd
+            [ano, mes, dia] = val.split('-').map(Number);
+        } else {
+            // Fallback para hoje
+            const now = new Date();
+            dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear();
+        }
+
+        // Garante números válidos
+        if (!dia || !mes || !ano) { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
+
+        // Formata para SQL (YYYY-MM-DD) - O banco PRECISA deste formato
+        const sAno = String(ano);
+        const sMes = String(mes).padStart(2, '0');
+        const sDia = String(dia).padStart(2, '0');
+        const dataSql = `${sAno}-${sMes}-${sDia}`;
+        // ------------------------------------------
 
         const inputHC = document.getElementById('cons-input-hc');
         const HF = inputHC ? (Number(inputHC.value) || 17) : 17;
 
-        // Chave de cache usando a data formatada corretamente
-        const cacheKey = `${t}_${dataFormatadaISO}_${HF}`;
+        const cacheKey = `${t}_${dataSql}_${HF}`;
 
-        // Se não forçar e a chave for igual a anterior, usa cache
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
             this.renderizar(this.ultimoCache.data, t, HF);
             return;
@@ -40,48 +54,39 @@ const Cons = {
 
         if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</td></tr>';
         
-        // Definição de Datas de Início (s) e Fim (e)
+        // Definição de Intervalos usando a data formatada
         let s, e;
         
         if (t === 'dia') { 
-            s = dataFormatadaISO; 
-            e = dataFormatadaISO; 
+            s = dataSql; e = dataSql; 
         }
         else if (t === 'mes') { 
-            s = `${anoLocal}-${mesLocal}-01`; 
-            // Pega o último dia do mês corretamente (dia 0 do mês seguinte)
-            const ultimoDia = new Date(anoLocal, mesLocal, 0).getDate();
-            e = `${anoLocal}-${mesLocal}-${ultimoDia}`; 
+            s = `${sAno}-${sMes}-01`; 
+            const ultimoDia = new Date(ano, mes, 0).getDate();
+            e = `${sAno}-${sMes}-${ultimoDia}`; 
         }
         else if (t === 'trimestre') { 
-            const mesNum = parseInt(mesLocal);
-            const trim = Math.ceil(mesNum / 3); 
+            const trim = Math.ceil(mes / 3); 
             const mStart = ((trim-1)*3)+1; 
             const mEnd = mStart+2; 
-            // Último dia do mês final do trimestre
-            const ultimoDiaT = new Date(anoLocal, mEnd, 0).getDate();
-            
-            s = `${anoLocal}-${String(mStart).padStart(2,'0')}-01`; 
-            e = `${anoLocal}-${String(mEnd).padStart(2,'0')}-${ultimoDiaT}`; 
+            const ultimoDiaT = new Date(ano, mEnd, 0).getDate();
+            s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; 
+            e = `${sAno}-${String(mEnd).padStart(2,'0')}-${ultimoDiaT}`; 
         }
         else if (t === 'semestre') { 
-            const mesNum = parseInt(mesLocal);
-            const sem = Math.ceil(mesNum / 6); 
-            s = sem === 1 ? `${anoLocal}-01-01` : `${anoLocal}-07-01`; 
-            e = sem === 1 ? `${anoLocal}-06-30` : `${anoLocal}-12-31`; 
+            const sem = Math.ceil(mes / 6); 
+            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
+            e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
         } 
         else { 
-            // Ano Completo
-            s = `${anoLocal}-01-01`; 
-            e = `${anoLocal}-12-31`; 
+            s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
         }
 
         try {
-            // Chama a procedure RPC otimizada no banco
+            console.log(`Enviando para SQL: ${s} até ${e}`);
             const { data: rawData, error } = await _supabase.rpc('get_consolidado_dados', { data_ini: s, data_fim: e });
             if(error) throw error;
             
-            // Atualiza Cache
             this.ultimoCache = { key: cacheKey, data: rawData };
             this.renderizar(rawData, t, HF);
             
@@ -108,7 +113,6 @@ const Cons = {
         if(rawData) {
             rawData.forEach(r => {
                 let b = 1; 
-                // data_ref vem do banco como YYYY-MM-DD
                 const parts = r.data_ref.split('-'); 
                 const dt = new Date(parts[0], parts[1]-1, parts[2]);
 
@@ -173,8 +177,6 @@ const Cons = {
         tbody.innerHTML = h;
         
         const tot = st[99]; const dTot = tot.dates.size || 1; 
-        
-        // Função segura para evitar erros caso elementos não existam
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerText = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
