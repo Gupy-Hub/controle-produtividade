@@ -251,9 +251,9 @@ const Cons = {
                 let val = 0; 
                 if (!isCalc) { 
                     // Na tabela (contagem simples), sempre mostra o valor REAL
-                    // Se for linha de Assistentes, mostra SYS_HC no total para histórico correto.
+                    // CORREÇÃO: Se for linha de Assistentes e for TOTAL (99), usa HF para bater com o Card.
                     if (label.includes('Assistentes')) {
-                        val = (i === 99) ? sysHC : realHC;
+                        val = (i === 99) ? HF : realHC;
                     } else {
                         val = getter(s); 
                     }
@@ -293,7 +293,7 @@ const Cons = {
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT (COM CLT/PJ) ---
+        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT (COM CLT / PJ) ---
         let cardHTML = '';
         
         // 1. Valor Principal: HF (Manual)
