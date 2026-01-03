@@ -1,4 +1,4 @@
-const MA_Geral = {
+const MA_Diario = {
     normalizarDadosPorNome: function(rawData) {
         const agrupado = {};
         rawData.forEach(item => {
@@ -67,7 +67,7 @@ const MA_Geral = {
             const dFmt = item.data_referencia.split('-').reverse().join('/');
             
             let inputMeta = `<span class="font-bold text-slate-600">${meta}</span>`;
-            if(MA_Main.isMgr && !viewingTime && item.id) inputMeta = `<input type="number" value="${meta}" onchange="MA_Geral.atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-200 rounded px-1 py-1 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">`;
+            if(MA_Main.isMgr && !viewingTime && item.id) inputMeta = `<input type="number" value="${meta}" onchange="MA_Diario.atualizarMeta(${item.id}, this.value, ${meta})" class="w-20 text-center border border-slate-200 rounded px-1 py-1 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">`;
             
             let obs = item.observacao || '<span class="text-slate-300">-</span>';
             if(item.observacao_gestora) obs += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100"><i class="fas fa-user-shield mr-1"></i>${item.observacao_gestora}</div>`;

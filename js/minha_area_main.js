@@ -11,7 +11,6 @@ const MA_Main = {
         
         this.isMgr = this.sessao.funcao === 'Gestora';
         
-        // Setup Inicial de Datas
         if (typeof Sistema !== 'undefined' && Sistema.Datas) {
             Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', () => this.atualizarDashboard());
         } else {
@@ -100,15 +99,14 @@ const MA_Main = {
             else if (val !== 'me') targetName = this.usersMap[val];
         }
 
-        // Buscar dados principais
         const { data: rawData } = await _supabase
             .from('producao')
             .select('*')
             .gte('data_referencia', dataInicio)
             .lte('data_referencia', dataFim);
 
-        // Processamento centralizado para Geral e Comparativo
-        const dadosNormalizados = MA_Geral.normalizarDadosPorNome(rawData || []);
+        // ATUALIZADO: Chama MA_Diario ao invés de MA_Geral
+        const dadosNormalizados = MA_Diario.normalizarDadosPorNome(rawData || []);
         let dadosFinais = [];
 
         if (viewingTime) {
@@ -133,9 +131,8 @@ const MA_Main = {
             });
         }
 
-        // Atualizar Módulos
-        MA_Geral.atualizarKPIs(dadosFinais);
-        MA_Geral.atualizarTabelaDiaria(dadosFinais, viewingTime);
+        MA_Diario.atualizarKPIs(dadosFinais);
+        MA_Diario.atualizarTabelaDiaria(dadosFinais, viewingTime);
         
         if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
             const btnAtivo = document.querySelector('.btn-chart.active');
