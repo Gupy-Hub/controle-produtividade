@@ -2,12 +2,42 @@ const sessao = JSON.parse(localStorage.getItem('usuario'));
 const KEY_DATA_GLOBAL = 'data_sistema_global';
 const KEY_TAB_GLOBAL = 'produtividade_aba_ativa';
 
+// Atualiza Data Global e sincroniza o input de Base HC
 function atualizarDataGlobal(novaData) {
     if(!novaData) return;
     localStorage.setItem(KEY_DATA_GLOBAL, novaData);
+    
+    // Atualiza o input de Base HC com o valor salvo para este mês
+    sincronizarInputBaseHC(novaData);
+
     // Recarrega a aba atual
     const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';
     mudarAba(abaAtual);
+}
+
+// Atualiza a Base HC Globalmente
+function atualizarBaseGlobal(novoValor) {
+    const globalInput = document.getElementById('global-date');
+    const dataRef = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
+    
+    // Salva no Sistema
+    if (typeof Sistema !== 'undefined' && Sistema.Dados) {
+        Sistema.Dados.definirBaseHC(dataRef, novoValor);
+        
+        // Se a aba ativa for Consolidado, recarrega ela
+        const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL);
+        if (abaAtual === 'consolidado' && typeof Cons !== 'undefined') {
+            Cons.carregar(true);
+        }
+    }
+}
+
+function sincronizarInputBaseHC(dataRef) {
+    const inputBase = document.getElementById('global-base-hc');
+    if (inputBase && Sistema.Dados) {
+        const base = Sistema.Dados.obterBaseHC(dataRef);
+        inputBase.value = base;
+    }
 }
 
 function mudarAba(aba) {
@@ -28,9 +58,14 @@ function mudarAba(aba) {
         localStorage.setItem(KEY_DATA_GLOBAL, dataString);
     }
     
-    // Atualiza o input visual global
+    // Atualiza Inputs Globais
     const globalInput = document.getElementById('global-date');
     if(globalInput) globalInput.value = dataString;
+    
+    // Garante que o input de Base HC esteja correto para a data
+    if (typeof Sistema !== 'undefined' && Sistema.Dados) {
+        sincronizarInputBaseHC(dataString);
+    }
 
     // Inicialização Específica por Aba
     if (aba === 'geral') { 
@@ -99,7 +134,6 @@ async function importarExcel(input) {
                     await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
                     alert("Sucesso!");
                     
-                    // Atualiza a data global para a data do arquivo
                     atualizarDataGlobal(dataDoArquivo);
                     localStorage.setItem(KEY_TAB_GLOBAL, 'geral');
                     mudarAba('geral');

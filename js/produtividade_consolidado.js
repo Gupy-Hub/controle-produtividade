@@ -8,15 +8,6 @@ const Cons = {
         } 
         setTimeout(() => this.carregar(false), 50); 
     },
-
-    mudarBase: function(novoValor) {
-        if(!novoValor) return;
-        let el = document.getElementById('global-date');
-        let val = el ? el.value : new Date().toISOString().split('T')[0];
-        
-        Sistema.Dados.definirBaseHC(val, novoValor);
-        this.carregar(true); 
-    },
     
     carregar: async function(forcar = false) {
         const tbody = document.getElementById('cons-table-body'); 
@@ -32,12 +23,6 @@ const Cons = {
         if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
         else { const now = new Date(); dia = now.getDate(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
-        const inputHC = document.getElementById('cons-input-hc');
-        if(inputHC) {
-            const baseDoMes = Sistema.Dados.obterBaseHC(val);
-            inputHC.value = baseDoMes;
-        }
-
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0'); const sDia = String(dia).padStart(2, '0');
         const dataSql = `${sAno}-${sMes}-${sDia}`;
         
@@ -48,7 +33,10 @@ const Cons = {
         else if (t === 'semestre') { const sem = Math.ceil(mes / 6); s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; } 
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
+        // --- CÁLCULO DA BASE HC MÉDIA DO PERÍODO ---
+        // Se for 1 dia, pega a base daquele mês. Se for ano, pega média dos 12 meses.
         const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
+
         const cacheKey = `${t}_${s}_${e}_${HF}`;
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
@@ -227,7 +215,7 @@ const Cons = {
         // 10. Média validação diária (Por Assistentes) -> Média pela BASE HC Configurada (HF)
         h += mkRow(`Média Validação Diária (Base ${HF})`, 'fas fa-user-tag', 'text-amber-600', (s, d) => d > 0 ? s.qty / d / HF : 0, true);
         
-        // SEGMENTAÇÃO (Opcional - Mantida para completude, mas visualmente separada)
+        // SEGMENTAÇÃO
         h += `<tr><td colspan="${numCols + 2}" class="px-6 py-6 bg-slate-50/50"><div class="flex items-center gap-4"><div class="h-px bg-slate-200 flex-1"></div><span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]"><i class="fas fa-file-signature mr-2"></i>Segmentação por Contrato</span><div class="h-px bg-slate-200 flex-1"></div></div></td></tr>`;
         h += mkRow('Produção CLT', 'fas fa-building', 'text-blue-500', s => s.clt_qty); 
         h += mkRow('Produção PJ', 'fas fa-briefcase', 'text-indigo-500', s => s.pj_qty); 
@@ -241,10 +229,9 @@ const Cons = {
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
-        setSafe('cons-p-headcount', tot.users.size); 
         
-        const elBadge = document.getElementById('cons-badge-base');
-        if (elBadge) elBadge.innerText = `Base ${HF}`;
+        // Card Headcount agora mostra as REAIS ATIVAS, pois o input mostra a base
+        setSafe('cons-p-headcount', tot.users.size); 
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
         if(elLblBase) elLblBase.innerText = HF;

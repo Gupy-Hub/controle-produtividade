@@ -19,7 +19,7 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {}, 
-        basesHcCache: {}, // NOVA MEMÓRIA DE BASES
+        basesHcCache: {}, // ARMAZENA AS BASES POR MÊS (ex: "2023-10": 13)
         inicializado: false,
 
         inicializar: async function() {
@@ -28,7 +28,7 @@ const Sistema = {
             this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
 
             // Carrega Bases HC (Histórico de Assistentes)
-            const savedBase = localStorage.getItem('produtividade_bases_hc');
+            const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
             this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
 
             if (this.inicializado) return; 
@@ -74,41 +74,52 @@ const Sistema = {
             return 1.0; 
         },
 
-        // --- GESTÃO DE BASE HC (NOVO) ---
-        // Salva a base para o Mês de Referência (YYYY-MM)
+        // --- GESTÃO DE BASE HC (GLOBAL POR MÊS) ---
+        // Salva a base para o Mês da data informada (YYYY-MM)
         definirBaseHC: function(dataRef, quantidade) {
+            if(!dataRef) return;
             const key = dataRef.substring(0, 7); // Pega apenas YYYY-MM
-            this.basesHcCache[key] = parseInt(quantidade);
-            localStorage.setItem('produtividade_bases_hc', JSON.stringify(this.basesHcCache));
+            
+            // Se for vazio ou 17, remove do cache para economizar (assume padrão)
+            if (!quantidade || parseInt(quantidade) === 17) {
+                delete this.basesHcCache[key];
+            } else {
+                this.basesHcCache[key] = parseInt(quantidade);
+            }
+            
+            localStorage.setItem('produtividade_bases_hc_v2', JSON.stringify(this.basesHcCache));
         },
 
         // Obtém a base de um mês específico (Padrão 17 se não definido)
         obterBaseHC: function(dataRef) {
+            if(!dataRef) return 17;
             const key = dataRef.substring(0, 7);
             return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
         },
 
-        // Calcula a média das bases para um intervalo de datas (para trimestres/ano)
+        // Calcula a média das bases para um intervalo (ex: Trimestre)
+        // Se Jan=17, Fev=13, Mar=17 -> Média ponderada
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
             let inicio = new Date(dataInicio);
             const fim = new Date(dataFim);
             let somaBases = 0;
             let mesesContados = 0;
             
-            // Itera mês a mês
+            // Ajusta para o dia 1 para iterar meses corretamente
+            inicio.setDate(1);
+
             while (inicio <= fim) {
                 const ano = inicio.getFullYear();
                 const mes = String(inicio.getMonth() + 1).padStart(2, '0');
-                const key = `${ano}-${mes}`;
+                const dataRef = `${ano}-${mes}-01`;
                 
-                // Pega base salva ou 17
-                const base = this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
+                const base = this.obterBaseHC(dataRef);
                 
                 somaBases += base;
                 mesesContados++;
                 
-                // Avança para o próximo mês (dia 1)
-                inicio = new Date(ano, inicio.getMonth() + 1, 1);
+                // Avança para o próximo mês
+                inicio.setMonth(inicio.getMonth() + 1);
             }
 
             return mesesContados > 0 ? Math.round(somaBases / mesesContados) : 17;

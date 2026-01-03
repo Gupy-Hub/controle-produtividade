@@ -42,7 +42,7 @@
                 <p class="text-slate-500 text-sm font-medium">Validação e Indicadores.</p>
             </div>
 
-            <div class="flex-1 flex justify-center">
+            <div class="flex-1 flex justify-center gap-4">
                 <div class="bg-white p-2 rounded-xl shadow-sm border border-blue-200 flex items-center gap-3">
                     <div class="bg-blue-50 p-2 rounded-lg text-blue-600">
                         <i class="fas fa-calendar-alt text-lg"></i>
@@ -50,6 +50,16 @@
                     <div>
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data de Referência</p>
                         <input type="date" id="global-date" onchange="atualizarDataGlobal(this.value)" class="text-lg font-black text-slate-700 outline-none bg-transparent cursor-pointer font-sans">
+                    </div>
+                </div>
+
+                <div class="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+                    <div class="bg-slate-50 p-2 rounded-lg text-slate-500">
+                        <i class="fas fa-users-cog text-lg"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Base Assistentes (Mês)</p>
+                        <input type="number" id="global-base-hc" value="17" onchange="atualizarBaseGlobal(this.value)" class="w-20 text-lg font-black text-slate-700 outline-none bg-transparent text-center">
                     </div>
                 </div>
             </div>
@@ -321,11 +331,6 @@
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
             <div class="flex justify-end p-3 bg-white rounded-xl shadow-sm border border-slate-200 gap-2">
-                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
-                    <span class="text-[10px] font-bold text-blue-500 uppercase">Definir Base do Mês</span>
-                    <input type="number" id="cons-input-hc" placeholder="17" class="w-12 bg-transparent text-center font-bold text-slate-700 outline-none text-sm" onchange="Cons.mudarBase(this.value)">
-                </div>
-
                 <select id="cons-period-type" onchange="Cons.carregar()" class="text-sm font-bold text-slate-600 bg-transparent outline-none cursor-pointer">
                     <option value="mes">Mensal (Semanas)</option>
                     <option value="trimestre">Trimestre (Meses)</option>
