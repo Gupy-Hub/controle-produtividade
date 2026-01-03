@@ -185,7 +185,7 @@
             }
         }
 
-        // --- GESTÃO DE USUÁRIOS (Mantido e melhorado) ---
+        // --- GESTÃO DE USUÁRIOS ---
         async function loadUsers() {
             try { 
                 const { data, error } = await _supabase.from('usuarios').select('*').order('nome'); 
@@ -251,11 +251,9 @@
             try { 
                 let query = _supabase.from('metas').select('*, usuarios(nome)').order('data_inicio', { ascending: false });
                 
-                // Se não for "Todos", filtra pelo ID
                 if (selectedUser !== 'all') {
                     query = query.eq('usuario_id', selectedUser);
                 } else {
-                    // Se for todos, limitamos para não explodir a lista
                     query = query.limit(50);
                 }
 
@@ -308,6 +306,9 @@
 
             try { 
                 let error = null; 
+                // Chave de conflito sem espaços para evitar erro 400
+                const conflictKey = 'usuario_id,data_inicio';
+
                 if (uid === 'all') { 
                     if(!confirm(`Confirma definir meta de ${valor} para TODOS os assistentes a partir de ${data}?`)) { 
                         throw new Error("Cancelado pelo utilizador."); 
@@ -315,24 +316,21 @@
                     const assistentes = allUsers.filter(u => u.funcao === 'Assistente'); 
                     if(assistentes.length === 0) throw new Error("Não há assistentes para aplicar a meta."); 
                     
-                    // Upsert para cada assistente
                     const inserts = assistentes.map(u => ({ 
                         usuario_id: u.id, 
                         data_inicio: data, 
                         valor_meta: parseInt(valor) 
                     }));
                     
-                    // Usamos upsert para evitar erro de chave duplicada se já existir meta nesse dia
-                    const res = await _supabase.from('metas').upsert(inserts, { onConflict: 'usuario_id, data_inicio' }); 
+                    const res = await _supabase.from('metas').upsert(inserts, { onConflict: conflictKey }); 
                     error = res.error; 
 
                 } else { 
-                    // Upsert individual
                     const res = await _supabase.from('metas').upsert({ 
                         usuario_id: uid, 
                         data_inicio: data, 
                         valor_meta: parseInt(valor) 
-                    }, { onConflict: 'usuario_id, data_inicio' }); 
+                    }, { onConflict: conflictKey }); 
                     error = res.error; 
                 } 
                 
@@ -350,18 +348,17 @@
             }
         }
 
-        // --- GESTÃO DE ASSERTIVIDADE (NOVO) ---
+        // --- GESTÃO DE ASSERTIVIDADE ---
         async function loadAssertividade() {
             const container = document.getElementById('assert-list');
             try {
-                // Tenta carregar. Se a tabela não existir, vai dar erro, mas lidamos com isso.
                 const { data, error } = await _supabase
                     .from('metas_assertividade')
                     .select('*')
                     .order('data_inicio', { ascending: false });
 
                 if (error) {
-                    if(error.code === '42P01') { // Erro tabela não existe
+                    if(error.code === '42P01') { 
                          container.innerHTML = '<div class="p-4 text-xs text-orange-500 bg-orange-50 border border-orange-100 rounded text-center">⚠️ Tabela "metas_assertividade" não criada no banco.</div>';
                          return;
                     }
@@ -415,8 +412,6 @@
             btn.disabled = true;
 
             try {
-                // Upsert based on data_inicio? Ou apenas insert. Vamos assumir insert para histórico.
-                // Mas se tivermos UNIQUE na data, usamos upsert.
                 const { error } = await _supabase
                     .from('metas_assertividade')
                     .insert({ data_inicio: data, valor_minimo: parseFloat(valor) });
@@ -435,7 +430,7 @@
             }
         }
 
-        // --- FUNÇÕES DE MODAL USUÁRIO (IGUAIS AO ANTERIOR) ---
+        // --- FUNÇÕES DE MODAL USUÁRIO ---
         function abrirModal(user = null) {
             const modal = document.getElementById('modal-user'); const title = document.getElementById('modal-title'); const btnDel = document.getElementById('btn-delete'); const idInput = document.getElementById('form-id');
             modal.classList.remove('hidden'); modal.classList.add('flex');
