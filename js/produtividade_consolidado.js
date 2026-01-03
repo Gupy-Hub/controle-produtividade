@@ -244,16 +244,15 @@ const Cons = {
                 const diasCal = s.diasUteis; 
                 
                 // --- LÓGICA CRUCIAL ---
-                // Para cálculo de média (isCalc=true), na coluna 99, usa HF (Manual).
                 const realHC = s.users.size || 0;
+                // Coluna 99 (Total) usa HF (Manual). Outras colunas usam Real (ou 1 se zero)
                 const hcDaColuna = (i === 99) ? HF : (realHC || 1); 
 
                 let val = 0; 
                 if (!isCalc) { 
-                    // Na tabela (contagem simples), sempre mostra o valor REAL (s.users.size)
-                    // mesmo na coluna 99, para o usuário ver o total real de pessoas.
+                    // Na tabela (contagem simples), sempre mostra o valor REAL
+                    // Se for linha de Assistentes, mostra SYS_HC no total para histórico correto.
                     if (label.includes('Assistentes')) {
-                        // Se for semana vazia, mostra 0. Se for total, mostra total do sistema.
                         val = (i === 99) ? sysHC : realHC;
                     } else {
                         val = getter(s); 
@@ -270,10 +269,8 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // Linha 1: "Total de Assistentes" na tabela
-        // Mostrará o SYS_HC (Real) na coluna Total, para histórico correto.
+        // Linhas da Tabela
         h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => s.users.size);
-        
         h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
@@ -281,7 +278,7 @@ const Cons = {
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // Linhas de Média (Usam HF para dividir no Total)
+        // Linhas de Média (Calculadas com HF no Total)
         h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
         h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
@@ -296,21 +293,35 @@ const Cons = {
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT ---
-        // Mostra o Manual (se houver) + Detalhamento CLT/PJ
+        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT (COM CLT/PJ) ---
         let cardHTML = '';
         
-        // Número principal (Manual se diferente, ou Sistema)
+        // 1. Valor Principal: HF (Manual)
         if (HF !== sysHC) {
-            cardHTML = `${HF} <span class="text-sm text-amber-500 font-bold">(Manual)</span>`;
+            cardHTML = `<div class="flex items-center gap-2">
+                            <span class="text-3xl font-black text-amber-600">${HF}</span>
+                            <span class="text-[10px] font-bold text-amber-500 uppercase bg-amber-50 border border-amber-100 px-2 py-1 rounded">Manual</span>
+                        </div>`;
         } else {
-            cardHTML = `${HF}`;
+            cardHTML = `<span class="text-3xl font-black text-slate-800">${HF}</span>`;
         }
         
-        // Detalhe CLT/PJ
-        cardHTML += `<div class="flex items-center gap-2 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                        <span class="bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">CLT: ${countCLT}</span>
-                        <span class="bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">PJ: ${countPJ}</span>
+        // 2. Detalhe CLT/PJ (Baseado no Real)
+        cardHTML += `<div class="flex items-center gap-3 mt-3 pt-3 border-t border-slate-100 w-full justify-between">
+                        <div class="flex flex-col items-center">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">CLT</span>
+                            <span class="text-sm font-black text-blue-600">${countCLT}</span>
+                        </div>
+                        <div class="w-px h-6 bg-slate-100"></div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">PJ</span>
+                            <span class="text-sm font-black text-indigo-600">${countPJ}</span>
+                        </div>
+                        <div class="w-px h-6 bg-slate-100"></div>
+                         <div class="flex flex-col items-center">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Real</span>
+                            <span class="text-sm font-black text-slate-500">${sysHC}</span>
+                        </div>
                      </div>`;
 
         setSafe('cons-p-headcount', cardHTML);
