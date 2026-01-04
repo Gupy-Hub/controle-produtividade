@@ -33,18 +33,20 @@ const MA_Main = {
             
             const selUser = document.getElementById('filtro-user');
             if(selUser) {
-                const optMe = selUser.querySelector('option[value="me"]');
-                if(optMe) optMe.remove();
-                selUser.value = 'time';
+                // Adiciona o evento de troca
                 selUser.addEventListener('change', () => this.atualizarDashboard());
             }
         }
 
+        // Carrega usuários e popula o select
         await this.carregarUsuarios();
         
+        // Força a seleção do Time na inicialização para Gestoras
         if (this.isMgr) {
              const selUser = document.getElementById('filtro-user');
-             if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
+             if(selUser) {
+                 if(!selUser.value || selUser.value === 'me') selUser.value = 'time';
+             }
         }
 
         this.atualizarDashboard();
@@ -52,10 +54,28 @@ const MA_Main = {
 
     carregarUsuarios: async function() {
         const { data } = await _supabase.from('usuarios').select('id, nome, funcao').order('nome');
+        
         if(data) {
             const selectFiltro = document.getElementById('filtro-user');
             const selectFeedback = document.getElementById('feedback-destinatario');
             
+            // CORREÇÃO: Limpa e recria as opções do select de filtro para Gestoras
+            if (this.isMgr && selectFiltro) {
+                selectFiltro.innerHTML = ''; // Limpa tudo
+                
+                // 1. Adiciona opção TIME
+                const optTime = document.createElement('option');
+                optTime.value = 'time';
+                optTime.text = '👥 Time (Média)';
+                selectFiltro.appendChild(optTime);
+
+                // 2. Separador
+                const optSep = document.createElement('option');
+                optSep.disabled = true;
+                optSep.text = '──────────';
+                selectFiltro.appendChild(optSep);
+            }
+
             data.forEach(u => {
                 this.usersMap[u.id] = u.nome;
                 this.userRoles[u.id] = u.funcao; 
@@ -64,11 +84,14 @@ const MA_Main = {
                 this.nameToIdsMap[u.nome].push(u.id);
 
                 if(this.nameToIdsMap[u.nome][0] === u.id) {
-                    if(u.funcao === 'Assistente' && selectFiltro) {
+                    // Adiciona Assistentes no filtro da Gestora
+                    if(u.funcao === 'Assistente' && selectFiltro && this.isMgr) {
                         const opt = document.createElement('option');
                         opt.value = u.id; opt.text = u.nome;
                         selectFiltro.appendChild(opt);
                     }
+                    
+                    // Popula select de feedback (exclui o próprio usuário)
                     if(u.id !== this.sessao.id && selectFeedback) {
                         const optF = document.createElement('option');
                         optF.value = u.id; optF.text = `👤 ${u.nome}`;
