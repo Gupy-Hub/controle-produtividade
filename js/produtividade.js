@@ -6,31 +6,33 @@ let currentMetaAssertividade = 0;
 
 async function init() {
     // 1. Verificar Login
-    const session = localStorage.getItem('usuario'); // Corrigido para 'usuario' conforme seu layout.js
+    const session = localStorage.getItem('usuario'); 
     if (!session) {
         window.location.href = 'index.html';
         return;
     }
     currentUser = JSON.parse(session);
 
-    // 2. Definir data de hoje no input (se existir na página)
-    // Nota: O HTML original 'produtividade.html' usa 'data-global', mas o seu JS antigo referia 'data-registo'.
-    // Vou assumir que você tem um input com id="data-registo" na sua página onde este script roda.
-    // Se estiver a usar o layout novo que usa DataGlobal, adapte conforme necessário.
+    // 2. Definir data de ONTEM no input
     const dateInput = document.getElementById('data-registo');
     if (dateInput) {
-        const today = new Date().toISOString().split('T')[0];
-        dateInput.value = today;
+        // Cálculo da data de ontem
+        const data = new Date();
+        data.setDate(data.getDate() - 1); // Subtrai 1 dia
+        const ontem = data.toISOString().split('T')[0];
+
+        dateInput.value = ontem;
         dateInput.addEventListener('change', carregarDadosDoDia);
     }
 
-    // 4. Carregar dados iniciais
+    // 4. Carregar dados iniciais (baseado na data definida acima)
     await carregarDadosDoDia();
 }
 
 async function carregarDadosDoDia() {
     const dateInput = document.getElementById('data-registo');
-    // Se não houver input específico, tenta pegar a data global ou usa hoje
+    // Se não houver input específico, tenta pegar a data global ou usa ontem (calculado no init)
+    // Se o init falhar, fallback para hoje, mas o init deve garantir o valor.
     const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
 
     if (!dataSelecionada) return;
@@ -58,37 +60,17 @@ async function carregarDadosDoDia() {
             if(elMeta) elMeta.innerText = "N/D";
         }
 
-        // --- B. Buscar Meta de Assertividade (Global) ---
-        // [DESATIVADO TEMPORARIAMENTE CONFORME SOLICITADO]
-        // Para não dar erro no sistema enquanto a tabela não existe ou não está configurada.
-        
+        // --- B. Meta de Assertividade (Placeholder) ---
         currentMetaAssertividade = 0;
         const elAssert = document.getElementById('display-meta-assert');
         if(elAssert) elAssert.innerText = "--"; 
-
-        /* CÓDIGO ORIGINAL (COMENTADO):
-        const { data: metasAss, error: errAss } = await _supabase
-            .from('metas_assertividade')
-            .select('valor_minimo')
-            .lte('data_inicio', dataSelecionada)
-            .order('data_inicio', { ascending: false })
-            .limit(1);
-
-        if (metasAss && metasAss.length > 0) {
-            currentMetaAssertividade = metasAss[0].valor_minimo;
-            document.getElementById('display-meta-assert').innerText = currentMetaAssertividade + "%";
-        } else {
-            currentMetaAssertividade = 0;
-            document.getElementById('display-meta-assert').innerText = "N/D";
-        }
-        */
 
         // --- C. Buscar Produção Já Lançada ---
         const { data: producao, error: errProd } = await _supabase
             .from('producao')
             .select('*')
             .eq('usuario_id', currentUser.id)
-            .eq('data_referencia', dataSelecionada) // Atenção: O nome da coluna no banco costuma ser data_referencia ou data
+            .eq('data_referencia', dataSelecionada)
             .maybeSingle();
 
         const statusIcon = document.getElementById('status-icon');
@@ -172,13 +154,11 @@ async function salvarProducao() {
         // Dados a salvar
         const payload = {
             usuario_id: currentUser.id,
-            data_referencia: dataSelecionada, // Usando data_referencia para manter padrão
+            data_referencia: dataSelecionada,
             quantidade: parseInt(qtd),
-            meta_diaria: currentMetaProducao // Opcional: Salvar qual era a meta no dia
+            meta_diaria: currentMetaProducao 
         };
 
-        // IMPORTANTE: A tabela 'producao' no Supabase deve ter uma constraint UNIQUE em (usuario_id, data_referencia)
-        // Se a constraint se chamar 'producao_usuario_id_data_referencia_key', o onConflict funcionará.
         const { error } = await _supabase
             .from('producao')
             .upsert(payload, { onConflict: 'usuario_id, data_referencia' });

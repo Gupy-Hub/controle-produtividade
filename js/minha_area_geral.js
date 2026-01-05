@@ -127,45 +127,59 @@ const MA_Diario = {
         MA_Main.atualizarDashboard(); 
     },
 
-    // --- NOVA FUNCIONALIDADE: PRESENÇA --- //
+    // --- FUNCIONALIDADE: PRESENÇA (ONTEM) --- //
 
     verificarAcessoHoje: async function() {
         // Só exibe para assistentes
         if(MA_Main.isMgr) return;
         
         const box = document.getElementById('box-confirmacao-leitura');
-        const hoje = new Date().toISOString().split('T')[0];
         
-        // Verifica se hoje é fim de semana (Sábado=6, Domingo=0)
-        const diaSemana = new Date().getDay();
+        // CALCULA A DATA DE ONTEM
+        const data = new Date();
+        data.setDate(data.getDate() - 1); 
+        const dataRef = data.toISOString().split('T')[0];
+        
+        // Verifica se ONTEM foi fim de semana (Sábado=6, Domingo=0)
+        const diaSemana = data.getDay();
         if(diaSemana === 0 || diaSemana === 6) {
+            // Se ontem foi fim de semana, não exige confirmação
             if(box) box.classList.add('hidden');
             return;
         }
 
-        const { data } = await _supabase
+        const { data: reg } = await _supabase
             .from('acessos_diarios')
             .select('id')
             .eq('usuario_id', MA_Main.sessao.id)
-            .eq('data_referencia', hoje);
+            .eq('data_referencia', dataRef); // Busca pela data de ontem
             
-        // Se já confirmou (data existe), esconde. Se não, mostra.
-        if (data && data.length > 0) {
+        // Se já confirmou, esconde. Se não, mostra.
+        if (reg && reg.length > 0) {
             if(box) box.classList.add('hidden');
         } else {
-            if(box) box.classList.remove('hidden');
+            if(box) {
+                box.classList.remove('hidden');
+                // Atualiza o texto para deixar claro que é sobre ontem
+                const txt = document.querySelector('#box-confirmacao-leitura p');
+                if(txt) txt.innerText = "Confirme que verificou suas metas do dia anterior.";
+            }
         }
     },
 
     confirmarAcessoHoje: async function() {
-        const hoje = new Date().toISOString().split('T')[0];
+        // CALCULA A DATA DE ONTEM PARA SALVAR
+        const data = new Date();
+        data.setDate(data.getDate() - 1);
+        const dataRef = data.toISOString().split('T')[0];
+        
         const btn = document.querySelector('#box-confirmacao-leitura button');
         
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
         
         const { error } = await _supabase.from('acessos_diarios').insert({
             usuario_id: MA_Main.sessao.id,
-            data_referencia: hoje
+            data_referencia: dataRef // Salva como ontem
         });
         
         if(error) {
@@ -173,7 +187,7 @@ const MA_Diario = {
             if(btn) btn.innerHTML = 'Tentar Novamente';
         } else {
             document.getElementById('box-confirmacao-leitura').classList.add('hidden');
-            alert("Presença confirmada com sucesso!");
+            alert("Presença do dia anterior confirmada!");
         }
     },
 
