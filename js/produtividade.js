@@ -1,179 +1,332 @@
-document.addEventListener('DOMContentLoaded', init);
+const Geral = {
+    listaAtual: [],
+    selecionado: null,
+    dataVisualizada: null,
+    periodoInicio: null,
+    periodoFim: null,
 
-let currentUser = null;
-let currentMetaProducao = 0;
-let currentMetaAssertividade = 0;
-
-async function init() {
-    // 1. Verificar Login
-    const session = localStorage.getItem('usuario'); 
-    if (!session) {
-        window.location.href = 'index.html';
-        return;
-    }
-    currentUser = JSON.parse(session);
-
-    // 2. Definir data de ONTEM no input
-    const dateInput = document.getElementById('data-registo');
-    if (dateInput) {
-        // Cálculo da data de ontem
-        const data = new Date();
-        data.setDate(data.getDate() - 1); // Subtrai 1 dia
-        const ontem = data.toISOString().split('T')[0];
-
-        dateInput.value = ontem;
-        dateInput.addEventListener('change', carregarDadosDoDia);
-    }
-
-    // 4. Carregar dados iniciais (baseado na data definida acima)
-    await carregarDadosDoDia();
-}
-
-async function carregarDadosDoDia() {
-    const dateInput = document.getElementById('data-registo');
-    // Se não houver input específico, tenta pegar a data global ou usa ontem (calculado no init)
-    // Se o init falhar, fallback para hoje, mas o init deve garantir o valor.
-    const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-
-    if (!dataSelecionada) return;
-
-    resetUI(); // Limpa os valores visuais enquanto carrega
-
-    try {
-        // --- A. Buscar Meta de Produção (Histórico) ---
-        // Queremos a meta cuja data_inicio seja menor ou igual à data selecionada.
-        const { data: metasProd, error: errMeta } = await _supabase
-            .from('metas')
-            .select('valor_meta')
-            .eq('usuario_id', currentUser.id)
-            .lte('data_inicio', dataSelecionada) 
-            .order('data_inicio', { ascending: false })
-            .limit(1);
-
-        if (metasProd && metasProd.length > 0) {
-            currentMetaProducao = metasProd[0].valor_meta;
-            const elMeta = document.getElementById('display-meta-prod');
-            if(elMeta) elMeta.innerText = currentMetaProducao;
+    toggleSemana: function() {
+        const mode = document.getElementById('view-mode').value;
+        const selSemana = document.getElementById('select-semana');
+        
+        if (mode === 'semana') {
+            selSemana.classList.remove('hidden');
         } else {
-            currentMetaProducao = 0;
-            const elMeta = document.getElementById('display-meta-prod');
-            if(elMeta) elMeta.innerText = "N/D";
+            selSemana.classList.add('hidden');
+        }
+        this.carregarTela();
+    },
+    
+    // --- NOVA FUNÇÃO DE EXCLUSÃO ---
+    excluirDadosDia: async function() {
+        const modo = document.getElementById('view-mode').value;
+        if (modo !== 'dia') {
+            alert("Para excluir dados, selecione o modo de visualização 'Apenas o Dia' no filtro 'Visualizar'.");
+            return;
+        }
+        
+        // Garante que a data está definida e formatada
+        const data = this.dataVisualizada;
+        const [ano, mes, dia] = data.split('-');
+        const dataFmt = `${dia}/${mes}/${ano}`;
+
+        if (!confirm(`ATENÇÃO: Você está prestes a EXCLUIR TODOS os lançamentos do dia ${dataFmt}.\n\nEsta ação é irreversível e geralmente usada para corrigir importações feitas na data errada.\n\nTem certeza absoluta?`)) {
+            return;
         }
 
-        // --- B. Meta de Assertividade (Placeholder) ---
-        currentMetaAssertividade = 0;
-        const elAssert = document.getElementById('display-meta-assert');
-        if(elAssert) elAssert.innerText = "--"; 
+        try {
+            const { error } = await _supabase
+                .from('producao')
+                .delete()
+                .eq('data_referencia', data);
 
-        // --- C. Buscar Produção Já Lançada ---
-        const { data: producao, error: errProd } = await _supabase
-            .from('producao')
-            .select('*')
-            .eq('usuario_id', currentUser.id)
-            .eq('data_referencia', dataSelecionada)
-            .maybeSingle();
+            if (error) throw error;
 
-        const statusIcon = document.getElementById('status-icon');
-        const statusText = document.getElementById('status-text');
-        const inputQtd = document.getElementById('input-qtd');
-        const btn = document.getElementById('btn-salvar');
+            alert('Dados excluídos com sucesso!');
+            this.carregarTela(); // Atualiza a tela para mostrar vazio
 
-        if (producao) {
-            // Se já existe produção
-            if(inputQtd) inputQtd.value = producao.quantidade;
+        } catch (e) {
+            console.error(e);
+            alert('Erro ao excluir dados: ' + e.message);
+        }
+    },
+    
+    carregarTela: async function() {
+        const modo = document.getElementById('view-mode').value;
+        const globalInput = document.getElementById('global-date');
+        const isoDate = globalInput && globalInput.value ? globalInput.value : new Date().toISOString().split('T')[0];
+        
+        this.dataVisualizada = isoDate; 
+        const [ano, mes, dia] = isoDate.split('-').map(Number);
+
+        const bulkSelect = document.getElementById('bulk-fator');
+        if(bulkSelect) bulkSelect.value = "";
+
+        let inicio, fim;
+        
+        if (modo === 'dia') { 
+            inicio = isoDate; fim = isoDate; 
+        } 
+        else if (modo === 'mes') { 
+            const dateIni = new Date(ano, mes - 1, 1);
+            const dateFim = new Date(ano, mes, 0);
+            inicio = dateIni.toLocaleDateString('en-CA'); 
+            fim = dateFim.toLocaleDateString('en-CA');
+        } 
+        else if (modo === 'semana') {
+            const numSemana = parseInt(document.getElementById('select-semana').value) || 1;
+            const ultimoDiaMes = new Date(ano, mes, 0).getDate();
             
-            // Verifica se bateu a meta
-            if (statusIcon && statusText) {
-                if (currentMetaProducao > 0 && producao.quantidade >= currentMetaProducao) {
-                    statusIcon.innerHTML = '<i class="fas fa-check-circle text-emerald-500"></i>';
-                    statusText.innerHTML = `<span class="text-emerald-600">Meta Atingida!</span>`;
-                    statusText.className = "text-sm font-bold text-emerald-600";
-                } else {
-                    statusIcon.innerHTML = '<i class="fas fa-adjust text-amber-500"></i>';
-                    statusText.innerHTML = 'Registo encontrado.<br>Pode editar abaixo.';
-                    statusText.className = "text-sm font-bold text-amber-600";
+            let semanaAtual = 1;
+            let dataIniSemana = null;
+            let dataFimSemana = null;
+
+            for (let d = 1; d <= ultimoDiaMes; d++) {
+                const dataLoop = new Date(ano, mes - 1, d);
+                const diaSemana = dataLoop.getDay(); 
+
+                if (semanaAtual === numSemana) {
+                    if (!dataIniSemana) dataIniSemana = new Date(dataLoop);
+                    dataFimSemana = new Date(dataLoop);
+                }
+
+                if (diaSemana === 6) {
+                    semanaAtual++;
+                }
+                if (semanaAtual > numSemana) break;
+            }
+
+            if (dataIniSemana && dataFimSemana) {
+                inicio = dataIniSemana.toLocaleDateString('en-CA');
+                fim = dataFimSemana.toLocaleDateString('en-CA');
+            } else {
+                inicio = isoDate; fim = isoDate;
+            }
+        }
+
+        this.periodoInicio = inicio;
+        this.periodoFim = fim;
+
+        const { data } = await _supabase
+            .from('producao')
+            .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc') 
+            .gte('data_referencia', inicio)
+            .lte('data_referencia', fim);
+            
+        let dadosFiltrados = data || [];
+        this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
+        this.renderizar();
+    },
+
+    contarDiasUteis: function(inicioStr, fimStr) {
+        if(!inicioStr || !fimStr) return 0;
+        let count = 0;
+        let cur = new Date(inicioStr + 'T12:00:00');
+        const end = new Date(fimStr + 'T12:00:00');
+        let safety = 0;
+        while(cur <= end && safety < 366) {
+            const d = cur.getDay();
+            if(d !== 0 && d !== 6) count++;
+            cur.setDate(cur.getDate() + 1);
+            safety++;
+        }
+        return count; 
+    },
+
+    mudarFator: function(nome, valor) {
+        const modo = document.getElementById('view-mode').value;
+        if (modo !== 'dia') {
+            alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico.");
+            this.renderizar(); 
+            return;
+        }
+        Sistema.Dados.definirFator(nome, this.dataVisualizada, valor);
+        this.carregarTela();
+    },
+
+    mudarFatorTodos: function(valor) {
+        if (!valor) return; 
+        const modo = document.getElementById('view-mode').value;
+        if (modo !== 'dia') {
+            alert("Atenção: A alteração em massa só é permitida na visão 'Apenas o Dia'.");
+            document.getElementById('bulk-fator').value = "";
+            return;
+        }
+        if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas?")) {
+            document.getElementById('bulk-fator').value = "";
+            return;
+        }
+        this.listaAtual.forEach(u => {
+            if (!u.inativo) {
+                Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor);
+            }
+        });
+        this.carregarTela(); 
+    },
+
+    selecionar: function(nome) {
+        if (this.selecionado === nome) this.selecionado = null; else this.selecionado = nome;
+        this.renderizar();
+    },
+    limparSelecao: function() { this.selecionado = null; this.renderizar(); },
+
+    renderizar: function() {
+        const tbody = document.getElementById('tabela-corpo'); 
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        const modo = document.getElementById('view-mode').value;
+
+        // Configuração do Bulk Select
+        const bulkSelect = document.getElementById('bulk-fator');
+        if (bulkSelect) {
+            if (modo !== 'dia') {
+                bulkSelect.disabled = true;
+                bulkSelect.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                bulkSelect.disabled = false;
+                bulkSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+        const ativos = this.listaAtual.filter(u => !u.inativo);
+        
+        // Total Produção: Soma de TODOS que estão na lista, independente da base manual
+        const totalProd = this.selecionado 
+            ? this.listaAtual.filter(u => u.nome === this.selecionado).reduce((a, b) => a + b.total, 0)
+            : ativos.reduce((a, b) => a + b.total, 0);
+
+        // --- LÓGICA DE HEADCOUNT CRÍTICA ---
+        let hcConsiderado = 0;
+        let diasDisplay = 0;
+        let diasLabel = "";
+        const diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
+
+        if (modo === 'dia') {
+            // Lógica Dia: Mantemos a lógica de presença real (desconta abonados do dia)
+            let qtdMeio = 0; let qtdAbonado = 0;
+            this.listaAtual.forEach(u => {
+                const diaInfo = u.diasMap[this.dataVisualizada];
+                if (diaInfo) { 
+                    if (diaInfo.fator === 0.5) qtdMeio++; 
+                    else if (diaInfo.fator === 0) qtdAbonado++; 
+                }
+            });
+            
+            if (this.selecionado) {
+                hcConsiderado = 1;
+                diasLabel = "Assistente Selecionada";
+            } else {
+                const reducaoParesMeio = Math.floor(qtdMeio / 2);
+                hcConsiderado = ativos.length - qtdAbonado - reducaoParesMeio;
+                diasLabel = "Ativos (Dia)";
+            }
+            diasDisplay = diasUteisPeriodo;
+
+            document.getElementById('kpi-hc').innerText = hcConsiderado;
+            
+            // Info de abonados (apenas no dia)
+            const elInfoAbonados = document.getElementById('info-abonados');
+            if(elInfoAbonados) {
+                elInfoAbonados.classList.add('hidden'); 
+                if ((qtdMeio > 0 || qtdAbonado > 0) && !this.selecionado) {
+                    let texto = [];
+                    if (qtdMeio > 0) texto.push(`${qtdMeio} Meio Período`);
+                    if (qtdAbonado > 0) texto.push(`${qtdAbonado} Abonado(s)`);
+                    elInfoAbonados.innerText = texto.join(', ');
+                    elInfoAbonados.classList.remove('hidden');
                 }
             }
-            
-            if(btn) {
-                btn.innerHTML = '<span>✏️ Atualizar Registo</span>';
-                btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-                btn.classList.add('bg-amber-600', 'hover:bg-amber-700');
-            }
 
         } else {
-            // Nada lançado ainda
-            if(inputQtd) inputQtd.value = '';
+            // LÓGICA MENSAL/SEMANAL: SOBERANIA MANUAL
+            // Aqui aplicamos a regra solicitada: Se está 13 no input, a conta é com 13.
             
-            if (statusIcon && statusText) {
-                statusIcon.innerHTML = '<i class="fas fa-clock text-slate-300"></i>';
-                statusText.innerText = 'A aguardar lançamento...';
-                statusText.className = "text-sm font-bold text-slate-400";
+            // Pega o valor manual (ou 17 padrão)
+            const hcManual = Sistema.Dados.obterBaseHC(this.dataVisualizada);
+            
+            if (this.selecionado) {
+                hcConsiderado = 1;
+                diasDisplay = this.listaAtual.filter(u => u.nome === this.selecionado)[0]?.dias || 0;
+                diasLabel = "Dias do Colaborador";
+                document.getElementById('kpi-hc').innerText = "1";
+            } else {
+                // Se não selecionou ninguém, o HC é OBRIGATORIAMENTE o valor manual
+                hcConsiderado = hcManual;
+                diasDisplay = diasUteisPeriodo;
+                diasLabel = "Dias Úteis (Calendário)";
+                
+                // Exibe no card apenas o valor manual (base considerada) para não confundir
+                // Adicionei um indicador visual de que é uma base definida
+                document.getElementById('kpi-hc').innerHTML = `${hcManual} <span class="text-[10px] text-slate-400 font-normal">Base Definida</span>`;
             }
             
-            if(btn) {
-                btn.innerHTML = '<span>💾 Salvar Produção</span>';
-                btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-                btn.classList.remove('bg-amber-600', 'hover:bg-amber-700');
+            const elInfoAbonados = document.getElementById('info-abonados');
+            if(elInfoAbonados) elInfoAbonados.classList.add('hidden');
+        }
+
+        document.getElementById('kpi-dias').innerText = diasDisplay;
+        document.getElementById('kpi-dias-label').innerText = diasLabel;
+        
+        // --- CÁLCULOS FINANCEIROS/METAS ---
+        const metaDiaria = 650;
+        
+        // A Meta Total agora obedece cegamente ao hcConsiderado (que veio do manual no modo mês)
+        const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
+        const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
+        
+        // A Média Real também obedece cegamente ao hcConsiderado
+        const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
+
+        document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
+        document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
+        
+        document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
+        document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
+
+        const percentual = metaTotalEsperada > 0 ? Math.round((totalProd / metaTotalEsperada) * 100) : 0;
+        document.getElementById('kpi-pct').innerText = percentual + '%';
+        document.getElementById('kpi-pct-detail').innerText = `${totalProd.toLocaleString()} / ${metaTotalEsperada.toLocaleString()}`;
+        
+        const cardPct = document.getElementById('card-pct');
+        const iconPct = document.getElementById('icon-pct');
+        if (cardPct) {
+            cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+            if (percentual < 100) {
+                cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-times-circle text-xl text-white/50"></i>';
+            } else {
+                cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-check-circle text-xl text-white/50"></i>';
             }
         }
 
-    } catch (error) {
-        console.error("Erro ao carregar dados:", error);
+        const selHeader = document.getElementById('selection-header');
+        if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
+        else selHeader.classList.add('hidden');
+
+        if(this.listaAtual.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400">Sem dados.</td></tr>'; return; }
+
+        this.listaAtual.forEach(u => {
+            const isSelected = this.selecionado === u.nome;
+            const rowClass = isSelected ? "selected-row" : "hover:bg-slate-50";
+            const opacity = u.inativo ? "row-ignored" : "";
+            
+            let fator = 1;
+            if (modo === 'dia') {
+                 const infoDia = u.diasMap[this.dataVisualizada];
+                 fator = infoDia ? infoDia.fator : 1;
+            } else {
+                 fator = 1; 
+            }
+            const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
+            const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
+
+            const selectHtml = `<select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)"><option value="1" ${fator===1?'selected':''}>100%</option><option value="0.5" ${fator===0.5?'selected':''}>50%</option><option value="0" ${fator===0?'selected':''}>0%</option></select>`;
+            const pctIndividual = u.meta > 0 ? Math.round((u.total / u.meta) * 100) : 0;
+            let badgeClass = pctIndividual >= 100 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
+            const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;
+
+            tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${pctBadge}</td></tr>`;
+        });
     }
-}
-
-function resetUI() {
-    const elMeta = document.getElementById('display-meta-prod');
-    if(elMeta) elMeta.innerHTML = '<i class="fas fa-spinner fa-spin text-lg text-slate-300"></i>';
-    
-    const elAssert = document.getElementById('display-meta-assert');
-    if(elAssert) elAssert.innerHTML = '<i class="fas fa-spinner fa-spin text-lg text-slate-300"></i>';
-    
-    const inputQtd = document.getElementById('input-qtd');
-    if(inputQtd) inputQtd.value = '';
-}
-
-async function salvarProducao() {
-    const dateInput = document.getElementById('data-registo');
-    const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-    const qtdInput = document.getElementById('input-qtd');
-    const qtd = qtdInput ? qtdInput.value : '';
-    const btn = document.getElementById('btn-salvar');
-
-    if (!dataSelecionada || qtd === '') {
-        alert("Por favor, preencha a quantidade.");
-        return;
-    }
-
-    const originalBtnContent = btn.innerHTML;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A processar...';
-    btn.disabled = true;
-
-    try {
-        // Dados a salvar
-        const payload = {
-            usuario_id: currentUser.id,
-            data_referencia: dataSelecionada,
-            quantidade: parseInt(qtd),
-            meta_diaria: currentMetaProducao 
-        };
-
-        const { error } = await _supabase
-            .from('producao')
-            .upsert(payload, { onConflict: 'usuario_id, data_referencia' });
-
-        if (error) throw error;
-
-        // Feedback visual
-        await carregarDadosDoDia(); 
-        alert("Produção gravada com sucesso!");
-
-    } catch (error) {
-        console.error("Erro ao salvar:", error);
-        alert("Erro ao salvar: " + error.message);
-    } finally {
-        btn.innerHTML = originalBtnContent;
-        btn.disabled = false;
-    }
-}
+};
