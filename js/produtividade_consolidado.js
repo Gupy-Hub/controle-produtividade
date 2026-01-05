@@ -223,17 +223,64 @@ const Cons = {
             });
         }
 
-        // Cálculo de Dias Úteis
+        // --- CÁLCULO DE DIAS ÚTEIS COM TRAVA DE HOJE (CORREÇÃO DE MÉDIA) ---
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        // Helper para limitar a data final a hoje se estiver no futuro
+        const getEffectiveEnd = (fimStr) => {
+            const dFim = new Date(fimStr + 'T12:00:00');
+            if (dFim > today) {
+                // Se a data final do período é no futuro, limita a hoje
+                const y = today.getFullYear();
+                const m = String(today.getMonth() + 1).padStart(2,'0');
+                const d = String(today.getDate()).padStart(2,'0');
+                return `${y}-${m}-${d}`;
+            }
+            return fimStr;
+        };
+
         for(let i=1; i<=numCols; i++) {
-            if(datesMap[i]) st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
-            else if (t === 'dia') st[i].diasUteis = this.calcularDiasUteisCalendario(`${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`, `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
-            else st[i].diasUteis = st[i].dates.size; 
+            if(datesMap[i]) {
+                const iniStr = datesMap[i].ini;
+                const fimStr = datesMap[i].fim;
+                const dIni = new Date(iniStr + 'T12:00:00');
+                
+                // Se a coluna começa no futuro, dias úteis = 0
+                if (dIni > today) {
+                    st[i].diasUteis = 0;
+                } else {
+                    // Senão, calcula até o fim do período ou até hoje (o que vier primeiro)
+                    const effectiveFim = getEffectiveEnd(fimStr);
+                    st[i].diasUteis = this.calcularDiasUteisCalendario(iniStr, effectiveFim);
+                }
+            }
+            else if (t === 'dia') {
+                // No modo dia, datesMap[i] deve existir, mas fallback por segurança
+                st[i].diasUteis = st[i].dates.size;
+            } else {
+                st[i].diasUteis = st[i].dates.size; 
+            }
         }
+
+        // Correção para o TOTAL (99)
         if (t === 'mes' || t === 'dia') {
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-            st[99].diasUteis = this.calcularDiasUteisCalendario(`${currentYear}-${String(currentMonth).padStart(2,'0')}-01`, `${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`);
+            const fullIni = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
+            const fullFim = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`;
+            
+            const dIni = new Date(fullIni + 'T12:00:00');
+            
+            if (dIni > today) {
+                st[99].diasUteis = 0;
+            } else {
+                const effectiveFim = getEffectiveEnd(fullFim);
+                st[99].diasUteis = this.calcularDiasUteisCalendario(fullIni, effectiveFim);
+            }
         } else {
-            st[99].diasUteis = 0; for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
+            // Para Trimestre/Semestre/Ano, somamos os dias úteis das colunas (que já foram corrigidas acima)
+            st[99].diasUteis = 0; 
+            for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
         }
 
         const hRow = document.getElementById('cons-table-header'); 
