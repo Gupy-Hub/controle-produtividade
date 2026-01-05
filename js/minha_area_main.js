@@ -12,7 +12,7 @@ const MA_Main = {
         const f = this.sessao.funcao;
         this.isMgr = (f === 'Gestora' || f === 'Auditora');
         
-        // Inicializa o Sistema
+        // Inicializa o Sistema (Importante para carregar Fatores/Abonos)
         if (typeof Sistema !== 'undefined' && Sistema.Dados) {
             await Sistema.Dados.inicializar();
             Sistema.Datas.criarInputInteligente('filtro-data-manual', 'produtividade_data_ref', () => this.atualizarDashboard());
@@ -38,10 +38,10 @@ const MA_Main = {
             }
         }
 
-        // Carrega usuários e popula o select
+        // Carrega usuários e popula os selects
         await this.carregarUsuarios();
         
-        // Força a seleção do Time na inicialização para Gestoras
+        // Garante a seleção do Time na inicialização para Gestoras
         if (this.isMgr) {
              const selUser = document.getElementById('filtro-user');
              if(selUser) {
@@ -59,11 +59,11 @@ const MA_Main = {
             const selectFiltro = document.getElementById('filtro-user');
             const selectFeedback = document.getElementById('feedback-destinatario');
             
-            // CORREÇÃO: Limpa e recria as opções do select de filtro para Gestoras
+            // Configura filtro da Gestora
             if (this.isMgr && selectFiltro) {
-                selectFiltro.innerHTML = ''; // Limpa tudo
+                selectFiltro.innerHTML = ''; // Limpa tudo para recriar
                 
-                // 1. Adiciona opção TIME
+                // 1. Adiciona opção TIME (Padrão para Gestora)
                 const optTime = document.createElement('option');
                 optTime.value = 'time';
                 optTime.text = '👥 Time (Média)';
@@ -135,6 +135,7 @@ const MA_Main = {
         const dt = this.getDateFromInput();
         const m = dt.getMonth() + 1;
 
+        // Lógica para pré-selecionar o trimestre/semestre correto baseado na data
         if(type === 'trimestre') {
             q.classList.remove('hidden');
             if (q.value === '1' && m > 3) q.value = Math.ceil(m/3);
@@ -156,6 +157,7 @@ const MA_Main = {
         
         let dataInicio, dataFim;
 
+        // --- Definição das Datas de Início e Fim conforme o Período ---
         if (type === 'mes') {
             const mes = refDate.getMonth();
             dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
@@ -176,6 +178,7 @@ const MA_Main = {
             dataInicio = `${ano}-01-01`;
             dataFim = `${ano}-12-31`;
         } else {
+             // Fallback para mês atual
              const mes = refDate.getMonth();
              dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
              dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
@@ -184,6 +187,7 @@ const MA_Main = {
         let targetName = this.usersMap[this.sessao.id];
         let viewingTime = false;
         
+        // --- Definição da Visão (Time vs Individual) ---
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
             if (val === 'time') {
@@ -193,6 +197,7 @@ const MA_Main = {
             }
         }
 
+        // --- Busca de Dados ---
         const { data: rawData } = await _supabase
             .from('producao')
             .select('*')
@@ -202,9 +207,12 @@ const MA_Main = {
         const dadosNormalizados = MA_Diario.normalizarDadosPorNome(rawData || []);
         let dadosFinais = [];
 
+        // Garante que fatores/abonos estão carregados
         if(!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
 
+        // --- Processamento dos Dados ---
         if (viewingTime) {
+            // Lógica de TIME (Média Ponderada pelos Fatores)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const assistants = Object.values(dadosNormalizados[dia]);
                 
@@ -225,8 +233,13 @@ const MA_Main = {
                     }
                 });
 
+                // Média de produção (Total / Pessoas)
                 const mediaProd = headcount ? Math.round(totalProd / headcount) : 0;
+                
+                // Média de Fator do dia (ex: se todos tiveram abono parcial)
                 const mediaFator = headcount ? sumFatores / headcount : 1;
+                
+                // Ajusta a meta do time baseado na média de presença/abono
                 const metaTimeAjustada = Math.round(650 * mediaFator);
 
                 let obs = `Média de ${headcount} assistentes.`;
@@ -244,6 +257,7 @@ const MA_Main = {
                 });
             });
         } else {
+            // Lógica INDIVIDUAL (Considera Fator Pessoal)
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
                 if (dPessoa) {
@@ -265,9 +279,11 @@ const MA_Main = {
             });
         }
 
+        // --- Atualização das Views ---
         MA_Diario.atualizarKPIs(dadosFinais);
         MA_Diario.atualizarTabelaDiaria(dadosFinais, viewingTime);
         
+        // Atualiza gráfico de evolução se a aba estiver visível
         if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
             const btnAtivo = document.querySelector('.btn-chart.active');
             const periodo = btnAtivo ? (btnAtivo.id.replace('chart-btn-', '')) : 'mes';
@@ -276,7 +292,12 @@ const MA_Main = {
         
         MA_Comparativo.atualizar(dadosFinais, viewingTime, targetName, dataInicio, dataFim);
         MA_Feedback.carregar();
+        
+        // --- Novas Funcionalidades de Presença ---
+        MA_Diario.verificarAcessoHoje(); 
+        MA_Diario.carregarRelatorioAcessos(); 
     }
 };
 
+// Inicialização automática ao carregar a página
 document.addEventListener('DOMContentLoaded', () => MA_Main.init());

@@ -9,7 +9,7 @@ const MA_Diario = {
             if (!agrupado[data][nome]) {
                 agrupado[data][nome] = {
                     id_ref: item.id, 
-                    nome: nome, // ADICIONADO: Salva o nome para usar na observação do time
+                    nome: nome,
                     quantidade: 0, 
                     meta_diaria: item.meta_diaria || 650,
                     observacao: item.observacao || '', 
@@ -100,7 +100,6 @@ const MA_Diario = {
             }
             
             let obs = item.observacao || '<span class="text-slate-300">-</span>';
-            
             if (obs.includes('Abonos:')) {
                 const parts = obs.split('Abonos:');
                 obs = `${parts[0]}<br><span class="text-[10px] text-amber-600 font-bold bg-amber-50 px-1 rounded mt-1 inline-block border border-amber-100">Abonos:${parts[1]}</span>`;
@@ -126,6 +125,122 @@ const MA_Diario = {
         const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; 
         await _supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); 
         MA_Main.atualizarDashboard(); 
+    },
+
+    // --- NOVA FUNCIONALIDADE: PRESENÇA --- //
+
+    verificarAcessoHoje: async function() {
+        // Só exibe para assistentes
+        if(MA_Main.isMgr) return;
+        
+        const box = document.getElementById('box-confirmacao-leitura');
+        const hoje = new Date().toISOString().split('T')[0];
+        
+        // Verifica se hoje é fim de semana (Sábado=6, Domingo=0)
+        const diaSemana = new Date().getDay();
+        if(diaSemana === 0 || diaSemana === 6) {
+            if(box) box.classList.add('hidden');
+            return;
+        }
+
+        const { data } = await _supabase
+            .from('acessos_diarios')
+            .select('id')
+            .eq('usuario_id', MA_Main.sessao.id)
+            .eq('data_referencia', hoje);
+            
+        // Se já confirmou (data existe), esconde. Se não, mostra.
+        if (data && data.length > 0) {
+            if(box) box.classList.add('hidden');
+        } else {
+            if(box) box.classList.remove('hidden');
+        }
+    },
+
+    confirmarAcessoHoje: async function() {
+        const hoje = new Date().toISOString().split('T')[0];
+        const btn = document.querySelector('#box-confirmacao-leitura button');
+        
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+        
+        const { error } = await _supabase.from('acessos_diarios').insert({
+            usuario_id: MA_Main.sessao.id,
+            data_referencia: hoje
+        });
+        
+        if(error) {
+            alert("Erro ao confirmar: " + error.message);
+            if(btn) btn.innerHTML = 'Tentar Novamente';
+        } else {
+            document.getElementById('box-confirmacao-leitura').classList.add('hidden');
+            alert("Presença confirmada com sucesso!");
+        }
+    },
+
+    carregarRelatorioAcessos: async function() {
+        // Só exibe para Gestoras/Auditoras
+        if(!MA_Main.isMgr) return;
+
+        const box = document.getElementById('box-relatorio-acessos');
+        const lista = document.getElementById('lista-presenca-time');
+        const lblData = document.getElementById('lbl-data-acesso');
+        
+        if(!box || !lista) return;
+
+        box.classList.remove('hidden');
+        
+        // Data selecionada no filtro (ou Hoje se estiver vazio)
+        const dt = MA_Main.getDateFromInput();
+        const dataStr = dt.toISOString().split('T')[0];
+        const dataFmt = dataStr.split('-').reverse().join('/');
+        
+        lblData.innerText = dataFmt;
+        lista.innerHTML = '<span class="col-span-full text-center text-slate-400 py-4"><i class="fas fa-spinner fa-spin"></i> Carregando presenças...</span>';
+
+        // 1. Busca todos os usuários ativos que são Assistentes
+        const { data: users } = await _supabase
+            .from('usuarios')
+            .select('id, nome')
+            .eq('funcao', 'Assistente')
+            .eq('ativo', true)
+            .order('nome');
+
+        // 2. Busca os acessos da data selecionada
+        const { data: acessos } = await _supabase
+            .from('acessos_diarios')
+            .select('usuario_id, created_at')
+            .eq('data_referencia', dataStr);
+            
+        const acessosMap = {};
+        if(acessos) {
+            acessos.forEach(a => acessosMap[a.usuario_id] = a.created_at);
+        }
+
+        let html = '';
+        if(users) {
+            users.forEach(u => {
+                const confirmou = acessosMap[u.id];
+                let statusIcon = '<i class="fas fa-times-circle text-rose-300"></i>';
+                let statusClass = 'border-rose-100 bg-rose-50 opacity-70';
+                let hora = '';
+
+                if(confirmou) {
+                    statusIcon = '<i class="fas fa-check-circle text-emerald-500"></i>';
+                    statusClass = 'border-emerald-100 bg-emerald-50';
+                    const h = new Date(confirmou);
+                    hora = `<span class="text-[9px] font-bold text-emerald-600 block mt-0.5">${h.getHours()}:${String(h.getMinutes()).padStart(2,'0')}</span>`;
+                }
+
+                html += `<div class="flex items-center gap-2 p-2 rounded-lg border ${statusClass}">
+                            <div class="text-lg">${statusIcon}</div>
+                            <div class="leading-tight">
+                                <span class="text-xs font-bold text-slate-700 block">${u.nome.split(' ')[0]}</span>
+                                ${hora}
+                            </div>
+                         </div>`;
+            });
+        }
+        lista.innerHTML = html;
     },
 
     setTxt: function(id, txt) {
