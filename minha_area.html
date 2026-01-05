@@ -1,4 +1,256 @@
-<button onclick="MA_Diario.carregarRelatorioAcessos()" class="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition text-sm font-bold border border-indigo-200">
-    <i class="fas fa-users"></i>
-    <span>Presença Time</span>
-</button>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Área - Controle de Produtividade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased">
+
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center gap-4">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg shadow-sm">
+                        <i class="fas fa-chart-line text-xl"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold text-slate-800 leading-tight">Minha Área</h1>
+                        <p class="text-xs text-slate-500 font-medium">Painel de Performance Individual</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                    <div id="btn-presenca-container">
+                        <button onclick="MA_Diario.carregarRelatorioAcessos()" class="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition text-sm font-bold border border-indigo-200 shadow-sm" title="Ver quem confirmou presença">
+                            <i class="fas fa-users"></i>
+                            <span class="hidden sm:inline">Presença Time</span>
+                        </button>
+                    </div>
+
+                    <div class="h-8 w-px bg-slate-200 mx-2"></div>
+
+                    <div class="flex items-center gap-3">
+                        <div class="text-right hidden sm:block">
+                            <p id="user-name" class="text-sm font-bold text-slate-700">Carregando...</p>
+                            <p id="user-role" class="text-xs text-slate-500">...</p>
+                        </div>
+                        <button onclick="logout()" class="p-2 text-slate-400 hover:text-rose-600 transition" title="Sair">
+                            <i class="fas fa-sign-out-alt text-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+        <div id="box-confirmacao-leitura" class="hidden bg-white border-l-4 border-blue-500 shadow-md rounded-r-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
+            <div class="flex items-center gap-3">
+                <div class="bg-blue-100 p-2 rounded-full text-blue-600">
+                    <i class="fas fa-bell text-xl"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800">Confirmação Diária</h3>
+                    <p class="text-sm text-slate-600">Confirme que verificou suas metas e resultados do dia anterior.</p>
+                </div>
+            </div>
+            <button onclick="MA_Diario.confirmarAcessoHoje()" class="whitespace-nowrap px-4 py-2 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition shadow-sm text-sm">
+                <i class="fas fa-check mr-2"></i> Confirmar Leitura
+            </button>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col sm:flex-row gap-4 items-center justify-between">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+                <label class="text-sm font-bold text-slate-600"><i class="far fa-calendar-alt mr-1"></i> Período:</label>
+                <input type="month" id="filtro-mes" class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none shadow-sm text-slate-600 font-medium">
+            </div>
+            
+            <div class="flex gap-2 w-full sm:w-auto justify-end">
+                <button onclick="MA_Main.atualizarDashboard()" class="px-4 py-2 bg-slate-800 text-white rounded-lg text-sm font-bold hover:bg-slate-700 transition shadow-sm flex items-center gap-2">
+                    <i class="fas fa-sync-alt"></i> Atualizar
+                </button>
+                <a href="index.html" class="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-bold hover:bg-slate-50 transition shadow-sm">
+                    Voltar
+                </a>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Total Produzido</p>
+                <div class="flex items-end justify-between">
+                    <h3 id="kpi-total" class="text-2xl font-black text-slate-800">--</h3>
+                    <i class="fas fa-layer-group text-slate-200 text-3xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Meta Esperada</p>
+                <div class="flex items-end justify-between">
+                    <h3 id="kpi-meta-total" class="text-2xl font-black text-slate-800">--</h3>
+                    <i class="fas fa-flag-checkered text-slate-200 text-3xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média Diária</p>
+                <div class="flex items-end justify-between">
+                    <h3 id="kpi-media-real" class="text-2xl font-black text-blue-600">--</h3>
+                    <i class="fas fa-chart-bar text-slate-200 text-3xl"></i>
+                </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition relative overflow-hidden">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Atingimento</p>
+                <div class="flex items-center gap-3 mt-1">
+                    <h3 id="kpi-porcentagem" class="text-3xl font-black text-slate-800">--%</h3>
+                    <i id="icon-status" class="fas fa-circle text-slate-200 text-lg"></i>
+                </div>
+                <div class="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden">
+                    <div id="bar-progress" class="h-full bg-slate-300 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-b border-slate-200">
+            <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                <button onclick="switchTab('diario')" id="tab-diario" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 active-tab">
+                    <i class="fas fa-list-alt"></i> Diário
+                </button>
+                <button onclick="switchTab('evolucao')" id="tab-evolucao" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
+                    <i class="fas fa-chart-area"></i> Evolução
+                </button>
+                <button onclick="switchTab('feedback')" id="tab-feedback" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
+                    <i class="fas fa-comments"></i> Feedbacks
+                </button>
+            </nav>
+        </div>
+
+        <div id="content-diario" class="tab-content block">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-500">
+                        <thead class="text-xs text-slate-700 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-6 py-3 font-bold">Data</th>
+                                <th class="px-6 py-3 text-center font-bold">Produção</th>
+                                <th class="px-6 py-3 text-center font-bold">Meta Ajustada</th>
+                                <th class="px-6 py-3 text-center font-bold">Status</th>
+                                <th class="px-6 py-3 font-bold">Observações / Abonos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-diario" class="divide-y divide-slate-100">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-evolucao" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-700 mb-4">Evolução de Produção Diária</h3>
+                <div class="h-64 flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100 text-slate-400">
+                    <p>Gráfico de evolução será renderizado aqui.</p>
+                    <canvas id="chart-evolucao" class="w-full h-full hidden"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="content-feedback" class="tab-content hidden">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="font-bold text-slate-700">Histórico de Feedbacks</h3>
+                    <button onclick="MA_Feedback.novoFeedback()" id="btn-novo-feedback" class="hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 font-bold">
+                        + Novo
+                    </button>
+                </div>
+                <div id="lista-feedbacks" class="space-y-4">
+                    <p class="text-center text-slate-400 py-8">Carregando feedbacks...</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <div id="box-relatorio-acessos" class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
+        
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all ring-1 ring-black/5">
+            
+            <div class="bg-indigo-600 px-6 py-4 flex items-center justify-between shadow-md">
+                <h3 class="text-white font-bold text-lg flex items-center gap-2">
+                    <i class="fas fa-clipboard-user bg-indigo-500 p-1.5 rounded-lg text-indigo-100"></i>
+                    Presença Diária
+                </h3>
+                <button onclick="document.getElementById('box-relatorio-acessos').classList.add('hidden')" class="text-white/70 hover:text-white transition p-1 hover:bg-indigo-500 rounded-full">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+
+            <div class="p-6 bg-slate-50">
+                <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-200">
+                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Referência (D-1):</span>
+                    <span id="lbl-data-acesso" class="bg-white border border-slate-200 px-3 py-1.5 rounded-md text-slate-700 font-bold text-sm shadow-sm flex items-center gap-2">
+                        <i class="far fa-calendar-alt text-slate-400"></i> --/--/----
+                    </span>
+                </div>
+
+                <div id="lista-presenca-time" class="grid grid-cols-2 gap-3 max-h-[50vh] overflow-y-auto pr-1 custom-scrollbar">
+                    <div class="col-span-2 text-center text-slate-400 py-8">
+                        <i class="fas fa-spinner fa-spin text-2xl mb-2 block"></i>
+                        Carregando dados...
+                    </div>
+                </div>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-100 border-t border-slate-200 text-center">
+                <button onclick="document.getElementById('box-relatorio-acessos').classList.add('hidden')" class="text-slate-500 hover:text-slate-800 text-sm font-bold px-4 py-2 hover:bg-slate-200 rounded-lg transition">
+                    Fechar Janela
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/minha_area_geral.js"></script>
+    <script src="js/minha_area_feedback.js"></script>
+    <script src="js/minha_area_evolucao.js"></script>
+    <script src="js/minha_area_main.js"></script>
+
+    <script>
+        // Lógica simples de abas
+        function switchTab(tabName) {
+            // Esconde todos
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('nav button').forEach(el => {
+                el.classList.remove('border-blue-500', 'text-blue-600', 'active-tab');
+                el.classList.add('border-transparent', 'text-slate-500');
+            });
+
+            // Mostra o atual
+            document.getElementById('content-' + tabName).classList.remove('hidden');
+            const activeBtn = document.getElementById('tab-' + tabName);
+            activeBtn.classList.remove('border-transparent', 'text-slate-500');
+            activeBtn.classList.add('border-blue-500', 'text-blue-600', 'active-tab');
+        }
+
+        // Logout simples
+        function logout() {
+            localStorage.removeItem('usuario');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

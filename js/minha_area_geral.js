@@ -127,23 +127,20 @@ const MA_Diario = {
         MA_Main.atualizarDashboard(); 
     },
 
-    // --- FUNCIONALIDADE: PRESENÇA (ONTEM) --- //
+    // --- FUNCIONALIDADE: PRESENÇA / BOX E MODAL --- //
 
     verificarAcessoHoje: async function() {
-        // Só exibe para assistentes
+        // ASSISTENTE: Verifica se marcou presença de ONTEM
         if(MA_Main.isMgr) return;
         
         const box = document.getElementById('box-confirmacao-leitura');
         
-        // CALCULA A DATA DE ONTEM
         const data = new Date();
-        data.setDate(data.getDate() - 1); 
+        data.setDate(data.getDate() - 1); // Ontem
         const dataRef = data.toISOString().split('T')[0];
         
-        // Verifica se ONTEM foi fim de semana (Sábado=6, Domingo=0)
         const diaSemana = data.getDay();
         if(diaSemana === 0 || diaSemana === 6) {
-            // Se ontem foi fim de semana, não exige confirmação
             if(box) box.classList.add('hidden');
             return;
         }
@@ -152,15 +149,13 @@ const MA_Diario = {
             .from('acessos_diarios')
             .select('id')
             .eq('usuario_id', MA_Main.sessao.id)
-            .eq('data_referencia', dataRef); // Busca pela data de ontem
+            .eq('data_referencia', dataRef);
             
-        // Se já confirmou, esconde. Se não, mostra.
         if (reg && reg.length > 0) {
             if(box) box.classList.add('hidden');
         } else {
             if(box) {
                 box.classList.remove('hidden');
-                // Atualiza o texto para deixar claro que é sobre ontem
                 const txt = document.querySelector('#box-confirmacao-leitura p');
                 if(txt) txt.innerText = "Confirme que verificou suas metas do dia anterior.";
             }
@@ -168,7 +163,7 @@ const MA_Diario = {
     },
 
     confirmarAcessoHoje: async function() {
-        // CALCULA A DATA DE ONTEM PARA SALVAR
+        // ASSISTENTE: Grava presença de ONTEM
         const data = new Date();
         data.setDate(data.getDate() - 1);
         const dataRef = data.toISOString().split('T')[0];
@@ -179,7 +174,7 @@ const MA_Diario = {
         
         const { error } = await _supabase.from('acessos_diarios').insert({
             usuario_id: MA_Main.sessao.id,
-            data_referencia: dataRef // Salva como ontem
+            data_referencia: dataRef
         });
         
         if(error) {
@@ -192,7 +187,7 @@ const MA_Diario = {
     },
 
     carregarRelatorioAcessos: async function() {
-        // Só exibe para Gestoras/Auditoras
+        // GESTORA: Abre Modal e mostra quem confirmou presença de ONTEM
         if(!MA_Main.isMgr) return;
 
         const box = document.getElementById('box-relatorio-acessos');
@@ -201,14 +196,16 @@ const MA_Diario = {
         
         if(!box || !lista) return;
 
+        // Exibir Modal
         box.classList.remove('hidden');
         
-        // Data selecionada no filtro (ou Hoje se estiver vazio)
-        const dt = MA_Main.getDateFromInput();
+        // Padrão: Buscar dados de ONTEM (D-1)
+        const dt = new Date();
+        dt.setDate(dt.getDate() - 1);
         const dataStr = dt.toISOString().split('T')[0];
         const dataFmt = dataStr.split('-').reverse().join('/');
         
-        lblData.innerText = dataFmt;
+        lblData.innerText = dataFmt + " (Ontem)";
         lista.innerHTML = '<span class="col-span-full text-center text-slate-400 py-4"><i class="fas fa-spinner fa-spin"></i> Carregando presenças...</span>';
 
         // 1. Busca todos os usuários ativos que são Assistentes
@@ -219,7 +216,7 @@ const MA_Diario = {
             .eq('ativo', true)
             .order('nome');
 
-        // 2. Busca os acessos da data selecionada
+        // 2. Busca os acessos da data de ONTEM
         const { data: acessos } = await _supabase
             .from('acessos_diarios')
             .select('usuario_id, created_at')
@@ -234,21 +231,26 @@ const MA_Diario = {
         if(users) {
             users.forEach(u => {
                 const confirmou = acessosMap[u.id];
-                let statusIcon = '<i class="fas fa-times-circle text-rose-300"></i>';
-                let statusClass = 'border-rose-100 bg-rose-50 opacity-70';
-                let hora = '';
+                
+                // Estilos visuais para Presente (Verde) vs Pendente (Cinza/Branco)
+                let statusClass = confirmou 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700' 
+                    : 'bg-white border-slate-200 text-slate-400 opacity-60 grayscale';
+                    
+                let icon = confirmou 
+                    ? '<i class="fas fa-check-circle text-emerald-500 text-xl"></i>' 
+                    : '<i class="fas fa-circle text-slate-200 text-xl"></i>';
 
-                if(confirmou) {
-                    statusIcon = '<i class="fas fa-check-circle text-emerald-500"></i>';
-                    statusClass = 'border-emerald-100 bg-emerald-50';
-                    const h = new Date(confirmou);
-                    hora = `<span class="text-[9px] font-bold text-emerald-600 block mt-0.5">${h.getHours()}:${String(h.getMinutes()).padStart(2,'0')}</span>`;
-                }
+                let hora = confirmou 
+                    ? `<span class="text-[10px] font-mono text-emerald-600 font-bold ml-auto block text-right">${new Date(confirmou).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}</span>`
+                    : '<span class="text-[10px] text-slate-300 ml-auto block text-right">--:--</span>';
 
-                html += `<div class="flex items-center gap-2 p-2 rounded-lg border ${statusClass}">
-                            <div class="text-lg">${statusIcon}</div>
-                            <div class="leading-tight">
-                                <span class="text-xs font-bold text-slate-700 block">${u.nome.split(' ')[0]}</span>
+                html += `<div class="flex items-center gap-3 p-3 rounded-lg border shadow-sm transition hover:shadow-md ${statusClass}">
+                            <div class="flex-shrink-0">${icon}</div>
+                            <div class="flex-1 min-w-0">
+                                <span class="text-xs font-bold block truncate uppercase tracking-tight">${u.nome.split(' ')[0]} ${u.nome.split(' ')[1]?.[0] || ''}.</span>
+                            </div>
+                            <div class="flex-shrink-0">
                                 ${hora}
                             </div>
                          </div>`;
