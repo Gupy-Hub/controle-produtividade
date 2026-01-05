@@ -124,8 +124,13 @@ const Cons = {
         if (!tbody) return;
 
         const tableWrapper = document.getElementById('cons-table-wrapper');
-        if (t === 'dia') tableWrapper.classList.add('scroll-top-wrapper');
-        else tableWrapper.classList.remove('scroll-top-wrapper');
+        
+        // --- ALTERAÇÃO: Adicionado || t === 'ano_mes' para subir o scroll ---
+        if (t === 'dia' || t === 'ano_mes') {
+            tableWrapper.classList.add('scroll-top-wrapper');
+        } else {
+            tableWrapper.classList.remove('scroll-top-wrapper');
+        }
 
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
@@ -191,7 +196,6 @@ const Cons = {
         }
 
         // --- CÁLCULO SIMPLIFICADO DE DIAS ÚTEIS (DIAS COM DADOS) ---
-        // Considera apenas a quantidade de dias únicos que tiveram registros encontrados.
         for(let i=1; i<=numCols; i++) {
             st[i].diasUteis = st[i].dates.size;
         }
@@ -276,7 +280,7 @@ const Cons = {
         
         // --- LINHAS DA TABELA ---
         h += mkRow('Assistentes (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size);
-        h += mkRow('Dias com Validação', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis); // Alterado label para clareza
+        h += mkRow('Dias com Validação', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis); 
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
