@@ -125,7 +125,7 @@ const Cons = {
 
         const tableWrapper = document.getElementById('cons-table-wrapper');
         
-        // --- ALTERAÇÃO: Adicionado || t === 'ano_mes' para subir o scroll ---
+        // Aplica o wrapper de scroll reverso para Dia e Ano/Mes (para barra ficar no topo)
         if (t === 'dia' || t === 'ano_mes') {
             tableWrapper.classList.add('scroll-top-wrapper');
         } else {
@@ -172,7 +172,13 @@ const Cons = {
             rawData.forEach(r => {
                 uniqueUsers.add(r.usuario_id);
                 const user = Sistema.Dados.usuariosCache[r.usuario_id];
-                if(!user || user.funcao !== 'Assistente') return;
+                
+                // --- ALTERAÇÃO AQUI: Permitir Auditora e Gestora ---
+                if(!user) return;
+                const func = user.funcao;
+                if(func !== 'Assistente' && func !== 'Auditora' && func !== 'Gestora') return;
+                // ----------------------------------------------------
+
                 const nome = user.nome; const sys = Number(r.quantidade) || 0;
                 let b = 1; 
                 const parts = r.data_referencia.split('-'); const dt = new Date(parts[0], parts[1]-1, parts[2]); const mIdx = dt.getMonth(); const dDia = dt.getDate();
@@ -266,7 +272,7 @@ const Cons = {
             
             idxs.forEach(i => {
                 const s = st[i]; 
-                const diasCal = s.diasUteis || 1; // Agora é puramente baseado em dados encontrados
+                const diasCal = s.diasUteis || 1; 
                 const baseManual = this.basesManuais[i] || 17; 
 
                 let val = getter(s, diasCal, baseManual);
@@ -279,7 +285,7 @@ const Cons = {
         };
         
         // --- LINHAS DA TABELA ---
-        h += mkRow('Assistentes (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size);
+        h += mkRow('Pessoas (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size); // Renomeado para Pessoas (Real) para fazer sentido com Auditoras
         h += mkRow('Dias com Validação', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis); 
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
