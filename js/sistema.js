@@ -24,13 +24,15 @@ const Sistema = {
         inicializado: false,
 
         inicializar: async function() {
+            // Carrega Fatores
             const savedFator = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
 
-            // Carrega os motivos salvos
+            // Carrega Motivos (NOVO)
             const savedMotivos = localStorage.getItem('produtividade_motivos_v1');
             this.motivosCache = savedMotivos ? JSON.parse(savedMotivos) : {};
 
+            // Carrega Bases HC
             const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
             this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
 
@@ -82,7 +84,7 @@ const Sistema = {
             return 1.0; 
         },
 
-        // --- NOVOS MÉTODOS PARA MOTIVOS ---
+        // --- NOVOS MÉTODOS OBRIGATÓRIOS PARA O MOTIVO FUNCIONAR ---
         definirMotivo: function(nome, dataRef, motivo) {
             if (!this.motivosCache[dataRef]) this.motivosCache[dataRef] = {};
             
@@ -107,7 +109,6 @@ const Sistema = {
             if(!dataRef) return;
             const key = dataRef.substring(0, 7); 
             
-            // Se for vazio ou 17, remove do cache para usar o padrão
             if (!quantidade || parseInt(quantidade) === 17) {
                 delete this.basesHcCache[key]; 
             } else {

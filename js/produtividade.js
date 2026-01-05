@@ -143,20 +143,21 @@ const Geral = {
 
         let motivo = "";
         
-        // Se for abono (0% ou 50%), pergunta o motivo
+        // Lógica de Pergunta do Motivo
         if (valor === "0" || valor === "0.5") {
             const motivoAtual = Sistema.Dados.obterMotivo(nome, this.dataVisualizada);
             motivo = prompt(`Informe o motivo para o ajuste de ${valor === "0" ? "ABONO TOTAL" : "MEIO PERÍODO"} de ${nome}:`, motivoAtual);
             
-            // Se o usuário clicar em Cancelar, não faz nada e restaura o anterior
+            // Se cancelar, reverte a ação
             if (motivo === null) {
                 this.renderizar();
                 return;
             }
         }
 
+        // Salva o Fator e o Motivo
         Sistema.Dados.definirFator(nome, this.dataVisualizada, valor);
-        Sistema.Dados.definirMotivo(nome, this.dataVisualizada, motivo); // Salva o motivo (ou limpa se for 100%)
+        Sistema.Dados.definirMotivo(nome, this.dataVisualizada, motivo);
         
         this.carregarTela();
     },
@@ -172,7 +173,6 @@ const Geral = {
 
         let motivo = "";
         
-        // Pergunta o motivo em massa
         if (valor === "0" || valor === "0.5") {
             motivo = prompt(`Informe o motivo para aplicar ${valor === "0" ? "ABONO TOTAL" : "MEIO PERÍODO"} para TODAS as assistentes:`);
             if (motivo === null) {
@@ -334,7 +334,7 @@ const Geral = {
             const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
             const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
 
-            // --- EXIBIÇÃO DO MOTIVO NO SELETOR ---
+            // --- EXIBIÇÃO DO MOTIVO (Ícone de Info) ---
             const motivo = Sistema.Dados.obterMotivo(u.nome, this.dataVisualizada);
             const motivoIcon = motivo ? `<i class="fas fa-info-circle text-blue-400 ml-2 text-xs" title="${motivo}"></i>` : '';
 
