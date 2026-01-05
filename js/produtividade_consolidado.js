@@ -45,18 +45,17 @@ const Cons = {
     // Chamado quando a gestora altera o input de assistentes na tabela
     atualizarBaseManual: function(colIndex, valor) {
         this.basesManuais[colIndex] = Number(valor);
-        // Re-renderiza usando os dados em cache, sem ir ao banco de dados
+        
+        // Re-renderiza usando os dados em cache para ser instantâneo
         if (this.ultimoCache.data) {
-            // Recalcula datas apenas para garantir contexto (pode ser otimizado, mas renderizar é rápido)
             const t = document.getElementById('cons-period-type').value;
-            const el = document.getElementById('global-date');
-            const val = el ? el.value : new Date().toISOString().split('T')[0];
+            // Recupera mês/ano atuais apenas para contexto da renderização
+            let el = document.getElementById('global-date');
+            let val = el ? el.value : new Date().toISOString().split('T')[0];
             let dia, mes, ano;
             if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
             else { const now = new Date(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
 
-            // O HF global não importa muito agora para as colunas, pois usaremos o manual
-            // Mas mantemos a assinatura
             this.renderizar(this.ultimoCache.data, t, 17, mes, ano);
         }
     },
@@ -78,7 +77,6 @@ const Cons = {
         const t = document.getElementById('cons-period-type').value; 
         
         if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
-        // Sistema.Dados.inicializar(); // Removido chamada duplicada
 
         let el = document.getElementById('global-date');
         let val = el ? el.value : new Date().toISOString().split('T')[0];
@@ -107,9 +105,7 @@ const Cons = {
         } 
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
-        // O valor padrão inicial continua sendo calculado ou fixo 17 se preferir
-        // Mas como vamos usar inputs manuais, o HF inicial serve apenas de fallback
-        const HF = 17; 
+        const HF = 17; // Valor padrão inicial de fallback
         const cacheKey = `${t}_${s}_${e}`;
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
@@ -242,7 +238,7 @@ const Cons = {
 
         const hRow = document.getElementById('cons-table-header'); 
         
-        // Geração dos Cabeçalhos com INPUT
+        // Geração dos Cabeçalhos com INPUT (Mantido conforme pedido anterior)
         let headerHTML = `<th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
         
         // Colunas Normais
@@ -289,6 +285,7 @@ const Cons = {
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
 
+        // Função geradora de linhas
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
             const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
             const iconColor = colorInfo || 'text-slate-400';
@@ -306,12 +303,12 @@ const Cons = {
             idxs.forEach(i => {
                 const s = st[i]; 
                 const diasCal = s.diasUteis || 1; 
-                const baseManual = this.basesManuais[i] || 17; // Pega o valor do input
+                const baseManual = this.basesManuais[i] || 17; // Valor do Input
 
-                // Passamos para a função de cálculo:
-                // s = stats acumulados
-                // diasCal = dias úteis
-                // baseManual = valor digitado no header
+                // Aqui é o pulo do gato:
+                // Se for cálculo (isCalc=true), usamos a baseManual.
+                // Se for dado real (ex: Total Assistentes), usamos o dado do objeto 's'.
+                
                 let val = getter(s, diasCal, baseManual);
 
                 let txt = (val !== null && val !== undefined) ? Math.round(val).toLocaleString() : '-';
@@ -322,10 +319,13 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // Linhas da Tabela
-        // Nota: Removi a linha "Total de Assistentes" que mostrava o Real, pois agora focamos no Input Manual.
-        // Se quiser manter, pode, mas a gestão é pelo input.
+        // --- LINHAS DA TABELA ---
         
+        // 1. REINSERIDO: Total de Assistentes (Real/Sistema)
+        // Mostra quantos usuários distintos tiveram produção no período.
+        h += mkRow('Assistentes (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size);
+
+        // 2. Outros totais
         h += mkRow('Total Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
@@ -333,15 +333,15 @@ const Cons = {
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // --- MÉDIAS CORRIGIDAS CONFORME PEDIDO ---
-
-        // 1. Média Validação Diária (Todas) -> Média da Equipe inteira por dia (ProdTotal / Dias)
+        // 3. Médias (Usando a Base Manual dos Inputs)
+        
+        // Média da Equipe (Prod / Dias) - Independe de assistentes
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-users', 'text-emerald-600', 
             (s, dias, base) => dias > 0 ? s.qty / dias : 0, 
             true
         );
 
-        // 2. Média Validação Diária (Por Assistentes) -> Média Individual (ProdTotal / Dias / BaseManual)
+        // Média Individual (Prod / Dias / BaseManual)
         h += mkRow('Média Validação Diária (Por Assistentes)', 'fas fa-user', 'text-amber-600', 
             (s, dias, base) => (dias > 0 && base > 0) ? (s.qty / dias) / base : 0, 
             true
@@ -349,23 +349,24 @@ const Cons = {
         
         tbody.innerHTML = h;
         
-        // Atualiza Cards Superiores (Consolidado Geral)
+        // Atualiza Cards Superiores
         const tot = st[99]; 
         const dTot = tot.diasUteis || 1; 
-        const baseTot = this.basesManuais[99]; // Base definida no input total
+        const baseTot = this.basesManuais[99];
         
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
-        
-        // Card Média do Time (Todas Juntas)
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        
-        // Card Média Individual (Usando a base total configurada)
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / baseTot).toLocaleString());
         
-        // No Card de Headcount, mostramos o que está configurado no total
-        setSafe('cons-p-headcount', `<span class="text-3xl font-black text-blue-700">${baseTot}</span><span class="block text-[10px] text-slate-400 font-bold uppercase mt-1">Definido Manualmente</span>`);
+        // No Card de Headcount, mostramos o Real e o Manual para comparação rápida
+        setSafe('cons-p-headcount', `
+            <div class="flex flex-col items-start">
+                <div><span class="text-xs text-slate-400 font-bold uppercase">Real:</span> <span class="text-xl font-black text-slate-700">${tot.users.size}</span></div>
+                <div><span class="text-xs text-blue-400 font-bold uppercase">Meta:</span> <span class="text-xl font-black text-blue-600">${baseTot}</span></div>
+            </div>
+        `);
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
         if(elLblBase) elLblBase.innerText = baseTot;
