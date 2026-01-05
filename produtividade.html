@@ -91,12 +91,18 @@
 
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                <div>
-                    <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
-                        <i class="fas fa-file-excel"></i> Importar Excel
+                <div class="flex items-start gap-2">
+                    <div>
+                        <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
+                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2">
+                            <i class="fas fa-file-excel"></i> Importar Excel
+                        </button>
+                        <span class="text-[10px] text-slate-400 block mt-1 ml-1">Arquivo: ddmmaaaa.xlsx</span>
+                    </div>
+                    
+                    <button onclick="Geral.excluirDadosDia()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-lg text-sm font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados do dia atual (Correção)">
+                        <i class="fas fa-trash-alt"></i>
                     </button>
-                    <span class="text-[10px] text-slate-400 block mt-1 ml-1">Arquivo: ddmmaaaa.xlsx</span>
                 </div>
                 
                 <div class="flex items-center gap-3">
