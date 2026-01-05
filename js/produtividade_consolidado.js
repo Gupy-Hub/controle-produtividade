@@ -1,7 +1,7 @@
 const Cons = {
     initialized: false,
     ultimoCache: { key: null, data: null },
-    basesManuais: {}, // Armazena as bases manuais (ex: {1: 17, 2: 13, 99: 17})
+    basesManuais: {},
 
     init: async function() { 
         if(!this.initialized) { 
@@ -11,8 +11,7 @@ const Cons = {
     },
 
     togglePeriodo: function() {
-        // Reseta as bases manuais ao mudar o tipo de visualização
-        this.basesManuais = {};
+        this.basesManuais = {}; // Reseta bases ao mudar período
 
         const t = document.getElementById('cons-period-type').value;
         const selQ = document.getElementById('cons-select-quarter');
@@ -41,11 +40,9 @@ const Cons = {
         this.carregar(false); 
     },
     
-    // Chamado quando a gestora altera o input de assistentes na tabela
     atualizarBaseManual: function(colIndex, valor) {
         this.basesManuais[colIndex] = Number(valor);
         
-        // Re-renderiza usando os dados em cache para ser instantâneo
         if (this.ultimoCache.data) {
             const t = document.getElementById('cons-period-type').value;
             let el = document.getElementById('global-date');
@@ -91,7 +88,7 @@ const Cons = {
         } 
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
-        const HF = 17; // Valor padrão inicial de fallback
+        const HF = 17;
         const cacheKey = `${t}_${s}_${e}`;
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
@@ -124,8 +121,6 @@ const Cons = {
         if (!tbody) return;
 
         const tableWrapper = document.getElementById('cons-table-wrapper');
-        
-        // Aplica o wrapper de scroll reverso para Dia e Ano/Mes (para barra ficar no topo)
         if (t === 'dia' || t === 'ano_mes') {
             tableWrapper.classList.add('scroll-top-wrapper');
         } else {
@@ -135,7 +130,6 @@ const Cons = {
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
         
-        // Definição das colunas
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) cols.push(String(d).padStart(2,'0'));
@@ -159,7 +153,6 @@ const Cons = {
         
         const numCols = cols.length; 
         
-        // Inicializa inputs manuais se não existirem
         for(let i=1; i<=numCols; i++) {
             if (this.basesManuais[i] === undefined) this.basesManuais[i] = 17;
         }
@@ -172,12 +165,9 @@ const Cons = {
             rawData.forEach(r => {
                 uniqueUsers.add(r.usuario_id);
                 const user = Sistema.Dados.usuariosCache[r.usuario_id];
-                
-                // --- ALTERAÇÃO AQUI: Permitir Auditora e Gestora ---
                 if(!user) return;
                 const func = user.funcao;
                 if(func !== 'Assistente' && func !== 'Auditora' && func !== 'Gestora') return;
-                // ----------------------------------------------------
 
                 const nome = user.nome; const sys = Number(r.quantidade) || 0;
                 let b = 1; 
@@ -201,15 +191,10 @@ const Cons = {
             });
         }
 
-        // --- CÁLCULO SIMPLIFICADO DE DIAS ÚTEIS (DIAS COM DADOS) ---
-        for(let i=1; i<=numCols; i++) {
-            st[i].diasUteis = st[i].dates.size;
-        }
+        for(let i=1; i<=numCols; i++) st[i].diasUteis = st[i].dates.size;
         st[99].diasUteis = st[99].dates.size;
 
         const hRow = document.getElementById('cons-table-header'); 
-        
-        // Geração dos Cabeçalhos com INPUT
         let headerHTML = `<th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
         
         cols.forEach((c, idx) => {
@@ -232,7 +217,6 @@ const Cons = {
             </th>`;
         });
 
-        // Coluna Total
         const valorTotalInput = this.basesManuais[99];
         headerHTML += `
         <th class="px-6 py-2 text-center bg-slate-50 border-b-2 border-slate-100 border-l border-slate-100 min-w-[120px]">
@@ -255,7 +239,6 @@ const Cons = {
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
 
-        // Função geradora de linhas
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
             const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
             const iconColor = colorInfo || 'text-slate-400';
@@ -284,48 +267,60 @@ const Cons = {
             return tr + '</tr>';
         };
         
-        // --- LINHAS DA TABELA ---
-        h += mkRow('Pessoas (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size); // Renomeado para Pessoas (Real) para fazer sentido com Auditoras
+        h += mkRow('Pessoas (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size); 
         h += mkRow('Dias com Validação', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis); 
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-        
-        // Médias (Usando a Base Manual dos Inputs)
-        h += mkRow('Média Validação Diária (Todas)', 'fas fa-users', 'text-emerald-600', 
-            (s, dias, base) => dias > 0 ? s.qty / dias : 0, 
-            true
-        );
-
-        h += mkRow('Média Validação Diária (Por Assistentes)', 'fas fa-user', 'text-amber-600', 
-            (s, dias, base) => (dias > 0 && base > 0) ? (s.qty / dias) / base : 0, 
-            true
-        );
+        h += mkRow('Média Validação Diária (Todas)', 'fas fa-users', 'text-emerald-600', (s, dias, base) => dias > 0 ? s.qty / dias : 0, true);
+        h += mkRow('Média Validação Diária (Por Assistentes)', 'fas fa-user', 'text-amber-600', (s, dias, base) => (dias > 0 && base > 0) ? (s.qty / dias) / base : 0, true);
         
         tbody.innerHTML = h;
         
-        // Atualiza Cards Superiores
+        // --- ATUALIZAÇÃO DOS 5 CARDS DO CONSOLIDADO ---
         const tot = st[99]; 
         const dTot = tot.diasUteis || 1; 
         const baseTot = this.basesManuais[99];
         
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
         
-        setSafe('cons-p-total', tot.qty.toLocaleString()); 
-        setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / baseTot).toLocaleString());
+        // 1. Equipe (Base Definida)
+        setSafe('cons-card-hc', baseTot); 
         
-        setSafe('cons-p-headcount', `
-            <div class="flex flex-col items-start">
-                <div><span class="text-xs text-slate-400 font-bold uppercase">Real:</span> <span class="text-xl font-black text-slate-700">${tot.users.size}</span></div>
-                <div><span class="text-xs text-blue-400 font-bold uppercase">Meta:</span> <span class="text-xl font-black text-blue-600">${baseTot}</span></div>
-            </div>
-        `);
+        // 2. Dias Úteis
+        setSafe('cons-card-dias', dTot); 
         
-        const elLblBase = document.getElementById('cons-lbl-base-avg');
-        if(elLblBase) elLblBase.innerText = baseTot;
+        // 3. Produção Total e Meta Total
+        setSafe('cons-card-total', tot.qty.toLocaleString()); 
+        const metaTotal = dTot * baseTot * 650;
+        setSafe('cons-card-meta-total', metaTotal.toLocaleString());
+
+        // 4. Média / Base
+        const mediaInd = Math.round(tot.qty / dTot / baseTot);
+        setSafe('cons-card-media', mediaInd.toLocaleString());
+        const metaMedia = dTot * 650; // Meta acumulada por pessoa
+        setSafe('cons-card-meta-media', metaMedia.toLocaleString());
+
+        // 5. Atingimento Global
+        const pct = metaTotal > 0 ? Math.round((tot.qty / metaTotal) * 100) : 0;
+        setSafe('cons-pct', pct + '%');
+        setSafe('cons-pct-detail', `${tot.qty.toLocaleString()} / ${metaTotal.toLocaleString()}`);
+
+        // Cor do Card Atingimento
+        const cardPct = document.getElementById('cons-card-pct');
+        const iconPct = document.getElementById('cons-icon-pct');
+        if (cardPct) {
+            cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+            if (pct < 100) {
+                cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-times-circle text-xl text-white/50"></i>';
+            } else {
+                cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-check-circle text-xl text-white/50"></i>';
+            }
+        }
     },
     
     newStats: function() { 

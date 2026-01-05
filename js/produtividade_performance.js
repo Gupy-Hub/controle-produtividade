@@ -15,22 +15,17 @@ const Perf = {
         this.carregarRanking(); 
     },
 
-    // Função Principal
     carregarRanking: async function() {
         const tbody = document.getElementById('perf-ranking-body');
         if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</td></tr>';
 
-        // Pega o valor do seletor da BARRA SUPERIOR
         const tipoPeriodo = document.getElementById('perf-period-type').value; 
-        
-        // Pega data global
         const globalInput = document.getElementById('global-date');
         const dataGlobal = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
         
         let d = new Date(dataGlobal + 'T12:00:00');
         let inicio, fim, label;
 
-        // Lógica de Datas
         const ano = d.getFullYear();
         const mes = d.getMonth();
 
@@ -51,33 +46,30 @@ const Perf = {
             fim = new Date(ano, (sem + 1) * 6, 0);
             label = `${sem + 1}º Semestre de ${ano}`;
         } 
-        else { // ano
+        else { 
             inicio = new Date(ano, 0, 1);
             fim = new Date(ano, 11, 31);
             label = `Ano de ${ano}`;
         }
 
-        // Converte para YYYY-MM-DD
         const sInicio = inicio.toISOString().split('T')[0];
         const sFim = fim.toISOString().split('T')[0];
 
-        // Atualiza label na tela (se ainda existir, senão ignora)
         const lbl = document.getElementById('perf-range-label');
         if(lbl) lbl.innerText = label;
 
-        // Busca dados
         const { data: rawData } = await _supabase
             .from('producao')
             .select('usuario_id, data_referencia, quantidade')
             .gte('data_referencia', sInicio)
             .lte('data_referencia', sFim);
 
-        // Processa dados
         const stats = {};
-        const diasUteisTotal = Sistema.Dados.calcularMediaBasePeriodo(sInicio, sFim); // Placeholder, ideal seria contar dias úteis reais
+        const diasSet = new Set(); // Para contar dias únicos no período
 
         if (rawData) {
             rawData.forEach(r => {
+                diasSet.add(r.data_referencia);
                 const u = Sistema.Dados.usuariosCache[r.usuario_id];
                 if (u && (u.funcao === 'Assistente' || u.funcao === 'Auditora' || u.funcao === 'Gestora')) {
                     if (!stats[u.nome]) {
@@ -89,10 +81,8 @@ const Perf = {
             });
         }
 
-        // Converte para array e ordena
         const ranking = Object.values(stats).sort((a, b) => b.total - a.total);
 
-        // Renderiza
         if (tbody) {
             tbody.innerHTML = '';
             if (ranking.length === 0) {
@@ -101,15 +91,13 @@ const Perf = {
                 ranking.forEach((r, idx) => {
                     const diasTrab = r.dias.size;
                     const media = diasTrab > 0 ? Math.round(r.total / diasTrab) : 0;
-                    
-                    // Meta Total Simplificada (Dias Trab * 650)
                     const meta = diasTrab * 650;
                     const pct = meta > 0 ? Math.round((r.total / meta) * 100) : 0;
                     
                     let badgeColor = pct >= 100 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
 
                     tbody.innerHTML += `
-                    <tr class="hover:bg-slate-50 border-b border-slate-100 last:border-0 transition">
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 last:border-0 transition text-xs">
                         <td class="px-6 py-4 font-bold text-slate-400">#${idx + 1}</td>
                         <td class="px-6 py-4 font-bold text-slate-700">
                             ${r.nome} <span class="text-[10px] text-slate-400 font-normal ml-1">(${r.funcao})</span>
@@ -126,31 +114,54 @@ const Perf = {
             }
         }
         
-        // Atualiza Cards Superiores (Totais)
-        const totalGeral = ranking.reduce((acc, curr) => acc + curr.total, 0);
-        const diasGeral = ranking.reduce((acc, curr) => acc + curr.dias.size, 0);
-        const mediaGeral = diasGeral > 0 ? Math.round(totalGeral / diasGeral) : 0; // Média ponderada por dia trabalhado
-
-        const elTotal = document.getElementById('perf-card-total');
-        if(elTotal) elTotal.innerText = totalGeral.toLocaleString();
-
-        const elMedia = document.getElementById('perf-card-media');
-        if(elMedia) elMedia.innerText = mediaGeral.toLocaleString();
-
-        // Cards CLT vs PJ
+        // --- ATUALIZAÇÃO DOS 5 CARDS DA PERFORMANCE ---
+        
+        // 1. CLT vs PJ (Mantido como "Equipe")
         const clt = ranking.filter(r => r.contrato === 'CLT');
         const pj = ranking.filter(r => r.contrato === 'PJ');
+        const totalPessoas = clt.length + pj.length;
         
-        const totClt = clt.reduce((acc, r) => acc + r.total, 0);
-        const totPj = pj.reduce((acc, r) => acc + r.total, 0);
-        const grandTotal = totClt + totPj;
-
-        if (grandTotal > 0) {
-            document.getElementById('perf-pct-clt').innerText = Math.round((totClt / grandTotal) * 100) + '%';
-            document.getElementById('perf-pct-pj').innerText = Math.round((totPj / grandTotal) * 100) + '%';
+        if (totalPessoas > 0) {
+            document.getElementById('perf-pct-clt').innerText = Math.round((clt.length / totalPessoas) * 100) + '%';
+            document.getElementById('perf-pct-pj').innerText = Math.round((pj.length / totalPessoas) * 100) + '%';
         }
-        
         document.getElementById('perf-count-clt').innerText = clt.length;
         document.getElementById('perf-count-pj').innerText = pj.length;
+
+        // 2. Dias Úteis (Considerados no período)
+        const diasUteisPeriodo = diasSet.size;
+        document.getElementById('perf-card-dias').innerText = diasUteisPeriodo;
+
+        // 3. Produção Total e Meta Total
+        const totalGeral = ranking.reduce((acc, curr) => acc + curr.total, 0);
+        document.getElementById('perf-card-total').innerText = totalGeral.toLocaleString();
+        
+        // Meta Total (Estimativa: Pessoas * Dias * 650)
+        // Usamos uma média simples de meta
+        const metaGeral = ranking.reduce((acc, curr) => acc + (curr.dias.size * 650), 0);
+        document.getElementById('perf-label-meta-total').innerText = metaGeral.toLocaleString();
+
+        // 4. Média Diária (Ponderada)
+        const somaMedias = ranking.reduce((acc, curr) => acc + (curr.dias.size > 0 ? curr.total / curr.dias.size : 0), 0);
+        const mediaDasMedias = ranking.length > 0 ? Math.round(somaMedias / ranking.length) : 0;
+        document.getElementById('perf-card-media').innerText = mediaDasMedias.toLocaleString();
+
+        // 5. Atingimento Global
+        const pctGeral = metaGeral > 0 ? Math.round((totalGeral / metaGeral) * 100) : 0;
+        document.getElementById('perf-txt-pct').innerText = pctGeral + '%';
+        
+        const cardPct = document.getElementById('perf-card-pct');
+        const iconPct = document.getElementById('perf-icon-pct');
+        
+        if (cardPct) {
+            cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+            if (pctGeral < 100) {
+                cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-times-circle text-xl text-white/50"></i>';
+            } else {
+                cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-check-circle text-xl text-white/50"></i>';
+            }
+        }
     }
 };
