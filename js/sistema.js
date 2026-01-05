@@ -19,12 +19,17 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {}, 
+        motivosCache: {}, // Novo cache para os motivos
         basesHcCache: {}, 
         inicializado: false,
 
         inicializar: async function() {
             const savedFator = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
+
+            // Carrega os motivos salvos
+            const savedMotivos = localStorage.getItem('produtividade_motivos_v1');
+            this.motivosCache = savedMotivos ? JSON.parse(savedMotivos) : {};
 
             const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
             this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
@@ -77,6 +82,26 @@ const Sistema = {
             return 1.0; 
         },
 
+        // --- NOVOS MÉTODOS PARA MOTIVOS ---
+        definirMotivo: function(nome, dataRef, motivo) {
+            if (!this.motivosCache[dataRef]) this.motivosCache[dataRef] = {};
+            
+            if (motivo && motivo.trim() !== "") {
+                this.motivosCache[dataRef][nome] = motivo;
+            } else {
+                delete this.motivosCache[dataRef][nome]; // Remove se estiver vazio
+            }
+            
+            localStorage.setItem('produtividade_motivos_v1', JSON.stringify(this.motivosCache));
+        },
+
+        obterMotivo: function(nome, dataRef) {
+            if (this.motivosCache[dataRef] && this.motivosCache[dataRef][nome]) {
+                return this.motivosCache[dataRef][nome];
+            }
+            return "";
+        },
+
         // --- GESTÃO DE BASE HC (PADRÃO 17) ---
         definirBaseHC: function(dataRef, quantidade) {
             if(!dataRef) return;
@@ -95,14 +120,10 @@ const Sistema = {
         obterBaseHC: function(dataRef) {
             if(!dataRef) return 17;
             const key = dataRef.substring(0, 7);
-            
-            // CORREÇÃO: Se não houver manual, retorna 17 fixo.
             return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
         },
 
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
-            // CORREÇÃO CRÍTICA: Adiciona hora fixa (12:00) para evitar que o fuso horário
-            // recue a data para o mês anterior (bug que causava média errada entre 17 e 13 -> 15)
             let inicio = new Date(dataInicio + 'T12:00:00');
             const fim = new Date(dataFim + 'T12:00:00');
             
