@@ -17,6 +17,43 @@ const Geral = {
         this.carregarTela();
     },
     
+    // --- NOVA FUNÇÃO DE EXCLUSÃO (Esta é a função que o erro diz estar faltando) ---
+    excluirDadosDia: async function() {
+        const modo = document.getElementById('view-mode').value;
+        if (modo !== 'dia') {
+            alert("Para excluir dados, selecione o modo de visualização 'Apenas o Dia' no filtro 'Visualizar'.");
+            return;
+        }
+        
+        // Garante que a data está definida e formatada
+        const data = this.dataVisualizada;
+        // Prevenção caso dataVisualizada esteja nula
+        if (!data) { alert("Data não selecionada."); return; }
+        
+        const [ano, mes, dia] = data.split('-');
+        const dataFmt = `${dia}/${mes}/${ano}`;
+
+        if (!confirm(`ATENÇÃO: Você está prestes a EXCLUIR TODOS os lançamentos do dia ${dataFmt}.\n\nEsta ação é irreversível e geralmente usada para corrigir importações feitas na data errada.\n\nTem certeza absoluta?`)) {
+            return;
+        }
+
+        try {
+            const { error } = await _supabase
+                .from('producao')
+                .delete()
+                .eq('data_referencia', data);
+
+            if (error) throw error;
+
+            alert('Dados excluídos com sucesso!');
+            this.carregarTela(); // Atualiza a tela para mostrar vazio
+
+        } catch (e) {
+            console.error(e);
+            alert('Erro ao excluir dados: ' + e.message);
+        }
+    },
+    
     carregarTela: async function() {
         const modo = document.getElementById('view-mode').value;
         const globalInput = document.getElementById('global-date');
@@ -156,19 +193,19 @@ const Geral = {
 
         const ativos = this.listaAtual.filter(u => !u.inativo);
         
-        // Total Produção: Soma de TODOS que estão na lista, independente da base manual
+        // Total Produção
         const totalProd = this.selecionado 
             ? this.listaAtual.filter(u => u.nome === this.selecionado).reduce((a, b) => a + b.total, 0)
             : ativos.reduce((a, b) => a + b.total, 0);
 
-        // --- LÓGICA DE HEADCOUNT CRÍTICA ---
+        // --- LÓGICA DE HEADCOUNT ---
         let hcConsiderado = 0;
         let diasDisplay = 0;
         let diasLabel = "";
         const diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
 
         if (modo === 'dia') {
-            // Lógica Dia: Mantemos a lógica de presença real (desconta abonados do dia)
+            // Lógica Dia
             let qtdMeio = 0; let qtdAbonado = 0;
             this.listaAtual.forEach(u => {
                 const diaInfo = u.diasMap[this.dataVisualizada];
@@ -190,7 +227,6 @@ const Geral = {
 
             document.getElementById('kpi-hc').innerText = hcConsiderado;
             
-            // Info de abonados (apenas no dia)
             const elInfoAbonados = document.getElementById('info-abonados');
             if(elInfoAbonados) {
                 elInfoAbonados.classList.add('hidden'); 
@@ -204,10 +240,7 @@ const Geral = {
             }
 
         } else {
-            // LÓGICA MENSAL/SEMANAL: SOBERANIA MANUAL
-            // Aqui aplicamos a regra solicitada: Se está 13 no input, a conta é com 13.
-            
-            // Pega o valor manual (ou 17 padrão)
+            // Lógica Mensal/Semanal
             const hcManual = Sistema.Dados.obterBaseHC(this.dataVisualizada);
             
             if (this.selecionado) {
@@ -216,13 +249,9 @@ const Geral = {
                 diasLabel = "Dias do Colaborador";
                 document.getElementById('kpi-hc').innerText = "1";
             } else {
-                // Se não selecionou ninguém, o HC é OBRIGATORIAMENTE o valor manual
                 hcConsiderado = hcManual;
                 diasDisplay = diasUteisPeriodo;
                 diasLabel = "Dias Úteis (Calendário)";
-                
-                // Exibe no card apenas o valor manual (base considerada) para não confundir
-                // Adicionei um indicador visual de que é uma base definida
                 document.getElementById('kpi-hc').innerHTML = `${hcManual} <span class="text-[10px] text-slate-400 font-normal">Base Definida</span>`;
             }
             
@@ -236,11 +265,9 @@ const Geral = {
         // --- CÁLCULOS FINANCEIROS/METAS ---
         const metaDiaria = 650;
         
-        // A Meta Total agora obedece cegamente ao hcConsiderado (que veio do manual no modo mês)
         const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
         const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
         
-        // A Média Real também obedece cegamente ao hcConsiderado
         const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
 
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
