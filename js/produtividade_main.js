@@ -1,153 +1,144 @@
-const sessao = JSON.parse(localStorage.getItem('usuario'));
-const KEY_DATA_GLOBAL = 'data_sistema_global';
-const KEY_TAB_GLOBAL = 'produtividade_aba_ativa';
+let _supabase = null;
+
+async function inicializar() {
+    if (window.supabase) {
+        _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        window._supabase = _supabase;
+        console.log("Supabase Conectado.");
+    } else {
+        console.error("Supabase SDK não encontrado.");
+        return;
+    }
+
+    await Sistema.Dados.inicializar();
+    
+    Sistema.Datas.criarInputInteligente('global-date', 'produtividade_data_ref', () => {
+        atualizarDataGlobal(document.getElementById('global-date').value);
+    });
+
+    mudarAba('geral');
+}
 
 function atualizarDataGlobal(novaData) {
-    if(!novaData) return;
-    localStorage.setItem(KEY_DATA_GLOBAL, novaData);
-    
-    sincronizarInputBaseHC(novaData);
-
-    const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';
-    mudarAba(abaAtual);
+    if (!novaData) return;
+    if (!document.getElementById('tab-geral').classList.contains('hidden')) { Geral.carregarTela(); }
+    if (!document.getElementById('tab-consolidado').classList.contains('hidden')) { Cons.carregar(); }
+    if (!document.getElementById('tab-performance').classList.contains('hidden')) { Perf.carregarRanking(); }
+    if (!document.getElementById('tab-matriz').classList.contains('hidden')) { Matriz.carregar(); }
 }
 
-function atualizarBaseGlobal(novoValor) {
-    const globalInput = document.getElementById('global-date');
-    const dataRef = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
-    
-    if (typeof Sistema !== 'undefined' && Sistema.Dados) {
-        // Define o valor manual. Este valor será usado como VERDADE ABSOLUTA nos cálculos mensais.
-        Sistema.Dados.definirBaseHC(dataRef, novoValor);
-        
-        // Feedback visual
-        const inputBase = document.getElementById('global-base-hc');
-        if(inputBase) {
-            inputBase.style.color = '#2563eb';
-            setTimeout(() => inputBase.style.color = '#334155', 1000);
-        }
+function atualizarBaseGlobal(novoValor) {} // Deprecado
 
-        // Recarrega IMEDIATAMENTE a tela para refazer as contas com o novo número
-        const abaAtual = localStorage.getItem(KEY_TAB_GLOBAL);
-        if (abaAtual === 'geral' && typeof Geral !== 'undefined') Geral.carregarTela();
-        if (abaAtual === 'consolidado' && typeof Cons !== 'undefined') Cons.carregar(true);
-    }
-}
-
-function sincronizarInputBaseHC(dataRef) {
-    const inputBase = document.getElementById('global-base-hc');
-    if (inputBase && Sistema.Dados) {
-        const base = Sistema.Dados.obterBaseHC(dataRef);
-        inputBase.value = base;
-    }
-}
-
-function mudarAba(aba) {
-    localStorage.setItem(KEY_TAB_GLOBAL, aba);
-    
-    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    const target = document.getElementById(`tab-${aba}`);
-    if(target) target.classList.remove('hidden');
-    
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    const btn = document.getElementById(`btn-${aba}`);
-    if(btn) btn.classList.add('active');
-
-    let dataString = localStorage.getItem(KEY_DATA_GLOBAL);
-    if (!dataString) {
-        dataString = new Date().toISOString().split('T')[0];
-        localStorage.setItem(KEY_DATA_GLOBAL, dataString);
-    }
-    
-    const globalInput = document.getElementById('global-date');
-    if(globalInput) globalInput.value = dataString;
-    
-    if (typeof Sistema !== 'undefined' && Sistema.Dados) {
-        sincronizarInputBaseHC(dataString);
-    }
-
-    if (aba === 'geral') { 
-        if(typeof Geral !== 'undefined') Geral.carregarTela(); 
-    }
-    
-    if (aba === 'performance') { 
-        if(typeof Perf !== 'undefined') Perf.carregarRanking(); 
-    }
-    
-    if (aba === 'matriz') { 
-        if(typeof Matriz !== 'undefined') Matriz.init(); 
-    }
-    
-    if (aba === 'consolidado') { 
-        if(typeof Cons !== 'undefined') Cons.init(); 
-    }
-}
-
-async function importarExcel(input) {
+function importarExcel(input) {
     const file = input.files[0];
     if (!file) return;
-    const nomeArquivo = file.name;
-    const matchData = nomeArquivo.match(/^(\d{2})(\d{2})(\d{4})/);
-    if (!matchData) { alert("Nome inválido (ddmmaaaa.xlsx)"); input.value = ''; return; }
-    const dataDoArquivo = `${matchData[3]}-${matchData[2]}-${matchData[1]}`;
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, { type: 'array' });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(sheet);
-            if (json.length === 0) return alert("Vazia.");
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
-            const usersMap = {};
-            if (Sistema.Dados && Sistema.Dados.usuariosCache) {
-                Object.values(Sistema.Dados.usuariosCache).forEach(u => usersMap[u.nome.trim().toLowerCase()] = u.id);
-            }
-
-            let inserts = [];
-            for (let row of json) {
-                const nomeCsv = row['assistente'];
-                const idCsv = row['id_assistente'];
-                if ((!idCsv && !nomeCsv) || String(nomeCsv).toLowerCase().includes('total')) continue;
-
-                let uid = idCsv;
-                if (!uid && nomeCsv && usersMap[nomeCsv.trim().toLowerCase()]) uid = usersMap[nomeCsv.trim().toLowerCase()];
-
-                if (uid) {
-                    inserts.push({
-                        usuario_id: uid, 
-                        data_referencia: dataDoArquivo,
-                        quantidade: row['documentos_validados'] || 0,
-                        fifo: row['documentos_validados_fifo'] || 0,
-                        gradual_total: row['documentos_validados_gradual_total'] || 0,
-                        gradual_parcial: row['documentos_validados_gradual_parcial'] || 0,
-                        perfil_fc: row['documentos_validados_perfil_fc'] || 0
-                    });
-                }
-            }
-
-            if (inserts.length > 0) {
-                if(confirm(`Importar ${inserts.length} registros para ${matchData[1]}/${matchData[2]}/${matchData[3]}?`)) {
-                    await _supabase.from('producao').upsert(inserts, { onConflict: 'usuario_id, data_referencia' });
-                    alert("Sucesso!");
-                    
-                    atualizarDataGlobal(dataDoArquivo);
-                    localStorage.setItem(KEY_TAB_GLOBAL, 'geral');
-                    mudarAba('geral');
-                }
-            } else {
-                alert("Nenhum usuário correspondente encontrado.");
-            }
-        } catch (err) { alert("Erro: " + err.message); } finally { input.value = ''; }
+        await processarDadosImportados(jsonData);
+        input.value = "";
     };
     reader.readAsArrayBuffer(file);
 }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    if(typeof Sistema !== 'undefined' && Sistema.Dados) {
-        await Sistema.Dados.inicializar();
+async function processarDadosImportados(dados) {
+    const dataRef = document.getElementById('global-date').value;
+    if (!dataRef) { alert("Selecione uma data antes."); return; }
+    
+    let count = 0;
+    const { data: usersDB } = await _supabase.from('usuarios').select('id, nome');
+    const mapUsuarios = {};
+    if(usersDB) usersDB.forEach(u => mapUsuarios[u.nome.trim().toLowerCase()] = u.id);
+
+    const findKey = (row, possibilities) => {
+        return Object.keys(row).find(k => possibilities.some(p => k.toLowerCase().includes(p)));
+    };
+
+    for (const row of dados) {
+        const keyNome = findKey(row, ['analista', 'nome', 'funcionário', 'funcionario']);
+        const keyQtd = findKey(row, ['quantidade', 'total', 'qtd']);
+        
+        if (keyNome && keyQtd) {
+            const nomePlanilha = String(row[keyNome]).trim();
+            const qtd = parseInt(row[keyQtd]) || 0;
+            const uid = mapUsuarios[nomePlanilha.toLowerCase()];
+            
+            if (uid && qtd > 0) {
+                const fifo = parseInt(row['FIFO'] || row['fifo'] || 0);
+                const gTotal = parseInt(row['Gradual Total'] || row['gradual total'] || 0);
+                const gParcial = parseInt(row['Gradual Parcial'] || row['gradual parcial'] || 0);
+                const perfilFc = parseInt(row['Perfil FC'] || row['perfil fc'] || 0);
+
+                const { error } = await _supabase
+                    .from('producao')
+                    .upsert({ 
+                        usuario_id: uid, 
+                        data_referencia: dataRef, 
+                        quantidade: qtd,
+                        fifo: fifo,
+                        gradual_total: gTotal,
+                        gradual_parcial: gParcial,
+                        perfil_fc: perfilFc,
+                        updated_at: new Date()
+                    }, { onConflict: 'usuario_id, data_referencia' });
+                
+                if (!error) count++;
+            }
+        }
     }
-    const lastTab = localStorage.getItem(KEY_TAB_GLOBAL) || 'geral';
-    mudarAba(lastTab);
-});
+    alert(`${count} registros importados/atualizados para ${dataRef}!`);
+    atualizarDataGlobal(dataRef);
+}
+
+// --- FUNÇÃO CRÍTICA PARA OS SELETORES DO TOPO ---
+window.mudarAba = function(aba) {
+    // 1. Esconde Abas
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+    
+    // 2. Reseta Botões
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    
+    // 3. Mostra Aba Atual
+    const tabEl = document.getElementById(`tab-${aba}`);
+    if (tabEl) tabEl.classList.remove('hidden');
+    
+    // 4. Ativa Botão Atual
+    const btnEl = document.getElementById(`btn-${aba}`);
+    if (btnEl) btnEl.classList.add('active');
+
+    // 5. GERENCIA SELETORES DO TOPO (CORREÇÃO)
+    // Esconde todos
+    const ctrls = ['ctrl-geral', 'ctrl-consolidado', 'ctrl-performance'];
+    ctrls.forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.classList.add('hidden');
+    });
+
+    // Mostra o específico
+    if (aba === 'geral') {
+        const c = document.getElementById('ctrl-geral');
+        if(c) c.classList.remove('hidden');
+        Geral.carregarTela();
+    } 
+    else if (aba === 'consolidado') {
+        const c = document.getElementById('ctrl-consolidado');
+        if(c) c.classList.remove('hidden');
+        Cons.init();
+    } 
+    else if (aba === 'performance') {
+        const c = document.getElementById('ctrl-performance');
+        if(c) c.classList.remove('hidden');
+        Perf.init();
+    } 
+    else if (aba === 'matriz') {
+        Matriz.init();
+    }
+};
+
+document.addEventListener('DOMContentLoaded', inicializar);

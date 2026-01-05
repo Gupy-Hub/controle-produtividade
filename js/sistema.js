@@ -5,7 +5,6 @@ const Sistema = {
             if (!input) return;
             const salva = localStorage.getItem(storageKey);
             input.value = salva && salva.length === 10 ? salva : new Date().toISOString().split('T')[0];
-            
             input.addEventListener('change', function() {
                 if (this.value.length === 10) {
                     localStorage.setItem(storageKey, this.value);
@@ -19,20 +18,18 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {}, 
-        motivosCache: {}, // Novo cache para os motivos
+        motivosCache: {}, // ESSENCIAL PARA O ABONO
         basesHcCache: {}, 
         inicializado: false,
 
         inicializar: async function() {
-            // Carrega Fatores
+            // Carrega Caches do LocalStorage
             const savedFator = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
 
-            // Carrega Motivos (NOVO)
             const savedMotivos = localStorage.getItem('produtividade_motivos_v1');
             this.motivosCache = savedMotivos ? JSON.parse(savedMotivos) : {};
 
-            // Carrega Bases HC
             const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
             this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
 
@@ -65,7 +62,6 @@ const Sistema = {
             }
         },
 
-        // Métodos de Contagem e Fatores
         contarAssistentesAtivos: function() {
             if (!this.usuariosCache) return 0;
             return Object.values(this.usuariosCache).filter(u => u.funcao === 'Assistente' && u.ativo).length;
@@ -84,14 +80,13 @@ const Sistema = {
             return 1.0; 
         },
 
-        // --- NOVOS MÉTODOS OBRIGATÓRIOS PARA O MOTIVO FUNCIONAR ---
         definirMotivo: function(nome, dataRef, motivo) {
             if (!this.motivosCache[dataRef]) this.motivosCache[dataRef] = {};
             
             if (motivo && motivo.trim() !== "") {
                 this.motivosCache[dataRef][nome] = motivo;
             } else {
-                delete this.motivosCache[dataRef][nome]; // Remove se estiver vazio
+                delete this.motivosCache[dataRef][nome];
             }
             
             localStorage.setItem('produtividade_motivos_v1', JSON.stringify(this.motivosCache));
@@ -104,17 +99,14 @@ const Sistema = {
             return "";
         },
 
-        // --- GESTÃO DE BASE HC (PADRÃO 17) ---
         definirBaseHC: function(dataRef, quantidade) {
             if(!dataRef) return;
             const key = dataRef.substring(0, 7); 
-            
             if (!quantidade || parseInt(quantidade) === 17) {
                 delete this.basesHcCache[key]; 
             } else {
                 this.basesHcCache[key] = parseInt(quantidade);
             }
-            
             localStorage.setItem('produtividade_bases_hc_v2', JSON.stringify(this.basesHcCache));
         },
 
@@ -127,25 +119,17 @@ const Sistema = {
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
             let inicio = new Date(dataInicio + 'T12:00:00');
             const fim = new Date(dataFim + 'T12:00:00');
-            
             let somaBases = 0;
             let mesesContados = 0;
-            
             inicio.setDate(1);
-
             while (inicio <= fim) {
                 const ano = inicio.getFullYear();
                 const mes = String(inicio.getMonth() + 1).padStart(2, '0');
                 const dataRef = `${ano}-${mes}-01`;
-                
-                const base = this.obterBaseHC(dataRef);
-                
-                somaBases += base;
+                somaBases += this.obterBaseHC(dataRef);
                 mesesContados++;
-                
                 inicio.setMonth(inicio.getMonth() + 1);
             }
-
             return mesesContados > 0 ? Math.round(somaBases / mesesContados) : 17;
         },
 
@@ -157,14 +141,12 @@ const Sistema = {
 
         normalizar: function(listaProducao) {
             const agrupado = {};
-
             listaProducao.forEach(item => {
                 const uid = item.usuario_id;
                 let user = this.usuariosCache[uid];
                 if (!user || (user.funcao && user.funcao !== 'Assistente')) return;
 
                 const nomeChave = user.nome.trim();
-
                 if (!agrupado[nomeChave]) {
                     agrupado[nomeChave] = {
                         nome: user.nome,
@@ -175,7 +157,6 @@ const Sistema = {
                         inativo: !user.ativo
                     };
                 }
-
                 agrupado[nomeChave].ids.add(uid);
                 agrupado[nomeChave].total += (Number(item.quantidade) || 0);
                 agrupado[nomeChave].fifo += (Number(item.fifo) || 0);
@@ -192,19 +173,15 @@ const Sistema = {
             return Object.values(agrupado).map(obj => {
                 let diasContabilizados = 0;
                 let metaTotalAdjustada = 0;
-
                 Object.keys(obj.diasMap).forEach(dia => {
                     const fator = this.obterFator(obj.nome, dia);
                     const uid = obj.ids.values().next().value;
                     const metaBase = this.obterMetaVigente(uid, dia);
-
                     diasContabilizados += fator;
                     metaTotalAdjustada += (metaBase * fator);
-                    
                     obj.diasMap[dia].fator = fator;
                     obj.diasMap[dia].meta = metaBase * fator;
                 });
-
                 return {
                     ...obj,
                     dias: diasContabilizados,

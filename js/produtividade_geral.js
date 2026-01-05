@@ -17,7 +17,6 @@ const Geral = {
         this.carregarTela();
     },
     
-    // --- NOVA FUNÇÃO DE EXCLUSÃO (Esta é a função que o erro diz estar faltando) ---
     excluirDadosDia: async function() {
         const modo = document.getElementById('view-mode').value;
         if (modo !== 'dia') {
@@ -25,9 +24,7 @@ const Geral = {
             return;
         }
         
-        // Garante que a data está definida e formatada
         const data = this.dataVisualizada;
-        // Prevenção caso dataVisualizada esteja nula
         if (!data) { alert("Data não selecionada."); return; }
         
         const [ano, mes, dia] = data.split('-');
@@ -46,7 +43,7 @@ const Geral = {
             if (error) throw error;
 
             alert('Dados excluídos com sucesso!');
-            this.carregarTela(); // Atualiza a tela para mostrar vazio
+            this.carregarTela();
 
         } catch (e) {
             console.error(e);
@@ -143,7 +140,23 @@ const Geral = {
             this.renderizar(); 
             return;
         }
+
+        let motivo = "";
+        
+        // --- AQUI ESTÁ A LÓGICA DE PERGUNTA ---
+        if (valor === "0" || valor === "0.5") {
+            const motivoAtual = Sistema.Dados.obterMotivo(nome, this.dataVisualizada);
+            motivo = prompt(`Informe o motivo para o ajuste de ${valor === "0" ? "ABONO TOTAL" : "MEIO PERÍODO"} de ${nome}:`, motivoAtual);
+            
+            if (motivo === null) {
+                this.renderizar();
+                return;
+            }
+        }
+
         Sistema.Dados.definirFator(nome, this.dataVisualizada, valor);
+        Sistema.Dados.definirMotivo(nome, this.dataVisualizada, motivo);
+        
         this.carregarTela();
     },
 
@@ -155,13 +168,26 @@ const Geral = {
             document.getElementById('bulk-fator').value = "";
             return;
         }
-        if (!confirm("Tem certeza que deseja aplicar este fator para TODAS as assistentes listadas?")) {
+
+        let motivo = "";
+        
+        if (valor === "0" || valor === "0.5") {
+            motivo = prompt(`Informe o motivo para aplicar ${valor === "0" ? "ABONO TOTAL" : "MEIO PERÍODO"} para TODAS as assistentes:`);
+            if (motivo === null) {
+                document.getElementById('bulk-fator').value = "";
+                return;
+            }
+        }
+
+        if (!confirm("Tem certeza que deseja aplicar esta alteração para TODAS as assistentes listadas?")) {
             document.getElementById('bulk-fator').value = "";
             return;
         }
+
         this.listaAtual.forEach(u => {
             if (!u.inativo) {
                 Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor);
+                Sistema.Dados.definirMotivo(u.nome, this.dataVisualizada, motivo);
             }
         });
         this.carregarTela(); 
@@ -193,7 +219,6 @@ const Geral = {
 
         const ativos = this.listaAtual.filter(u => !u.inativo);
         
-        // Total Produção
         const totalProd = this.selecionado 
             ? this.listaAtual.filter(u => u.nome === this.selecionado).reduce((a, b) => a + b.total, 0)
             : ativos.reduce((a, b) => a + b.total, 0);
@@ -205,7 +230,6 @@ const Geral = {
         const diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
 
         if (modo === 'dia') {
-            // Lógica Dia
             let qtdMeio = 0; let qtdAbonado = 0;
             this.listaAtual.forEach(u => {
                 const diaInfo = u.diasMap[this.dataVisualizada];
@@ -240,9 +264,7 @@ const Geral = {
             }
 
         } else {
-            // Lógica Mensal/Semanal
             const hcManual = Sistema.Dados.obterBaseHC(this.dataVisualizada);
-            
             if (this.selecionado) {
                 hcConsiderado = 1;
                 diasDisplay = this.listaAtual.filter(u => u.nome === this.selecionado)[0]?.dias || 0;
@@ -262,17 +284,13 @@ const Geral = {
         document.getElementById('kpi-dias').innerText = diasDisplay;
         document.getElementById('kpi-dias-label').innerText = diasLabel;
         
-        // --- CÁLCULOS FINANCEIROS/METAS ---
         const metaDiaria = 650;
-        
         const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
         const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
-        
         const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
 
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
         document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
-        
         document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
         document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
 
@@ -314,7 +332,20 @@ const Geral = {
             const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
             const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
 
-            const selectHtml = `<select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)"><option value="1" ${fator===1?'selected':''}>100%</option><option value="0.5" ${fator===0.5?'selected':''}>50%</option><option value="0" ${fator===0?'selected':''}>0%</option></select>`;
+            // --- EXIBIÇÃO DO MOTIVO (Ícone de Info) ---
+            const motivo = Sistema.Dados.obterMotivo(u.nome, this.dataVisualizada);
+            const motivoIcon = motivo ? `<i class="fas fa-info-circle text-blue-400 ml-2 text-xs" title="${motivo}"></i>` : '';
+
+            const selectHtml = `
+            <div class="flex items-center justify-center">
+                <select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)">
+                    <option value="1" ${fator===1?'selected':''}>100%</option>
+                    <option value="0.5" ${fator===0.5?'selected':''}>50%</option>
+                    <option value="0" ${fator===0?'selected':''}>0%</option>
+                </select>
+                ${motivoIcon}
+            </div>`;
+
             const pctIndividual = u.meta > 0 ? Math.round((u.total / u.meta) * 100) : 0;
             let badgeClass = pctIndividual >= 100 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
             const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;
