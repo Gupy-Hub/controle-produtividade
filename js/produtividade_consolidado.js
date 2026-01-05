@@ -1,16 +1,20 @@
 const Cons = {
     initialized: false,
     ultimoCache: { key: null, data: null },
+    basesManuais: {}, // Armazena as bases manuais (ex: {1: 17, 2: 13, 99: 17})
 
     init: async function() { 
         if(!this.initialized) { 
             this.initialized = true; 
         } 
         this.togglePeriodo();
-        setTimeout(() => this.carregar(false), 50); 
+        // Não precisa chamar carregar aqui pois o togglePeriodo já chama
     },
 
     togglePeriodo: function() {
+        // Reseta as bases manuais ao mudar o tipo de visualização para evitar confusão
+        this.basesManuais = {};
+
         const t = document.getElementById('cons-period-type').value;
         const selQ = document.getElementById('cons-select-quarter');
         const selS = document.getElementById('cons-select-semester');
@@ -38,6 +42,25 @@ const Cons = {
         this.carregar(false); 
     },
     
+    // Chamado quando a gestora altera o input de assistentes na tabela
+    atualizarBaseManual: function(colIndex, valor) {
+        this.basesManuais[colIndex] = Number(valor);
+        // Re-renderiza usando os dados em cache, sem ir ao banco de dados
+        if (this.ultimoCache.data) {
+            // Recalcula datas apenas para garantir contexto (pode ser otimizado, mas renderizar é rápido)
+            const t = document.getElementById('cons-period-type').value;
+            const el = document.getElementById('global-date');
+            const val = el ? el.value : new Date().toISOString().split('T')[0];
+            let dia, mes, ano;
+            if (val.includes('-')) { [ano, mes, dia] = val.split('-').map(Number); }
+            else { const now = new Date(); mes = now.getMonth() + 1; ano = now.getFullYear(); }
+
+            // O HF global não importa muito agora para as colunas, pois usaremos o manual
+            // Mas mantemos a assinatura
+            this.renderizar(this.ultimoCache.data, t, 17, mes, ano);
+        }
+    },
+
     calcularDiasUteisCalendario: function(dataInicio, dataFim) {
         let count = 0;
         let cur = new Date(dataInicio + 'T12:00:00'); 
@@ -55,7 +78,7 @@ const Cons = {
         const t = document.getElementById('cons-period-type').value; 
         
         if (!Sistema.Dados.inicializado) await Sistema.Dados.inicializar();
-        Sistema.Dados.inicializar(); 
+        // Sistema.Dados.inicializar(); // Removido chamada duplicada
 
         let el = document.getElementById('global-date');
         let val = el ? el.value : new Date().toISOString().split('T')[0];
@@ -84,8 +107,10 @@ const Cons = {
         } 
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
-        const HF = Sistema.Dados.calcularMediaBasePeriodo(s, e);
-        const cacheKey = `${t}_${s}_${e}_${HF}`;
+        // O valor padrão inicial continua sendo calculado ou fixo 17 se preferir
+        // Mas como vamos usar inputs manuais, o HF inicial serve apenas de fallback
+        const HF = 17; 
+        const cacheKey = `${t}_${s}_${e}`;
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
             this.renderizar(this.ultimoCache.data, t, HF, mes, ano);
@@ -112,7 +137,7 @@ const Cons = {
         }
     },
 
-    renderizar: function(rawData, t, HF, currentMonth, currentYear) {
+    renderizar: function(rawData, t, HF_Fallback, currentMonth, currentYear) {
         const tbody = document.getElementById('cons-table-body');
         if (!tbody) return;
 
@@ -124,6 +149,7 @@ const Cons = {
         let cols = []; 
         let datesMap = {}; 
 
+        // Definição das colunas
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) {
@@ -164,6 +190,13 @@ const Cons = {
         }
         
         const numCols = cols.length; 
+        
+        // Garante que temos valores padrão (17) ou valores manuais
+        for(let i=1; i<=numCols; i++) {
+            if (this.basesManuais[i] === undefined) this.basesManuais[i] = 17;
+        }
+        if (this.basesManuais[99] === undefined) this.basesManuais[99] = 17;
+
         let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
         
         const uniqueUsers = new Set();
@@ -194,6 +227,7 @@ const Cons = {
             });
         }
 
+        // Cálculo de Dias Úteis
         for(let i=1; i<=numCols; i++) {
             if(datesMap[i]) st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
             else if (t === 'dia') st[i].diasUteis = this.calcularDiasUteisCalendario(`${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`, `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(i).padStart(2,'0')}`);
@@ -207,33 +241,53 @@ const Cons = {
         }
 
         const hRow = document.getElementById('cons-table-header'); 
-        if(hRow) hRow.innerHTML = `<th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>` + cols.map(c => `<th class="px-4 py-4 text-center border-b-2 border-slate-100"><span class="text-xs font-bold text-slate-500 uppercase">${c}</span></th>`).join('') + `<th class="px-6 py-4 text-center bg-slate-50 border-b-2 border-slate-100 border-l border-slate-100 min-w-[120px]"><span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span></th>`;
+        
+        // Geração dos Cabeçalhos com INPUT
+        let headerHTML = `<th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
+        
+        // Colunas Normais
+        cols.forEach((c, idx) => {
+            const colIndex = idx + 1;
+            const valorInput = this.basesManuais[colIndex];
+            headerHTML += `
+            <th class="px-4 py-2 text-center border-b-2 border-slate-100 min-w-[100px]">
+                <div class="flex flex-col items-center gap-1">
+                    <span class="text-xs font-bold text-slate-500 uppercase">${c}</span>
+                    <div class="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded border border-slate-200" title="Base de Assistentes para cálculo de meta individual">
+                        <i class="fas fa-users text-[9px] text-slate-400"></i>
+                        <input type="number" 
+                            value="${valorInput}" 
+                            min="1" 
+                            onchange="Cons.atualizarBaseManual(${colIndex}, this.value)"
+                            class="w-10 bg-transparent text-center text-xs font-bold text-blue-600 outline-none border-b border-transparent focus:border-blue-400 p-0"
+                        >
+                    </div>
+                </div>
+            </th>`;
+        });
+
+        // Coluna Total
+        const valorTotalInput = this.basesManuais[99];
+        headerHTML += `
+        <th class="px-6 py-2 text-center bg-slate-50 border-b-2 border-slate-100 border-l border-slate-100 min-w-[120px]">
+            <div class="flex flex-col items-center gap-1">
+                <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
+                <div class="flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-blue-200 shadow-sm">
+                    <i class="fas fa-users text-[9px] text-blue-400"></i>
+                    <input type="number" 
+                        value="${valorTotalInput}" 
+                        min="1" 
+                        onchange="Cons.atualizarBaseManual(99, this.value)"
+                        class="w-10 bg-transparent text-center text-xs font-bold text-blue-700 outline-none border-b border-transparent focus:border-blue-400 p-0"
+                    >
+                </div>
+            </div>
+        </th>`;
+        
+        if(hRow) hRow.innerHTML = headerHTML;
         
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
-        
-        // --- CÁLCULO REAL E CONTAGEM CLT / PJ ---
-        const sysHC = uniqueUsers.size; // Total Real
-        let countCLT = 0;
-        let countPJ = 0;
-        let countOutros = 0;
-        
-        uniqueUsers.forEach(uid => {
-            const u = Sistema.Dados.usuariosCache[uid];
-            if (u) {
-                const c = (u.contrato || '').toUpperCase();
-                if (c.includes('CLT')) countCLT++;
-                else if (c.includes('PJ')) countPJ++;
-                else countOutros++;
-            } else {
-                countOutros++; // Usuário não encontrado no cache mas está na produção
-            }
-        });
-
-        // Força a soma bater com o total
-        if ((countCLT + countPJ + countOutros) !== sysHC) {
-            countOutros = sysHC - (countCLT + countPJ);
-        }
 
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
             const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
@@ -251,37 +305,17 @@ const Cons = {
             
             idxs.forEach(i => {
                 const s = st[i]; 
-                const diasCal = s.diasUteis; 
-                
-                // --- LÓGICA CRUCIAL CORRIGIDA ---
-                const realHC = s.users.size || 0;
-                
-                // IMPORTANTE:
-                // Para a linha "Total de Assistentes", mostramos o REAL (sysHC/realHC).
-                // Para cálculos de MÉDIA (isCalc=true), usamos o MANUAL (HF) se estiver na coluna total.
-                const hcParaCalculo = (i === 99) ? HF : (realHC || 1); 
+                const diasCal = s.diasUteis || 1; 
+                const baseManual = this.basesManuais[i] || 17; // Pega o valor do input
 
-                let val = 0; 
-                if (!isCalc) { 
-                    if (label.includes('Assistentes')) {
-                        // FIX: Na linha VISUAL de assistentes, sempre mostra o REAL.
-                        val = (i === 99) ? sysHC : realHC;
-                    } else {
-                        val = getter(s); 
-                    }
-                } else { 
-                    // Nos cálculos matemáticos, usa a base manual (HF).
-                    val = getter(s, diasCal, hcParaCalculo); 
-                }
+                // Passamos para a função de cálculo:
+                // s = stats acumulados
+                // diasCal = dias úteis
+                // baseManual = valor digitado no header
+                let val = getter(s, diasCal, baseManual);
 
-                let txt = val ? Math.round(val).toLocaleString() : '-';
+                let txt = (val !== null && val !== undefined) ? Math.round(val).toLocaleString() : '-';
                 
-                // Destaque visual se o número exibido for diferente da base de cálculo
-                let extraStyle = '';
-                if (!isCalc && label.includes('Assistentes') && i === 99 && sysHC !== HF) {
-                    txt += `<span class="block text-[9px] text-amber-500 font-normal mt-1" title="Base para cálculo das médias">Base Calc: ${HF}</span>`;
-                }
-
                 const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
                 tr += `<td class="${cellClass}">${txt}</td>`;
             });
@@ -289,64 +323,52 @@ const Cons = {
         };
         
         // Linhas da Tabela
-        h += mkRow('Total de Assistentes', 'fas fa-users', 'text-indigo-500', s => s.users.size);
-        h += mkRow('Total Dias Úteis / Trabalhado', 'fas fa-calendar-check', 'text-cyan-500', (s) => s.diasUteis);
+        // Nota: Removi a linha "Total de Assistentes" que mostrava o Real, pois agora focamos no Input Manual.
+        // Se quiser manter, pode, mas a gestão é pelo input.
+        
+        h += mkRow('Total Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // Linhas de Média (Calculadas com HF no Total)
-        h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
-        h += mkRow('Média Validação Diária (Todas)', 'fas fa-user-friends', 'text-teal-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
-        h += mkRow(`Média Validação Diária (Por Assistentes)`, 'fas fa-user-tag', 'text-amber-600', (s, d, a) => (d > 0 && a > 0) ? s.qty / d / a : 0, true);
+        // --- MÉDIAS CORRIGIDAS CONFORME PEDIDO ---
+
+        // 1. Média Validação Diária (Todas) -> Média da Equipe inteira por dia (ProdTotal / Dias)
+        h += mkRow('Média Validação Diária (Todas)', 'fas fa-users', 'text-emerald-600', 
+            (s, dias, base) => dias > 0 ? s.qty / dias : 0, 
+            true
+        );
+
+        // 2. Média Validação Diária (Por Assistentes) -> Média Individual (ProdTotal / Dias / BaseManual)
+        h += mkRow('Média Validação Diária (Por Assistentes)', 'fas fa-user', 'text-amber-600', 
+            (s, dias, base) => (dias > 0 && base > 0) ? (s.qty / dias) / base : 0, 
+            true
+        );
         
         tbody.innerHTML = h;
         
+        // Atualiza Cards Superiores (Consolidado Geral)
         const tot = st[99]; 
         const dTot = tot.diasUteis || 1; 
+        const baseTot = this.basesManuais[99]; // Base definida no input total
+        
         const setSafe = (id, v) => { const el = document.getElementById(id); if(el) el.innerHTML = v; };
         
         setSafe('cons-p-total', tot.qty.toLocaleString()); 
+        
+        // Card Média do Time (Todas Juntas)
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
-        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / HF).toLocaleString());
         
-        // --- ATUALIZAÇÃO DO CARD DE HEADCOUNT ---
-        // Agora mostra o REAL como destaque, e a BASE MANUAL como detalhe secundário se for diferente.
+        // Card Média Individual (Usando a base total configurada)
+        setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / baseTot).toLocaleString());
         
-        let cardHTML = '';
-        const somaCheck = countCLT + countPJ + countOutros; // 23
-
-        if (HF !== sysHC) {
-            // Se houver diferença (Ex: Manual 13, Real 23), mostra o REAL com aviso.
-            cardHTML = `<div class="flex flex-col items-center">
-                            <span class="text-3xl font-black text-slate-800">${somaCheck}</span>
-                            <span class="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded mt-1" title="Valor usado para dividir a meta">Base Meta: ${HF}</span>
-                        </div>`;
-        } else {
-            // Se forem iguais (ou padrão), mostra normal
-            cardHTML = `<span class="text-3xl font-black text-slate-800">${somaCheck}</span>`;
-        }
-        
-        // Detalhe CLT/PJ
-        cardHTML += `<div class="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 w-full justify-between">
-                        <div class="flex flex-col items-center">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase">CLT</span>
-                            <span class="text-sm font-black text-blue-600">${countCLT}</span>
-                        </div>
-                        <div class="w-px h-6 bg-slate-100"></div>
-                        <div class="flex flex-col items-center">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase">PJ</span>
-                            <span class="text-sm font-black text-indigo-600">${countPJ}</span>
-                        </div>
-                        ${countOutros > 0 ? `<div class="w-px h-6 bg-slate-100"></div><div class="flex flex-col items-center"><span class="text-[9px] font-bold text-slate-400 uppercase">Out</span><span class="text-sm font-black text-slate-500">${countOutros}</span></div>` : ''}
-                     </div>`;
-
-        setSafe('cons-p-headcount', cardHTML);
+        // No Card de Headcount, mostramos o que está configurado no total
+        setSafe('cons-p-headcount', `<span class="text-3xl font-black text-blue-700">${baseTot}</span><span class="block text-[10px] text-slate-400 font-bold uppercase mt-1">Definido Manualmente</span>`);
         
         const elLblBase = document.getElementById('cons-lbl-base-avg');
-        if(elLblBase) elLblBase.innerText = HF;
+        if(elLblBase) elLblBase.innerText = baseTot;
     },
     
     newStats: function() { 
