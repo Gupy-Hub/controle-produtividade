@@ -8,11 +8,10 @@ const Cons = {
             this.initialized = true; 
         } 
         this.togglePeriodo();
-        // Não precisa chamar carregar aqui pois o togglePeriodo já chama
     },
 
     togglePeriodo: function() {
-        // Reseta as bases manuais ao mudar o tipo de visualização para evitar confusão
+        // Reseta as bases manuais ao mudar o tipo de visualização
         this.basesManuais = {};
 
         const t = document.getElementById('cons-period-type').value;
@@ -49,7 +48,6 @@ const Cons = {
         // Re-renderiza usando os dados em cache para ser instantâneo
         if (this.ultimoCache.data) {
             const t = document.getElementById('cons-period-type').value;
-            // Recupera mês/ano atuais apenas para contexto da renderização
             let el = document.getElementById('global-date');
             let val = el ? el.value : new Date().toISOString().split('T')[0];
             let dia, mes, ano;
@@ -58,18 +56,6 @@ const Cons = {
 
             this.renderizar(this.ultimoCache.data, t, 17, mes, ano);
         }
-    },
-
-    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
-        let count = 0;
-        let cur = new Date(dataInicio + 'T12:00:00'); 
-        const end = new Date(dataFim + 'T12:00:00');
-        while (cur <= end) {
-            const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++;
-            cur.setDate(cur.getDate() + 1);
-        }
-        return count;
     },
     
     carregar: async function(forcar = false) {
@@ -143,15 +129,11 @@ const Cons = {
 
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
-        let datesMap = {}; 
-
+        
         // Definição das colunas
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-            for(let d=1; d<=lastDay; d++) {
-                cols.push(String(d).padStart(2,'0'));
-                datesMap[d] = { ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`, fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}` };
-            }
+            for(let d=1; d<=lastDay; d++) cols.push(String(d).padStart(2,'0'));
         } 
         else if (t === 'mes') { cols = ['Semana 1','Semana 2','Semana 3','Semana 4','Semana 5']; } 
         else if (t === 'trimestre') {
@@ -159,35 +141,20 @@ const Cons = {
             const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
             const idxStart = (trim - 1) * 3;
             cols = [mesesNomes[idxStart], mesesNomes[idxStart+1], mesesNomes[idxStart+2]];
-            for(let i=0; i<3; i++) {
-                const m = idxStart + i + 1;
-                const ultimoDia = new Date(currentYear, m, 0).getDate();
-                datesMap[i+1] = { ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}` };
-            }
         } else if (t === 'semestre') {
             const selS = document.getElementById('cons-select-semester');
             const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2);
             const idxStart = (sem - 1) * 6;
             cols = mesesNomes.slice(idxStart, idxStart + 6);
-            for(let i=0; i<6; i++) {
-                const m = idxStart + i + 1;
-                const ultimoDia = new Date(currentYear, m, 0).getDate();
-                datesMap[i+1] = { ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}` };
-            }
         } else if (t === 'ano_trim') {
             cols = ['1º Trim', '2º Trim', '3º Trim', '4º Trim'];
         } else { 
             cols = mesesNomes; 
-            for(let i=0; i<12; i++) {
-                const m = i + 1;
-                const ultimoDia = new Date(currentYear, m, 0).getDate();
-                datesMap[i+1] = { ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, fim: `${currentYear}-${String(m).padStart(2,'0')}-${ultimoDia}` };
-            }
         }
         
         const numCols = cols.length; 
         
-        // Garante que temos valores padrão (17) ou valores manuais
+        // Inicializa inputs manuais se não existirem
         for(let i=1; i<=numCols; i++) {
             if (this.basesManuais[i] === undefined) this.basesManuais[i] = 17;
         }
@@ -223,72 +190,18 @@ const Cons = {
             });
         }
 
-        // --- CÁLCULO DE DIAS ÚTEIS COM TRAVA DE HOJE (CORREÇÃO DE MÉDIA) ---
-        const today = new Date();
-        today.setHours(0,0,0,0);
-
-        // Helper para limitar a data final a hoje se estiver no futuro
-        const getEffectiveEnd = (fimStr) => {
-            const dFim = new Date(fimStr + 'T12:00:00');
-            if (dFim > today) {
-                // Se a data final do período é no futuro, limita a hoje
-                const y = today.getFullYear();
-                const m = String(today.getMonth() + 1).padStart(2,'0');
-                const d = String(today.getDate()).padStart(2,'0');
-                return `${y}-${m}-${d}`;
-            }
-            return fimStr;
-        };
-
+        // --- CÁLCULO SIMPLIFICADO DE DIAS ÚTEIS (DIAS COM DADOS) ---
+        // Considera apenas a quantidade de dias únicos que tiveram registros encontrados.
         for(let i=1; i<=numCols; i++) {
-            if(datesMap[i]) {
-                const iniStr = datesMap[i].ini;
-                const fimStr = datesMap[i].fim;
-                const dIni = new Date(iniStr + 'T12:00:00');
-                
-                // Se a coluna começa no futuro, dias úteis = 0
-                if (dIni > today) {
-                    st[i].diasUteis = 0;
-                } else {
-                    // Senão, calcula até o fim do período ou até hoje (o que vier primeiro)
-                    const effectiveFim = getEffectiveEnd(fimStr);
-                    st[i].diasUteis = this.calcularDiasUteisCalendario(iniStr, effectiveFim);
-                }
-            }
-            else if (t === 'dia') {
-                // No modo dia, datesMap[i] deve existir, mas fallback por segurança
-                st[i].diasUteis = st[i].dates.size;
-            } else {
-                st[i].diasUteis = st[i].dates.size; 
-            }
+            st[i].diasUteis = st[i].dates.size;
         }
-
-        // Correção para o TOTAL (99)
-        if (t === 'mes' || t === 'dia') {
-            const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-            const fullIni = `${currentYear}-${String(currentMonth).padStart(2,'0')}-01`;
-            const fullFim = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${lastDay}`;
-            
-            const dIni = new Date(fullIni + 'T12:00:00');
-            
-            if (dIni > today) {
-                st[99].diasUteis = 0;
-            } else {
-                const effectiveFim = getEffectiveEnd(fullFim);
-                st[99].diasUteis = this.calcularDiasUteisCalendario(fullIni, effectiveFim);
-            }
-        } else {
-            // Para Trimestre/Semestre/Ano, somamos os dias úteis das colunas (que já foram corrigidas acima)
-            st[99].diasUteis = 0; 
-            for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
-        }
+        st[99].diasUteis = st[99].dates.size;
 
         const hRow = document.getElementById('cons-table-header'); 
         
-        // Geração dos Cabeçalhos com INPUT (Mantido conforme pedido anterior)
+        // Geração dos Cabeçalhos com INPUT
         let headerHTML = `<th class="px-6 py-4 sticky left-0 bg-white z-20 border-b-2 border-slate-100 text-left min-w-[200px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
         
-        // Colunas Normais
         cols.forEach((c, idx) => {
             const colIndex = idx + 1;
             const valorInput = this.basesManuais[colIndex];
@@ -349,15 +262,10 @@ const Cons = {
             
             idxs.forEach(i => {
                 const s = st[i]; 
-                const diasCal = s.diasUteis || 1; 
-                const baseManual = this.basesManuais[i] || 17; // Valor do Input
+                const diasCal = s.diasUteis || 1; // Agora é puramente baseado em dados encontrados
+                const baseManual = this.basesManuais[i] || 17; 
 
-                // Aqui é o pulo do gato:
-                // Se for cálculo (isCalc=true), usamos a baseManual.
-                // Se for dado real (ex: Total Assistentes), usamos o dado do objeto 's'.
-                
                 let val = getter(s, diasCal, baseManual);
-
                 let txt = (val !== null && val !== undefined) ? Math.round(val).toLocaleString() : '-';
                 
                 const cellClass = i === 99 ? `px-6 py-4 text-center bg-slate-50 border-l border-slate-100 font-bold ${colorInfo ? colorInfo.replace('text-', 'text-') : 'text-slate-700'}` : `px-4 py-4 text-center text-slate-500 font-medium`;
@@ -367,28 +275,20 @@ const Cons = {
         };
         
         // --- LINHAS DA TABELA ---
-        
-        // 1. REINSERIDO: Total de Assistentes (Real/Sistema)
-        // Mostra quantos usuários distintos tiveram produção no período.
         h += mkRow('Assistentes (Real)', 'fas fa-id-card-alt', 'text-indigo-500', (s) => s.users.size);
-
-        // 2. Outros totais
-        h += mkRow('Total Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
+        h += mkRow('Dias com Validação', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis); // Alterado label para clareza
         h += mkRow('Total de Documentos FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total de Documentos G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total de Documentos G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total de Documentos Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total de Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // 3. Médias (Usando a Base Manual dos Inputs)
-        
-        // Média da Equipe (Prod / Dias) - Independe de assistentes
+        // Médias (Usando a Base Manual dos Inputs)
         h += mkRow('Média Validação Diária (Todas)', 'fas fa-users', 'text-emerald-600', 
             (s, dias, base) => dias > 0 ? s.qty / dias : 0, 
             true
         );
 
-        // Média Individual (Prod / Dias / BaseManual)
         h += mkRow('Média Validação Diária (Por Assistentes)', 'fas fa-user', 'text-amber-600', 
             (s, dias, base) => (dias > 0 && base > 0) ? (s.qty / dias) / base : 0, 
             true
@@ -407,7 +307,6 @@ const Cons = {
         setSafe('cons-p-media-time', Math.round(tot.qty / dTot).toLocaleString()); 
         setSafe('cons-p-media-ind', Math.round(tot.qty / dTot / baseTot).toLocaleString());
         
-        // No Card de Headcount, mostramos o Real e o Manual para comparação rápida
         setSafe('cons-p-headcount', `
             <div class="flex flex-col items-start">
                 <div><span class="text-xs text-slate-400 font-bold uppercase">Real:</span> <span class="text-xl font-black text-slate-700">${tot.users.size}</span></div>
