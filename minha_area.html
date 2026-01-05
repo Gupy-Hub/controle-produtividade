@@ -11,14 +11,19 @@
     
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        /* Barra de rolagem personalizada para o Modal */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 20px; }
+        
+        /* Animação suave */
+        .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased">
 
-    <nav class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <nav class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center gap-4">
@@ -32,12 +37,11 @@
                 </div>
 
                 <div class="flex items-center gap-4">
-                    <div id="btn-presenca-container">
-                        <button onclick="MA_Diario.carregarRelatorioAcessos()" class="flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition text-sm font-bold border border-indigo-200 shadow-sm" title="Ver quem confirmou presença">
-                            <i class="fas fa-users"></i>
-                            <span class="hidden sm:inline">Presença Time</span>
-                        </button>
-                    </div>
+                    
+                    <button onclick="MA_Diario.carregarRelatorioAcessos()" class="hidden sm:flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition text-sm font-bold border border-indigo-200 shadow-sm" title="Ver quem confirmou presença">
+                        <i class="fas fa-users"></i>
+                        <span>Presença Time</span>
+                    </button>
 
                     <div class="h-8 w-px bg-slate-200 mx-2"></div>
 
@@ -46,7 +50,7 @@
                             <p id="user-name" class="text-sm font-bold text-slate-700">Carregando...</p>
                             <p id="user-role" class="text-xs text-slate-500">...</p>
                         </div>
-                        <button onclick="logout()" class="p-2 text-slate-400 hover:text-rose-600 transition" title="Sair">
+                        <button onclick="logout()" class="p-2 text-slate-400 hover:text-rose-600 transition" title="Sair do Sistema">
                             <i class="fas fa-sign-out-alt text-lg"></i>
                         </button>
                     </div>
@@ -125,21 +129,21 @@
             </div>
         </div>
 
-        <div class="border-b border-slate-200">
+        <div class="border-b border-slate-200 mt-2">
             <nav class="-mb-px flex space-x-8" aria-label="Tabs">
-                <button onclick="switchTab('diario')" id="tab-diario" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 active-tab">
+                <button onclick="switchTab('diario')" id="tab-diario" class="border-blue-500 text-blue-600 whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm flex items-center gap-2 active-tab transition-colors">
                     <i class="fas fa-list-alt"></i> Diário
                 </button>
-                <button onclick="switchTab('evolucao')" id="tab-evolucao" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
+                <button onclick="switchTab('evolucao')" id="tab-evolucao" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors">
                     <i class="fas fa-chart-area"></i> Evolução
                 </button>
-                <button onclick="switchTab('feedback')" id="tab-feedback" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2">
+                <button onclick="switchTab('feedback')" id="tab-feedback" class="border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300 whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-colors">
                     <i class="fas fa-comments"></i> Feedbacks
                 </button>
             </nav>
         </div>
 
-        <div id="content-diario" class="tab-content block">
+        <div id="content-diario" class="tab-content block animate-fade-in">
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left text-slate-500">
@@ -153,27 +157,28 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-diario" class="divide-y divide-slate-100">
-                            </tbody>
+                            <tr><td colspan="5" class="text-center py-12 text-slate-300">Carregando dados...</td></tr>
+                        </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <div id="content-evolucao" class="tab-content hidden">
+        <div id="content-evolucao" class="tab-content hidden animate-fade-in">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <h3 class="font-bold text-slate-700 mb-4">Evolução de Produção Diária</h3>
                 <div class="h-64 flex items-center justify-center bg-slate-50 rounded-lg border border-slate-100 text-slate-400">
-                    <p>Gráfico de evolução será renderizado aqui.</p>
-                    <canvas id="chart-evolucao" class="w-full h-full hidden"></canvas>
+                    <canvas id="chart-evolucao" class="w-full h-full p-2"></canvas>
+                    <span id="chart-placeholder" class="hidden">Gráfico indisponível no momento.</span>
                 </div>
             </div>
         </div>
 
-        <div id="content-feedback" class="tab-content hidden">
+        <div id="content-feedback" class="tab-content hidden animate-fade-in">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="font-bold text-slate-700">Histórico de Feedbacks</h3>
-                    <button onclick="MA_Feedback.novoFeedback()" id="btn-novo-feedback" class="hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 font-bold">
+                    <button onclick="MA_Feedback.novoFeedback()" id="btn-novo-feedback" class="hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 font-bold transition">
                         + Novo
                     </button>
                 </div>
@@ -187,7 +192,7 @@
 
     <div id="box-relatorio-acessos" class="hidden fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm transition-opacity p-4">
         
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all ring-1 ring-black/5">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all ring-1 ring-black/5 animate-fade-in">
             
             <div class="bg-indigo-600 px-6 py-4 flex items-center justify-between shadow-md">
                 <h3 class="text-white font-bold text-lg flex items-center gap-2">
@@ -223,6 +228,8 @@
         </div>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <script src="js/config.js"></script>
     <script src="js/minha_area_geral.js"></script>
     <script src="js/minha_area_feedback.js"></script>
@@ -230,23 +237,30 @@
     <script src="js/minha_area_main.js"></script>
 
     <script>
-        // Lógica simples de abas
+        // Lógica de Abas
         function switchTab(tabName) {
-            // Esconde todos
+            // 1. Esconde todo o conteúdo
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            
+            // 2. Reseta o estilo dos botões
             document.querySelectorAll('nav button').forEach(el => {
                 el.classList.remove('border-blue-500', 'text-blue-600', 'active-tab');
                 el.classList.add('border-transparent', 'text-slate-500');
             });
 
-            // Mostra o atual
-            document.getElementById('content-' + tabName).classList.remove('hidden');
+            // 3. Mostra o conteúdo selecionado
+            const content = document.getElementById('content-' + tabName);
+            if (content) content.classList.remove('hidden');
+
+            // 4. Ativa o botão selecionado
             const activeBtn = document.getElementById('tab-' + tabName);
-            activeBtn.classList.remove('border-transparent', 'text-slate-500');
-            activeBtn.classList.add('border-blue-500', 'text-blue-600', 'active-tab');
+            if (activeBtn) {
+                activeBtn.classList.remove('border-transparent', 'text-slate-500');
+                activeBtn.classList.add('border-blue-500', 'text-blue-600', 'active-tab');
+            }
         }
 
-        // Logout simples
+        // Função de Logout
         function logout() {
             localStorage.removeItem('usuario');
             window.location.href = 'index.html';
