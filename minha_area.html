@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
@@ -20,7 +21,6 @@
         .card-stat:hover { transform: translateY(-3px); }
         .animate-enter { animation: enter 0.4s ease-out; }
         @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        /* Scrollbar fina */
         .custom-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
     </style>
@@ -30,7 +30,7 @@
     <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="bg-white border-b border-slate-200 shadow-sm">
         <div class="max-w-6xl mx-auto px-4">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-16 py-2 md:py-0">
                 <div class="flex items-center gap-3 mb-2 md:mb-0 w-full md:w-auto">
@@ -55,6 +55,9 @@
                     </button>
                     <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="ma-tab py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
                         <i class="fas fa-bullseye"></i> Qualidade
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="ma-tab py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
+                        <i class="fas fa-comments"></i> Feedback
                     </button>
                 </div>
             </div>
@@ -207,6 +210,9 @@
             </div>
         </div>
 
+        <div id="ma-tab-feedback" class="ma-view hidden animate-enter">
+             </div>
+
     </div>
 
     <script src="js/minha_area/main.js"></script>
@@ -214,5 +220,6 @@
     <script src="js/minha_area/evolucao.js"></script>
     <script src="js/minha_area/comparativo.js"></script>
     <script src="js/minha_area/assertividade.js"></script>
+    <script src="js/minha_area/feedback.js"></script>
 </body>
 </html>
