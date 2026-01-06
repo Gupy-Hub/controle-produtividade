@@ -5,7 +5,6 @@ const MA_Main = {
     isMgr: false,
     usersMap: {},
     userRoles: {},
-    nameToIdsMap: {},
 
     init: async function() {
         if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
@@ -28,6 +27,7 @@ const MA_Main = {
 
         const inputData = document.getElementById('global-date');
         if (inputData) {
+            // Tenta pegar data salva ou define HOJE
             const dataSalva = localStorage.getItem('produtividade_data_ref') || new Date().toISOString().split('T')[0];
             inputData.value = dataSalva;
         }
@@ -53,17 +53,8 @@ const MA_Main = {
              if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
         }
 
-        // Carrega aba inicial
         this.mudarAba('diario');
         this.atualizarDashboard();
-    },
-
-    aplicarDataManual: function() {
-        const val = document.getElementById('global-date').value;
-        if(val) {
-            localStorage.setItem('produtividade_data_ref', val);
-            this.atualizarDashboard();
-        }
     },
 
     mudarAba: function(aba) {
@@ -73,7 +64,6 @@ const MA_Main = {
         document.getElementById(`tab-${aba}`).classList.remove('hidden'); 
         document.getElementById(`btn-${aba}`).classList.add('active');
         
-        // Controle Contextual (Topo)
         const ctrlEvo = document.getElementById('ctrl-evolucao');
         if (ctrlEvo) {
             if (aba === 'evolucao') {
@@ -116,7 +106,13 @@ const MA_Main = {
         const valData = document.getElementById('global-date').value;
         if (!valData) return;
         
-        // Converte string YYYY-MM-DD para Date
+        localStorage.setItem('produtividade_data_ref', valData); // Persiste a data
+
+        // --- ATUALIZA O CHECK-IN NO TOPO ---
+        if(typeof MA_Checkin !== 'undefined') {
+            MA_Checkin.verificar(valData);
+        }
+
         const [y, m, d] = valData.split('-').map(Number);
         const refDate = new Date(y, m-1, d);
 

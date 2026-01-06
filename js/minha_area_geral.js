@@ -1,123 +1,95 @@
-// Objeto Responsável pelo Gráfico de Evolução (Atualizado para ler o novo input)
-const MA_Evolucao = {
-    chart: null,
-    
-    renderizarGraficos: async function(periodo) {
-        document.querySelectorAll('.chart-selector-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(`chart-btn-${periodo}`).classList.add('active');
+// Objeto Responsável pelo Check-in Diário
+const MA_Checkin = {
+    verificar: async function(dataRef) {
+        const container = document.getElementById('container-checkin');
+        if (!container) return;
+        container.innerHTML = '';
 
-        const valData = document.getElementById('global-date').value;
-        if(!valData) return;
-        const [y, m, d] = valData.split('-').map(Number);
-        const refDate = new Date(y, m-1, d);
-
-        const ano = refDate.getFullYear();
-        const mes = refDate.getMonth();
-        let dInicio, dFim;
-
-        if (periodo === 'mes') {
-            dInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-            dFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-        } else if (periodo === 'trimestre') {
-            const trimStart = Math.floor(mes / 3) * 3;
-            dInicio = new Date(ano, trimStart, 1).toISOString().split('T')[0];
-            dFim = new Date(ano, trimStart + 3, 0).toISOString().split('T')[0];
-        } else if (periodo === 'semestre') {
-            const semStart = mes < 6 ? 0 : 6;
-            dInicio = new Date(ano, semStart, 1).toISOString().split('T')[0];
-            dFim = new Date(ano, semStart + 6, 0).toISOString().split('T')[0];
-        } else if (periodo === 'ano') {
-            dInicio = `${ano}-01-01`;
-            dFim = `${ano}-12-31`;
-        }
-
-        let targetName = MA_Main.usersMap[MA_Main.sessao.id];
-        let viewingTime = false;
-        if(MA_Main.isMgr) {
-            const val = document.getElementById('filtro-user').value;
-            if(val === 'time') viewingTime = true; else if(val !== 'me') targetName = MA_Main.usersMap[val];
-        }
-
-        const { data: rawData } = await _supabase.from('producao')
-            .select('*')
-            .gte('data_referencia', dInicio)
-            .lte('data_referencia', dFim)
-            .order('data_referencia');
-
-        const grouped = MA_Diario.normalizarDados(rawData || []);
-        const agruparPorMes = (periodo === 'ano');
-
-        const processedTime = {}, processedMain = {};
-        
-        Object.keys(grouped).sort().forEach(date => {
-            let label = agruparPorMes ? date.substring(0, 7) : date;
-            const prods = Object.values(grouped[date]);
-            const total = prods.reduce((a,b) => a + b.quantidade, 0); 
-            const count = prods.length;
-            const avg = count ? Math.round(total / count) : 0;
-
-            if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; }
-            processedTime[label].sum += avg; 
-            processedTime[label].cnt++;
-
-            let valUser = 0; 
-            if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; }
-            processedMain[label] += valUser; 
-        });
-
-        const labels = Object.keys(processedTime).sort();
-        const dataMain = [], dataBench = [];
-        let statsDias = 0, statsBest = 0, statsBatida = 0;
-
-        labels.forEach(k => {
-            let valTime = Math.round(processedTime[k].sum / processedTime[k].cnt);
-            let valMainFinal = processedMain[k];
-            if (agruparPorMes) valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); 
+        if (MA_Main.isMgr) {
+            // VISÃO GESTORA: Mostra status do time
+            const { data: checkins } = await _supabase.from('checkins').select('usuario_id').eq('data_referencia', dataRef);
+            const { data: users } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').eq('ativo', true);
             
-            const displayMain = viewingTime ? valTime : valMainFinal;
-            dataMain.push(displayMain);
-            dataBench.push(viewingTime ? 650 : valTime);
+            if (users && checkins) {
+                const total = users.length;
+                const feitos = checkins.length;
+                const checkedIds = checkins.map(c => c.usuario_id);
+                const pendentes = users.filter(u => !checkedIds.includes(u.id));
 
-            if(displayMain > 0) {
-                statsDias++;
-                if(displayMain > statsBest) statsBest = displayMain;
-                if(displayMain >= 650) statsBatida++;
+                const colorClass = feitos === total ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
+                
+                // Botão da Gestora
+                const btn = document.createElement('button');
+                btn.className = `flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition shadow-sm ${colorClass}`;
+                btn.innerHTML = `<i class="fas fa-tasks"></i> Check-in: ${feitos}/${total}`;
+                btn.onclick = () => this.abrirModalPendencias(pendentes);
+                
+                container.appendChild(btn);
             }
+        } else {
+            // VISÃO ASSISTENTE: Botão de Validar
+            const { data } = await _supabase.from('checkins')
+                .select('*')
+                .eq('usuario_id', MA_Main.sessao.id)
+                .eq('data_referencia', dataRef)
+                .single();
+
+            const jaFez = !!data;
+            const btn = document.createElement('button');
+            
+            if (jaFez) {
+                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold cursor-default shadow-sm";
+                btn.innerHTML = `<i class="fas fa-check-circle"></i> Dia Validado`;
+            } else {
+                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 transition shadow-sm animate-pulse";
+                btn.innerHTML = `<i class="fas fa-fingerprint"></i> Validar Dia`;
+                btn.onclick = () => this.realizarCheckin(dataRef);
+            }
+            container.appendChild(btn);
+        }
+    },
+
+    realizarCheckin: async function(dataRef) {
+        // Confirmação para evitar clique acidental
+        const dataFmt = dataRef.split('-').reverse().join('/');
+        if (!confirm(`Confirmar que os dados de produção do dia ${dataFmt} estão corretos?`)) return;
+
+        const { error } = await _supabase.from('checkins').insert({
+            usuario_id: MA_Main.sessao.id,
+            data_referencia: dataRef
         });
 
-        document.getElementById('evo-dias').innerText = statsDias;
-        document.getElementById('evo-label-dias').innerText = agruparPorMes ? "meses ativos" : "dias trabalhados";
-        document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%';
-        document.getElementById('evo-best').innerText = statsBest;
+        if (error) {
+            alert('Erro ao realizar check-in: ' + error.message);
+        } else {
+            this.verificar(dataRef); // Atualiza botão
+        }
+    },
 
-        const ctx = document.getElementById('chartPrincipal').getContext('2d');
-        if(this.chart) this.chart.destroy();
+    abrirModalPendencias: function(listaPendentes) {
+        const modal = document.getElementById('modal-pendencias');
+        const listaBody = document.getElementById('lista-pendentes-body');
         
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)');
-        gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
-
-        this.chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/')),
-                datasets: [
-                    { label: viewingTime ? 'Média Equipa' : targetName, data: dataMain, borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true },
-                    { label: viewingTime ? 'Meta (650)' : 'Média Equipa', data: dataBench, borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, fill: false }
-                ]
-            },
-            options: { 
-                responsive: true, maintainAspectRatio: false, 
-                plugins: { legend: { position: 'bottom' } }, 
-                scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } 
-            } 
-        });
+        if (listaPendentes.length === 0) {
+            listaBody.innerHTML = '<div class="text-center py-8 text-emerald-500 font-bold"><i class="fas fa-check-circle text-4xl mb-2 block"></i>Todos realizaram o check-in!</div>';
+        } else {
+            let html = '<ul class="space-y-2">';
+            listaPendentes.forEach(u => {
+                html += `<li class="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100">
+                    <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-200">${u.nome.charAt(0)}</div>
+                    <span class="text-sm font-bold text-slate-700">${u.nome}</span>
+                </li>`;
+            });
+            html += '</ul>';
+            listaBody.innerHTML = html;
+        }
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
 };
 
-// ... Restante do arquivo (MA_Diario, MA_Comparativo, MA_Feedback) continua igual ao que enviei antes ...
-// Vou incluir apenas para garantir a integridade se você for copiar e colar.
-
+// ... Restante dos objetos (MA_Diario, MA_Evolucao, MA_Comparativo, MA_Feedback) ...
 const MA_Diario = {
     normalizarDados: function(rawData) {
         const agrupado = {};
@@ -148,9 +120,9 @@ const MA_Diario = {
         document.getElementById('kpi-media-real').innerText = media.toLocaleString();
         document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
         const bar = document.getElementById('bar-progress'); const icon = document.getElementById('icon-status');
-        if(atingimento >= 100) { bar.className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full rounded-full"; icon.className="fas fa-check-circle text-emerald-500"; }
-        else if(atingimento >= 80) { bar.className="bg-gradient-to-r from-yellow-400 to-orange-400 h-full rounded-full"; icon.className="fas fa-exclamation-circle text-yellow-500"; }
-        else { bar.className="bg-gradient-to-r from-red-500 to-rose-600 h-full rounded-full"; icon.className="fas fa-times-circle text-red-500"; }
+        if(atingimento >= 100) { bar.className="bg-blue-600 h-full rounded-full"; icon.className="fas fa-check-circle text-emerald-500 text-2xl"; }
+        else if(atingimento >= 80) { bar.className="bg-yellow-500 h-full rounded-full"; icon.className="fas fa-exclamation-circle text-yellow-500 text-2xl"; }
+        else { bar.className="bg-red-500 h-full rounded-full"; icon.className="fas fa-times-circle text-red-500 text-2xl"; }
     },
     atualizarTabela: function(dados, viewingTime) {
         const tbody = document.getElementById('tabela-diario');
@@ -175,54 +147,65 @@ const MA_Diario = {
     }
 };
 
+const MA_Evolucao = {
+    chart: null,
+    renderizarGraficos: async function(periodo) {
+        document.querySelectorAll('.chart-selector-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`chart-btn-${periodo}`).classList.add('active');
+        const valData = document.getElementById('global-date').value; if(!valData) return;
+        const [y, m, d] = valData.split('-').map(Number); const refDate = new Date(y, m-1, d);
+        const ano = refDate.getFullYear(); const mes = refDate.getMonth();
+        let dInicio, dFim;
+        if (periodo === 'mes') { dInicio = new Date(ano, mes, 1).toISOString().split('T')[0]; dFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0]; } 
+        else if (periodo === 'trimestre') { const trimStart = Math.floor(mes / 3) * 3; dInicio = new Date(ano, trimStart, 1).toISOString().split('T')[0]; dFim = new Date(ano, trimStart + 3, 0).toISOString().split('T')[0]; } 
+        else if (periodo === 'semestre') { const semStart = mes < 6 ? 0 : 6; dInicio = new Date(ano, semStart, 1).toISOString().split('T')[0]; dFim = new Date(ano, semStart + 6, 0).toISOString().split('T')[0]; } 
+        else if (periodo === 'ano') { dInicio = `${ano}-01-01`; dFim = `${ano}-12-31`; }
+        
+        let targetName = MA_Main.usersMap[MA_Main.sessao.id]; let viewingTime = false;
+        if(MA_Main.isMgr) { const val = document.getElementById('filtro-user').value; if(val === 'time') viewingTime = true; else if(val !== 'me') targetName = MA_Main.usersMap[val]; }
+        const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dInicio).lte('data_referencia', dFim).order('data_referencia');
+        const grouped = MA_Diario.normalizarDados(rawData || []); const agruparPorMes = (periodo === 'ano');
+        const processedTime = {}, processedMain = {};
+        Object.keys(grouped).sort().forEach(date => {
+            let label = agruparPorMes ? date.substring(0, 7) : date; const prods = Object.values(grouped[date]); const total = prods.reduce((a,b) => a + b.quantidade, 0); const count = prods.length; const avg = count ? Math.round(total / count) : 0;
+            if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; } processedTime[label].sum += avg; processedTime[label].cnt++;
+            let valUser = 0; if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; } processedMain[label] += valUser; 
+        });
+        const labels = Object.keys(processedTime).sort(); const dataMain = [], dataBench = []; let statsDias = 0, statsBest = 0, statsBatida = 0;
+        labels.forEach(k => {
+            let valTime = Math.round(processedTime[k].sum / processedTime[k].cnt); let valMainFinal = processedMain[k];
+            if (agruparPorMes) valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); 
+            const displayMain = viewingTime ? valTime : valMainFinal; dataMain.push(displayMain); dataBench.push(viewingTime ? 650 : valTime);
+            if(displayMain > 0) { statsDias++; if(displayMain > statsBest) statsBest = displayMain; if(displayMain >= 650) statsBatida++; }
+        });
+        document.getElementById('evo-dias').innerText = statsDias; document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%'; document.getElementById('evo-best').innerText = statsBest;
+        const ctx = document.getElementById('chartPrincipal').getContext('2d'); if(this.chart) this.chart.destroy();
+        const gradient = ctx.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)'); gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
+        this.chart = new Chart(ctx, { type: 'line', data: { labels: labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/')), datasets: [ { label: viewingTime ? 'Média Equipa' : targetName, data: dataMain, borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true }, { label: viewingTime ? 'Meta (650)' : 'Média Equipa', data: dataBench, borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, fill: false } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } } });
+    }
+};
+
 const MA_Comparativo = {
     atualizar: async function(dadosFinais, viewingTime, targetName, inicio, fim) {
-        const valL = document.getElementById('comp-media-user');
-        const valR = document.getElementById('comp-media-time');
-        const elMsg = document.getElementById('comp-mensagem');
+        const valL = document.getElementById('comp-media-user'); const valR = document.getElementById('comp-media-time'); const elMsg = document.getElementById('comp-mensagem');
         const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-        const norm = MA_Diario.normalizarDados(all||[]);
-        let sumMedias=0, cntDias=0;
-        Object.values(norm).forEach(diaObj => {
-            const arr = Object.values(diaObj); const tot = arr.reduce((a,b)=>a+b.quantidade,0); const headCount = arr.filter(p => p.quantidade > 0).length;
-            if(headCount > 0) { sumMedias += (tot/headCount); cntDias++; }
-        });
+        const norm = MA_Diario.normalizarDados(all||[]); let sumMedias=0, cntDias=0;
+        Object.values(norm).forEach(diaObj => { const arr = Object.values(diaObj); const tot = arr.reduce((a,b)=>a+b.quantidade,0); const headCount = arr.filter(p => p.quantidade > 0).length; if(headCount > 0) { sumMedias += (tot/headCount); cntDias++; } });
         const mediaGeral = cntDias ? Math.round(sumMedias/cntDias) : 0;
-        const diasTrabUser = dadosFinais.filter(d => d.quantidade > 0);
-        const totUser = diasTrabUser.reduce((a,b)=>a+b.quantidade,0);
-        const mediaUser = diasTrabUser.length ? Math.round(totUser/diasTrabUser.length) : 0;
+        const diasTrabUser = dadosFinais.filter(d => d.quantidade > 0); const totUser = diasTrabUser.reduce((a,b)=>a+b.quantidade,0); const mediaUser = diasTrabUser.length ? Math.round(totUser/diasTrabUser.length) : 0;
         valL.innerText = mediaUser; valR.innerText = viewingTime ? 650 : mediaGeral; 
         document.getElementById('label-media-selecionada').innerText = viewingTime ? "Média da Equipa" : `Média ${targetName}`;
         document.getElementById('label-media-benchmark').innerText = viewingTime ? "Meta Esperada" : "Média Geral da Equipa";
         const diff = mediaUser - (viewingTime ? 650 : mediaGeral);
-        if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`;
-        else if (diff < 0) elMsg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo do esperado</span>`;
-        else elMsg.innerHTML = `<span class="text-slate-500">Exatamente na média.</span>`;
+        if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`; else if (diff < 0) elMsg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo do esperado</span>`; else elMsg.innerHTML = `<span class="text-slate-500">Exatamente na média.</span>`;
     }
 };
 
 const MA_Feedback = {
     carregar: async function() {
-        const el = document.getElementById('lista-feedbacks');
-        const { data } = await _supabase.from('feedbacks').select('*').order('created_at', {ascending:true});
+        const el = document.getElementById('lista-feedbacks'); const { data } = await _supabase.from('feedbacks').select('*').order('created_at', {ascending:true});
         if(!data || !data.length) { el.innerHTML = '<div class="text-center text-slate-300 py-12">Nenhum feedback encontrado.</div>'; return; }
-        let html='';
-        data.forEach(m => {
-            const isPub = m.usuario_alvo_id === null; const isMe = m.usuario_alvo_id == MA_Main.sessao.id; const isMine = m.autor_nome === MA_Main.sessao.nome;
-            if(isPub || isMe || isMine) {
-                const align = isMine ? 'ml-auto bg-blue-600 text-white rounded-tr-none' : 'mr-auto bg-white text-slate-700 border border-slate-100 rounded-tl-none';
-                const subColor = isMine ? 'text-blue-200' : 'text-slate-400';
-                const badge = isPub ? '📢 TIME' : (isMine && m.usuario_alvo_id ? `🔒 ${MA_Main.usersMap[m.usuario_alvo_id]}` : '🔒 PRIVADO');
-                html += `<div class="max-w-[80%] p-4 rounded-2xl shadow-sm mb-4 ${align}"><div class="flex justify-between items-center mb-2 text-xs font-bold uppercase tracking-wide opacity-90"><span>${m.autor_nome} <span class="opacity-70 ml-1 scale-75 inline-block border border-current px-1 rounded">${badge}</span></span><span class="${subColor}">${new Date(m.created_at).toLocaleDateString()}</span></div><p class="leading-relaxed whitespace-pre-wrap font-medium">${m.mensagem}</p></div>`;
-            }
-        });
-        el.innerHTML = html; el.scrollTop = el.scrollHeight;
+        let html=''; data.forEach(m => { const isPub = m.usuario_alvo_id === null; const isMe = m.usuario_alvo_id == MA_Main.sessao.id; const isMine = m.autor_nome === MA_Main.sessao.nome; if(isPub || isMe || isMine) { const align = isMine ? 'ml-auto bg-blue-600 text-white rounded-tr-none' : 'mr-auto bg-white text-slate-700 border border-slate-100 rounded-tl-none'; const subColor = isMine ? 'text-blue-200' : 'text-slate-400'; const badge = isPub ? '📢 TIME' : (isMine && m.usuario_alvo_id ? `🔒 ${MA_Main.usersMap[m.usuario_alvo_id]}` : '🔒 PRIVADO'); html += `<div class="max-w-[80%] p-4 rounded-2xl shadow-sm mb-4 ${align}"><div class="flex justify-between items-center mb-2 text-xs font-bold uppercase tracking-wide opacity-90"><span>${m.autor_nome} <span class="opacity-70 ml-1 scale-75 inline-block border border-current px-1 rounded">${badge}</span></span><span class="${subColor}">${new Date(m.created_at).toLocaleDateString()}</span></div><p class="leading-relaxed whitespace-pre-wrap font-medium">${m.mensagem}</p></div>`; } }); el.innerHTML = html; el.scrollTop = el.scrollHeight;
     },
-    enviar: async function() {
-        const txt = document.getElementById('input-feedback').value; const dest = document.getElementById('feedback-destinatario').value;
-        if(!txt.trim()) return;
-        const aid = dest !== 'time' ? parseInt(dest) : null;
-        await _supabase.from('feedbacks').insert({ usuario_alvo_id: aid, autor_nome: MA_Main.sessao.nome, autor_funcao: MA_Main.sessao.funcao, mensagem: txt });
-        document.getElementById('input-feedback').value = ''; this.carregar();
-    }
+    enviar: async function() { const txt = document.getElementById('input-feedback').value; const dest = document.getElementById('feedback-destinatario').value; if(!txt.trim()) return; const aid = dest !== 'time' ? parseInt(dest) : null; await _supabase.from('feedbacks').insert({ usuario_alvo_id: aid, autor_nome: MA_Main.sessao.nome, autor_funcao: MA_Main.sessao.funcao, mensagem: txt }); document.getElementById('input-feedback').value = ''; this.carregar(); }
 };
