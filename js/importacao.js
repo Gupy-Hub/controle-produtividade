@@ -8,9 +8,7 @@ const Importacao = {
 
     lerArquivo: function(origem) {
         return new Promise((resolve, reject) => {
-            // Verifica se 'origem' é um input HTML (tem .files) ou se já é o arquivo direto
             const file = origem.files ? origem.files[0] : origem;
-            
             if (!file) return reject("Nenhum arquivo identificado.");
 
             const reader = new FileReader();
@@ -19,57 +17,44 @@ const Importacao = {
                     const data = new Uint8Array(e.target.result);
                     let workbook;
                     
-                    // Verifica assinatura do arquivo (Magic Bytes)
-                    // Arquivos XLSX reais (ZIP) começam com os bytes: 50 4B 03 04 (PK..)
+                    // Verifica se é um arquivo Excel/ZIP real (assinatura PK...)
                     const isZip = data.length > 4 && 
                                   data[0] === 0x50 && data[1] === 0x4B && 
                                   data[2] === 0x03 && data[3] === 0x04;
 
                     if (isZip) {
                         try {
-                            // TENTATIVA 1: Leitura Padrão (Array)
-                            // É a mais rápida, mas falha se o ZIP estiver com tamanho incorreto
-                            workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                        } catch (eZip) {
-                            console.warn("Erro na leitura padrão (Array). Tentando modo Binário...", eZip);
-                            
-                            try {
-                                // TENTATIVA 2: Workaround para erro "Bad uncompressed size"
-                                // Converte o buffer para string binária manualmente.
-                                // O parser 'binary' do SheetJS ignora erros de tamanho no ZIP.
-                                let binary = "";
-                                const len = data.byteLength;
-                                for (let i = 0; i < len; i++) {
-                                    binary += String.fromCharCode(data[i]);
-                                }
-                                
-                                workbook = XLSX.read(binary, { type: 'binary', cellDates: true });
-                            
-                            } catch (eBin) {
-                                console.warn("Erro na leitura Binária. Tentando como Texto/CSV...", eBin);
-                                // TENTATIVA 3: Fallback final (Texto/CSV)
-                                const decoder = new TextDecoder('iso-8859-1');
-                                const text = decoder.decode(data);
-                                workbook = XLSX.read(text, { type: 'string', raw: true });
+                            // ESTRATÉGIA MUDADA: Tenta o Modo Seguro (Binário) PRIMEIRO
+                            // Isso evita que o erro "Bad uncompressed size" sequer apareça na consola
+                            let binary = "";
+                            const len = data.byteLength;
+                            for (let i = 0; i < len; i++) {
+                                binary += String.fromCharCode(data[i]);
                             }
+                            workbook = XLSX.read(binary, { type: 'binary', cellDates: true });
+                        
+                        } catch (eBin) {
+                            // Se o modo binário falhar (muito raro), tenta o modo Array como fallback
+                            console.warn("Modo Seguro falhou, tentando padrão...", eBin);
+                            workbook = XLSX.read(data, { type: 'array', cellDates: true });
                         }
                     } else {
-                        // NÃO é um Excel real (provavelmente CSV ou Texto com extensão .xlsx)
+                        // Não é ZIP (provavelmente CSV renomeado ou texto simples)
                         const decoder = new TextDecoder('iso-8859-1');
                         const text = decoder.decode(data);
                         workbook = XLSX.read(text, { type: 'string', raw: true });
                     }
                     
-                    // Detecção de data no nome (DDMMYYYY ou YYYY-MM-DD)
+                    // Detecção de data e formatação final
                     let dataDetectada = null;
                     const regexData = /(\d{2})[-/.]?(\d{2})[-/.]?(\d{4})/;
                     const match = file.name.match(regexData);
                     
                     if (match) {
-                        // Assume formato Dia-Mes-Ano se vier do nome brasileiro (ex: 05012026)
-                        // Converte para YYYY-MM-DD para o banco
                         dataDetectada = `${match[3]}-${match[2]}-${match[1]}`; 
                     }
+
+                    if (!workbook || !workbook.SheetNames.length) throw new Error("Arquivo vazio ou ilegível.");
 
                     const firstSheet = workbook.SheetNames[0];
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "", raw: false });
