@@ -2,14 +2,20 @@ const Produtividade = {
     supabase: null,
 
     init: async function() {
-        if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+        // CORREÇÃO: Reutiliza a instância global criada pelo sistema.js
+        if (window._supabase) {
+            Produtividade.supabase = window._supabase;
+            console.log("Supabase reutilizado (Produtividade).");
+        } 
+        else if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+            // Fallback caso sistema.js não tenha carregado
             Produtividade.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
-            window._supabase = Produtividade.supabase; // Compatibilidade global
+            window._supabase = Produtividade.supabase;
         } else {
             return alert("Erro: Supabase não configurado.");
         }
 
-        // Sistema de Dados compartilhado (se houver)
+        // Sistema de Dados compartilhado
         if(window.Sistema && Sistema.Dados) await Sistema.Dados.inicializar();
 
         const dateInput = document.getElementById('global-date');
@@ -39,10 +45,12 @@ const Produtividade = {
         document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         
-        document.getElementById(`tab-${aba}`).classList.remove('hidden');
-        document.getElementById(`btn-${aba}`).classList.add('active');
+        const tabEl = document.getElementById(`tab-${aba}`);
+        if (tabEl) tabEl.classList.remove('hidden');
+        
+        const btnEl = document.getElementById(`btn-${aba}`);
+        if (btnEl) btnEl.classList.add('active');
 
-        // Controles Topo
         ['ctrl-geral', 'ctrl-consolidado', 'ctrl-performance'].forEach(id => {
             const el = document.getElementById(id);
             if(el) el.classList.add('hidden');
@@ -69,7 +77,6 @@ const Produtividade = {
         if (!input.files || input.files.length === 0) return;
 
         try {
-            // Usa o Importacao.js global
             const resultadoLeitura = await Importacao.lerArquivo(input);
             let dataFinal = resultadoLeitura.dataSugestionada;
             
@@ -85,11 +92,9 @@ const Produtividade = {
                 }
             }
 
-            // Atualiza data visualmente e no processamento
             document.getElementById('global-date').value = dataFinal;
             Produtividade.atualizarDataGlobal(dataFinal);
 
-            // Importacao.processar agora lida com a lógica de insert/update
             const resultado = await Importacao.processar(resultadoLeitura.dados, dataFinal);
 
             let msg = `✅ ${resultado.qtdImportada} registros importados.`;
@@ -98,7 +103,6 @@ const Produtividade = {
             }
             alert(msg);
             
-            // Recarrega
             Produtividade.Geral.carregarTela();
 
         } catch (erro) {

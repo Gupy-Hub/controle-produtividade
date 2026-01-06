@@ -1,36 +1,75 @@
-const Gestao = {
+const MinhaArea = {
     supabase: null,
-    dados: { usuarios: [], empresas: [] },
+    user: null,
+    dataAtual: new Date(),
 
     init: async function() {
-        if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
-            Gestao.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        const storedUser = localStorage.getItem('usuario_logado');
+        if (!storedUser) {
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        MinhaArea.user = JSON.parse(storedUser);
+        
+        const elName = document.getElementById('user-name-display');
+        const elRole = document.getElementById('user-role-label');
+        if(elName) elName.innerText = MinhaArea.user.nome.split(' ')[0];
+        if(elRole) elRole.innerText = `${MinhaArea.user.funcao} • ${MinhaArea.user.contrato || 'PJ'}`;
+
+        // CORREÇÃO: Reutiliza conexão
+        if (window._supabase) {
+            MinhaArea.supabase = window._supabase;
+        }
+        else if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+            MinhaArea.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+            window._supabase = MinhaArea.supabase;
         } else {
-            return alert("Erro: Supabase não configurado.");
+            console.error("Supabase não configurado.");
+            return;
         }
 
-        const today = new Date().toISOString().substring(0, 10);
-        ['meta-date', 'assert-date', 'form-empresa-data'].forEach(id => {
-            const el = document.getElementById(id); if(el) el.value = today;
-        });
-
-        await Gestao.Equipe.carregar();
-        await Gestao.Empresas.carregar();
-        await Gestao.Producao.carregar();
-        await Gestao.Assertividade.carregar();
-        Gestao.mudarAba('equipe');
+        MinhaArea.renderizaData();
+        MinhaArea.mudarAba('geral');
     },
 
     mudarAba: function(aba) {
-        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.getElementById(`tab-${aba}`).classList.remove('hidden');
-        document.getElementById(`btn-${aba}`).classList.add('active');
+        document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.ma-tab').forEach(btn => btn.classList.remove('active'));
+        
+        const view = document.getElementById(`ma-tab-${aba}`);
+        const btn = document.getElementById(`btn-ma-${aba}`);
+        
+        if(view) view.classList.remove('hidden');
+        if(btn) btn.classList.add('active');
+
+        if (aba === 'geral') MinhaArea.Geral.carregar();
+        else if (aba === 'evolucao') MinhaArea.Evolucao.carregar();
+        else if (aba === 'comparativo') MinhaArea.Comparativo.carregar();
+        else if (aba === 'assertividade') MinhaArea.Assertividade.carregar();
+        else if (aba === 'feedback') MinhaArea.Feedback.carregar();
     },
 
-    fecharModais: function() {
-        document.getElementById('modal-user').classList.add('hidden');
-        document.getElementById('modal-empresa').classList.add('hidden');
+    alterarMes: function(delta) {
+        MinhaArea.dataAtual.setMonth(MinhaArea.dataAtual.getMonth() + delta);
+        MinhaArea.renderizaData();
+        const abaAtiva = document.querySelector('.ma-tab.active').id.replace('btn-ma-', '');
+        MinhaArea.mudarAba(abaAtiva);
+    },
+
+    renderizaData: function() {
+        const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+        document.getElementById('display-mes').innerText = meses[MinhaArea.dataAtual.getMonth()];
+        document.getElementById('display-ano').innerText = MinhaArea.dataAtual.getFullYear();
+    },
+
+    getPeriodo: function() {
+        const y = MinhaArea.dataAtual.getFullYear();
+        const m = MinhaArea.dataAtual.getMonth();
+        const inicio = new Date(y, m, 1).toISOString().split('T')[0];
+        const fim = new Date(y, m + 1, 0).toISOString().split('T')[0];
+        return { inicio, fim };
     }
 };
-document.addEventListener('DOMContentLoaded', Gestao.init);
+
+document.addEventListener('DOMContentLoaded', MinhaArea.init);
