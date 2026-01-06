@@ -1,93 +1,74 @@
-// Aguarda o carregamento do DOM para adicionar os eventos
-document.addEventListener('DOMContentLoaded', () => {
-    
-    // Adicionar evento de "Enter" nos campos de input para facilitar o login
-    const inputs = document.querySelectorAll('input');
-    inputs.forEach(input => {
-        input.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') {
-                fazerLogin();
-            }
-        });
-    });
-
-    // Foco automático no campo de ID ao carregar
-    const idInput = document.getElementById('login-id');
-    if(idInput) idInput.focus();
-});
+// js/login.js
 
 async function fazerLogin() {
     const idInput = document.getElementById('login-id');
-    const passInput = document.getElementById('login-pass');
-    const btn = document.querySelector('button');
-    
-    // Resetar estilos de erro
-    idInput.classList.remove('border-red-500');
-    passInput.classList.remove('border-red-500');
+    const senhaInput = document.getElementById('login-senha');
+    const btn = document.getElementById('btn-login');
 
-    const idVal = idInput.value.trim();
-    const passVal = passInput.value.trim();
+    const id = idInput.value.trim();
+    const senha = senhaInput.value.trim();
 
-    // Validação básica
-    if (!idVal || !passVal) {
+    if (!id || !senha) {
         alert("Por favor, preencha o ID e a Senha.");
-        if(!idVal) idInput.classList.add('border-red-500');
-        if(!passVal) passInput.classList.add('border-red-500');
         return;
     }
 
-    // Feedback visual no botão
-    const originalText = btn.innerText;
-    btn.innerText = "Entrando...";
+    // Feedback visual de carregamento
+    const textoOriginal = btn.innerText;
+    btn.innerText = "Verificando...";
     btn.disabled = true;
     btn.classList.add('opacity-70', 'cursor-not-allowed');
 
     try {
-        // Verifica conexão
-        if (typeof _supabase === 'undefined' || !_supabase) {
-            throw new Error("Erro de conexão com o banco de dados. Verifique o config.js.");
+        // 1. Verifica se as credenciais globais existem
+        if (!window.SUPABASE_URL || !window.SUPABASE_KEY) {
+            throw new Error("Erro de configuração: Credenciais do Supabase não encontradas no config.js");
         }
 
-        // Consulta ao Supabase
+        // 2. Inicializa o cliente Supabase
+        // (Mesmo que já tenha sido inicializado em outros lugares, aqui garantimos localmente para o login)
+        const _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+
+        // 3. Consulta o banco de dados
         const { data, error } = await _supabase
             .from('usuarios')
             .select('*')
-            .eq('id', idVal)
-            .eq('senha', passVal)
-            .eq('ativo', true) // <-- SEGURANÇA: Só permite login se estiver ativo
-            .maybeSingle();
+            .eq('id', parseInt(id))
+            .single();
 
-        if (error) throw error;
+        if (error) {
+            // Se o erro for "PGRST116", significa que não encontrou linhas (ID incorreto)
+            if (error.code === 'PGRST116') {
+                throw new Error("Usuário não encontrado.");
+            }
+            throw error; // Outros erros de conexão
+        }
 
-        if (data) {
-            // SUCESSO
-            console.log("Login realizado com sucesso:", data.nome);
-            
-            // Salvar sessão no navegador
-            localStorage.setItem('usuario', JSON.stringify(data));
-            
-            // Redirecionamento baseado na função (Opcional: podes direcionar gestores para outra pág)
-            // Por padrão, todos vão para produtividade
+        // 4. Verifica a senha (Comparação simples conforme seu sistema atual)
+        if (data && String(data.senha) === senha) {
+            // Sucesso! Salva na sessão
+            const usuarioSessao = {
+                id: data.id,
+                nome: data.nome,
+                funcao: data.funcao, // 'Assistente', 'Gestora', etc.
+                contrato: data.contrato
+            };
+
+            localStorage.setItem('usuario', JSON.stringify(usuarioSessao));
+
+            // Redirecionamento baseado na função (Opcional, ou vai direto para produtividade)
+            // Por padrão, vamos para a tela principal
             window.location.href = 'produtividade.html'; 
         } else {
-            // FALHA (Usuário não encontrado, senha errada ou inativo)
-            throw new Error("ID ou Senha incorretos, ou conta inativa.");
+            throw new Error("Senha incorreta.");
         }
 
     } catch (err) {
         console.error("Erro no login:", err);
-        alert(err.message);
+        alert(err.message || "Erro ao conectar ao servidor.");
         
-        // Se for erro de credenciais, destaca os campos
-        if (err.message.includes("incorretos") || err.message.includes("inativa")) {
-            idInput.classList.add('border-red-500');
-            passInput.classList.add('border-red-500');
-            passInput.value = ''; // Limpa a senha
-            passInput.focus();
-        }
-    } finally {
         // Restaura o botão
-        btn.innerText = originalText;
+        btn.innerText = textoOriginal;
         btn.disabled = false;
         btn.classList.remove('opacity-70', 'cursor-not-allowed');
     }
