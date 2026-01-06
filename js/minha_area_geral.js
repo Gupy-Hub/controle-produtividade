@@ -1,6 +1,5 @@
 // js/minha_area_geral.js
 
-// ... (MA_Checkin mantido igual, não alterado nesta resposta para brevidade, mas deve estar aqui) ...
 const MA_Checkin = {
     obterUltimoDiaTrabalhado: async function() {
         const hoje = new Date().toISOString().split('T')[0];
@@ -54,7 +53,7 @@ const MA_Diario = {
             const data = item.data_referencia;
             if (!agrupado[data]) agrupado[data] = {};
             if (!agrupado[data][nome]) {
-                agrupado[data][nome] = { nome: nome, id_ref: item.id, quantidade: 0, meta_diaria: 650 }; // Meta base 650
+                agrupado[data][nome] = { nome: nome, id_ref: item.id, quantidade: 0, meta_diaria: 650 };
             }
             agrupado[data][nome].quantidade += item.quantidade;
         });
@@ -62,9 +61,10 @@ const MA_Diario = {
     },
 
     atualizarKPIs: function(dados) {
+        const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+
         const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-        // Dias trabalhados considera meta > 0 (exclui abonos totais do cálculo de média real se a pessoa não produziu)
-        const diasProdutivos = dados.filter(d => d.quantidade > 0).length; 
+        const diasProdutivos = dados.filter(d => d.quantidade > 0).length;
         
         let metaTotal = 0;
         if(dados.length > 0) dados.forEach(d => metaTotal += d.meta_ajustada); 
@@ -73,15 +73,13 @@ const MA_Diario = {
         const media = diasProdutivos > 0 ? Math.round(total / diasProdutivos) : 0;
         const atingimento = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
 
-        document.getElementById('kpi-total').innerText = total.toLocaleString();
-        document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
-        document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
-        document.getElementById('kpi-media-real').innerText = media.toLocaleString();
+        // Atualiza Global KPIs
+        setTxt('kpi-total', total.toLocaleString());
+        setTxt('kpi-meta-total', metaTotal.toLocaleString());
+        setTxt('kpi-porcentagem', atingimento + '%');
+        setTxt('kpi-media-real', media.toLocaleString());
         
-        // Atualiza 5 Cards
-        const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
-        
-        // Dias Úteis (Calculado com base no calendário do mês)
+        // Atualiza 5 Cards da Aba Diário
         const valData = document.getElementById('global-date').value;
         const [y, m, d] = valData.split('-').map(Number);
         let diasUteisTotal = 0;
@@ -95,6 +93,7 @@ const MA_Diario = {
         setTxt('diario-card-media', media.toLocaleString());
         setTxt('diario-kpi-pct', atingimento + '%');
 
+        // Barras e Ícones
         const bar = document.getElementById('bar-progress'); 
         const icon = document.getElementById('icon-status');
         const cardPct = document.getElementById('diario-card-pct');
@@ -102,12 +101,10 @@ const MA_Diario = {
 
         if(bar) bar.style.width = Math.min(atingimento, 100) + '%';
         
-        // Cores KPI Topo
         if(atingimento >= 100) { if(bar) bar.className="bg-emerald-500 h-full rounded-full"; if(icon) icon.className="fas fa-check-circle text-emerald-500 text-2xl"; }
         else if(atingimento >= 80) { if(bar) bar.className="bg-yellow-400 h-full rounded-full"; if(icon) icon.className="fas fa-exclamation-circle text-yellow-500 text-2xl"; }
         else { if(bar) bar.className="bg-red-500 h-full rounded-full"; if(icon) icon.className="fas fa-times-circle text-red-500 text-2xl"; }
 
-        // Cores Card 5
         if (cardPct) {
             cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
             if (atingimento < 100) {
@@ -128,30 +125,22 @@ const MA_Diario = {
         dados.sort((a,b) => b.data_referencia.localeCompare(a.data_referencia));
 
         dados.forEach(item => {
-            // 1. Meta (Fixa, não editável)
-            const meta = item.meta_ajustada; // Já vem calculado com fator
-            
-            // 2. Status (Porcentagem)
+            const meta = item.meta_ajustada;
             const pct = meta > 0 ? Math.round((item.quantidade / meta) * 100) : (item.quantidade > 0 ? 100 : 0);
+            
             let badgeClass = 'bg-rose-100 text-rose-800 border-rose-200';
             if (pct >= 100) badgeClass = 'bg-emerald-100 text-emerald-800 border-emerald-200';
             else if (pct >= 80) badgeClass = 'bg-amber-100 text-amber-800 border-amber-200';
             
-            const badge = meta === 0 && item.fator === 0 
+            const badge = (meta === 0 && item.fator === 0)
                 ? '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-xs font-bold border border-slate-200">Abonado</span>'
                 : `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pct}%</span>`;
 
-            // 3. Obs / Histórico (Média Time + Motivo Abono)
             let obsHtml = '';
             
-            // A. Calcula Média do Time do Dia
+            // A. Média do Time
             if (rawData && !viewingTime) {
-                // Filtra registros do dia, excluindo o próprio usuário
-                const doDia = rawData.filter(r => 
-                    r.data_referencia === item.data_referencia && 
-                    MA_Main.userRoles[r.usuario_id] === 'Assistente'
-                );
-                
+                const doDia = rawData.filter(r => r.data_referencia === item.data_referencia && MA_Main.userRoles[r.usuario_id] === 'Assistente');
                 const totalDia = doDia.reduce((acc, r) => acc + r.quantidade, 0);
                 const countDia = doDia.length;
                 const mediaDia = countDia > 0 ? Math.round(totalDia / countDia) : 0;
@@ -161,7 +150,7 @@ const MA_Diario = {
                 </div>`;
             }
 
-            // B. Verifica Abono/Fator
+            // B. Motivo Abono
             const fator = item.fator !== undefined ? item.fator : 1;
             if (fator < 1) {
                 const motivo = Sistema.Dados.obterMotivo(item.nome, item.data_referencia) || "Sem motivo registrado";
@@ -169,15 +158,12 @@ const MA_Diario = {
                 obsHtml += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100">
                     <i class="fas fa-info-circle mr-1"></i> <strong>${tipoAbono}:</strong> ${motivo}
                 </div>`;
-            } else if (viewingTime) {
-                obsHtml = item.observacao; // Mantém a obs genérica na visão de time
             }
 
             const dFmt = item.data_referencia.split('-').reverse().join('/');
             const displayMeta = meta === 0 ? '<span class="text-slate-300">-</span>' : meta;
 
-            html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
+            html += `<tr class="hover:bg-slate-50 border-b border-slate-50 transition">
                 <td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td>
                 <td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade.toLocaleString()}</td>
                 <td class="px-6 py-4 text-center font-bold text-slate-500">${displayMeta}</td>
@@ -188,7 +174,6 @@ const MA_Diario = {
         tbody.innerHTML = html;
     },
     
-    // Método antigo de update manual removido pois não é mais permitido
     atualizarMetaBD: async function() { alert("Ação não permitida."); } 
 };
 
