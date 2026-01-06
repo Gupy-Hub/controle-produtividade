@@ -4,7 +4,9 @@ const Sistema = {
             const input = document.getElementById(elementId);
             if (!input) return;
             const salva = localStorage.getItem(storageKey);
-            input.value = salva && salva.length === 10 ? salva : new Date().toISOString().split('T')[0];
+            // Garante que o valor seja uma data válida YYYY-MM-DD
+            input.value = (salva && salva.length === 10) ? salva : new Date().toISOString().split('T')[0];
+            
             input.addEventListener('change', function() {
                 if (this.value.length === 10) {
                     localStorage.setItem(storageKey, this.value);
@@ -18,23 +20,35 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {}, 
-        motivosCache: {}, // Cache de Motivos
+        motivosCache: {},
         basesHcCache: {}, 
         inicializado: false,
 
         inicializar: async function() {
-            const savedFator = localStorage.getItem('produtividade_fatores_v2');
-            this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
+            // Carrega Caches Locais
+            try {
+                const savedFator = localStorage.getItem('produtividade_fatores_v2');
+                this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
 
-            const savedMotivos = localStorage.getItem('produtividade_motivos_v1');
-            this.motivosCache = savedMotivos ? JSON.parse(savedMotivos) : {};
+                const savedMotivos = localStorage.getItem('produtividade_motivos_v1');
+                this.motivosCache = savedMotivos ? JSON.parse(savedMotivos) : {};
 
-            const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
-            this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
+                const savedBase = localStorage.getItem('produtividade_bases_hc_v2');
+                this.basesHcCache = savedBase ? JSON.parse(savedBase) : {};
+            } catch(e) {
+                console.warn("Erro ao ler localStorage, resetando caches.", e);
+                this.fatoresCache = {};
+                this.motivosCache = {};
+                this.basesHcCache = {};
+            }
 
             if (this.inicializado) return; 
 
-            if (!window._supabase) { console.error("Supabase Off"); return; }
+            // VERIFICAÇÃO DE SEGURANÇA: Se supabase não existe, para aqui.
+            if (!window._supabase) { 
+                console.warn("Sistema: Supabase não inicializado. Verifique js/config.js"); 
+                return; 
+            }
             
             try {
                 const { data: users, error: errUser } = await _supabase
@@ -55,17 +69,13 @@ const Sistema = {
                 this.metasCache = metas || [];
                 
                 this.inicializado = true;
-                console.log("Sistema: Dados carregados.");
+                console.log("Sistema: Dados carregados com sucesso.");
             } catch (e) {
                 console.error("Erro Sistema:", e);
             }
         },
 
-        contarAssistentesAtivos: function() {
-            if (!this.usuariosCache) return 0;
-            return Object.values(this.usuariosCache).filter(u => u.funcao === 'Assistente' && u.ativo).length;
-        },
-
+        // Métodos auxiliares
         definirFator: function(nome, dataRef, fator) {
             if (!this.fatoresCache[dataRef]) this.fatoresCache[dataRef] = {};
             this.fatoresCache[dataRef][nome] = parseFloat(fator);
@@ -96,6 +106,12 @@ const Sistema = {
             return "";
         },
 
+        obterBaseHC: function(dataRef) {
+            if(!dataRef) return 17;
+            const key = dataRef.substring(0, 7);
+            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
+        },
+        
         definirBaseHC: function(dataRef, quantidade) {
             if(!dataRef) return;
             const key = dataRef.substring(0, 7); 
@@ -107,25 +123,23 @@ const Sistema = {
             localStorage.setItem('produtividade_bases_hc_v2', JSON.stringify(this.basesHcCache));
         },
 
-        obterBaseHC: function(dataRef) {
-            if(!dataRef) return 17;
-            const key = dataRef.substring(0, 7);
-            return this.basesHcCache[key] !== undefined ? this.basesHcCache[key] : 17;
-        },
-
         calcularMediaBasePeriodo: function(dataInicio, dataFim) {
+            if(!dataInicio || !dataFim) return 17;
             let inicio = new Date(dataInicio + 'T12:00:00');
             const fim = new Date(dataFim + 'T12:00:00');
             let somaBases = 0;
             let mesesContados = 0;
-            inicio.setDate(1);
-            while (inicio <= fim) {
+            
+            // Segurança contra loop infinito
+            let safety = 0;
+            while (inicio <= fim && safety < 100) {
                 const ano = inicio.getFullYear();
                 const mes = String(inicio.getMonth() + 1).padStart(2, '0');
                 const dataRef = `${ano}-${mes}-01`;
                 somaBases += this.obterBaseHC(dataRef);
                 mesesContados++;
                 inicio.setMonth(inicio.getMonth() + 1);
+                safety++;
             }
             return mesesContados > 0 ? Math.round(somaBases / mesesContados) : 17;
         },

@@ -21,11 +21,19 @@ const Perf = {
 
         const tipoPeriodo = document.getElementById('perf-period-type').value; 
         const globalInput = document.getElementById('global-date');
-        const dataGlobal = globalInput ? globalInput.value : new Date().toISOString().split('T')[0];
         
-        let d = new Date(dataGlobal + 'T12:00:00');
-        let inicio, fim, label;
+        // CORREÇÃO CRÍTICA: Fallback para data válida
+        const dataGlobal = (globalInput && globalInput.value) ? globalInput.value : new Date().toISOString().split('T')[0];
+        
+        let d;
+        try {
+            d = new Date(dataGlobal + 'T12:00:00');
+            if (isNaN(d.getTime())) throw new Error("Data inválida");
+        } catch(e) {
+            d = new Date(); // Fallback final para hoje
+        }
 
+        let inicio, fim, label;
         const ano = d.getFullYear();
         const mes = d.getMonth();
 
@@ -58,6 +66,12 @@ const Perf = {
         const lbl = document.getElementById('perf-range-label');
         if(lbl) lbl.innerText = label;
 
+        // Se _supabase for null, evita crash
+        if (!window._supabase) {
+            if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-red-400">Erro: Supabase não conectado.</td></tr>';
+            return;
+        }
+
         const { data: rawData } = await _supabase
             .from('producao')
             .select('usuario_id, data_referencia, quantidade')
@@ -65,7 +79,7 @@ const Perf = {
             .lte('data_referencia', sFim);
 
         const stats = {};
-        const diasSet = new Set(); // Para contar dias únicos no período
+        const diasSet = new Set();
 
         if (rawData) {
             rawData.forEach(r => {
@@ -93,7 +107,6 @@ const Perf = {
                     const media = diasTrab > 0 ? Math.round(r.total / diasTrab) : 0;
                     const meta = diasTrab * 650;
                     const pct = meta > 0 ? Math.round((r.total / meta) * 100) : 0;
-                    
                     let badgeColor = pct >= 100 ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50';
 
                     tbody.innerHTML += `
@@ -114,45 +127,36 @@ const Perf = {
             }
         }
         
-        // --- ATUALIZAÇÃO DOS 5 CARDS DA PERFORMANCE ---
-        
-        // 1. CLT vs PJ (Mantido como "Equipe")
+        // --- Atualização dos Cards ---
         const clt = ranking.filter(r => r.contrato === 'CLT');
         const pj = ranking.filter(r => r.contrato === 'PJ');
-        const totalPessoas = clt.length + pj.length;
+        const totP = clt.length + pj.length;
         
-        if (totalPessoas > 0) {
-            document.getElementById('perf-pct-clt').innerText = Math.round((clt.length / totalPessoas) * 100) + '%';
-            document.getElementById('perf-pct-pj').innerText = Math.round((pj.length / totalPessoas) * 100) + '%';
+        if (totP > 0) {
+            document.getElementById('perf-pct-clt').innerText = Math.round((clt.length/totP)*100)+'%';
+            document.getElementById('perf-pct-pj').innerText = Math.round((pj.length/totP)*100)+'%';
         }
         document.getElementById('perf-count-clt').innerText = clt.length;
         document.getElementById('perf-count-pj').innerText = pj.length;
 
-        // 2. Dias Úteis (Considerados no período)
         const diasUteisPeriodo = diasSet.size;
         document.getElementById('perf-card-dias').innerText = diasUteisPeriodo;
 
-        // 3. Produção Total e Meta Total
-        const totalGeral = ranking.reduce((acc, curr) => acc + curr.total, 0);
+        const totalGeral = ranking.reduce((a,b)=>a+b.total,0);
         document.getElementById('perf-card-total').innerText = totalGeral.toLocaleString();
         
-        // Meta Total (Estimativa: Pessoas * Dias * 650)
-        // Usamos uma média simples de meta
         const metaGeral = ranking.reduce((acc, curr) => acc + (curr.dias.size * 650), 0);
         document.getElementById('perf-label-meta-total').innerText = metaGeral.toLocaleString();
 
-        // 4. Média Diária (Ponderada)
         const somaMedias = ranking.reduce((acc, curr) => acc + (curr.dias.size > 0 ? curr.total / curr.dias.size : 0), 0);
         const mediaDasMedias = ranking.length > 0 ? Math.round(somaMedias / ranking.length) : 0;
         document.getElementById('perf-card-media').innerText = mediaDasMedias.toLocaleString();
 
-        // 5. Atingimento Global
         const pctGeral = metaGeral > 0 ? Math.round((totalGeral / metaGeral) * 100) : 0;
         document.getElementById('perf-txt-pct').innerText = pctGeral + '%';
         
         const cardPct = document.getElementById('perf-card-pct');
         const iconPct = document.getElementById('perf-icon-pct');
-        
         if (cardPct) {
             cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
             if (pctGeral < 100) {

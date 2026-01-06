@@ -1,33 +1,50 @@
+// js/produtividade_main.js
+
 let _supabase = null;
 
 async function inicializar() {
-    if (window.supabase) {
-        _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        window._supabase = _supabase;
+    // 1. Verifica credenciais globais (Do config.js)
+    if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+        _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        window._supabase = _supabase; // Torna global para os outros arquivos
         console.log("Supabase Conectado.");
     } else {
-        console.error("Supabase SDK não encontrado.");
+        console.error("ERRO CRÍTICO: Supabase SDK ou Credenciais não encontrados. Verifique js/config.js");
+        alert("Erro de configuração: Credenciais do banco de dados não encontradas.");
         return;
     }
 
+    // 2. Inicializa o Sistema de Dados
+    // Aguarda o sistema carregar os caches antes de prosseguir
     await Sistema.Dados.inicializar();
     
+    // 3. Inicializa o Input de Data com valor padrão HOJE se estiver vazio
     Sistema.Datas.criarInputInteligente('global-date', 'produtividade_data_ref', () => {
-        atualizarDataGlobal(document.getElementById('global-date').value);
+        const val = document.getElementById('global-date').value;
+        if(val) atualizarDataGlobal(val);
     });
 
+    // Garante que existe uma data setada antes de carregar a primeira aba
+    const dateInput = document.getElementById('global-date');
+    if (!dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+
+    // 4. Carrega a aba inicial
     mudarAba('geral');
 }
 
 function atualizarDataGlobal(novaData) {
     if (!novaData) return;
+    
+    // Só recarrega a aba que está visível para economizar recursos
     if (!document.getElementById('tab-geral').classList.contains('hidden')) { Geral.carregarTela(); }
     if (!document.getElementById('tab-consolidado').classList.contains('hidden')) { Cons.carregar(); }
     if (!document.getElementById('tab-performance').classList.contains('hidden')) { Perf.carregarRanking(); }
     if (!document.getElementById('tab-matriz').classList.contains('hidden')) { Matriz.carregar(); }
 }
 
-function atualizarBaseGlobal(novoValor) {} // Deprecado
+function atualizarBaseGlobal(novoValor) {} 
 
 function importarExcel(input) {
     const file = input.files[0];
@@ -96,31 +113,23 @@ async function processarDadosImportados(dados) {
     atualizarDataGlobal(dataRef);
 }
 
-// --- FUNÇÃO CRÍTICA PARA OS SELETORES DO TOPO ---
 window.mudarAba = function(aba) {
-    // 1. Esconde Abas
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    
-    // 2. Reseta Botões
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
-    // 3. Mostra Aba Atual
     const tabEl = document.getElementById(`tab-${aba}`);
     if (tabEl) tabEl.classList.remove('hidden');
     
-    // 4. Ativa Botão Atual
     const btnEl = document.getElementById(`btn-${aba}`);
     if (btnEl) btnEl.classList.add('active');
 
-    // 5. GERENCIA SELETORES DO TOPO (CORREÇÃO)
-    // Esconde todos
+    // Gerencia Seletores do Topo
     const ctrls = ['ctrl-geral', 'ctrl-consolidado', 'ctrl-performance'];
     ctrls.forEach(id => {
         const el = document.getElementById(id);
         if(el) el.classList.add('hidden');
     });
 
-    // Mostra o específico
     if (aba === 'geral') {
         const c = document.getElementById('ctrl-geral');
         if(c) c.classList.remove('hidden');
