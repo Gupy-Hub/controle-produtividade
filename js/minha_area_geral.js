@@ -1,26 +1,22 @@
 // js/minha_area_geral.js
 
 const MA_Checkin = {
-    // Lista de Feriados (Formato YYYY-MM-DD) - Adicione os feriados nacionais/locais aqui
-    feriados: [
-        "2025-01-01", "2025-04-21", "2025-05-01", "2025-09-07", "2025-10-12", "2025-11-02", "2025-11-15", "2025-12-25",
-        "2026-01-01" // Exemplo futuro
-    ],
-
-    // Função para encontrar o dia útil anterior baseado em HOJE
-    calcularDiaUtilAnterior: function() {
-        let data = new Date(); // Começa com Hoje
+    
+    // Nova lógica: Busca no banco o último dia que teve produção lançada (excluindo hoje)
+    obterUltimoDiaTrabalhado: async function() {
+        const hoje = new Date().toISOString().split('T')[0];
         
-        // Loop para voltar dias até achar um dia útil
-        do {
-            data.setDate(data.getDate() - 1); // Volta 1 dia
-            var diaSemana = data.getDay(); // 0 = Domingo, 6 = Sábado
-            var dataISO = data.toISOString().split('T')[0]; // YYYY-MM-DD
-            
-            // Se for Sábado (6), Domingo (0) ou Feriado, continua voltando
-        } while (diaSemana === 0 || diaSemana === 6 || this.feriados.includes(dataISO));
+        const { data, error } = await _supabase
+            .from('producao')
+            .select('data_referencia')
+            .eq('usuario_id', MA_Main.sessao.id)
+            .lt('data_referencia', hoje) // Apenas dias passados
+            .order('data_referencia', { ascending: false }) // Do mais recente para o mais antigo
+            .limit(1)
+            .single();
 
-        return data.toISOString().split('T')[0];
+        if (error || !data) return null;
+        return data.data_referencia;
     },
 
     verificar: async function(dataVisualizadaNoPainel) {
@@ -29,8 +25,8 @@ const MA_Checkin = {
         container.innerHTML = '';
 
         if (MA_Main.isMgr) {
-            // --- VISÃO GESTORA (Continua olhando para a data do filtro) ---
-            // A gestora quer ver quem fez check-in na data que ela está analisando no painel
+            // --- VISÃO GESTORA (Mantida baseada no Filtro) ---
+            // A gestora vê quem fez check-in na data que ela selecionou no painel
             const dataRef = dataVisualizadaNoPainel;
             
             const { data: checkins } = await _supabase.from('checkins').select('usuario_id').eq('data_referencia', dataRef);
@@ -53,30 +49,37 @@ const MA_Checkin = {
             }
 
         } else {
-            // --- VISÃO ASSISTENTE (Regra do Dia Útil Anterior) ---
-            // Ignora o filtro do painel. Calcula o dia que DEVE ser validado.
-            const dataAlvo = this.calcularDiaUtilAnterior();
+            // --- VISÃO ASSISTENTE (Nova Lógica Baseada em Produção Real) ---
+            
+            // 1. Descobre qual foi o último dia trabalhado
+            const dataAlvo = await this.obterUltimoDiaTrabalhado();
+
+            if (!dataAlvo) {
+                // Se não tem produção anterior, não mostra botão ou mostra aviso discreto
+                return; 
+            }
+
             const dataAlvoFmt = dataAlvo.split('-').reverse().join('/');
 
-            // Verifica se JÁ FEZ o check-in dessa data alvo
-            const { data } = await _supabase.from('checkins')
+            // 2. Verifica se JÁ FEZ o check-in dessa data específica
+            const { data: checkData } = await _supabase.from('checkins')
                 .select('*')
                 .eq('usuario_id', MA_Main.sessao.id)
                 .eq('data_referencia', dataAlvo)
                 .single();
 
-            const jaFez = !!data;
+            const jaFez = !!checkData;
             const btn = document.createElement('button');
             
             if (jaFez) {
-                // Se já fez, mostra verde estático
+                // Já validou: Botão Verde Estático
                 btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold cursor-default shadow-sm opacity-80";
-                btn.innerHTML = `<i class="fas fa-check-double"></i> Check-in ${dataAlvoFmt.slice(0,5)} OK`;
+                btn.innerHTML = `<i class="fas fa-check-double"></i> Dia ${dataAlvoFmt.slice(0,5)} Validado`;
             } else {
-                // Se não fez, mostra botão de ação pulsante (Obrigatório)
+                // Pendente: Botão Vermelho Pulsante
                 btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition shadow-sm animate-pulse";
-                btn.innerHTML = `<i class="fas fa-exclamation-circle"></i> Validar dia ${dataAlvoFmt}`;
-                btn.title = "Clique para confirmar sua produção do dia útil anterior";
+                btn.innerHTML = `<i class="fas fa-exclamation-circle"></i> Validar ${dataAlvoFmt}`;
+                btn.title = "Clique para confirmar que os dados deste dia estão corretos";
                 btn.onclick = () => this.realizarCheckin(dataAlvo, dataAlvoFmt);
             }
             container.appendChild(btn);
@@ -84,7 +87,16 @@ const MA_Checkin = {
     },
 
     realizarCheckin: async function(dataRef, dataFmt) {
-        if (!confirm(`CONFIRMAÇÃO DE CHECK-IN\n\nVocê confirma que os dados de produção referentes ao dia ${dataFmt} (Dia Útil Anterior) estão corretos e lançados no sistema?`)) return;
+        // Busca o valor da produção desse dia para mostrar na confirmação (UX melhor)
+        const { data: prod } = await _supabase.from('producao')
+            .select('quantidade')
+            .eq('usuario_id', MA_Main.sessao.id)
+            .eq('data_referencia', dataRef)
+            .single();
+            
+        const qtd = prod ? prod.quantidade : 0;
+
+        if (!confirm(`CONFIRMAÇÃO DE DADOS\n\nData: ${dataFmt}\nSua Produção: ${qtd} documentos\n\nVocê confirma que estes dados estão corretos?`)) return;
 
         const { error } = await _supabase.from('checkins').insert({
             usuario_id: MA_Main.sessao.id,
@@ -92,16 +104,15 @@ const MA_Checkin = {
         });
 
         if (error) {
-            // Código 23505 = Unique violation (já fez)
             if(error.code === '23505') {
                 alert("Check-in já realizado para esta data!");
-                this.verificar(null); // Atualiza botão
+                this.verificar(null);
             } else {
                 alert('Erro ao realizar check-in: ' + error.message);
             }
         } else {
-            alert("Check-in realizado com sucesso!");
-            this.verificar(null); // Atualiza botão para verde
+            alert("Dados validados com sucesso!");
+            this.verificar(null); // Atualiza o botão
         }
     },
 
@@ -127,6 +138,8 @@ const MA_Checkin = {
         modal.classList.add('flex');
     }
 };
+
+// --- MANTENDO OS OUTROS OBJETOS INTACTOS PARA NÃO QUEBRAR O RESTO ---
 
 const MA_Diario = {
     normalizarDados: function(rawData) {
