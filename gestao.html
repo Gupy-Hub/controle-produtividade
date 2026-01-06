@@ -234,6 +234,13 @@
                     <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função</label><select id="form-user-funcao" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none"><option value="Assistente">Assistente</option><option value="Gestora">Gestora</option><option value="Auditora">Auditora</option></select></div>
                     <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label><select id="form-user-contrato" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none"><option value="PJ">PJ</option><option value="CLT">CLT</option></select></div>
                 </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Situação</label>
+                    <select id="form-user-ativo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none">
+                        <option value="true" class="text-green-600">🟢 ATIVO</option>
+                        <option value="false" class="text-red-600">🔴 INATIVO / FINALIZADO</option>
+                    </select>
+                </div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
                 <button onclick="Gestao.Equipe.salvar()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar</button>
