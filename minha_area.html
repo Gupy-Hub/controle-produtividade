@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Minha Área - Performance Pro</title>
+    <link rel="shortcut icon" href="#">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -28,6 +29,7 @@
 <body class="bg-slate-50">
 
     <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -46,22 +48,22 @@
                            onclick="this.select()" 
                            placeholder="DD/MM/AAAA" maxlength="10" 
                            data-sync="true"
-                           oninput="mascaraDataGlobal(this)" 
-                           onblur="aplicarDataManual()" 
-                           onkeypress="verificarEnter(event)" 
+                           oninput="MA_Main.mascaraData(this)" 
+                           onblur="MA_Main.aplicarDataManual()" 
+                           onkeypress="MA_Main.verificarEnter(event)" 
                            class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 block w-36 py-2.5 px-3 font-bold outline-none tracking-wide transition-all hover:border-blue-300 text-center">
                 </div>
 
                 <div id="container-filtro-user" class="relative hidden group border-l border-slate-100 pl-3">
                     <div class="absolute -top-2.5 left-4 bg-white px-1 text-[10px] font-bold text-purple-500 uppercase tracking-wider">Visão Gestora</div>
-                    <select id="filtro-user" onchange="atualizarDashboard()" class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-purple-100 focus:border-purple-500 block w-48 py-2.5 pl-3 pr-8 font-bold outline-none cursor-pointer h-[42px] transition-all hover:border-purple-300">
+                    <select id="filtro-user" class="bg-transparent border border-slate-200 text-slate-700 text-sm rounded-xl focus:ring-2 focus:ring-purple-100 focus:border-purple-500 block w-48 py-2.5 pl-3 pr-8 font-bold outline-none cursor-pointer h-[42px] transition-all hover:border-purple-300">
                         <option value="me">👤 Minha Visão (Admin)</option>
                         <option value="time">👥 Time (Média Geral)</option>
                         <option disabled>──────────</option>
                     </select>
                 </div>
                 
-                <button onclick="aplicarDataManual()" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-blue-600 transition shadow-md h-[42px] w-[42px] flex items-center justify-center group" title="Atualizar Dados">
+                <button onclick="MA_Main.aplicarDataManual()" class="bg-slate-900 text-white p-2.5 rounded-xl hover:bg-blue-600 transition shadow-md h-[42px] w-[42px] flex items-center justify-center group" title="Atualizar Dados">
                     <i class="fas fa-sync-alt group-hover:rotate-180 transition-transform duration-500"></i>
                 </button>
             </div>
@@ -116,10 +118,10 @@
             </div>
 
             <div class="flex gap-2 bg-slate-200/50 p-1 rounded-2xl w-fit mx-auto sm:mx-0 overflow-x-auto max-w-full">
-                <button onclick="mudarAba('diario')" id="btn-diario" class="btn-tab active whitespace-nowrap"><i class="fas fa-calendar-alt mr-2"></i>Diário</button>
-                <button onclick="mudarAba('evolucao')" id="btn-evolucao" class="btn-tab whitespace-nowrap"><i class="fas fa-chart-line mr-2"></i>Evolução</button>
-                <button onclick="mudarAba('comparativo')" id="btn-comparativo" class="btn-tab whitespace-nowrap"><i class="fas fa-trophy mr-2"></i>Comparativo</button>
-                <button onclick="mudarAba('feedback')" id="btn-feedback" class="btn-tab whitespace-nowrap"><i class="fas fa-comments mr-2"></i>Feedback</button>
+                <button onclick="MA_Main.mudarAba('diario')" id="btn-diario" class="btn-tab active whitespace-nowrap"><i class="fas fa-calendar-alt mr-2"></i>Diário</button>
+                <button onclick="MA_Main.mudarAba('evolucao')" id="btn-evolucao" class="btn-tab whitespace-nowrap"><i class="fas fa-chart-line mr-2"></i>Evolução</button>
+                <button onclick="MA_Main.mudarAba('comparativo')" id="btn-comparativo" class="btn-tab whitespace-nowrap"><i class="fas fa-trophy mr-2"></i>Comparativo</button>
+                <button onclick="MA_Main.mudarAba('feedback')" id="btn-feedback" class="btn-tab whitespace-nowrap"><i class="fas fa-comments mr-2"></i>Feedback</button>
             </div>
 
             <div class="bg-white rounded-3xl shadow-sm border border-slate-200 min-h-[500px] relative overflow-hidden">
@@ -128,11 +130,7 @@
                     <div class="flex justify-between items-center mb-6">
                         <h3 class="font-bold text-slate-800 text-lg">Histórico (Mês Selecionado)</h3>
                         <div id="aviso-edicao" class="hidden flex items-center gap-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-100 px-3 py-1.5 rounded-full">
-                            <span class="relative flex h-2 w-2">
-                              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-                              <span class="relative inline-flex rounded-full h-2 w-2 bg-orange-500"></span>
-                            </span>
-                            Modo de Edição
+                            <i class="fas fa-pen"></i> Modo de Edição
                         </div>
                     </div>
                     <div class="overflow-x-auto rounded-xl border border-slate-100">
@@ -160,10 +158,10 @@
                             <p class="text-sm text-slate-500">Referente ao ano/mês da data escolhida.</p>
                         </div>
                         <div class="flex bg-slate-100 p-1 rounded-xl flex-wrap justify-center">
-                            <button onclick="renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
-                            <button onclick="renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
-                            <button onclick="renderizarGraficos('semestre')" id="chart-btn-semestre" class="btn-chart">Semestre</button>
-                            <button onclick="renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
+                            <button onclick="MA_Evolucao.renderizarGraficos('mes')" id="chart-btn-mes" class="btn-chart active">Mês</button>
+                            <button onclick="MA_Evolucao.renderizarGraficos('trimestre')" id="chart-btn-trimestre" class="btn-chart">Trimestre</button>
+                            <button onclick="MA_Evolucao.renderizarGraficos('semestre')" id="chart-btn-semestre" class="btn-chart">Semestre</button>
+                            <button onclick="MA_Evolucao.renderizarGraficos('ano')" id="chart-btn-ano" class="btn-chart">Ano</button>
                         </div>
                     </div>
                     <div class="relative h-[320px] w-full bg-gradient-to-b from-white to-slate-50/50 rounded-2xl border border-slate-100 p-4 mb-8">
@@ -223,7 +221,7 @@
                         </div>
                         <div class="flex gap-3">
                             <input type="text" id="input-feedback" placeholder="Escreva uma mensagem de feedback..." class="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition font-medium text-slate-700 placeholder-slate-400">
-                            <button onclick="enviarFeedback()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 font-bold transition shadow-lg shadow-blue-200 flex items-center gap-2">
+                            <button onclick="MA_Feedback.enviar()" class="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 font-bold transition shadow-lg shadow-blue-200 flex items-center gap-2">
                                 <span>Enviar</span> <i class="fas fa-paper-plane"></i>
                             </button>
                         </div>
@@ -235,5 +233,6 @@
     </div>
     
     <script src="js/minha_area_geral.js"></script>
+    <script src="js/minha_area_main.js"></script>
 </body>
 </html>
