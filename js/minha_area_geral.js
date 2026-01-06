@@ -1,145 +1,47 @@
 // js/minha_area_geral.js
 
 const MA_Checkin = {
-    
-    // Nova lógica: Busca no banco o último dia que teve produção lançada (excluindo hoje)
     obterUltimoDiaTrabalhado: async function() {
         const hoje = new Date().toISOString().split('T')[0];
-        
-        const { data, error } = await _supabase
-            .from('producao')
-            .select('data_referencia')
-            .eq('usuario_id', MA_Main.sessao.id)
-            .lt('data_referencia', hoje) // Apenas dias passados
-            .order('data_referencia', { ascending: false }) // Do mais recente para o mais antigo
-            .limit(1)
-            .single();
-
+        const { data, error } = await _supabase.from('producao').select('data_referencia').eq('usuario_id', MA_Main.sessao.id).lt('data_referencia', hoje).order('data_referencia', { ascending: false }).limit(1).single();
         if (error || !data) return null;
         return data.data_referencia;
     },
-
     verificar: async function(dataVisualizadaNoPainel) {
-        const container = document.getElementById('container-checkin');
-        if (!container) return;
-        container.innerHTML = '';
-
+        const container = document.getElementById('container-checkin'); if (!container) return; container.innerHTML = '';
         if (MA_Main.isMgr) {
-            // --- VISÃO GESTORA (Mantida baseada no Filtro) ---
-            // A gestora vê quem fez check-in na data que ela selecionou no painel
             const dataRef = dataVisualizadaNoPainel;
-            
             const { data: checkins } = await _supabase.from('checkins').select('usuario_id').eq('data_referencia', dataRef);
             const { data: users } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').eq('ativo', true);
-            
             if (users && checkins) {
-                const total = users.length;
-                const feitos = checkins.length;
-                const checkedIds = checkins.map(c => c.usuario_id);
-                const pendentes = users.filter(u => !checkedIds.includes(u.id));
-
+                const total = users.length; const feitos = checkins.length; const checkedIds = checkins.map(c => c.usuario_id); const pendentes = users.filter(u => !checkedIds.includes(u.id));
                 const colorClass = feitos === total ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
-                
-                const btn = document.createElement('button');
-                btn.className = `flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition shadow-sm ${colorClass}`;
-                btn.innerHTML = `<i class="fas fa-tasks"></i> Check-in (${dataRef.split('-').reverse().slice(0,2).join('/')}): ${feitos}/${total}`;
-                btn.onclick = () => this.abrirModalPendencias(pendentes);
-                
-                container.appendChild(btn);
+                const btn = document.createElement('button'); btn.className = `flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition shadow-sm ${colorClass}`; btn.innerHTML = `<i class="fas fa-tasks"></i> Check-in (${dataRef.split('-').reverse().slice(0,2).join('/')}): ${feitos}/${total}`; btn.onclick = () => this.abrirModalPendencias(pendentes); container.appendChild(btn);
             }
-
         } else {
-            // --- VISÃO ASSISTENTE (Nova Lógica Baseada em Produção Real) ---
-            
-            // 1. Descobre qual foi o último dia trabalhado
-            const dataAlvo = await this.obterUltimoDiaTrabalhado();
-
-            if (!dataAlvo) {
-                // Se não tem produção anterior, não mostra botão ou mostra aviso discreto
-                return; 
-            }
-
+            const dataAlvo = await this.obterUltimoDiaTrabalhado(); if (!dataAlvo) return;
             const dataAlvoFmt = dataAlvo.split('-').reverse().join('/');
-
-            // 2. Verifica se JÁ FEZ o check-in dessa data específica
-            const { data: checkData } = await _supabase.from('checkins')
-                .select('*')
-                .eq('usuario_id', MA_Main.sessao.id)
-                .eq('data_referencia', dataAlvo)
-                .single();
-
-            const jaFez = !!checkData;
-            const btn = document.createElement('button');
-            
-            if (jaFez) {
-                // Já validou: Botão Verde Estático
-                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold cursor-default shadow-sm opacity-80";
-                btn.innerHTML = `<i class="fas fa-check-double"></i> Dia ${dataAlvoFmt.slice(0,5)} Validado`;
-            } else {
-                // Pendente: Botão Vermelho Pulsante
-                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition shadow-sm animate-pulse";
-                btn.innerHTML = `<i class="fas fa-exclamation-circle"></i> Validar ${dataAlvoFmt}`;
-                btn.title = "Clique para confirmar que os dados deste dia estão corretos";
-                btn.onclick = () => this.realizarCheckin(dataAlvo, dataAlvoFmt);
-            }
+            const { data: checkData } = await _supabase.from('checkins').select('*').eq('usuario_id', MA_Main.sessao.id).eq('data_referencia', dataAlvo).single();
+            const jaFez = !!checkData; const btn = document.createElement('button');
+            if (jaFez) { btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold cursor-default shadow-sm opacity-80"; btn.innerHTML = `<i class="fas fa-check-double"></i> Dia ${dataAlvoFmt.slice(0,5)} Validado`; } 
+            else { btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition shadow-sm animate-pulse"; btn.innerHTML = `<i class="fas fa-exclamation-circle"></i> Validar ${dataAlvoFmt}`; btn.title = "Clique para confirmar que os dados deste dia estão corretos"; btn.onclick = () => this.realizarCheckin(dataAlvo, dataAlvoFmt); }
             container.appendChild(btn);
         }
     },
-
     realizarCheckin: async function(dataRef, dataFmt) {
-        // Busca o valor da produção desse dia para mostrar na confirmação (UX melhor)
-        const { data: prod } = await _supabase.from('producao')
-            .select('quantidade')
-            .eq('usuario_id', MA_Main.sessao.id)
-            .eq('data_referencia', dataRef)
-            .single();
-            
+        const { data: prod } = await _supabase.from('producao').select('quantidade').eq('usuario_id', MA_Main.sessao.id).eq('data_referencia', dataRef).single();
         const qtd = prod ? prod.quantidade : 0;
-
         if (!confirm(`CONFIRMAÇÃO DE DADOS\n\nData: ${dataFmt}\nSua Produção: ${qtd} documentos\n\nVocê confirma que estes dados estão corretos?`)) return;
-
-        const { error } = await _supabase.from('checkins').insert({
-            usuario_id: MA_Main.sessao.id,
-            data_referencia: dataRef
-        });
-
-        if (error) {
-            if(error.code === '23505') {
-                alert("Check-in já realizado para esta data!");
-                this.verificar(null);
-            } else {
-                alert('Erro ao realizar check-in: ' + error.message);
-            }
-        } else {
-            alert("Dados validados com sucesso!");
-            this.verificar(null); // Atualiza o botão
-        }
+        const { error } = await _supabase.from('checkins').insert({ usuario_id: MA_Main.sessao.id, data_referencia: dataRef });
+        if (error) { if(error.code === '23505') { alert("Check-in já realizado para esta data!"); this.verificar(null); } else { alert('Erro ao realizar check-in: ' + error.message); } } else { alert("Dados validados com sucesso!"); this.verificar(null); }
     },
-
     abrirModalPendencias: function(listaPendentes) {
-        const modal = document.getElementById('modal-pendencias');
-        const listaBody = document.getElementById('lista-pendentes-body');
-        
-        if (listaPendentes.length === 0) {
-            listaBody.innerHTML = '<div class="text-center py-8 text-emerald-500 font-bold"><i class="fas fa-check-circle text-4xl mb-2 block"></i>Todos realizaram o check-in!</div>';
-        } else {
-            let html = '<ul class="space-y-2">';
-            listaPendentes.forEach(u => {
-                html += `<li class="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100">
-                    <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-200">${u.nome.charAt(0)}</div>
-                    <span class="text-sm font-bold text-slate-700">${u.nome}</span>
-                </li>`;
-            });
-            html += '</ul>';
-            listaBody.innerHTML = html;
-        }
-        
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
+        const modal = document.getElementById('modal-pendencias'); const listaBody = document.getElementById('lista-pendentes-body');
+        if (listaPendentes.length === 0) { listaBody.innerHTML = '<div class="text-center py-8 text-emerald-500 font-bold"><i class="fas fa-check-circle text-4xl mb-2 block"></i>Todos realizaram o check-in!</div>'; } 
+        else { let html = '<ul class="space-y-2">'; listaPendentes.forEach(u => { html += `<li class="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100"><div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-200">${u.nome.charAt(0)}</div><span class="text-sm font-bold text-slate-700">${u.nome}</span></li>`; }); html += '</ul>'; listaBody.innerHTML = html; }
+        modal.classList.remove('hidden'); modal.classList.add('flex');
     }
 };
-
-// --- MANTENDO OS OUTROS OBJETOS INTACTOS PARA NÃO QUEBRAR O RESTO ---
 
 const MA_Diario = {
     normalizarDados: function(rawData) {
@@ -158,22 +60,56 @@ const MA_Diario = {
         });
         return agrupado;
     },
-    atualizarKPIs: function(dados) {
+    atualizarKPIs: function(dados, viewingTime) {
+        const valData = document.getElementById('global-date').value;
+        const [y, m, d] = valData.split('-').map(Number);
+        
+        // 1. Dias Trabalhados (Com produção > 0)
+        const diasTrabalhados = dados.filter(d => d.quantidade > 0).length;
+        
+        // 2. Dias Úteis (Calendário do mês selecionado)
+        let diasUteisTotal = 0;
+        const lastDay = new Date(y, m, 0).getDate();
+        for(let i=1; i<=lastDay; i++) {
+            const dt = new Date(y, m-1, i);
+            if(dt.getDay() !== 0 && dt.getDay() !== 6) diasUteisTotal++;
+        }
+
+        // 3. Produção Total
         const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-        const diasTrabalhados = dados.filter(d => d.quantidade > 0).length || 1; 
-        let metaTotal = 0;
-        if(dados.length > 0) dados.forEach(d => metaTotal += (d.meta_ajustada || d.meta_diaria || 650)); else metaTotal = 650 * 22;
-        const media = Math.round(total / diasTrabalhados);
+        
+        // 4. Meta Total (Dias Úteis * 650)
+        const metaTotal = diasUteisTotal * 650;
+
+        // 5. Média Diária (Real)
+        const media = diasTrabalhados > 0 ? Math.round(total / diasTrabalhados) : 0;
+
+        // 6. Atingimento
         const atingimento = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
-        document.getElementById('kpi-total').innerText = total.toLocaleString();
-        document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
-        document.getElementById('kpi-porcentagem').innerText = atingimento + '%';
-        document.getElementById('kpi-media-real').innerText = media.toLocaleString();
-        document.getElementById('bar-progress').style.width = Math.min(atingimento, 100) + '%';
-        const bar = document.getElementById('bar-progress'); const icon = document.getElementById('icon-status');
-        if(atingimento >= 100) { bar.className="bg-blue-600 h-full rounded-full"; icon.className="fas fa-check-circle text-emerald-500 text-2xl"; }
-        else if(atingimento >= 80) { bar.className="bg-yellow-500 h-full rounded-full"; icon.className="fas fa-exclamation-circle text-yellow-500 text-2xl"; }
-        else { bar.className="bg-red-500 h-full rounded-full"; icon.className="fas fa-times-circle text-red-500 text-2xl"; }
+
+        // Atualiza Cards
+        const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+        
+        setTxt('diario-card-dias-trab', diasTrabalhados);
+        setTxt('diario-card-dias-uteis', diasUteisTotal);
+        setTxt('diario-card-total', total.toLocaleString());
+        setTxt('diario-card-meta-total', metaTotal.toLocaleString());
+        setTxt('diario-card-media', media.toLocaleString());
+        setTxt('diario-kpi-pct', atingimento + '%');
+
+        // Cor do Card Atingimento
+        const cardPct = document.getElementById('diario-card-pct');
+        const iconPct = document.getElementById('diario-icon-pct');
+        if (cardPct) {
+            cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
+            if (atingimento < 100) {
+                cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-times-circle text-xl text-white/50"></i>';
+            } else {
+                cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
+                if(iconPct) iconPct.innerHTML = '<i class="fas fa-check-circle text-xl text-white/50"></i>';
+            }
+        }
     },
     atualizarTabela: function(dados, viewingTime) {
         const tbody = document.getElementById('tabela-diario');

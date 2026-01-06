@@ -51,8 +51,7 @@
                         </div>
                     </div>
 
-                    <div id="container-checkin" class="flex items-center gap-2 pl-2 border-l border-slate-200">
-                        </div>
+                    <div id="container-checkin" class="flex items-center gap-2 pl-2 border-l border-slate-200"></div>
 
                     <div id="container-filtro-user" class="hidden flex items-center gap-2 pl-2 border-l border-slate-200">
                         <div class="relative">
@@ -95,6 +94,7 @@
     </div>
 
     <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
         <div id="aviso-gestora-view" class="hidden mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-8 rounded-3xl text-center shadow-sm animate-fade-in">
             <div class="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm text-blue-500 text-2xl"><i class="fas fa-user-shield"></i></div>
             <h3 class="font-black text-xl text-slate-800 mb-1">Modo Administrativo</h3>
@@ -103,53 +103,81 @@
 
         <div id="conteudo-principal" class="space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group flex flex-col justify-between hover:-translate-y-1 transition duration-300">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção (Mês)</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2>
-                            <span class="text-sm font-bold text-slate-400">docs</span>
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-2 font-bold">Meta: <span id="kpi-meta-total" class="text-slate-700">--</span></p>
-                </div>
-
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group flex flex-col justify-between hover:-translate-y-1 transition duration-300">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Atingimento</p>
-                        <div class="flex items-center gap-3">
-                            <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2>
-                            <i id="icon-status" class="fas fa-check-circle text-emerald-500 text-2xl"></i>
-                        </div>
-                    </div>
-                    <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
-                        <div id="bar-progress" class="bg-blue-600 h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group flex flex-col justify-between hover:-translate-y-1 transition duration-300">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Diária</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2>
-                            <span class="text-sm font-bold text-slate-400">/ dia</span>
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-2 font-bold">Ideal: <span class="text-emerald-600" id="kpi-media-ideal">650</span></p>
-                </div>
-            </div>
-
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px] relative overflow-hidden">
+                
                 <div id="tab-diario" class="view-tab p-6 animate-fade-in">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-bold text-slate-700">Histórico Detalhado</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+                        <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Dias Produtivos</p>
+                                <div class="flex items-end justify-between">
+                                    <p class="text-2xl font-black text-slate-800 tracking-tighter" id="diario-card-dias-trab">--</p>
+                                    <i class="fas fa-briefcase text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-1 font-bold">Com produção lançada</p>
+                        </div>
+
+                        <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+                            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
+                            <div class="flex items-end justify-between">
+                                <p class="text-2xl font-black text-slate-800 tracking-tighter" id="diario-card-dias-uteis">--</p>
+                                <i class="fas fa-calendar-day text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-1 font-bold">Base do Mês</p>
+                        </div>
+
+                        <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
+                                <p class="text-2xl font-black text-blue-600 tracking-tighter" id="diario-card-total">--</p>
+                            </div>
+                            <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="diario-card-meta-total" class="text-slate-700">--</span></p>
+                        </div>
+
+                        <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                            <div>
+                                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média Diária</p>
+                                <p class="text-2xl font-black text-emerald-600 tracking-tighter" id="diario-card-media">--</p>
+                            </div>
+                            <p class="text-[10px] text-slate-500 mt-1 font-bold">Ideal: <span class="text-slate-700">650</span></p>
+                        </div>
+
+                        <div id="diario-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500 flex flex-col justify-between">
+                            <div>
+                                <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento</p>
+                                <div class="flex items-center justify-between">
+                                    <p class="text-2xl font-black tracking-tighter" id="diario-kpi-pct">--%</p>
+                                    <div id="diario-icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-white/60 mt-1 font-medium">Real vs Meta Mensal</p>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center mb-4 border-t border-slate-100 pt-4">
+                        <h3 class="font-bold text-slate-700 text-sm uppercase tracking-wide">Lançamentos</h3>
                         <div id="aviso-edicao" class="hidden flex items-center gap-2 text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-100 px-2 py-1 rounded">
                             <i class="fas fa-pen"></i> Edição
                         </div>
                     </div>
+                    
                     <div class="overflow-x-auto rounded-lg border border-slate-100">
-                        <table class="w-full text-sm text-left"><thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider"><tr><th class="px-6 py-3">Data</th><th class="px-6 py-3 text-center">Produção</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Status</th><th class="px-6 py-3">Obs / Histórico</th></tr></thead><tbody id="tabela-diario" class="divide-y divide-slate-100 bg-white"><tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Carregando dados...</td></tr></tbody></table>
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wider">
+                                <tr>
+                                    <th class="px-6 py-3">Data</th>
+                                    <th class="px-6 py-3 text-center">Produção</th>
+                                    <th class="px-6 py-3 text-center">Meta</th>
+                                    <th class="px-6 py-3 text-center">Status</th>
+                                    <th class="px-6 py-3">Obs / Histórico</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-diario" class="divide-y divide-slate-100 bg-white">
+                                <tr><td colspan="5" class="text-center py-12 text-slate-400 italic">Carregando dados...</td></tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
                 
@@ -160,7 +188,7 @@
                 </div>
 
                 <div id="tab-comparativo" class="view-tab hidden p-8 animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
-                     <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl"><div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span><h2 id="comp-media-user" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div><div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div><div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span><h2 id="comp-media-time" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div></div><div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500">Carregando...</div>
+                     <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl"><div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span><h2 id="comp-media-user" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div><div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div><div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span><h2 id="comp-media-time" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div></div><div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500">Carregando comparativo...</div>
                 </div>
 
                 <div id="tab-feedback" class="view-tab hidden flex flex-col h-[600px]">
@@ -177,11 +205,8 @@
                 <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2"><i class="fas fa-user-clock text-amber-500"></i> Pendências de Check-in</h3>
                 <button onclick="document.getElementById('modal-pendencias').classList.add('hidden')" class="text-slate-400 hover:text-slate-600">&times;</button>
             </div>
-            <div class="p-5 max-h-[400px] overflow-y-auto" id="lista-pendentes-body">
-                </div>
-            <div class="bg-slate-50 px-5 py-3 text-[10px] text-slate-400 text-center border-t border-slate-100">
-                Referente à data selecionada.
-            </div>
+            <div class="p-5 max-h-[400px] overflow-y-auto" id="lista-pendentes-body"></div>
+            <div class="bg-slate-50 px-5 py-3 text-[10px] text-slate-400 text-center border-t border-slate-100">Referente à data selecionada.</div>
         </div>
     </div>
     
