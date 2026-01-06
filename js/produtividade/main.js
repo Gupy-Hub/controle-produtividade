@@ -1,15 +1,11 @@
-window.Produtividade = window.Produtividade || {
-    supabase: null
-};
+window.Produtividade = window.Produtividade || { supabase: null };
 
 Produtividade.init = async function() {
     if (window._supabase) {
         Produtividade.supabase = window._supabase;
-    } else if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+    } else if (window.supabase) {
         Produtividade.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
         window._supabase = Produtividade.supabase;
-    } else {
-        return alert("Erro: Supabase não configurado.");
     }
 
     if(window.Sistema && Sistema.Dados) await Sistema.Dados.inicializar();
@@ -26,20 +22,20 @@ Produtividade.init = async function() {
 Produtividade.atualizarDataGlobal = function(novaData) {
     if (!novaData) return;
     localStorage.setItem('produtividade_data_ref', novaData);
-
-    const tabGeral = document.getElementById('tab-geral');
-    if (tabGeral && !tabGeral.classList.contains('hidden') && Produtividade.Geral) {
+    if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
         Produtividade.Geral.carregarTela();
     }
-    // Adicionar refresh para outras abas se necessário
 };
 
 Produtividade.mudarAba = function(aba) {
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
-    document.getElementById(`tab-${aba}`).classList.remove('hidden');
-    document.getElementById(`btn-${aba}`).classList.add('active');
+    const tabEl = document.getElementById(`tab-${aba}`);
+    if (tabEl) tabEl.classList.remove('hidden');
+    
+    const btnEl = document.getElementById(`btn-${aba}`);
+    if (btnEl) btnEl.classList.add('active');
 
     ['ctrl-geral', 'ctrl-consolidado', 'ctrl-performance'].forEach(id => {
         const el = document.getElementById(id);
@@ -63,22 +59,19 @@ Produtividade.mudarAba = function(aba) {
     }
 };
 
-// --- IMPORTAÇÃO EM MASSA ---
+// --- IMPORTAÇÃO EM MASSA CORRIGIDA ---
 Produtividade.importarEmMassa = async function(input) {
     const files = input.files;
     if (!files || files.length === 0) return;
 
-    if(!confirm(`Deseja importar ${files.length} arquivo(s)?`)) {
-        input.value = ""; return;
-    }
+    if(!confirm(`Deseja importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
 
-    // Carrega usuários uma vez
-    const { data: usersDB, error: errUser } = await Produtividade.supabase.from('usuarios').select('id, nome');
-    if(errUser) return alert("Erro ao carregar usuários: " + errUser.message);
-
+    // 1. Carrega Usuários para Mapeamento (Nome -> ID)
+    const { data: usersDB } = await Produtividade.supabase.from('usuarios').select('id, nome');
     const mapUsuarios = {};
     const activeIds = new Set();
-    usersDB.forEach(u => {
+    
+    (usersDB || []).forEach(u => {
         mapUsuarios[Importacao.normalizar(u.nome)] = u.id;
         activeIds.add(u.id);
     });
@@ -89,46 +82,43 @@ Produtividade.importarEmMassa = async function(input) {
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        
         try {
             const leitura = await Importacao.lerArquivo(file);
+            
+            // Lógica de Data: Prioriza nome do arquivo, senão usa painel
             let dataRef = leitura.dataSugestionada;
-
-            // Se não achou data no nome, usa a do painel (sem perguntar a cada arquivo para não travar o loop)
-            if (!dataRef) {
-                dataRef = document.getElementById('global-date').value;
-            }
+            if (!dataRef) dataRef = document.getElementById('global-date').value;
 
             const updates = [];
             
             leitura.dados.forEach(row => {
                 const keys = Object.keys(row);
                 const norm = Importacao.normalizar;
-                
-                // Mapeia colunas
                 const getKey = (term) => keys.find(k => k.trim() === term || norm(k) === term || norm(k).includes(term));
                 
-                const kId = getKey('id_assistente');
+                // Mapeamento baseado no seu CSV (05012026.xlsx)
                 const kNome = getKey('assistente');
+                const kId = getKey('id_assistente');
                 
-                // Ignora linhas sem identificação ou totais
+                // Ignora linha de "Total"
                 if (!kNome && !kId) return;
-                const valNome = row[kNome] ? row[kNome].toString() : '';
-                if (valNome.toLowerCase().includes('total')) return;
+                const nomeVal = row[kNome] ? row[kNome].toString() : '';
+                if (nomeVal.toLowerCase().includes('total')) return;
 
-                const kTotal = getKey('documentos_validados') || getKey('total');
-                const kFifo = getKey('documentos_validados_fifo') || getKey('fifo');
-                const kGT = getKey('gradual_total');
-                const kGP = getKey('gradual_parcial');
-                const kPFC = getKey('perfil_fc');
+                // Colunas de Valores
+                const kTotal = keys.find(k => k.trim() === 'documentos_validados') || getKey('total'); // Prioriza nome exato
+                const kFifo = keys.find(k => k.trim() === 'documentos_validados_fifo') || getKey('fifo');
+                const kGT = keys.find(k => k.trim() === 'documentos_validados_gradual_total') || getKey('gradual_total');
+                const kGP = keys.find(k => k.trim() === 'documentos_validados_gradual_parcial') || getKey('gradual_parcial');
+                const kPFC = keys.find(k => k.trim() === 'documentos_validados_perfil_fc') || getKey('perfil_fc');
 
                 let uid = null;
-                // Tenta por ID
+                // Tenta ID
                 if (kId && row[kId]) {
                     const idVal = parseInt(row[kId]);
                     if (activeIds.has(idVal)) uid = idVal;
                 }
-                // Tenta por Nome
+                // Tenta Nome
                 if (!uid && kNome && row[kNome]) {
                     uid = mapUsuarios[norm(row[kNome])];
                 }
@@ -137,7 +127,7 @@ Produtividade.importarEmMassa = async function(input) {
                     const pInt = (v) => {
                         if (typeof v === 'number') return v;
                         if (!v) return 0;
-                        const s = v.toString().replace(/\./g, '').replace(',', '.');
+                        const s = v.toString().replace(/\./g, '').replace(',', '.'); // Remove ponto de milhar
                         return parseInt(s) || 0;
                     };
 
@@ -164,16 +154,14 @@ Produtividade.importarEmMassa = async function(input) {
             }
 
         } catch (err) {
-            console.error(`Erro em ${file.name}:`, err);
+            console.error(`Erro arquivo ${file.name}:`, err);
             erros++;
         }
     }
 
-    input.value = ""; // Limpa input
+    input.value = "";
+    alert(`Finalizado!\n\nProcessados: ${arquivosProcessados}\nRegistros: ${totalImportados}\nErros: ${erros}`);
     
-    alert(`Processo Finalizado!\n\n📂 Arquivos Processados: ${arquivosProcessados}\n✅ Registros Importados: ${totalImportados}\n❌ Arquivos com Erro: ${erros}`);
-    
-    // Atualiza tela se necessário
     if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
         Produtividade.Geral.carregarTela();
     }
