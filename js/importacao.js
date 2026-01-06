@@ -29,18 +29,12 @@ const Importacao = {
                             // TENTATIVA 1: Leitura Padrão (Array)
                             workbook = XLSX.read(data, { type: 'array', cellDates: true });
                         } catch (eZip) {
-                            // Verifica se é o erro conhecido de compressão "Bad uncompressed size"
-                            const erroConhecido = eZip.message && (eZip.message.includes("Bad uncompressed size") || eZip.message.includes("corrupted zip"));
-                            
-                            if (erroConhecido) {
-                                console.log(`%c[Info] Arquivo '${file.name}' com cabeçalho ZIP incorreto. Aplicando correção automática...`, "color: orange");
-                            } else {
-                                console.warn("Erro na leitura padrão. Tentando modo Binário...", eZip);
-                            }
+                            // Verifica se é o erro de compressão e avisa no console (sem travar)
+                            console.warn(`[Aviso] Leitura padrão falhou (${file.name}). Tentando modo de compatibilidade... Erro: ${eZip.message}`);
                             
                             try {
-                                // TENTATIVA 2: Workaround para arquivos corrompidos/exportados incorretamente
-                                // Converte para string binária manualmente para ignorar validação de tamanho do ZIP
+                                // TENTATIVA 2: Workaround para erro "Bad uncompressed size"
+                                // Converte para string binária manualmente.
                                 let binary = "";
                                 const len = data.byteLength;
                                 for (let i = 0; i < len; i++) {
