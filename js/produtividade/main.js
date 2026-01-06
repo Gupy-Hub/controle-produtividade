@@ -22,6 +22,13 @@ Produtividade.init = async function() {
 Produtividade.atualizarDataGlobal = function(novaData) {
     if (!novaData) return;
     localStorage.setItem('produtividade_data_ref', novaData);
+    
+    // Atualiza visualmente o input se ele não tiver a data correta
+    const dateInput = document.getElementById('global-date');
+    if (dateInput && dateInput.value !== novaData) {
+        dateInput.value = novaData;
+    }
+
     if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
         Produtividade.Geral.carregarTela();
     }
@@ -71,12 +78,19 @@ Produtividade.importarEmMassa = async function(input) {
 
     let totalImportados = 0;
     let erros = 0;
+    let ultimaDataDetectada = null; // Para guardar a data do arquivo
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
             const leitura = await Importacao.lerArquivo(file);
+            
+            // Prioriza a data do arquivo. Se não tiver, usa a do calendário.
             let dataRef = leitura.dataSugestionada || document.getElementById('global-date').value;
+            
+            // Guarda a data detectada para atualizar a tela no final
+            if (leitura.dataSugestionada) ultimaDataDetectada = leitura.dataSugestionada;
+
             const updates = [];
             
             leitura.dados.forEach(row => {
@@ -89,11 +103,8 @@ Produtividade.importarEmMassa = async function(input) {
                 // Ignora linha de total ou vazia
                 if (!kNome || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
 
-                // Mapeamento Exato (Baseado no seu CSV)
-                // Procura a coluna "documentos_validados" (Total)
+                // Mapeamento Exato (Baseado no CSV)
                 const kTotal = keys.find(k => k === 'documentos_validados') || findKey('total') || findKey('qtd');
-                
-                // Procura colunas específicas com nomes longos
                 const kFifo = keys.find(k => k === 'documentos_validados_fifo') || findKey('fifo');
                 const kGT = keys.find(k => k === 'documentos_validados_gradual_total') || findKey('gradual_total');
                 const kGP = keys.find(k => k === 'documentos_validados_gradual_parcial') || findKey('gradual_parcial');
@@ -137,9 +148,14 @@ Produtividade.importarEmMassa = async function(input) {
     }
 
     input.value = "";
-    alert(`Importação finalizada!\nRegistros: ${totalImportados}\nArquivos com erro: ${erros}`);
+    alert(`Importação finalizada!\nRegistros salvos: ${totalImportados}\nArquivos com erro: ${erros}`);
     
-    if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
+    // ATUALIZAÇÃO INTELIGENTE DA TELA
+    if (ultimaDataDetectada) {
+        // Se o arquivo tinha data (ex: 02012026), muda a tela para essa data
+        Produtividade.atualizarDataGlobal(ultimaDataDetectada);
+    } else if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
+        // Se não, apenas recarrega a data atual
         Produtividade.Geral.carregarTela();
     }
 };
