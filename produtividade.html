@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel - Performance Pro</title>
-    <link rel="shortcut icon" href="#">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -14,13 +13,11 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        .tab-btn { transition: all 0.2s; position: relative; }
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
-        .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
-        .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         /* Ajustes de Scroll */
@@ -38,7 +35,8 @@
 <body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
-    <script src="js/importacao.js"></script> <script src="js/layout.js"></script>
+    <script src="js/importacao.js"></script>
+    <script src="js/layout.js"></script>
 
     <div class="bg-white border-b border-slate-200 sticky top-10 z-40 shadow-sm">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -51,26 +49,28 @@
                         </div>
                         <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
                             <i class="fas fa-calendar-alt text-blue-500"></i>
-                            <input type="date" id="global-date" onchange="atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                            <input type="date" id="global-date" onchange="Produtividade.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
                         </div>
                     </div>
+                    
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
-                        <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
+                        <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="Produtividade.importarExcel(this)">
                         <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar arquivo Excel/CSV">
                             <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar</span>
                         </button>
-                        <button onclick="Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados do dia atual">
+                        <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados do dia atual">
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </div>
+
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200" id="top-bar-controls">
                         <div id="ctrl-geral" class="flex items-center gap-2">
-                            <select id="view-mode" onchange="Geral.toggleSemana()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                            <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
                                 <option value="dia">Apenas o Dia</option>
                                 <option value="mes">Mês da Data</option>
                                 <option value="semana">Semana Específica</option>
                             </select>
-                            <select id="select-semana" onchange="Geral.carregarTela()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                            <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
                                 <option value="1">Semana 1</option>
                                 <option value="2">Semana 2</option>
                                 <option value="3">Semana 3</option>
@@ -79,7 +79,7 @@
                             </select>
                         </div>
                         <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
-                            <select id="cons-period-type" onchange="Cons.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                            <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
                                 <option value="mes">Mensal (Semanas)</option>
                                 <option value="trimestre">Trimestral (Meses)</option>
                                 <option value="semestre">Semestral (Meses)</option>
@@ -87,19 +87,9 @@
                                 <option value="ano_trim">Anual (Trimestres)</option>
                                 <option value="dia">Diário</option>
                             </select>
-                            <select id="cons-select-quarter" onchange="Cons.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
-                                <option value="1">1º Trimestre</option>
-                                <option value="2">2º Trimestre</option>
-                                <option value="3">3º Trimestre</option>
-                                <option value="4">4º Trimestre</option>
-                            </select>
-                            <select id="cons-select-semester" onchange="Cons.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
-                                <option value="1">1º Semestre</option>
-                                <option value="2">2º Semestre</option>
-                            </select>
                         </div>
                         <div id="ctrl-performance" class="hidden flex items-center gap-2">
-                            <select id="perf-period-type" onchange="Perf.carregarRanking()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                            <select id="perf-period-type" onchange="Produtividade.Performance.carregarRanking()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
                                 <option value="mes">Mensal</option>
                                 <option value="trimestre">Trimestral</option>
                                 <option value="semestre">Semestral</option>
@@ -108,17 +98,18 @@
                         </div>
                     </div>
                 </div>
+
                 <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
-                    <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-check-circle"></i> Validação
                     </button>
-                    <button onclick="mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-table"></i> Consolidado
                     </button>
-                    <button onclick="mudarAba('performance')" id="btn-performance" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-trophy"></i> Performance
                     </button>
-                    <button onclick="mudarAba('matriz')" id="btn-matriz" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-th"></i> Matriz
                     </button>
                 </div>
@@ -130,7 +121,7 @@
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe</p>
                         <div class="flex items-center justify-between mt-1 h-full">
@@ -146,52 +137,24 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
-                    <div class="flex items-end justify-between">
-                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p>
-                        <i class="fas fa-calendar-day text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
-                    </div>
-                    <p class="text-[10px] text-slate-400 mt-1 font-bold" id="kpi-dias-label">Geral ou Individual</p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
                         <p class="text-2xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
                     </div>
-                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total" class="text-slate-700">--</span></p>
+                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total">--</span></p>
                 </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Médias Diárias</p>
-                    <div class="space-y-2">
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Time (Todas)</span>
-                            <span class="text-lg font-black text-slate-800" id="kpi-media-todas">--</span>
-                        </div>
-                        <div class="w-full h-px bg-slate-100"></div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Individual</span>
-                            <span class="text-lg font-black text-emerald-600" id="kpi-media-assist">--</span>
-                        </div>
-                    </div>
-                </div>
-                <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500 flex flex-col justify-between">
+                <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between">
                     <div>
                         <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
                         <div class="flex items-center justify-between">
                             <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                            <div id="icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                            <i class="fas fa-chart-pie text-xl text-white/80"></i>
                         </div>
                     </div>
-                    <p class="text-[10px] text-white/60 mt-1 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
             </div>
-            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
-                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
-                <button onclick="Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
-                    <i class="fas fa-times mr-1"></i> Limpar Filtro
-                </button>
-            </div>
+
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -200,7 +163,7 @@
                                 <th class="px-4 py-2 text-center w-28 bg-slate-100/50 border-r border-slate-200">
                                     <div class="flex flex-col items-center gap-1">
                                         <span class="text-[10px] text-slate-400">Ação em Massa</span>
-                                        <select id="bulk-fator" onchange="Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer hover:border-blue-400 focus:border-blue-500 transition">
+                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer">
                                             <option value="">Aplicar...</option>
                                             <option value="1">Todos 100%</option>
                                             <option value="0.5">Todos 50%</option>
@@ -224,87 +187,37 @@
             </div>
         </div>
 
-        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            <div id="perf-view-individual">
-                <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe (Ranking)</p>
-                        <div class="flex items-center justify-between mt-1 h-full">
-                            <div class="text-center">
-                                <p class="text-lg font-black text-blue-800" id="perf-pct-clt">0%</p>
-                                <p class="text-[9px] text-slate-400 uppercase font-bold">CLT (<span id="perf-count-clt">0</span>)</p>
-                            </div>
-                            <div class="h-8 w-px bg-slate-200 mx-2"></div>
-                            <div class="text-center">
-                                <p class="text-lg font-black text-indigo-800" id="perf-pct-pj">0%</p>
-                                <p class="text-[9px] text-slate-400 uppercase font-bold">PJ (<span id="perf-count-pj">0</span>)</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
-                        <div class="flex items-end justify-between">
-                            <p class="text-2xl font-black text-slate-800 tracking-tighter" id="perf-card-dias">--</p>
-                            <i class="fas fa-calendar-day text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
-                        </div>
-                        <p class="text-[10px] text-slate-400 mt-1 font-bold">Considerados</p>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <div>
-                            <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
-                            <p class="text-2xl font-black text-blue-700" id="perf-card-total">0</p>
-                        </div>
-                        <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="perf-label-meta-total" class="text-slate-700">--</span></p>
-                    </div>
-                    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Médias Diárias</p>
-                        <div class="space-y-2">
-                            <div class="flex justify-between items-center">
-                                <span class="text-[10px] text-slate-500 font-bold uppercase">Time (Todas)</span>
-                                <span class="text-lg font-black text-slate-800" id="perf-media-todas">--</span>
-                            </div>
-                            <div class="w-full h-px bg-slate-100"></div>
-                            <div class="flex justify-between items-center">
-                                <span class="text-[10px] text-slate-500 font-bold uppercase">Individual</span>
-                                <span class="text-lg font-black text-emerald-600" id="perf-media-assist">--</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="perf-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between transition-colors duration-300">
-                         <div>
-                            <p class="text-[10px] font-bold text-white/70 uppercase mb-1">Atingimento</p>
-                             <div class="flex items-center justify-between">
-                                <p class="text-2xl font-black" id="perf-txt-pct">0%</p>
-                                <i id="perf-icon-pct" class="fas fa-chart-line text-xl text-white/80"></i>
-                             </div>
-                        </div>
-                        <p class="text-[9px] text-white/60 mt-1 font-medium">Real vs Meta do Período</p>
-                    </div>
+        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="w-full text-sm text-left">
+                        <thead id="cons-table-header"></thead>
+                        <tbody id="cons-table-body"></tbody>
+                    </table>
                 </div>
+            </div>
+        </div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700">Ranking Detalhado (Por Produção)</h3>
-                        <button onclick="Perf.limparSelecao()" class="text-xs text-blue-600 hover:text-blue-800 font-bold hidden bg-blue-50 px-3 py-1 rounded border border-blue-200" id="perf-btn-limpar">
-                            ✕ Limpar Seleção
-                        </button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left text-slate-600">
-                            <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th class="px-6 py-3">#</th>
-                                    <th class="px-6 py-3">Assistente</th>
-                                    <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
-                                    <th class="px-6 py-3 text-center">Dias</th>
-                                    <th class="px-6 py-3 text-center">Média</th>
-                                    <th class="px-6 py-3 text-center">Meta Total</th>
-                                    <th class="px-6 py-3 text-center">% Meta</th>
-                                </tr>
-                            </thead>
-                            <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
-                        </table>
-                    </div>
+        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-6 py-3">#</th>
+                                <th class="px-6 py-3">Assistente</th>
+                                <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
+                                <th class="px-6 py-3 text-center">Dias</th>
+                                <th class="px-6 py-3 text-center">Média</th>
+                                <th class="px-6 py-3 text-center">Meta Total</th>
+                                <th class="px-6 py-3 text-center">% Meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -342,79 +255,12 @@
                 </div>
             </div>
         </div>
-
-        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe</p>
-                    <div class="flex items-center justify-between mt-1 h-full">
-                        <div class="text-center">
-                            <p class="text-lg font-black text-blue-800" id="cons-pct-clt">0%</p>
-                            <p class="text-[9px] text-slate-400 uppercase font-bold">CLT (<span id="cons-count-clt">0</span>)</p>
-                        </div>
-                        <div class="h-8 w-px bg-slate-200 mx-2"></div>
-                        <div class="text-center">
-                            <p class="text-lg font-black text-indigo-800" id="cons-pct-pj">0%</p>
-                            <p class="text-[9px] text-slate-400 uppercase font-bold">PJ (<span id="cons-count-pj">0</span>)</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
-                    <div class="flex items-end justify-between">
-                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="cons-card-dias">--</p>
-                        <i class="fas fa-calendar-day text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
-                    </div>
-                    <p class="text-[10px] text-slate-400 mt-1 font-bold">Considerados</p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
-                        <p class="text-2xl font-black text-blue-700" id="cons-card-total">0</p>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="cons-card-meta-total" class="text-slate-700">--</span></p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Médias Diárias</p>
-                    <div class="space-y-2">
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Time (Todas)</span>
-                            <span class="text-lg font-black text-slate-800" id="cons-media-todas">0</span>
-                        </div>
-                        <div class="w-full h-px bg-slate-100"></div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Individual</span>
-                            <span class="text-lg font-black text-emerald-600" id="cons-media-assist">0</span>
-                        </div>
-                    </div>
-                </div>
-                <div id="cons-card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 group relative text-white transition-colors duration-500 flex flex-col justify-between">
-                    <div>
-                        <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
-                        <div class="flex items-center justify-between">
-                            <p class="text-2xl font-black tracking-tighter" id="cons-pct">--%</p>
-                            <div id="cons-icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-white/60 mt-1 font-medium" id="cons-pct-detail">Real vs Esperado</p>
-                </div>
-            </div>
-            
-            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
-                <div class="overflow-x-auto custom-scrollbar">
-                    <table class="w-full text-sm text-left">
-                        <thead id="cons-table-header"></thead>
-                        <tbody id="cons-table-body"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <script src="js/produtividade_main.js"></script>
-    <script src="js/produtividade_geral.js"></script>
-    <script src="js/produtividade_performance.js"></script>
-    <script src="js/produtividade_matriz.js"></script>
-    <script src="js/produtividade_consolidado.js"></script>
+    <script src="js/produtividade/main.js"></script>
+    <script src="js/produtividade/geral.js"></script>
+    <script src="js/produtividade/consolidado.js"></script>
+    <script src="js/produtividade/performance.js"></script>
+    <script src="js/produtividade/matriz.js"></script>
 </body>
 </html>
