@@ -8,7 +8,6 @@ const MA_Main = {
     nameToIdsMap: {},
 
     init: async function() {
-        // 1. Inicialização do Supabase
         if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
             _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
             window._supabase = _supabase; 
@@ -17,27 +16,22 @@ const MA_Main = {
             return;
         }
 
-        // 2. Validação de Sessão
         this.sessao = JSON.parse(localStorage.getItem('usuario'));
         if(!this.sessao) { window.location.href='index.html'; return; }
         
         const f = this.sessao.funcao;
         this.isMgr = (f === 'Gestora' || f === 'Auditora');
         
-        // 3. Inicializa Sistema Base (Fatores, Datas)
         if (typeof Sistema !== 'undefined' && Sistema.Dados) {
             await Sistema.Dados.inicializar();
         }
 
-        // 4. Configura Input de Data
-        const inputData = document.getElementById('filtro-data-manual');
+        const inputData = document.getElementById('global-date');
         if (inputData) {
             const dataSalva = localStorage.getItem('produtividade_data_ref') || new Date().toISOString().split('T')[0];
-            const parts = dataSalva.split('-');
-            inputData.value = `${parts[2]}/${parts[1]}/${parts[0]}`;
+            inputData.value = dataSalva;
         }
 
-        // 5. Configurações de Gestora
         if (this.isMgr) {
             const elFiltro = document.getElementById('container-filtro-user');
             if(elFiltro) elFiltro.classList.remove('hidden');
@@ -59,44 +53,38 @@ const MA_Main = {
              if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
         }
 
+        // Carrega aba inicial
+        this.mudarAba('diario');
         this.atualizarDashboard();
     },
 
-    // --- MÉTODOS AUXILIARES ---
-    getDateFromInput: function() {
-        const val = document.getElementById('filtro-data-manual').value;
-        if(!val || val.length < 10) return new Date();
-        const parts = val.split('/');
-        return new Date(parts[2], parts[1]-1, parts[0]);
-    },
-
-    mascaraData: function(input) {
-        let v = input.value.replace(/\D/g, "");
-        if (v.length > 8) v = v.substring(0, 8);
-        if (v.length >= 5) input.value = v.substring(0, 2) + "/" + v.substring(2, 4) + "/" + v.substring(4);
-        else if (v.length >= 3) input.value = v.substring(0, 2) + "/" + v.substring(2);
-        else input.value = v;
-    },
-
-    verificarEnter: function(e) { if(e.key === 'Enter') this.aplicarDataManual(); },
-
     aplicarDataManual: function() {
-        const val = document.getElementById('filtro-data-manual').value;
-        if(val.length === 10) {
-            const parts = val.split('/');
-            localStorage.setItem('produtividade_data_ref', `${parts[2]}-${parts[1]}-${parts[0]}`);
+        const val = document.getElementById('global-date').value;
+        if(val) {
+            localStorage.setItem('produtividade_data_ref', val);
             this.atualizarDashboard();
         }
     },
 
     mudarAba: function(aba) {
         document.querySelectorAll('.view-tab').forEach(el => el.classList.add('hidden')); 
-        document.querySelectorAll('.btn-tab').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
         
         document.getElementById(`tab-${aba}`).classList.remove('hidden'); 
         document.getElementById(`btn-${aba}`).classList.add('active');
         
-        if(aba === 'evolucao' && typeof MA_Evolucao !== 'undefined') MA_Evolucao.renderizarGraficos('mes');
+        // Controle Contextual (Topo)
+        const ctrlEvo = document.getElementById('ctrl-evolucao');
+        if (ctrlEvo) {
+            if (aba === 'evolucao') {
+                ctrlEvo.classList.remove('hidden');
+                if(typeof MA_Evolucao !== 'undefined') MA_Evolucao.renderizarGraficos('mes');
+            } else {
+                ctrlEvo.classList.add('hidden');
+            }
+        }
+        
+        if (aba === 'comparativo') this.atualizarDashboard();
     },
 
     carregarUsuarios: async function() {
@@ -125,8 +113,12 @@ const MA_Main = {
     },
 
     atualizarDashboard: async function() {
-        const refDate = this.getDateFromInput();
-        if (isNaN(refDate.getTime())) return;
+        const valData = document.getElementById('global-date').value;
+        if (!valData) return;
+        
+        // Converte string YYYY-MM-DD para Date
+        const [y, m, d] = valData.split('-').map(Number);
+        const refDate = new Date(y, m-1, d);
 
         const ano = refDate.getFullYear();
         const mes = refDate.getMonth();
@@ -159,18 +151,15 @@ const MA_Main = {
             .gte('data_referencia', dataInicio)
             .lte('data_referencia', dataFim);
 
-        // Usa MA_Diario para normalizar (garante que existe no arquivo Geral)
         const dadosNormalizados = MA_Diario.normalizarDados(rawData || []);
         let dadosFinais = [];
 
-        // Lógica de preparação de dados (Time vs Individual)
         if (viewingTime) {
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const prods = Object.values(dadosNormalizados[dia]);
                 const total = prods.reduce((a, b) => a + b.quantidade, 0);
                 const headcount = prods.length;
                 
-                // Média de fatores
                 let sumFatores = 0;
                 prods.forEach(p => { sumFatores += Sistema.Dados.obterFator(p.nome, dia); });
                 const mediaFator = headcount ? sumFatores/headcount : 1;
@@ -201,14 +190,13 @@ const MA_Main = {
             });
         }
 
-        // Chamadas seguras aos módulos
         if(typeof MA_Diario !== 'undefined') {
             MA_Diario.atualizarKPIs(dadosFinais);
             MA_Diario.atualizarTabela(dadosFinais, viewingTime);
         }
         
         if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
-            const btnAtivo = document.querySelector('.btn-chart.active');
+            const btnAtivo = document.querySelector('.chart-selector-btn.active');
             const periodo = btnAtivo ? (btnAtivo.id.replace('chart-btn-', '')) : 'mes';
             if(typeof MA_Evolucao !== 'undefined') MA_Evolucao.renderizarGraficos(periodo);
         }
