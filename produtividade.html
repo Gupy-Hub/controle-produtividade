@@ -1,3 +1,7 @@
+{
+type: "file",
+fileName: "produtividade.html",
+content: `
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -23,8 +27,12 @@
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .scroll-top-wrapper { transform: rotateX(180deg); }
-        .scroll-top-wrapper table { transform: rotateX(180deg); }
+        /* Ajustes de Scroll */
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
         .status-select { background: transparent; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none; transition: all 0.2s; }
         .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } 
         .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } 
@@ -34,7 +42,7 @@
 <body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
-    <script src="js/layout.js"></script>
+    <script src="js/importacao.js"></script> <script src="js/layout.js"></script>
 
     <div class="bg-white border-b border-slate-200 sticky top-10 z-40 shadow-sm">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -52,7 +60,7 @@
                     </div>
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
                         <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
-                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar arquivo Excel">
+                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar arquivo Excel/CSV">
                             <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar</span>
                         </button>
                         <button onclick="Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados do dia atual">
@@ -414,3 +422,5 @@
     <script src="js/produtividade_consolidado.js"></script>
 </body>
 </html>
+`
+}
