@@ -18,9 +18,27 @@ const Importacao = {
                 try {
                     const data = new Uint8Array(e.target.result);
                     let workbook;
-                    try {
-                        workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                    } catch (e1) {
+                    
+                    // CORREÇÃO CRÍTICA: Verifica assinatura do arquivo
+                    // Arquivos XLSX reais (ZIP) começam com os bytes: 50 4B 03 04 (PK..)
+                    const isZip = data.length > 4 && 
+                                  data[0] === 0x50 && data[1] === 0x4B && 
+                                  data[2] === 0x03 && data[3] === 0x04;
+
+                    if (isZip) {
+                        try {
+                            // É um Excel real
+                            workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                        } catch (eZip) {
+                            console.warn("Arquivo parece ZIP mas falhou. Tentando como texto...", eZip);
+                            // Fallback de emergência
+                            const decoder = new TextDecoder('iso-8859-1');
+                            const text = decoder.decode(data);
+                            workbook = XLSX.read(text, { type: 'string', raw: true });
+                        }
+                    } else {
+                        // NÃO é um Excel real (é CSV/Texto com extensão .xlsx)
+                        // Força leitura como texto para evitar erro "Bad uncompressed size"
                         const decoder = new TextDecoder('iso-8859-1');
                         const text = decoder.decode(data);
                         workbook = XLSX.read(text, { type: 'string', raw: true });
@@ -28,12 +46,11 @@ const Importacao = {
                     
                     // Detecção de data no nome (DDMMYYYY ou YYYY-MM-DD)
                     let dataDetectada = null;
-                    // Regex para pegar 05012026 ou 05-01-2026
                     const regexData = /(\d{2})[-/.]?(\d{2})[-/.]?(\d{4})/;
                     const match = file.name.match(regexData);
                     
                     if (match) {
-                        // Assume formato Dia-Mes-Ano se vier do nome brasileiro
+                        // Assume formato Dia-Mes-Ano se vier do nome brasileiro (ex: 05012026)
                         dataDetectada = `${match[3]}-${match[2]}-${match[1]}`; // YYYY-MM-DD para o banco
                     }
 
@@ -42,6 +59,7 @@ const Importacao = {
                     
                     resolve({ dados: jsonData, dataSugestionada: dataDetectada, nomeArquivo: file.name });
                 } catch (err) {
+                    console.error(err);
                     reject(`Erro ao ler ${file.name}: ${err.message}`);
                 }
             };
@@ -49,7 +67,5 @@ const Importacao = {
         });
     },
 
-    // (Opcional) Função genérica de processar mantida apenas para compatibilidade, 
-    // mas estamos usando a lógica específica no main.js de cada módulo.
     processar: async function() { return { qtdImportada: 0, nomesNaoEncontrados: [] }; } 
 };
