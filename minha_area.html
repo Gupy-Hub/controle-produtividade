@@ -34,7 +34,7 @@
     <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 sticky top-14 z-40 shadow-sm">
+    <div class="bg-white border-b border-slate-200 sticky top-10 z-40 shadow-sm transition-all">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
                 
@@ -55,7 +55,6 @@
                     <div id="container-filtro-user" class="hidden flex items-center gap-2 pl-2 border-l border-slate-200">
                         <div class="relative">
                             <select id="filtro-user" class="appearance-none py-1 pl-3 pr-8 border border-purple-200 bg-purple-50 text-purple-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8 focus:ring-2 focus:ring-purple-200 w-40">
-                                <option value="me">👤 Minha Visão</option>
                                 <option value="time">👥 Time (Média)</option>
                                 <option disabled>──────────</option>
                             </select>
@@ -102,43 +101,6 @@
 
         <div id="conteudo-principal" class="space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 animate-fade-in">
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group flex flex-col justify-between hover:-translate-y-1 transition duration-300">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Produção (Mês)</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-total">--</h2>
-                            <span class="text-sm font-bold text-slate-400">docs</span>
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-2 font-bold">Meta: <span id="kpi-meta-total" class="text-slate-700">--</span></p>
-                </div>
-
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group flex flex-col justify-between hover:-translate-y-1 transition duration-300">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Atingimento</p>
-                        <div class="flex items-center gap-3">
-                            <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-porcentagem">--%</h2>
-                            <i id="icon-status" class="fas fa-check-circle text-emerald-500 text-2xl"></i>
-                        </div>
-                    </div>
-                    <div class="w-full bg-slate-100 rounded-full h-1.5 mt-2 overflow-hidden">
-                        <div id="bar-progress" class="bg-blue-600 h-full rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 group flex flex-col justify-between hover:-translate-y-1 transition duration-300">
-                    <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Média Diária</p>
-                        <div class="flex items-baseline gap-2">
-                            <h2 class="text-4xl font-black text-slate-800 tracking-tight" id="kpi-media-real">--</h2>
-                            <span class="text-sm font-bold text-slate-400">/ dia</span>
-                        </div>
-                    </div>
-                    <p class="text-[10px] text-slate-500 mt-2 font-bold">Ideal: <span class="text-emerald-600" id="kpi-media-ideal">650</span></p>
-                </div>
-            </div>
-
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[500px] relative overflow-hidden">
                 
                 <div id="tab-diario" class="view-tab p-6 animate-fade-in">

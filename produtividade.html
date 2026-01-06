@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão de Produtividade</title>
+    <title>Painel - Performance Pro</title>
     <link rel="shortcut icon" href="#">
     
     <script src="https://cdn.tailwindcss.com"></script>
@@ -13,15 +13,13 @@
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
         .tab-btn { transition: all 0.2s; position: relative; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
-        .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
-        .top-row { background-color: #fffbeb; border-left: 4px solid #f59e0b; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
@@ -33,12 +31,12 @@
         .st-0 { color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; } 
     </style>
 </head>
-<body class="text-slate-800 bg-slate-100">
+<body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 sticky top-14 z-30 shadow-sm">
+    <div class="bg-white border-b border-slate-200 sticky top-10 z-40 shadow-sm">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
                 <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
@@ -79,7 +77,7 @@
                         <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
                             <select id="cons-period-type" onchange="Cons.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
                                 <option value="mes">Mensal (Semanas)</option>
-                                <option value="trimestre">Trimestre (Meses)</option>
+                                <option value="trimestre">Trimestral (Meses)</option>
                                 <option value="semestre">Semestral (Meses)</option>
                                 <option value="ano_mes">Anual (Meses)</option>
                                 <option value="ano_trim">Anual (Trimestres)</option>
@@ -128,17 +126,19 @@
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe</p>
-                    <div class="flex items-center justify-between mt-1 h-full">
-                        <div class="text-center">
-                            <p class="text-lg font-black text-blue-800" id="kpi-pct-clt">0%</p>
-                            <p class="text-[9px] text-slate-400 uppercase font-bold">CLT (<span id="kpi-count-clt">0</span>)</p>
-                        </div>
-                        <div class="h-8 w-px bg-slate-200 mx-2"></div>
-                        <div class="text-center">
-                            <p class="text-lg font-black text-indigo-800" id="kpi-pct-pj">0%</p>
-                            <p class="text-[9px] text-slate-400 uppercase font-bold">PJ (<span id="kpi-count-pj">0</span>)</p>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe</p>
+                        <div class="flex items-center justify-between mt-1 h-full">
+                            <div class="text-center">
+                                <p class="text-lg font-black text-blue-800" id="kpi-pct-clt">0%</p>
+                                <p class="text-[9px] text-slate-400 uppercase font-bold">CLT (<span id="kpi-count-clt">0</span>)</p>
+                            </div>
+                            <div class="h-8 w-px bg-slate-200 mx-2"></div>
+                            <div class="text-center">
+                                <p class="text-lg font-black text-indigo-800" id="kpi-pct-pj">0%</p>
+                                <p class="text-[9px] text-slate-400 uppercase font-bold">PJ (<span id="kpi-count-pj">0</span>)</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -277,6 +277,7 @@
                         <p class="text-[9px] text-white/60 mt-1 font-medium">Real vs Meta do Período</p>
                     </div>
                 </div>
+
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h3 class="font-bold text-slate-700">Ranking Detalhado (Por Produção)</h3>
