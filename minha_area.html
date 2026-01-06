@@ -14,8 +14,8 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        .animate-fade-in { animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
         .tab-btn { transition: all 0.2s; position: relative; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
@@ -34,7 +34,7 @@
     <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 sticky top-14 z-30 shadow-sm">
+    <div class="bg-white border-b border-slate-200 sticky top-14 z-40 shadow-sm">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
                 
@@ -55,7 +55,7 @@
 
                     <div id="container-filtro-user" class="hidden flex items-center gap-2 pl-2 border-l border-slate-200">
                         <div class="relative">
-                            <select id="filtro-user" class="py-1 pl-2 pr-8 border border-purple-200 bg-purple-50 text-purple-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8 focus:ring-2 focus:ring-purple-200">
+                            <select id="filtro-user" class="appearance-none py-1 pl-3 pr-8 border border-purple-200 bg-purple-50 text-purple-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8 focus:ring-2 focus:ring-purple-200 w-40">
                                 <option value="me">👤 Minha Visão</option>
                                 <option value="time">👥 Time (Média)</option>
                                 <option disabled>──────────</option>
@@ -98,7 +98,7 @@
         <div id="aviso-gestora-view" class="hidden mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 p-8 rounded-3xl text-center shadow-sm animate-fade-in">
             <div class="bg-white w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm text-blue-500 text-2xl"><i class="fas fa-user-shield"></i></div>
             <h3 class="font-black text-xl text-slate-800 mb-1">Modo Administrativo</h3>
-            <p class="text-slate-500 max-w-md mx-auto">Selecione "Time Todo" ou uma Assistente específica no menu superior para visualizar a produção.</p>
+            <p class="text-slate-500 max-w-md mx-auto">Selecione "Time Todo" ou uma Assistente específica no menu superior para visualizar os dados.</p>
         </div>
 
         <div id="conteudo-principal" class="space-y-6">
@@ -116,7 +116,7 @@
                                     <i class="fas fa-briefcase text-2xl text-slate-100 group-hover:text-blue-50 transition"></i>
                                 </div>
                             </div>
-                            <p class="text-[10px] text-slate-400 mt-1 font-bold">Com produção lançada</p>
+                            <p class="text-[10px] text-slate-400 mt-1 font-bold">Com produção</p>
                         </div>
 
                         <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 group relative flex flex-col justify-between">
@@ -188,7 +188,7 @@
                 </div>
 
                 <div id="tab-comparativo" class="view-tab hidden p-8 animate-fade-in flex flex-col items-center justify-center min-h-[400px]">
-                     <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl"><div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span><h2 id="comp-media-user" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div><div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div><div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span><h2 id="comp-media-time" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div></div><div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500">Carregando comparativo...</div>
+                     <div class="flex flex-col md:flex-row gap-6 items-stretch justify-center w-full max-w-4xl"><div id="card-comp-left" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-selecionada" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Sua Média</span><h2 id="comp-media-user" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div><div class="w-12 flex items-center justify-center text-slate-300 font-black text-xs shrink-0 self-center">VS</div><div id="card-comp-right" class="flex-1 bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm relative overflow-hidden transition-colors duration-300"><span id="label-media-benchmark" class="block text-xs font-bold opacity-60 uppercase tracking-widest mb-4">Média da Equipa</span><h2 id="comp-media-time" class="text-5xl font-black tracking-tighter mb-2">--</h2><span class="text-sm font-medium opacity-60">documentos / dia</span></div></div><div id="comp-mensagem" class="mt-8 text-center font-bold text-slate-500">Carregando...</div>
                 </div>
 
                 <div id="tab-feedback" class="view-tab hidden flex flex-col h-[600px]">

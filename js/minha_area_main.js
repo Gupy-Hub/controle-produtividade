@@ -27,7 +27,6 @@ const MA_Main = {
 
         const inputData = document.getElementById('global-date');
         if (inputData) {
-            // Tenta pegar data salva ou define HOJE
             const dataSalva = localStorage.getItem('produtividade_data_ref') || new Date().toISOString().split('T')[0];
             inputData.value = dataSalva;
         }
@@ -106,24 +105,17 @@ const MA_Main = {
         const valData = document.getElementById('global-date').value;
         if (!valData) return;
         
-        localStorage.setItem('produtividade_data_ref', valData); // Persiste a data
+        localStorage.setItem('produtividade_data_ref', valData);
 
-        // --- ATUALIZA O CHECK-IN NO TOPO ---
-        if(typeof MA_Checkin !== 'undefined') {
-            MA_Checkin.verificar(valData);
-        }
+        // Atualiza Check-in
+        if(typeof MA_Checkin !== 'undefined') MA_Checkin.verificar(valData);
 
         const [y, m, d] = valData.split('-').map(Number);
-        const refDate = new Date(y, m-1, d);
-
-        const ano = refDate.getFullYear();
-        const mes = refDate.getMonth();
-        const dataInicio = new Date(ano, mes, 1).toISOString().split('T')[0];
-        const dataFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
-
-        let targetName = this.usersMap[this.sessao.id];
-        let viewingTime = false;
+        
+        // CORREÇÃO DE LÓGICA DE DUPLICIDADE
         let isGestoraViewSelf = false;
+        let viewingTime = false;
+        let targetName = this.usersMap[this.sessao.id];
 
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
@@ -132,15 +124,25 @@ const MA_Main = {
             else targetName = this.usersMap[val];
         }
 
+        const elConteudo = document.getElementById('conteudo-principal');
+        const elAviso = document.getElementById('aviso-gestora-view');
+
         if (isGestoraViewSelf) {
-            document.getElementById('conteudo-principal').classList.add('hidden');
-            document.getElementById('aviso-gestora-view').classList.remove('hidden');
+            // Se for gestora vendo a si mesma, esconde TUDO do painel e mostra aviso
+            elConteudo.classList.add('hidden');
+            elAviso.classList.remove('hidden');
             if(typeof MA_Feedback !== 'undefined') MA_Feedback.carregar();
-            return;
+            return; // Sai da função para não carregar dados desnecessários
         } else {
-            document.getElementById('conteudo-principal').classList.remove('hidden');
-            document.getElementById('aviso-gestora-view').classList.add('hidden');
+            // Se for assistente ou gestora vendo time/assistente
+            elConteudo.classList.remove('hidden');
+            elAviso.classList.add('hidden');
         }
+
+        const ano = y;
+        const mes = m;
+        const dataInicio = new Date(ano, mes-1, 1).toISOString().split('T')[0];
+        const dataFim = new Date(ano, mes, 0).toISOString().split('T')[0];
 
         const { data: rawData } = await _supabase.from('producao')
             .select('*')
