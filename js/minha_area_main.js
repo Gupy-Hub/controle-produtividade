@@ -34,15 +34,24 @@ const MA_Main = {
         if (this.isMgr) {
             const elFiltro = document.getElementById('container-filtro-user');
             if(elFiltro) elFiltro.classList.remove('hidden');
+            
+            const elAviso = document.getElementById('aviso-edicao');
+            if(elAviso) {
+                elAviso.classList.remove('hidden');
+                if(f === 'Auditora') elAviso.innerHTML = '<i class="fas fa-search"></i> Modo Auditoria';
+            }
+            
             const selUser = document.getElementById('filtro-user');
             if(selUser) selUser.addEventListener('change', () => this.atualizarDashboard(true));
         }
 
         await this.carregarMapaUsuarios();
         
+        // CORREÇÃO: Removemos a lógica que setava 'me' como padrão se vazio
         if (this.isMgr) {
              const selUser = document.getElementById('filtro-user');
-             if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
+             // Agora o padrão forçado é sempre 'time'
+             if(selUser) selUser.value = 'time';
         }
 
         this.mudarAba('diario');
@@ -88,21 +97,35 @@ const MA_Main = {
         if (!this.isMgr) return;
         const selUser = document.getElementById('filtro-user');
         if (!selUser) return;
-        const valorAtual = selUser.value;
+        
+        const valorAtual = selUser.value; // Tenta manter a seleção
+        
         const usuariosNoPeriodo = new Set();
         if (rawData) {
             rawData.forEach(r => { if (this.userRoles[r.usuario_id] === 'Assistente') { usuariosNoPeriodo.add(r.usuario_id); } });
         }
+        
         selUser.innerHTML = '';
-        const optMe = document.createElement('option'); optMe.value = 'me'; optMe.text = '👤 Minha Visão';
+        
+        // --- ALTERAÇÃO: REMOVIDA A OPÇÃO "MINHA VISÃO" ---
+        // Apenas Time e Separador
         const optTime = document.createElement('option'); optTime.value = 'time'; optTime.text = '👥 Time (Média)';
         const optSep = document.createElement('option'); optSep.disabled = true; optSep.text = '──────────';
-        selUser.appendChild(optMe); selUser.appendChild(optTime); selUser.appendChild(optSep);
+        
+        selUser.appendChild(optTime); 
+        selUser.appendChild(optSep);
 
         const listaOrdenada = Array.from(usuariosNoPeriodo).map(id => ({ id: id, nome: this.usersMap[id] || 'Desconhecido' })).sort((a, b) => a.nome.localeCompare(b.nome));
         listaOrdenada.forEach(u => { const opt = document.createElement('option'); opt.value = u.id; opt.text = u.nome; selUser.appendChild(opt); });
 
-        if (valorAtual === 'me' || valorAtual === 'time' || usuariosNoPeriodo.has(parseInt(valorAtual))) { selUser.value = valorAtual; } else { selUser.value = 'time'; }
+        // Se o valor anterior era 'me' (que não existe mais), força 'time'
+        if (valorAtual === 'me' || !valorAtual) {
+            selUser.value = 'time';
+        } else if (valorAtual === 'time' || usuariosNoPeriodo.has(parseInt(valorAtual))) { 
+            selUser.value = valorAtual; 
+        } else { 
+            selUser.value = 'time'; 
+        }
     },
 
     atualizarDashboard: async function(apenasTrocaDeUsuario = false) {
@@ -118,25 +141,20 @@ const MA_Main = {
 
         let targetName = this.usersMap[this.sessao.id];
         let viewingTime = false;
-        let isGestoraViewSelf = false;
-
+        
+        // --- ALTERAÇÃO: Removida lógica de isGestoraViewSelf pois a opção foi excluída ---
+        
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
             if (val === 'time') viewingTime = true;
-            else if (val === 'me') isGestoraViewSelf = true;
             else targetName = this.usersMap[val];
         }
 
+        // Garante que o conteúdo apareça (pois não há mais modo "Minha Visão" que escondia)
         const elConteudo = document.getElementById('conteudo-principal');
         const elAviso = document.getElementById('aviso-gestora-view');
-
-        if (isGestoraViewSelf) {
-            elConteudo.classList.add('hidden'); elAviso.classList.remove('hidden');
-            if(typeof MA_Feedback !== 'undefined') MA_Feedback.carregar();
-            return; 
-        } else {
-            elConteudo.classList.remove('hidden'); elAviso.classList.add('hidden');
-        }
+        if(elConteudo) elConteudo.classList.remove('hidden');
+        if(elAviso) elAviso.classList.add('hidden');
 
         const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
 
@@ -144,7 +162,7 @@ const MA_Main = {
             this.atualizarSeletorDinamico(rawData);
             const novoVal = document.getElementById('filtro-user').value;
             if (novoVal === 'time') { viewingTime = true; }
-            else if (novoVal !== 'me') { targetName = this.usersMap[novoVal]; viewingTime = false; }
+            else { targetName = this.usersMap[novoVal]; viewingTime = false; }
         }
 
         const dadosNormalizados = MA_Diario.normalizarDados(rawData || []);
