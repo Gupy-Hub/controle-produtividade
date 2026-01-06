@@ -66,7 +66,7 @@ Produtividade.importarEmMassa = async function(input) {
 
     if(!confirm(`Importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
 
-    // Carrega usuários para mapear Nome -> ID
+    // Carrega usuários do banco para mapear Nome -> ID
     const { data: usersDB } = await Produtividade.supabase.from('usuarios').select('id, nome');
     const mapUsuarios = {};
     (usersDB || []).forEach(u => mapUsuarios[Importacao.normalizar(u.nome)] = u.id);
@@ -84,35 +84,33 @@ Produtividade.importarEmMassa = async function(input) {
             leitura.dados.forEach(row => {
                 const keys = Object.keys(row);
                 const norm = Importacao.normalizar;
-                // Helper para busca flexível
+                // Helper para busca flexível (caso o nome varie ligeiramente)
                 const findKey = (t) => keys.find(k => k.trim() === t || norm(k) === t || norm(k).includes(t));
 
+                // 1. Identificar a coluna de Nome
                 const kNome = findKey('assistente') || findKey('nome');
-                // Ignora linha de total ou vazia onde o nome contenha "Total"
+                
+                // Ignora linha se não tiver nome ou se for a linha de "Total"
                 if (!kNome || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
 
-                // Mapeamento de Colunas (Atualizado para sua planilha 05012026.xlsx)
-                // Procura exatamente as colunas do seu arquivo primeiro
-                const kTotal = keys.find(k => k.trim() === 'documentos_validados') || 
-                               findKey('total') || 
-                               findKey('producao') || 
-                               findKey('qtd');
+                // 2. Mapeamento Exato das Colunas (Baseado no seu arquivo 05012026.xlsx)
+                // Prioriza o nome exato da coluna técnica, depois tenta apelidos
+                const kTotal = keys.find(k => k === 'documentos_validados') || findKey('total') || findKey('qtd');
+                const kFifo  = keys.find(k => k === 'documentos_validados_fifo') || findKey('fifo');
+                const kGT    = keys.find(k => k === 'documentos_validados_gradual_total') || findKey('gradual_total');
+                const kGP    = keys.find(k => k === 'documentos_validados_gradual_parcial') || findKey('gradual_parcial');
+                const kPFC   = keys.find(k => k === 'documentos_validados_perfil_fc') || findKey('perfil_fc');
 
-                const kFifo = findKey('documentos_validados_fifo') || findKey('fifo');
-                const kGT = findKey('documentos_validados_gradual_total') || findKey('gradual_total');
-                const kGP = findKey('documentos_validados_gradual_parcial') || findKey('gradual_parcial');
-                const kPFC = findKey('documentos_validados_perfil_fc') || findKey('perfil_fc');
-
-                // Identifica Usuário
+                // 3. Identificar o ID do Usuário
                 const nomeRaw = row[kNome] ? row[kNome].toString() : "";
                 const uid = mapUsuarios[norm(nomeRaw)];
 
                 if (uid) {
-                    // Função auxiliar robusta para converter números
+                    // Função auxiliar para converter strings numéricas (ex: "1.200") em inteiros
                     const pInt = (v) => {
                         if (typeof v === 'number') return v;
                         if (!v) return 0;
-                        // Remove pontos de milhar e troca vírgula decimal por ponto
+                        // Remove pontos de milhar e substitui vírgula decimal
                         const s = v.toString().trim().replace(/\./g, '').replace(',', '.');
                         return parseInt(s) || 0;
                     };
@@ -120,11 +118,11 @@ Produtividade.importarEmMassa = async function(input) {
                     updates.push({
                         usuario_id: uid,
                         data_referencia: dataRef,
-                        quantidade: pInt(row[kTotal]),
-                        fifo: pInt(row[kFifo]),
-                        gradual_total: pInt(row[kGT]),
-                        gradual_parcial: pInt(row[kGP]),
-                        perfil_fc: pInt(row[kPFC])
+                        quantidade: pInt(row[kTotal]),      // Coluna 'documentos_validados'
+                        fifo: pInt(row[kFifo]),             // Coluna 'documentos_validados_fifo'
+                        gradual_total: pInt(row[kGT]),      // Coluna 'documentos_validados_gradual_total'
+                        gradual_parcial: pInt(row[kGP]),    // Coluna 'documentos_validados_gradual_parcial'
+                        perfil_fc: pInt(row[kPFC])          // Coluna 'documentos_validados_perfil_fc'
                     });
                 }
             });
@@ -139,7 +137,7 @@ Produtividade.importarEmMassa = async function(input) {
             }
 
         } catch (err) {
-            console.error("Erro na importação:", err);
+            console.error(`Erro ao processar arquivo ${file.name}:`, err);
             erros++;
         }
     }
@@ -147,7 +145,7 @@ Produtividade.importarEmMassa = async function(input) {
     input.value = "";
     alert(`Importação finalizada!\nRegistros processados: ${totalImportados}\nArquivos com erro: ${erros}`);
     
-    // Recarrega a tela se estiver na aba geral
+    // Atualiza a tela imediatamente após importar
     if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
         Produtividade.Geral.carregarTela();
     }
