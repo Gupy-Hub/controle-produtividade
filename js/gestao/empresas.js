@@ -52,6 +52,82 @@ Gestao.Empresas = {
         this.renderizar(filtered);
     },
 
+    // --- IMPORTAÇÃO DE EMPRESAS ---
+    importar: async function(input) {
+        const file = input.files[0];
+        if (!file) return;
+        if(!confirm("Importar EMPRESAS?\nIDs existentes serão atualizados.")) { input.value = ""; return; }
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                let workbook;
+                try { workbook = XLSX.read(data, { type: 'array' }); } 
+                catch { const dec = new TextDecoder('iso-8859-1'); workbook = XLSX.read(dec.decode(data), { type: 'string', raw: true }); }
+                
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const json = XLSX.utils.sheet_to_json(sheet);
+                await this.processarImportacao(json);
+            } catch (err) { alert("Erro arquivo: " + err.message); }
+            input.value = "";
+        };
+        reader.readAsArrayBuffer(file);
+    },
+
+    processarImportacao: async function(linhas) {
+        const norm = t => t ? t.toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "") : "";
+        const upserts = [];
+
+        for (const row of linhas) {
+            const keys = Object.keys(row);
+            // Mapeamento baseado no seu CSV: ID Empresa, Nome, Subdominio, Entrou para mesa, OBS
+            const kId = keys.find(k => ['id empresa', 'id'].includes(norm(k)));
+            const kNome = keys.find(k => ['nome', 'nome da empresa', 'empresa'].includes(norm(k)));
+            const kSub = keys.find(k => ['subdominio'].includes(norm(k)));
+            const kData = keys.find(k => ['entrou para mesa', 'data', 'inicio'].includes(norm(k)));
+            const kObs = keys.find(k => ['obs', 'observacao'].includes(norm(k)));
+
+            if (!kId || !kNome) continue;
+
+            const id = parseInt(row[kId]);
+            const nome = row[kNome] ? row[kNome].toString().trim() : "";
+            const sub = kSub && row[kSub] ? row[kSub].toString().trim() : null;
+            const obs = kObs && row[kObs] ? row[kObs].toString().trim() : null;
+            
+            // Tratamento de data (Assume formato YYYY-MM-DD do Excel ou string)
+            let dataEntrada = null;
+            if (kData && row[kData]) {
+                const d = row[kData].toString().trim();
+                // Verifica se é válida
+                if (d.match(/^\d{4}-\d{2}-\d{2}$/)) dataEntrada = d; 
+                // Excel às vezes manda número serial para datas, o XLSX converte se usar option cellDates, 
+                // mas aqui estamos lendo raw. Se vier string ISO, ok.
+            }
+
+            if (!id || !nome) continue;
+
+            upserts.push({
+                id: id,
+                nome: nome,
+                subdominio: sub,
+                data_entrada: dataEntrada,
+                observacao: obs
+            });
+        }
+
+        try {
+            if (upserts.length) {
+                const { error } = await Gestao.supabase.from('empresas').upsert(upserts);
+                if (error) throw error;
+                alert(`Importação concluída: ${upserts.length} empresas processadas.`);
+                this.carregar();
+            } else {
+                alert("Nenhuma empresa válida encontrada no arquivo.");
+            }
+        } catch (err) { alert("Erro BD: " + err.message); }
+    },
+
     // --- MODAL ---
     abrirModal: function(empresa = null) {
         const m = document.getElementById('modal-empresa');

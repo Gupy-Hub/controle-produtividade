@@ -1,6 +1,7 @@
 Gestao.Equipe = {
     carregar: async function() {
         try {
+            // Carrega e ordena por nome
             const { data, error } = await Gestao.supabase.from('usuarios').select('*').order('nome');
             if (error) throw error;
             Gestao.dados.usuarios = data || [];
@@ -23,16 +24,25 @@ Gestao.Equipe = {
 
         let html = '';
         lista.forEach(u => {
-            // Escapa aspas para passar no JSON do onclick
             const userJson = JSON.stringify(u).replace(/"/g, '&quot;');
-            const icon = u.funcao === 'Gestora' ? '<i class="fas fa-user-shield text-purple-500"></i>' : '<i class="fas fa-user text-slate-400"></i>';
             
+            // Ícone baseando na função
+            let iconClass = 'fa-user text-slate-400';
+            if (u.funcao === 'Gestora') iconClass = 'fa-user-shield text-purple-500';
+            if (u.funcao === 'Auditora') iconClass = 'fa-search text-orange-500';
+
+            // Estilo visual para desativados
+            const opacityClass = u.ativo ? '' : 'opacity-60 grayscale bg-slate-100';
+            const statusLabel = u.ativo ? '' : '<span class="ml-2 text-[10px] bg-red-100 text-red-600 px-1 rounded border border-red-200">INATIVO</span>';
+
             html += `
-            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition group shadow-sm">
+            <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition group shadow-sm ${opacityClass}">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-xs font-bold text-slate-600 border border-slate-100">${u.id}</div>
                     <div>
-                        <div class="font-bold text-sm text-slate-700 flex items-center gap-2">${u.nome} ${icon}</div>
+                        <div class="font-bold text-sm text-slate-700 flex items-center gap-2">
+                            ${u.nome} <i class="fas ${iconClass}"></i> ${statusLabel}
+                        </div>
                         <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">${u.funcao} • ${u.contrato || 'PJ'}</div>
                     </div>
                 </div>
@@ -58,7 +68,8 @@ Gestao.Equipe = {
         sel.innerHTML = '<option value="">Selecione...</option>';
         sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>';
         
-        const assistentes = Gestao.dados.usuarios.filter(u => u.funcao === 'Assistente');
+        // Filtra apenas assistentes ATIVOS para a meta
+        const assistentes = Gestao.dados.usuarios.filter(u => u.funcao === 'Assistente' && u.ativo);
         assistentes.forEach(u => { 
             sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`; 
         });
@@ -68,7 +79,7 @@ Gestao.Equipe = {
     importar: async function(input) {
         const file = input.files[0];
         if (!file) return;
-        if(!confirm("Deseja importar este arquivo? IDs existentes terão nome atualizado, novos serão criados.")) { input.value = ""; return; }
+        if(!confirm("Confirmar importação de 'ASSISTENTES'?\n\nIsso atualizará nomes, funções, contratos e inativará quem estiver com situação diferente de 'ATIVO'.")) { input.value = ""; return; }
 
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -89,30 +100,79 @@ Gestao.Equipe = {
 
     processarImportacao: async function(linhas) {
         const norm = t => t ? t.toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "") : "";
-        const updates = []; const inserts = [];
+        const updates = []; 
+        const inserts = [];
         const mapDb = {}; 
-        Gestao.dados.usuarios.forEach(u => mapDb[u.id] = u.nome);
+        Gestao.dados.usuarios.forEach(u => mapDb[u.id] = u); // Mapeia objeto completo para comparação
 
         for (const row of linhas) {
             const keys = Object.keys(row);
-            const kId = keys.find(k => ['id','id_assistente','matricula'].includes(norm(k)));
-            const kNome = keys.find(k => norm(k).includes('nome') || norm(k).includes('assistente'));
+            
+            // 1. Identificar Colunas (Baseado no CSV enviado)
+            const kId = keys.find(k => ['id assistente', 'id', 'matricula'].includes(norm(k)));
+            const kNome = keys.find(k => ['nome assist', 'assistente', 'nome'].includes(norm(k)));
+            const kContrato = keys.find(k => ['contrato'].includes(norm(k)));
+            const kSituacao = keys.find(k => ['situacao', 'status'].includes(norm(k)));
+
             if (!kId || !kNome) continue;
 
-            const id = parseInt(row[kId]); const nome = row[kNome] ? row[kNome].toString().trim() : "";
+            const id = parseInt(row[kId]);
+            const nome = row[kNome] ? row[kNome].toString().trim() : "";
+            const rawContrato = kContrato && row[kContrato] ? row[kContrato].toString().toUpperCase().trim() : "PJ";
+            const rawSituacao = kSituacao && row[kSituacao] ? row[kSituacao].toString().toUpperCase().trim() : "ATIVO";
+
             if (!id || !nome || nome.toLowerCase() === 'total') continue;
 
+            // 2. Lógica de Função e Contrato
+            let funcao = 'Assistente';
+            let contrato = 'PJ';
+            
+            if (rawContrato === 'CLT') contrato = 'CLT';
+            else if (rawContrato === 'AUDITORA') { funcao = 'Auditora'; contrato = 'PJ'; } // Assume PJ para cargos especiais se não especificado
+            else if (rawContrato === 'GESTORA') { funcao = 'Gestora'; contrato = 'PJ'; }
+            
+            // 3. Lógica de Ativo/Inativo
+            const ativo = rawSituacao === 'ATIVO';
+
+            const payload = {
+                id: id,
+                nome: nome,
+                funcao: funcao,
+                contrato: contrato,
+                ativo: ativo
+            };
+
+            // 4. Verifica se precisa atualizar ou criar
             if (mapDb[id]) {
-                if (norm(mapDb[id]) !== norm(nome)) updates.push({id, nome});
+                const uDb = mapDb[id];
+                // Atualiza se houver qualquer diferença
+                if (norm(uDb.nome) !== norm(nome) || uDb.funcao !== funcao || uDb.contrato !== contrato || uDb.ativo !== ativo) {
+                    updates.push(payload);
+                }
             } else {
-                inserts.push({ id, nome, senha: '123456', funcao: 'Assistente', contrato: 'PJ', ativo: true });
+                // Novo usuário (Senha padrão)
+                payload.senha = '123456'; 
+                inserts.push(payload);
             }
         }
 
         try {
-            for (const u of updates) await Gestao.supabase.from('usuarios').update({nome: u.nome}).eq('id', u.id);
+            // Atualizações (um por um para garantir segurança dos campos não mapeados)
+            let countUpd = 0;
+            for (const u of updates) {
+                await Gestao.supabase.from('usuarios').update({
+                    nome: u.nome,
+                    funcao: u.funcao,
+                    contrato: u.contrato,
+                    ativo: u.ativo
+                }).eq('id', u.id);
+                countUpd++;
+            }
+
+            // Inserções em lote
             if (inserts.length) await Gestao.supabase.from('usuarios').insert(inserts);
-            alert(`Importação: ${inserts.length} criados, ${updates.length} atualizados.`);
+
+            alert(`Processamento Concluído!\n\n🆕 Novos: ${inserts.length}\n🔄 Atualizados: ${countUpd}`);
             this.carregar();
         } catch (err) { alert("Erro BD: " + err.message); }
     },
@@ -152,7 +212,7 @@ Gestao.Equipe = {
         const contrato = document.getElementById('form-user-contrato').value;
         
         if(!id || !nome) return alert("Campos obrigatórios.");
-        const payload = { id: parseInt(id), nome, senha, funcao, contrato };
+        const payload = { id: parseInt(id), nome, senha, funcao, contrato, ativo: true };
         
         try {
             if (document.getElementById('form-user-id').disabled) {
@@ -168,7 +228,9 @@ Gestao.Equipe = {
 
     excluir: async function() {
         const id = document.getElementById('form-user-id').value;
-        if(!confirm("Excluir usuário?")) return;
+        // Soft delete (apenas inativa) é mais seguro, mas aqui segue exclusão física conforme pedido
+        if(!confirm("Tem certeza? Isso apagará o histórico de produção deste usuário! \n\nRecomendamos apenas mudar o contrato ou senha.")) return;
+        
         try {
             const { error } = await Gestao.supabase.from('usuarios').delete().eq('id', id);
             if (error) throw error;
