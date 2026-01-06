@@ -28,13 +28,15 @@ const Importacao = {
                     if (isZip) {
                         try {
                             // TENTATIVA 1: Leitura Padrão (Array)
+                            // É a mais rápida, mas falha se o ZIP estiver com tamanho incorreto
                             workbook = XLSX.read(data, { type: 'array', cellDates: true });
                         } catch (eZip) {
                             console.warn("Erro na leitura padrão (Array). Tentando modo Binário...", eZip);
                             
                             try {
                                 // TENTATIVA 2: Workaround para erro "Bad uncompressed size"
-                                // Converte o buffer para string binária manualmente
+                                // Converte o buffer para string binária manualmente.
+                                // O parser 'binary' do SheetJS ignora erros de tamanho no ZIP.
                                 let binary = "";
                                 const len = data.byteLength;
                                 for (let i = 0; i < len; i++) {
@@ -52,7 +54,7 @@ const Importacao = {
                             }
                         }
                     } else {
-                        // NÃO é um Excel real (é CSV/Texto com extensão .xlsx)
+                        // NÃO é um Excel real (provavelmente CSV ou Texto com extensão .xlsx)
                         const decoder = new TextDecoder('iso-8859-1');
                         const text = decoder.decode(data);
                         workbook = XLSX.read(text, { type: 'string', raw: true });
