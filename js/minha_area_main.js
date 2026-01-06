@@ -34,24 +34,15 @@ const MA_Main = {
         if (this.isMgr) {
             const elFiltro = document.getElementById('container-filtro-user');
             if(elFiltro) elFiltro.classList.remove('hidden');
-            
-            const elAviso = document.getElementById('aviso-edicao');
-            if(elAviso) {
-                elAviso.classList.remove('hidden');
-                if(f === 'Auditora') elAviso.innerHTML = '<i class="fas fa-search"></i> Modo Auditoria';
-            }
-            
             const selUser = document.getElementById('filtro-user');
             if(selUser) selUser.addEventListener('change', () => this.atualizarDashboard(true));
         }
 
         await this.carregarMapaUsuarios();
         
-        // CORREÇÃO: Removemos a lógica que setava 'me' como padrão se vazio
         if (this.isMgr) {
              const selUser = document.getElementById('filtro-user');
-             // Agora o padrão forçado é sempre 'time'
-             if(selUser) selUser.value = 'time';
+             if(selUser && (!selUser.value || selUser.value === 'me')) selUser.value = 'time';
         }
 
         this.mudarAba('diario');
@@ -97,35 +88,20 @@ const MA_Main = {
         if (!this.isMgr) return;
         const selUser = document.getElementById('filtro-user');
         if (!selUser) return;
-        
-        const valorAtual = selUser.value; // Tenta manter a seleção
-        
+        const valorAtual = selUser.value;
         const usuariosNoPeriodo = new Set();
         if (rawData) {
             rawData.forEach(r => { if (this.userRoles[r.usuario_id] === 'Assistente') { usuariosNoPeriodo.add(r.usuario_id); } });
         }
-        
         selUser.innerHTML = '';
-        
-        // --- ALTERAÇÃO: REMOVIDA A OPÇÃO "MINHA VISÃO" ---
-        // Apenas Time e Separador
         const optTime = document.createElement('option'); optTime.value = 'time'; optTime.text = '👥 Time (Média)';
         const optSep = document.createElement('option'); optSep.disabled = true; optSep.text = '──────────';
-        
-        selUser.appendChild(optTime); 
-        selUser.appendChild(optSep);
+        selUser.appendChild(optTime); selUser.appendChild(optSep);
 
         const listaOrdenada = Array.from(usuariosNoPeriodo).map(id => ({ id: id, nome: this.usersMap[id] || 'Desconhecido' })).sort((a, b) => a.nome.localeCompare(b.nome));
         listaOrdenada.forEach(u => { const opt = document.createElement('option'); opt.value = u.id; opt.text = u.nome; selUser.appendChild(opt); });
 
-        // Se o valor anterior era 'me' (que não existe mais), força 'time'
-        if (valorAtual === 'me' || !valorAtual) {
-            selUser.value = 'time';
-        } else if (valorAtual === 'time' || usuariosNoPeriodo.has(parseInt(valorAtual))) { 
-            selUser.value = valorAtual; 
-        } else { 
-            selUser.value = 'time'; 
-        }
+        if (valorAtual === 'time' || usuariosNoPeriodo.has(parseInt(valorAtual))) { selUser.value = valorAtual; } else { selUser.value = 'time'; }
     },
 
     atualizarDashboard: async function(apenasTrocaDeUsuario = false) {
@@ -142,15 +118,12 @@ const MA_Main = {
         let targetName = this.usersMap[this.sessao.id];
         let viewingTime = false;
         
-        // --- ALTERAÇÃO: Removida lógica de isGestoraViewSelf pois a opção foi excluída ---
-        
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
             if (val === 'time') viewingTime = true;
             else targetName = this.usersMap[val];
         }
 
-        // Garante que o conteúdo apareça (pois não há mais modo "Minha Visão" que escondia)
         const elConteudo = document.getElementById('conteudo-principal');
         const elAviso = document.getElementById('aviso-gestora-view');
         if(elConteudo) elConteudo.classList.remove('hidden');
@@ -175,6 +148,9 @@ const MA_Main = {
                 const headcount = prods.length;
                 let sumFatores = 0; prods.forEach(p => { sumFatores += Sistema.Dados.obterFator(p.nome, dia); });
                 const mediaFator = headcount ? sumFatores/headcount : 1;
+                
+                // Nota: 'quantidade' aqui continua sendo a MÉDIA para a tabela, 
+                // mas vamos calcular o TOTAL real no KPI separadamente usando rawData.
                 dadosFinais.push({
                     data_referencia: dia, nome: 'Time',
                     quantidade: headcount ? Math.round(total / headcount) : 0,
@@ -197,7 +173,8 @@ const MA_Main = {
         }
 
         if(typeof MA_Diario !== 'undefined') {
-            MA_Diario.atualizarKPIs(dadosFinais);
+            // CORREÇÃO: Passando rawData para calcular o total real do time nos cards
+            MA_Diario.atualizarKPIs(dadosFinais, viewingTime, rawData);
             MA_Diario.atualizarTabela(dadosFinais, viewingTime, rawData);
         }
         

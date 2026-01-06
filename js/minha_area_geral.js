@@ -1,5 +1,6 @@
 // js/minha_area_geral.js
 
+// ... (MA_Checkin mantido igual) ...
 const MA_Checkin = {
     obterUltimoDiaTrabalhado: async function() {
         const hoje = new Date().toISOString().split('T')[0];
@@ -60,26 +61,54 @@ const MA_Diario = {
         return agrupado;
     },
 
-    atualizarKPIs: function(dados) {
+    atualizarKPIs: function(dadosFinais, viewingTime, rawData) {
         const setTxt = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
 
-        const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
-        const diasProdutivos = dados.filter(d => d.quantidade > 0).length;
-        
+        let total = 0;
         let metaTotal = 0;
-        if(dados.length > 0) dados.forEach(d => metaTotal += d.meta_ajustada); 
-        else metaTotal = 650 * 22;
+        
+        // 1. CÁLCULO DE TOTAL E META
+        if (viewingTime && rawData) {
+            // CORREÇÃO: Visão Time -> Soma TODA a produção de TODOS os assistentes do mês
+            // Filtra rawData para apenas assistentes
+            const assistentesData = rawData.filter(r => MA_Main.userRoles[r.usuario_id] === 'Assistente');
+            
+            total = assistentesData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+            
+            // Meta Total do Time no Mês = Soma das metas diárias de cada assistente
+            // (Considerando fatores de abono)
+            assistentesData.forEach(r => {
+                const nome = MA_Main.usersMap[r.usuario_id];
+                const fator = Sistema.Dados.obterFator(nome, r.data_referencia);
+                metaTotal += Math.round(650 * fator);
+            });
+        } else {
+            // Visão Individual (dadosFinais já tem os dados da pessoa)
+            total = dadosFinais.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+            if(dadosFinais.length > 0) dadosFinais.forEach(d => metaTotal += d.meta_ajustada); 
+            else metaTotal = 650 * 22; // Estimativa se vazio
+        }
 
-        const media = diasProdutivos > 0 ? Math.round(total / diasProdutivos) : 0;
+        // 2. DIAS E MÉDIA
+        const diasProdutivos = dadosFinais.filter(d => d.quantidade > 0).length;
+        
+        // Na visão TIME, a Média Diária é "Média por Pessoa por Dia" (igual ao consolidado)
+        // Na visão INDIVIDUAL, é "Média do Indivíduo"
+        let media = 0;
+        if (viewingTime) {
+            // Média no card de time geralmente é a média per capita
+            // Mas para o card "Média Diária" fazer sentido com a meta "650", 
+            // precisamos da média POR PESSOA.
+            // dadosFinais na visão time já contém a média do time por dia.
+            const somaMediasDiarias = dadosFinais.reduce((acc, curr) => acc + curr.quantidade, 0);
+            media = dadosFinais.length > 0 ? Math.round(somaMediasDiarias / dadosFinais.length) : 0;
+        } else {
+            media = diasProdutivos > 0 ? Math.round(total / diasProdutivos) : 0;
+        }
+
         const atingimento = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
 
-        // Atualiza Global KPIs
-        setTxt('kpi-total', total.toLocaleString());
-        setTxt('kpi-meta-total', metaTotal.toLocaleString());
-        setTxt('kpi-porcentagem', atingimento + '%');
-        setTxt('kpi-media-real', media.toLocaleString());
-        
-        // Atualiza 5 Cards da Aba Diário
+        // Atualiza Cards
         const valData = document.getElementById('global-date').value;
         const [y, m, d] = valData.split('-').map(Number);
         let diasUteisTotal = 0;
@@ -93,18 +122,9 @@ const MA_Diario = {
         setTxt('diario-card-media', media.toLocaleString());
         setTxt('diario-kpi-pct', atingimento + '%');
 
-        // Barras e Ícones
-        const bar = document.getElementById('bar-progress'); 
-        const icon = document.getElementById('icon-status');
+        // Cores
         const cardPct = document.getElementById('diario-card-pct');
         const iconPct = document.getElementById('diario-icon-pct');
-
-        if(bar) bar.style.width = Math.min(atingimento, 100) + '%';
-        
-        if(atingimento >= 100) { if(bar) bar.className="bg-emerald-500 h-full rounded-full"; if(icon) icon.className="fas fa-check-circle text-emerald-500 text-2xl"; }
-        else if(atingimento >= 80) { if(bar) bar.className="bg-yellow-400 h-full rounded-full"; if(icon) icon.className="fas fa-exclamation-circle text-yellow-500 text-2xl"; }
-        else { if(bar) bar.className="bg-red-500 h-full rounded-full"; if(icon) icon.className="fas fa-times-circle text-red-500 text-2xl"; }
-
         if (cardPct) {
             cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
             if (atingimento < 100) {
@@ -138,7 +158,6 @@ const MA_Diario = {
 
             let obsHtml = '';
             
-            // A. Média do Time
             if (rawData && !viewingTime) {
                 const doDia = rawData.filter(r => r.data_referencia === item.data_referencia && MA_Main.userRoles[r.usuario_id] === 'Assistente');
                 const totalDia = doDia.reduce((acc, r) => acc + r.quantidade, 0);
@@ -150,7 +169,6 @@ const MA_Diario = {
                 </div>`;
             }
 
-            // B. Motivo Abono
             const fator = item.fator !== undefined ? item.fator : 1;
             if (fator < 1) {
                 const motivo = Sistema.Dados.obterMotivo(item.nome, item.data_referencia) || "Sem motivo registrado";
@@ -158,6 +176,9 @@ const MA_Diario = {
                 obsHtml += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100">
                     <i class="fas fa-info-circle mr-1"></i> <strong>${tipoAbono}:</strong> ${motivo}
                 </div>`;
+            } else if (viewingTime) {
+                // Na visão time, mostra quantos assistentes
+                obsHtml = `<span class="text-xs text-slate-400">Média calculada sobre o time ativo.</span>`;
             }
 
             const dFmt = item.data_referencia.split('-').reverse().join('/');
