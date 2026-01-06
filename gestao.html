@@ -4,461 +4,688 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão Administrativa</title>
-    <link rel="shortcut icon" href="#">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style> 
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
 </head>
-<body class="text-slate-800">
+<body class="bg-slate-100">
     
     <script src="js/config.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">Painel de Gestão</h1>
-            <p class="text-slate-500">Gerencie colaboradores e defina as metas do time.</p>
-        </div>
+    <div class="bg-white border-b border-slate-200 sticky top-10 z-40 shadow-sm">
+        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
+                
+                <div class="flex items-center gap-3 w-full md:w-auto">
+                    <div class="flex items-center gap-2 border-r border-slate-200 pr-3">
+                        <i class="fas fa-cogs text-slate-400 text-lg"></i>
+                        <h1 class="text-lg font-black text-slate-700 tracking-tight">Gestão</h1>
+                    </div>
+                    <span class="text-xs text-slate-400 font-bold hidden sm:inline">Administração do Sistema</span>
+                </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[600px]">
-                <div class="p-5 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                        👥 Equipa <span id="total-users" class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">...</span>
-                    </h3>
-                    <button onclick="abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition shadow-sm">
-                        <i class="fas fa-plus mr-1"></i> Novo
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end">
+                    <button onclick="mudarAba('equipe')" id="btn-equipe" class="tab-btn active px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-users"></i> Equipe
+                    </button>
+                    <button onclick="mudarAba('producao')" id="btn-producao" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-chart-line"></i> Prod. Individual
+                    </button>
+                    <button onclick="mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-bullseye"></i> Assertividade
+                    </button>
+                    <button onclick="mudarAba('empresas')" id="btn-empresas" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-building"></i> Empresas
                     </button>
                 </div>
-                <div class="p-4 border-b border-slate-100 bg-white">
-                    <div class="relative">
-                        <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
-                        <input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar por nome ou ID..." class="w-full bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 focus:ring-blue-500 focus:border-blue-500 outline-none">
-                    </div>
-                </div>
-                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative scroll-smooth" id="user-list">
-                    <div class="absolute inset-0 flex items-center justify-center text-slate-400">
-                        <div class="text-center"><span class="block text-2xl mb-2">⏳</span>A carregar equipa...</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-fit min-h-[600px] flex flex-col">
-                <div class="flex border-b border-slate-200">
-                    <button onclick="mudarAbaMeta('producao')" id="tab-producao" class="flex-1 py-4 text-sm font-bold text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 hover:bg-blue-50 transition">
-                        📊 Produção (Individual)
-                    </button>
-                    <button onclick="mudarAbaMeta('assertividade')" id="tab-assertividade" class="flex-1 py-4 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition">
-                        🎯 Assertividade (Global)
-                    </button>
-                </div>
-
-                <div id="content-producao" class="p-6 space-y-4 animate-fade-in">
-                    <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800 mb-4">
-                        <i class="fas fa-info-circle mr-1"></i> Defina a meta diária de documentos. O sistema usará a meta válida para a data do registo.
-                    </div>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="col-span-2">
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Aplicar Para</label>
-                            <select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500">
-                                <option>A carregar...</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label>
-                            <input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Valor Diário (Docs)</label>
-                            <input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500">
-                        </div>
-                    </div>
-                    
-                    <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 active:scale-95">
-                        <i class="fas fa-save mr-2"></i> Gravar Meta de Produção
-                    </button>
-
-                    <div class="pt-6 border-t border-slate-100 flex-1 flex flex-col">
-                        <div class="flex justify-between items-center mb-3">
-                            <h4 class="text-sm font-bold text-slate-700">Histórico de Metas</h4>
-                            <button onclick="loadMetasAtuais()" class="text-xs text-blue-600 hover:underline"><i class="fas fa-sync"></i> Atualizar</button>
-                        </div>
-                        <div class="overflow-y-auto max-h-64 space-y-2 pr-1" id="meta-list">
-                            <div class="text-xs text-slate-400 italic text-center py-4">Selecione "Todos" ou um utilizador para ver o histórico.</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="content-assertividade" class="hidden p-6 space-y-4 animate-fade-in">
-                    <div class="bg-purple-50 border border-purple-100 p-3 rounded-lg text-xs text-purple-800 mb-4">
-                        <i class="fas fa-check-double mr-1"></i> Esta meta aplica-se a <b>todas</b> as assistentes a partir da data definida.
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label>
-                            <input type="date" id="assert-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-purple-500">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Mínimo (%)</label>
-                            <div class="relative">
-                                <input type="number" id="assert-value" placeholder="Ex: 97" step="0.1" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-purple-500 pr-8">
-                                <span class="absolute right-3 top-2.5 text-slate-400 font-bold">%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <button onclick="salvarAssertividade()" id="btn-assert" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-purple-200 active:scale-95">
-                        <i class="fas fa-bullseye mr-2"></i> Gravar Meta Global
-                    </button>
-
-                    <div class="pt-6 border-t border-slate-100">
-                        <h4 class="text-sm font-bold text-slate-700 mb-3">Histórico de Assertividade</h4>
-                        <div class="overflow-y-auto max-h-64 space-y-2 pr-1" id="assert-list">
-                            <div class="text-xs text-slate-400 italic text-center py-4">A carregar...</div>
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
     </div>
 
-    <div id="modal-user" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden transform transition-all scale-100">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center"><h3 class="font-bold text-slate-800" id="modal-title">Novo Colaborador</h3><button onclick="fecharModal()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button></div>
-            <div class="p-6 space-y-4">
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Login)</label><input type="number" id="form-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label><input type="text" id="form-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha</label><input type="text" id="form-senha" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500"></div>
-                <div class="grid grid-cols-2 gap-4"><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função</label><select id="form-funcao" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700"><option value="Assistente">Assistente</option><option value="Gestora">Gestora</option><option value="Auditora">Auditora</option></select></div><div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label><select id="form-contrato" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700"><option value="PJ">PJ</option><option value="CLT">CLT</option></select></div></div>
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+
+        <div id="tab-equipe" class="view-section animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[600px]">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div class="flex items-center gap-2 w-full sm:w-auto">
+                        <div class="relative w-full sm:w-64">
+                            <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                            <input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar colaborador..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
+                        </div>
+                        <span id="total-users" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full border border-blue-200">0</span>
+                    </div>
+                    
+                    <div class="flex gap-2 w-full sm:w-auto justify-end">
+                        <input type="file" id="input-import-users" accept=".xlsx, .csv" class="hidden" onchange="importarUsuarios(this)">
+                        <button onclick="document.getElementById('input-import-users').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
+                            <i class="fas fa-file-excel"></i> Importar
+                        </button>
+                        
+                        <button onclick="abrirModalUsuario()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
+                            <i class="fas fa-plus"></i> Novo
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative custom-scrollbar bg-slate-50/50" id="user-list">
+                    <div class="text-center p-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando equipe...</div>
+                </div>
             </div>
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3"><button onclick="salvarUsuario()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar</button><button onclick="excluirUsuario()" id="btn-delete" class="hidden bg-red-100 hover:bg-red-200 text-red-600 font-bold py-2 px-4 rounded-lg transition">Excluir</button></div>
+        </div>
+
+        <div id="tab-producao" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-4xl mx-auto">
+                <div class="mb-6 border-b border-slate-100 pb-4">
+                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-chart-line text-blue-600"></i> Metas de Produção
+                    </h2>
+                    <p class="text-sm text-slate-500">Defina a meta diária de documentos processados por colaborador.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800">
+                            <i class="fas fa-info-circle mr-1"></i> O sistema considera a meta válida na data do registro.
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Colaborador</label>
+                            <select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
+                                <option>Carregando...</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label>
+                                <input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Meta (Docs)</label>
+                                <input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500">
+                            </div>
+                        </div>
+                        <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 active:scale-95">
+                            Gravar Meta
+                        </button>
+                    </div>
+
+                    <div class="border-l border-slate-100 pl-6 flex flex-col">
+                        <div class="flex justify-between items-center mb-3">
+                            <h4 class="text-sm font-bold text-slate-700">Histórico Recente</h4>
+                            <button onclick="loadMetasAtuais()" class="text-xs text-blue-600 hover:underline font-bold"><i class="fas fa-sync"></i> Atualizar</button>
+                        </div>
+                        <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar max-h-[400px]" id="meta-list">
+                            <div class="text-xs text-slate-400 italic text-center py-4">Selecione um usuário para ver.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-assertividade" class="view-section hidden animate-fade-in space-y-6">
+             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-4xl mx-auto">
+                <div class="mb-6 border-b border-slate-100 pb-4">
+                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-bullseye text-purple-600"></i> Assertividade Global
+                    </h2>
+                    <p class="text-sm text-slate-500">Meta de qualidade mínima aplicada a <b>todas</b> as assistentes.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="space-y-4">
+                        <div class="bg-purple-50 border border-purple-100 p-3 rounded-lg text-xs text-purple-800">
+                            <i class="fas fa-check-double mr-1"></i> Atingimento abaixo deste valor será destacado em vermelho nos relatórios.
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label>
+                                <input type="date" id="assert-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-purple-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Mínimo (%)</label>
+                                <div class="relative">
+                                    <input type="number" id="assert-value" placeholder="Ex: 97" step="0.1" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-purple-500 pr-8">
+                                    <span class="absolute right-3 top-2.5 text-slate-400 font-bold">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="salvarAssertividade()" id="btn-assert" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-purple-200 active:scale-95">
+                            Gravar Meta Global
+                        </button>
+                    </div>
+
+                     <div class="border-l border-slate-100 pl-6 flex flex-col">
+                        <h4 class="text-sm font-bold text-slate-700 mb-3">Histórico</h4>
+                        <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar max-h-[400px]" id="assert-list">
+                            <div class="text-xs text-slate-400 italic text-center py-4">Carregando...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-empresas" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[600px]">
+                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
+                    <div class="relative w-full sm:w-80">
+                        <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="search-empresa" onkeyup="filtrarEmpresas()" placeholder="Buscar empresa por nome ou ID..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
+                    </div>
+                    
+                    <button onclick="abrirModalEmpresa()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
+                        <i class="fas fa-plus"></i> Nova Empresa
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                            <tr>
+                                <th class="px-6 py-3 border-b border-slate-200 w-24">ID</th>
+                                <th class="px-6 py-3 border-b border-slate-200">Nome da Empresa</th>
+                                <th class="px-6 py-3 border-b border-slate-200">Subdomínio</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">Data Entrada</th>
+                                <th class="px-6 py-3 border-b border-slate-200">Obs</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center w-24">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-empresas" class="divide-y divide-slate-100 bg-white">
+                            </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div id="modal-user" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800" id="modal-user-title">Novo Colaborador</h3>
+                <button onclick="fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Login)</label><input type="number" id="form-user-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label><input type="text" id="form-user-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha</label><input type="text" id="form-user-senha" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função</label><select id="form-user-funcao" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none"><option value="Assistente">Assistente</option><option value="Gestora">Gestora</option><option value="Auditora">Auditora</option></select></div>
+                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label><select id="form-user-contrato" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none"><option value="PJ">PJ</option><option value="CLT">CLT</option></select></div>
+                </div>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button onclick="salvarUsuario()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar</button>
+                <button onclick="excluirUsuario()" id="btn-user-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-empresa" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100">
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800" id="modal-empresa-title">Nova Empresa</h3>
+                <button onclick="fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <input type="hidden" id="form-empresa-uid"> <div class="grid grid-cols-3 gap-4">
+                    <div class="col-span-1"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID Empresa</label><input type="number" id="form-empresa-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
+                    <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Entrada Mesa</label><input type="date" id="form-empresa-data" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
+                </div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Empresa</label><input type="text" id="form-empresa-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none" placeholder="Ex: Gupy Tecnologia"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Subdomínio</label><input type="text" id="form-empresa-sub" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none" placeholder="Ex: gupy.com.br"></div>
+                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Observação</label><textarea id="form-empresa-obs" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none resize-none"></textarea></div>
+            </div>
+            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
+                <button onclick="salvarEmpresa()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar Empresa</button>
+                <button onclick="excluirEmpresa()" id="btn-empresa-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
+            </div>
         </div>
     </div>
 
     <script>
         let allUsers = [];
-        let _supabase = null; // Variável global para o cliente Supabase
+        let allEmpresas = [];
+        let _supabase = null;
 
         document.addEventListener('DOMContentLoaded', init);
 
-        async function init() { 
-            // 1. Inicializa Conexão (CORREÇÃO CRÍTICA)
+        async function init() {
             if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
                 _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
             } else {
-                alert("Erro: Credenciais do Supabase não encontradas. Verifique js/config.js");
+                alert("Erro: Configuração do Supabase não encontrada.");
                 return;
             }
 
-            try { 
-                const today = new Date().toISOString().substring(0, 10); 
-                document.getElementById('meta-date').value = today; 
-                document.getElementById('assert-date').value = today;
-                
-                await loadUsers(); 
-                await loadMetasAtuais();
-                await loadAssertividade(); 
+            // Define datas padrão nos inputs
+            const today = new Date().toISOString().substring(0, 10);
+            const inputsDate = ['meta-date', 'assert-date', 'form-empresa-data'];
+            inputsDate.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.value = today;
+            });
 
-                // Event Listener para recarregar lista quando mudar o user no select
-                document.getElementById('meta-user').addEventListener('change', loadMetasAtuais);
+            // Carrega dados iniciais
+            mudarAba('equipe'); // Aba padrão
+            await loadUsers();
+            await loadMetasAtuais();
+            await loadAssertividade();
+            await loadEmpresas();
 
-            } catch (e) { 
-                console.error("Erro no INIT:", e); 
-                // alert("Ocorreu um erro ao inicializar: " + e.message); 
-            } 
+            // Listeners
+            document.getElementById('meta-user').addEventListener('change', loadMetasAtuais);
         }
 
-        // --- LÓGICA DE ABAS ---
-        function mudarAbaMeta(aba) {
-            const btnProd = document.getElementById('tab-producao');
-            const btnAss = document.getElementById('tab-assertividade');
-            const contentProd = document.getElementById('content-producao');
-            const contentAss = document.getElementById('content-assertividade');
-
-            if (aba === 'producao') {
-                contentProd.classList.remove('hidden');
-                contentAss.classList.add('hidden');
-                btnProd.className = "flex-1 py-4 text-sm font-bold text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 hover:bg-blue-50 transition";
-                btnAss.className = "flex-1 py-4 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition";
-            } else {
-                contentProd.classList.add('hidden');
-                contentAss.classList.remove('hidden');
-                btnProd.className = "flex-1 py-4 text-sm font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition";
-                btnAss.className = "flex-1 py-4 text-sm font-bold text-purple-600 border-b-2 border-purple-600 bg-purple-50/50 hover:bg-purple-50 transition";
-                loadAssertividade();
-            }
+        // --- SISTEMA DE ABAS ---
+        function mudarAba(aba) {
+            // Esconde todas as seções
+            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+            // Remove classe ativa de todos botões
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            
+            // Ativa seleção
+            document.getElementById(`tab-${aba}`).classList.remove('hidden');
+            document.getElementById(`btn-${aba}`).classList.add('active');
         }
 
-        // --- GESTÃO DE USUÁRIOS ---
+        // --- MÓDULO: EQUIPE ---
         async function loadUsers() {
-            try { 
-                const { data, error } = await _supabase.from('usuarios').select('*').order('nome'); 
-                if (error) throw error; 
-                allUsers = data || []; 
-                renderUsers(allUsers); 
-                populateSelect(allUsers); 
-            } catch (err) { 
-                document.getElementById('user-list').innerHTML = `<div class="text-center p-4 text-red-500 text-sm">Erro: ${err.message}</div>`; 
+            try {
+                const { data, error } = await _supabase.from('usuarios').select('*').order('nome');
+                if (error) throw error;
+                allUsers = data || [];
+                renderUsers(allUsers);
+                populateSelect(allUsers);
+            } catch (err) {
+                console.error(err);
+                document.getElementById('user-list').innerHTML = `<div class="p-4 text-center text-red-500">Erro ao carregar equipe.</div>`;
             }
         }
 
         function renderUsers(lista) {
-            const container = document.getElementById('user-list'); 
+            const container = document.getElementById('user-list');
             document.getElementById('total-users').innerText = lista.length;
-            if(!lista.length) { container.innerHTML = '<div class="text-center p-4 text-slate-400 text-sm">Nenhum utilizador encontrado.</div>'; return; }
             
+            if (lista.length === 0) {
+                container.innerHTML = '<div class="p-10 text-center text-slate-400">Nenhum colaborador encontrado.</div>';
+                return;
+            }
+
             let html = '';
-            lista.forEach(u => { 
-                const userJson = JSON.stringify(u).replace(/"/g, '&quot;'); 
+            lista.forEach(u => {
+                const userJson = JSON.stringify(u).replace(/"/g, '&quot;');
                 const icon = u.funcao === 'Gestora' ? '<i class="fas fa-user-shield text-purple-500"></i>' : '<i class="fas fa-user text-slate-400"></i>';
+                
                 html += `
-                <div class="flex items-center justify-between p-3 hover:bg-slate-50 rounded-lg border border-transparent hover:border-slate-200 transition group">
+                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition group shadow-sm">
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-xs font-bold text-slate-600">${u.id}</div>
+                        <div class="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-xs font-bold text-slate-600 border border-slate-100">${u.id}</div>
                         <div>
                             <div class="font-bold text-sm text-slate-700 flex items-center gap-2">${u.nome} ${icon}</div>
                             <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">${u.funcao} • ${u.contrato || 'PJ'}</div>
                         </div>
                     </div>
-                    <button onclick="abrirModal(${userJson})" class="text-slate-400 hover:text-blue-600 opacity-0 group-hover:opacity-100 transition px-3 py-1 text-xs font-bold border border-slate-200 rounded hover:bg-white">
-                        EDITAR
+                    <button onclick="abrirModalUsuario(${userJson})" class="text-slate-400 hover:text-blue-600 px-3 py-1 text-xs font-bold border border-slate-100 rounded hover:bg-slate-50 transition">
+                        <i class="fas fa-pen"></i> Editar
                     </button>
-                </div>`; 
+                </div>`;
             });
             container.innerHTML = html;
         }
 
-        function populateSelect(lista) { 
-            const sel = document.getElementById('meta-user'); 
-            sel.innerHTML = '<option value="">Selecione...</option>'; 
-            sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>'; 
-            const assistentes = lista.filter(u => u.funcao === 'Assistente'); 
-            assistentes.forEach(u => { sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`; }); 
+        function populateSelect(lista) {
+            const sel = document.getElementById('meta-user');
+            sel.innerHTML = '<option value="">Selecione...</option>';
+            sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>';
+            const assistentes = lista.filter(u => u.funcao === 'Assistente');
+            assistentes.forEach(u => { sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`; });
         }
 
-        function filtrarUsuarios() { 
-            const term = document.getElementById('search-user').value.toLowerCase(); 
-            const filtered = allUsers.filter(u => u.nome.toLowerCase().includes(term) || String(u.id).includes(term)); 
-            renderUsers(filtered); 
+        function filtrarUsuarios() {
+            const term = document.getElementById('search-user').value.toLowerCase();
+            const filtered = allUsers.filter(u => u.nome.toLowerCase().includes(term) || String(u.id).includes(term));
+            renderUsers(filtered);
         }
 
-        // --- GESTÃO DE METAS DE PRODUÇÃO ---
+        // --- IMPORTAÇÃO ---
+        async function importarUsuarios(input) {
+            const file = input.files[0];
+            if (!file) return;
+            if(!confirm("Deseja importar este arquivo? IDs existentes terão nome atualizado, novos serão criados.")) { input.value = ""; return; }
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    let workbook;
+                    try { workbook = XLSX.read(data, { type: 'array' }); } 
+                    catch { const dec = new TextDecoder('iso-8859-1'); workbook = XLSX.read(dec.decode(data), { type: 'string', raw: true }); }
+                    
+                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const json = XLSX.utils.sheet_to_json(sheet);
+                    await processarImportacao(json);
+                } catch (err) { alert("Erro arquivo: " + err.message); }
+                input.value = "";
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function processarImportacao(linhas) {
+            const norm = t => t ? t.toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "") : "";
+            const updates = []; const inserts = [];
+            const mapDb = {}; allUsers.forEach(u => mapDb[u.id] = u.nome);
+
+            for (const row of linhas) {
+                const keys = Object.keys(row);
+                const kId = keys.find(k => ['id','id_assistente','matricula'].includes(norm(k)));
+                const kNome = keys.find(k => norm(k).includes('nome') || norm(k).includes('assistente'));
+                if (!kId || !kNome) continue;
+
+                const id = parseInt(row[kId]); const nome = row[kNome] ? row[kNome].toString().trim() : "";
+                if (!id || !nome || nome.toLowerCase() === 'total') continue;
+
+                if (mapDb[id]) {
+                    if (norm(mapDb[id]) !== norm(nome)) updates.push({id, nome});
+                } else {
+                    inserts.push({ id, nome, senha: '123456', funcao: 'Assistente', contrato: 'PJ', ativo: true });
+                }
+            }
+
+            try {
+                for (const u of updates) await _supabase.from('usuarios').update({nome: u.nome}).eq('id', u.id);
+                if (inserts.length) await _supabase.from('usuarios').insert(inserts);
+                alert(`Importação: ${inserts.length} criados, ${updates.length} atualizados.`);
+                loadUsers();
+            } catch (err) { alert("Erro BD: " + err.message); }
+        }
+
+        // --- MÓDULO: PRODUÇÃO INDIVIDUAL ---
         async function loadMetasAtuais() {
             const container = document.getElementById('meta-list');
-            const selectedUser = document.getElementById('meta-user').value;
+            const uid = document.getElementById('meta-user').value;
+            if (!uid) { container.innerHTML = '<div class="text-xs text-slate-400 italic text-center py-10">Selecione um usuário.</div>'; return; }
 
-            if (!selectedUser) {
-                container.innerHTML = '<div class="text-xs text-slate-400 italic text-center py-4">Selecione um utilizador acima para ver o histórico.</div>';
-                return;
-            }
-
-            try { 
-                let query = _supabase.from('metas').select('*, usuarios(nome)').order('data_inicio', { ascending: false });
-                
-                if (selectedUser !== 'all') {
-                    query = query.eq('usuario_id', selectedUser);
-                } else {
-                    query = query.limit(50);
-                }
-
-                const { data: metas, error } = await query;
-                if (error) throw error;
-
-                if (!metas || !metas.length) { 
-                    container.innerHTML = '<div class="p-4 text-xs text-slate-400 text-center bg-slate-50 rounded border border-slate-100">Nenhuma meta encontrada para esta seleção.</div>'; 
-                    return; 
-                } 
-
-                let html = ''; 
-                const hoje = new Date().toISOString().split('T')[0];
-
-                metas.forEach(m => { 
-                    const dataFmt = m.data_inicio.split('-').reverse().join('/');
-                    const isFuture = m.data_inicio > hoje;
-                    const styleClass = isFuture ? 'bg-amber-50 border-amber-100 text-amber-800' : 'bg-white border-slate-100';
-                    const icon = isFuture ? '<i class="fas fa-clock text-amber-500" title="Futura"></i>' : '<i class="fas fa-check-circle text-emerald-500" title="Vigente/Passada"></i>';
-
-                    html += `
-                    <div class="flex justify-between items-center text-xs p-2 rounded border mb-1 ${styleClass}">
-                        <div>
-                            <div class="font-bold flex items-center gap-2">
-                                ${icon} <span>${m.usuarios?.nome || 'Utilizador Removido'}</span>
-                            </div>
-                            <div class="text-[10px] opacity-70 mt-0.5">Início: <b>${dataFmt}</b></div>
-                        </div>
-                        <div class="font-black text-sm">${m.valor_meta}</div>
-                    </div>`; 
-                }); 
-                container.innerHTML = html; 
-            } catch (err) { 
-                console.error("Erro metas:", err); 
-                container.innerHTML = '<div class="text-xs text-red-400">Erro ao carregar histórico.</div>'; 
-            }
-        }
-
-        async function salvarMeta() {
-            const uid = document.getElementById('meta-user').value; 
-            const data = document.getElementById('meta-date').value; 
-            const valor = document.getElementById('meta-value').value;
-
-            if(!uid || !data || !valor) return alert("Preencha todos os campos da meta.");
-            
-            const btn = document.getElementById('btn-meta'); 
-            const txt = btn.innerHTML; 
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...'; 
-            btn.disabled = true;
-
-            try { 
-                let error = null; 
-                const conflictKey = 'usuario_id,data_inicio';
-
-                if (uid === 'all') { 
-                    if(!confirm(`Confirma definir meta de ${valor} para TODOS os assistentes a partir de ${data}?`)) { 
-                        throw new Error("Cancelado pelo utilizador."); 
-                    } 
-                    const assistentes = allUsers.filter(u => u.funcao === 'Assistente'); 
-                    if(assistentes.length === 0) throw new Error("Não há assistentes para aplicar a meta."); 
-                    
-                    const inserts = assistentes.map(u => ({ 
-                        usuario_id: u.id, 
-                        data_inicio: data, 
-                        valor_meta: parseInt(valor) 
-                    }));
-                    
-                    const res = await _supabase.from('metas').upsert(inserts, { onConflict: conflictKey }); 
-                    error = res.error; 
-
-                } else { 
-                    const res = await _supabase.from('metas').upsert({ 
-                        usuario_id: uid, 
-                        data_inicio: data, 
-                        valor_meta: parseInt(valor) 
-                    }, { onConflict: conflictKey }); 
-                    error = res.error; 
-                } 
-                
-                if(error) throw error; 
-                
-                document.getElementById('meta-value').value = ''; 
-                await loadMetasAtuais(); 
-                alert('Meta guardada com sucesso! (O histórico foi atualizado)'); 
-
-            } catch (err) { 
-                if(err.message !== "Cancelado pelo utilizador.") alert('Erro: ' + err.message); 
-            } finally { 
-                btn.innerHTML = txt; 
-                btn.disabled = false; 
-            }
-        }
-
-        // --- GESTÃO DE ASSERTIVIDADE ---
-        async function loadAssertividade() {
-            const container = document.getElementById('assert-list');
             try {
-                const { data, error } = await _supabase
-                    .from('metas_assertividade')
-                    .select('*')
-                    .order('data_inicio', { ascending: false });
+                let query = _supabase.from('metas').select('*, usuarios(nome)').order('data_inicio', { ascending: false });
+                if (uid !== 'all') query = query.eq('usuario_id', uid); else query = query.limit(50);
+                
+                const { data } = await query;
+                if (!data?.length) { container.innerHTML = '<div class="text-xs text-slate-400 text-center py-4">Sem histórico.</div>'; return; }
 
-                if (error) {
-                    if(error.code === '42P01') { 
-                         container.innerHTML = '<div class="p-4 text-xs text-orange-500 bg-orange-50 border border-orange-100 rounded text-center">⚠️ Tabela "metas_assertividade" não criada no banco.</div>';
-                         return;
-                    }
-                    throw error;
-                }
-
-                if (!data || !data.length) {
-                    container.innerHTML = '<div class="text-center p-4 text-slate-400 text-xs">Nenhuma meta de assertividade definida ainda.</div>';
-                    return;
-                }
-
-                let html = '';
-                const hoje = new Date().toISOString().split('T')[0];
-
-                data.forEach(item => {
-                    const dataFmt = item.data_inicio.split('-').reverse().join('/');
-                    const isFuture = item.data_inicio > hoje;
-                    const cor = isFuture ? 'text-purple-400' : 'text-purple-700';
-                    
-                    html += `
-                    <div class="flex justify-between items-center p-3 bg-white border border-purple-100 rounded-lg shadow-sm mb-2">
-                        <div class="flex items-center gap-3">
-                            <div class="bg-purple-50 p-2 rounded-full text-purple-600">
-                                <i class="fas ${isFuture ? 'fa-hourglass-half' : 'fa-check'}"></i>
-                            </div>
-                            <div>
-                                <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">A partir de</div>
-                                <div class="text-sm font-bold text-slate-800">${dataFmt}</div>
-                            </div>
+                let html = ''; const hoje = new Date().toISOString().split('T')[0];
+                data.forEach(m => {
+                    const isFuture = m.data_inicio > hoje;
+                    const style = isFuture ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-white border-slate-100 text-slate-700';
+                    html += `<div class="p-3 rounded-lg border mb-2 ${style} shadow-sm text-sm flex justify-between items-center">
+                        <div>
+                            <div class="font-bold">${m.usuarios?.nome}</div>
+                            <div class="text-xs opacity-75">Início: ${m.data_inicio.split('-').reverse().join('/')}</div>
                         </div>
-                        <div class="text-xl font-black ${cor}">${item.valor_minimo}%</div>
+                        <div class="text-lg font-black">${m.valor_meta}</div>
                     </div>`;
                 });
                 container.innerHTML = html;
+            } catch (e) { console.error(e); }
+        }
 
-            } catch (err) {
-                console.error(err);
-                container.innerHTML = '<div class="text-center p-4 text-red-400 text-xs">Erro ao carregar dados.</div>';
-            }
+        async function salvarMeta() {
+            const uid = document.getElementById('meta-user').value;
+            const data = document.getElementById('meta-date').value;
+            const val = document.getElementById('meta-value').value;
+            if (!uid || !data || !val) return alert("Preencha todos campos.");
+
+            try {
+                const payload = uid === 'all' 
+                    ? allUsers.filter(u => u.funcao==='Assistente').map(u => ({ usuario_id: u.id, data_inicio: data, valor_meta: parseInt(val) }))
+                    : { usuario_id: uid, data_inicio: data, valor_meta: parseInt(val) };
+                
+                const { error } = await _supabase.from('metas').upsert(payload, { onConflict: 'usuario_id,data_inicio' });
+                if (error) throw error;
+                
+                alert("Meta salva!");
+                loadMetasAtuais();
+            } catch (e) { alert("Erro: " + e.message); }
+        }
+
+        // --- MÓDULO: ASSERTIVIDADE ---
+        async function loadAssertividade() {
+            try {
+                const { data } = await _supabase.from('metas_assertividade').select('*').order('data_inicio', {ascending:false});
+                const container = document.getElementById('assert-list');
+                if(!data?.length) { container.innerHTML = '<div class="text-center text-xs text-slate-400 py-4">Vazio.</div>'; return; }
+                
+                let html = ''; const hoje = new Date().toISOString().split('T')[0];
+                data.forEach(m => {
+                    const isFuture = m.data_inicio > hoje;
+                    html += `<div class="p-3 mb-2 rounded-lg border ${isFuture ? 'bg-purple-50 border-purple-200' : 'bg-white border-slate-100'} flex justify-between items-center shadow-sm">
+                        <div class="text-sm"><span class="block text-xs font-bold text-slate-400 uppercase">Vigência</span>${m.data_inicio.split('-').reverse().join('/')}</div>
+                        <div class="text-xl font-black text-purple-700">${m.valor_minimo}%</div>
+                    </div>`;
+                });
+                container.innerHTML = html;
+            } catch (e) { console.error(e); }
         }
 
         async function salvarAssertividade() {
             const data = document.getElementById('assert-date').value;
-            const valor = document.getElementById('assert-value').value;
-
-            if (!data || !valor) return alert("Preencha a data e o valor percentual.");
-
-            const btn = document.getElementById('btn-assert');
-            const txt = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> A Gravar...';
-            btn.disabled = true;
-
+            const val = document.getElementById('assert-value').value;
+            if (!data || !val) return alert("Preencha campos.");
             try {
-                const { error } = await _supabase
-                    .from('metas_assertividade')
-                    .insert({ data_inicio: data, valor_minimo: parseFloat(valor) });
-
+                const { error } = await _supabase.from('metas_assertividade').insert({ data_inicio: data, valor_minimo: parseFloat(val) });
                 if (error) throw error;
+                alert("Salvo!"); loadAssertividade();
+            } catch (e) { alert("Erro: " + e.message); }
+        }
 
-                alert("Assertividade Global definida com sucesso!");
-                document.getElementById('assert-value').value = '';
-                loadAssertividade();
+        // --- MÓDULO: EMPRESAS (NOVO) ---
+        async function loadEmpresas() {
+            try {
+                // Verifica se tabela existe tentando um select simples. Se der erro, avisa.
+                const { data, error } = await _supabase.from('empresas').select('*').order('nome');
+                
+                const container = document.getElementById('lista-empresas');
+                if (error) {
+                    console.warn("Tabela empresas pode não existir.", error);
+                    container.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500 text-xs">Erro: Tabela 'empresas' não encontrada ou erro de conexão.</td></tr>`;
+                    return;
+                }
 
+                allEmpresas = data || [];
+                renderEmpresas(allEmpresas);
             } catch (err) {
-                alert("Erro ao gravar: " + err.message);
-            } finally {
-                btn.innerHTML = txt;
-                btn.disabled = false;
+                console.error(err);
             }
         }
 
-        // --- FUNÇÕES DE MODAL USUÁRIO ---
-        function abrirModal(user = null) {
-            const modal = document.getElementById('modal-user'); const title = document.getElementById('modal-title'); const btnDel = document.getElementById('btn-delete'); const idInput = document.getElementById('form-id');
-            modal.classList.remove('hidden'); modal.classList.add('flex');
-            if (user) { title.innerText = "Editar Colaborador"; idInput.value = user.id; idInput.disabled = true; idInput.classList.add('bg-slate-100', 'text-slate-500'); document.getElementById('form-nome').value = user.nome; document.getElementById('form-senha').value = user.senha; document.getElementById('form-funcao').value = user.funcao; document.getElementById('form-contrato').value = user.contrato || 'PJ'; btnDel.classList.remove('hidden'); }
-            else { title.innerText = "Novo Colaborador"; idInput.value = ""; idInput.disabled = false; idInput.classList.remove('bg-slate-100', 'text-slate-500'); document.getElementById('form-nome').value = ""; document.getElementById('form-senha').value = ""; document.getElementById('form-funcao').value = "Assistente"; document.getElementById('form-contrato').value = "PJ"; btnDel.classList.add('hidden'); }
+        function renderEmpresas(lista) {
+            const container = document.getElementById('lista-empresas');
+            if (lista.length === 0) {
+                container.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">Nenhuma empresa cadastrada.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            lista.forEach(e => {
+                const dataFmt = e.data_entrada ? e.data_entrada.split('-').reverse().join('/') : '-';
+                const empresaJson = JSON.stringify(e).replace(/"/g, '&quot;');
+                
+                html += `
+                <tr class="hover:bg-slate-50 transition border-b border-slate-50 group">
+                    <td class="px-6 py-4 font-bold text-slate-600">#${e.id}</td>
+                    <td class="px-6 py-4 font-bold text-slate-800">${e.nome}</td>
+                    <td class="px-6 py-4 text-blue-600 text-xs font-mono bg-blue-50/50 rounded px-2 w-fit">${e.subdominio || '-'}</td>
+                    <td class="px-6 py-4 text-center text-slate-500 text-xs">${dataFmt}</td>
+                    <td class="px-6 py-4 text-slate-500 text-xs max-w-xs truncate" title="${e.observacao || ''}">${e.observacao || '-'}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="abrirModalEmpresa(${empresaJson})" class="text-slate-400 hover:text-blue-600 transition">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </td>
+                </tr>`;
+            });
+            container.innerHTML = html;
         }
-        function fecharModal() { document.getElementById('modal-user').classList.add('hidden'); document.getElementById('modal-user').classList.remove('flex'); }
-        
+
+        function filtrarEmpresas() {
+            const term = document.getElementById('search-empresa').value.toLowerCase();
+            const filtered = allEmpresas.filter(e => 
+                e.nome.toLowerCase().includes(term) || 
+                String(e.id).includes(term) ||
+                (e.subdominio && e.subdominio.toLowerCase().includes(term))
+            );
+            renderEmpresas(filtered);
+        }
+
+        async function salvarEmpresa() {
+            const id = document.getElementById('form-empresa-id').value;
+            const nome = document.getElementById('form-empresa-nome').value;
+            const sub = document.getElementById('form-empresa-sub').value;
+            const data = document.getElementById('form-empresa-data').value;
+            const obs = document.getElementById('form-empresa-obs').value;
+            // Campo oculto para saber se é edição (embora usemos ID fixo como PK, vamos usar upsert)
+            // Assumindo que o ID digitado é a Primary Key
+            
+            if (!id || !nome) return alert("ID e Nome são obrigatórios.");
+
+            try {
+                const payload = {
+                    id: parseInt(id),
+                    nome: nome,
+                    subdominio: sub,
+                    data_entrada: data || null,
+                    observacao: obs
+                };
+
+                const { error } = await _supabase.from('empresas').upsert(payload);
+                if (error) throw error;
+
+                alert("Empresa salva com sucesso!");
+                fecharModais();
+                loadEmpresas();
+            } catch (err) {
+                alert("Erro ao salvar: " + err.message);
+            }
+        }
+
+        async function excluirEmpresa() {
+            const id = document.getElementById('form-empresa-id').value;
+            if (!confirm(`Tem certeza que deseja excluir a empresa ID ${id}?`)) return;
+
+            try {
+                const { error } = await _supabase.from('empresas').delete().eq('id', id);
+                if (error) throw error;
+                alert("Empresa excluída.");
+                fecharModais();
+                loadEmpresas();
+            } catch (err) {
+                alert("Erro ao excluir: " + err.message);
+            }
+        }
+
+        // --- MODAIS ---
+        function fecharModais() {
+            document.getElementById('modal-user').classList.add('hidden');
+            document.getElementById('modal-empresa').classList.add('hidden');
+        }
+
+        function abrirModalUsuario(user = null) {
+            const m = document.getElementById('modal-user');
+            m.classList.remove('hidden'); m.classList.add('flex');
+            
+            const btnDel = document.getElementById('btn-user-delete');
+            const inputId = document.getElementById('form-user-id');
+            
+            if (user) {
+                document.getElementById('modal-user-title').innerText = "Editar Colaborador";
+                inputId.value = user.id; inputId.disabled = true; inputId.classList.add('bg-slate-100');
+                document.getElementById('form-user-nome').value = user.nome;
+                document.getElementById('form-user-senha').value = user.senha;
+                document.getElementById('form-user-funcao').value = user.funcao;
+                document.getElementById('form-user-contrato').value = user.contrato || 'PJ';
+                btnDel.classList.remove('hidden');
+            } else {
+                document.getElementById('modal-user-title').innerText = "Novo Colaborador";
+                inputId.value = ""; inputId.disabled = false; inputId.classList.remove('bg-slate-100');
+                document.getElementById('form-user-nome').value = "";
+                document.getElementById('form-user-senha').value = "";
+                document.getElementById('form-user-funcao').value = "Assistente";
+                document.getElementById('form-user-contrato').value = "PJ";
+                btnDel.classList.add('hidden');
+            }
+        }
+
+        function abrirModalEmpresa(empresa = null) {
+            const m = document.getElementById('modal-empresa');
+            m.classList.remove('hidden'); m.classList.add('flex');
+            
+            const btnDel = document.getElementById('btn-empresa-delete');
+            const inputId = document.getElementById('form-empresa-id');
+
+            if (empresa) {
+                document.getElementById('modal-empresa-title').innerText = "Editar Empresa";
+                inputId.value = empresa.id; inputId.disabled = true; inputId.classList.add('bg-slate-100');
+                document.getElementById('form-empresa-nome').value = empresa.nome;
+                document.getElementById('form-empresa-sub').value = empresa.subdominio || '';
+                document.getElementById('form-empresa-data').value = empresa.data_entrada || '';
+                document.getElementById('form-empresa-obs').value = empresa.observacao || '';
+                btnDel.classList.remove('hidden');
+            } else {
+                document.getElementById('modal-empresa-title').innerText = "Nova Empresa";
+                inputId.value = ""; inputId.disabled = false; inputId.classList.remove('bg-slate-100');
+                document.getElementById('form-empresa-nome').value = "";
+                document.getElementById('form-empresa-sub').value = "";
+                document.getElementById('form-empresa-data').value = new Date().toISOString().substring(0, 10);
+                document.getElementById('form-empresa-obs').value = "";
+                btnDel.classList.add('hidden');
+            }
+        }
+
+        // Funções de CRUD Usuário (reaproveitadas do código anterior para manter lógica)
         async function salvarUsuario() {
-            const id = document.getElementById('form-id').value; const nome = document.getElementById('form-nome').value; const senha = document.getElementById('form-senha').value; const funcao = document.getElementById('form-funcao').value; const contrato = document.getElementById('form-contrato').value;
-            if(!id || !nome || !senha) return alert("Preencha todos os campos obrigatórios.");
-            const payload = { id: parseInt(id), nome, senha, funcao, contrato }; let error = null; const btns = document.querySelectorAll('#modal-user button'); btns.forEach(b => b.disabled = true);
-            try { if(document.getElementById('form-id').disabled) { const res = await _supabase.from('usuarios').update(payload).eq('id', id); error = res.error; } else { const res = await _supabase.from('usuarios').insert(payload); error = res.error; } if(error) throw error; fecharModal(); await loadUsers(); await loadMetasAtuais(); } catch (err) { alert("Erro ao salvar: " + err.message); } finally { btns.forEach(b => b.disabled = false); }
+            const id = document.getElementById('form-user-id').value;
+            const nome = document.getElementById('form-user-nome').value;
+            const senha = document.getElementById('form-user-senha').value;
+            const funcao = document.getElementById('form-user-funcao').value;
+            const contrato = document.getElementById('form-user-contrato').value;
+            
+            if(!id || !nome) return alert("Campos obrigatórios.");
+            const payload = { id: parseInt(id), nome, senha, funcao, contrato };
+            
+            try {
+                if (document.getElementById('form-user-id').disabled) {
+                     const { error } = await _supabase.from('usuarios').update(payload).eq('id', id);
+                     if (error) throw error;
+                } else {
+                     const { error } = await _supabase.from('usuarios').insert(payload);
+                     if (error) throw error;
+                }
+                fecharModais(); loadUsers();
+            } catch (e) { alert("Erro: " + e.message); }
         }
-        
+
         async function excluirUsuario() {
-            const id = document.getElementById('form-id').value; if(!confirm('Tem a certeza que deseja excluir este utilizador?')) return;
-            try { const { error } = await _supabase.from('usuarios').delete().eq('id', id); if(error) throw error; fecharModal(); await loadUsers(); await loadMetasAtuais(); } catch(err) { alert("Erro ao excluir: " + err.message); }
+            const id = document.getElementById('form-user-id').value;
+            if(!confirm("Excluir usuário?")) return;
+            try {
+                const { error } = await _supabase.from('usuarios').delete().eq('id', id);
+                if (error) throw error;
+                fecharModais(); loadUsers();
+            } catch (e) { alert("Erro: " + e.message); }
         }
 
     </script>
