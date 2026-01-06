@@ -1,7 +1,3 @@
-{
-type: "file",
-fileName: "js/importacao.js",
-content: `
 const Importacao = {
     // Utilitário para normalizar strings (remove acentos e espaços extras) para comparação
     normalizarTexto: function(texto) {
@@ -32,7 +28,7 @@ const Importacao = {
                     
                     if (match) {
                         // match[1]=Dia, match[2]=Mes, match[3]=Ano -> YYYY-MM-DD
-                        dataDetectada = \`\${match[3]}-\${match[2]}-\${match[1]}\`;
+                        dataDetectada = `${match[3]}-${match[2]}-${match[1]}`;
                     }
 
                     const firstSheet = workbook.SheetNames[0];
@@ -154,5 +150,3 @@ const Importacao = {
         };
     }
 };
-`
-}

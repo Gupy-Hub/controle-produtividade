@@ -1,7 +1,3 @@
-{
-type: "file",
-fileName: "js/produtividade_main.js",
-content: `
 let _supabase = null;
 
 // Objeto Main principal
@@ -59,10 +55,10 @@ async function importarExcel(input) {
         // 2. Confirmação da Data com o Usuário
         if (dataFinal) {
             const dataFormatada = dataFinal.split('-').reverse().join('/');
-            if (!confirm(\`O arquivo parece ser do dia \${dataFormatada}. Confirmar importação para esta data?\`)) {
+            if (!confirm(`O arquivo parece ser do dia ${dataFormatada}. Confirmar importação para esta data?`)) {
                 // Se o usuário negar, pergunta se quer usar a data selecionada no painel
                 const dataPainel = document.getElementById('global-date').value;
-                if(confirm(\`Deseja usar a data selecionada no painel (\${dataPainel.split('-').reverse().join('/')})?\`)) {
+                if(confirm(`Deseja usar a data selecionada no painel (${dataPainel.split('-').reverse().join('/')})?`)) {
                     dataFinal = dataPainel;
                 } else {
                     input.value = ""; return; // Cancela tudo
@@ -72,7 +68,7 @@ async function importarExcel(input) {
             // Se não detectou data no nome, usa a do painel
             dataFinal = document.getElementById('global-date').value;
             const dataFormatada = dataFinal.split('-').reverse().join('/');
-            if(!confirm(\`Data não detectada no nome do arquivo. Importar para \${dataFormatada}?\`)) {
+            if(!confirm(`Data não detectada no nome do arquivo. Importar para ${dataFormatada}?`)) {
                 input.value = ""; return;
             }
         }
@@ -86,10 +82,10 @@ async function importarExcel(input) {
         const resultadoProcessamento = await Importacao.processar(resultadoLeitura.dados, dataFinal);
 
         // 5. Feedback Final
-        let msg = \`✅ Sucesso! \${resultadoProcessamento.qtdImportada} registros atualizados.\`;
+        let msg = `✅ Sucesso! ${resultadoProcessamento.qtdImportada} registros atualizados.`;
         
         if (resultadoProcessamento.nomesNaoEncontrados.length > 0) {
-            msg += \`\\n\\n⚠️ Atenção: \${resultadoProcessamento.nomesNaoEncontrados.length} nomes não foram encontrados no cadastro:\\n\`;
+            msg += `\n\n⚠️ Atenção: ${resultadoProcessamento.nomesNaoEncontrados.length} nomes não foram encontrados no cadastro:\n`;
             // Mostra apenas os 5 primeiros para não poluir o alert
             msg += resultadoProcessamento.nomesNaoEncontrados.slice(0, 5).join(', ');
             if (resultadoProcessamento.nomesNaoEncontrados.length > 5) msg += '... e outros.';
@@ -117,11 +113,11 @@ window.mudarAba = function(aba) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
     // Mostra a seção desejada
-    const tabEl = document.getElementById(\`tab-\${aba}\`);
+    const tabEl = document.getElementById(`tab-${aba}`);
     if (tabEl) tabEl.classList.remove('hidden');
     
     // Ativa o botão
-    const btnEl = document.getElementById(\`btn-\${aba}\`);
+    const btnEl = document.getElementById(`btn-${aba}`);
     if (btnEl) btnEl.classList.add('active');
 
     // Gerencia controles do topo (filtros específicos de cada aba)
@@ -152,5 +148,3 @@ window.mudarAba = function(aba) {
 };
 
 document.addEventListener('DOMContentLoaded', inicializar);
-`
-}
