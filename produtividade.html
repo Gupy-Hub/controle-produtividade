@@ -21,7 +21,6 @@
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        /* Ajustes de Scroll */
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -88,6 +87,16 @@
                                 <option value="ano_trim">Anual (Trimestres)</option>
                                 <option value="dia">Diário</option>
                             </select>
+                            <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">1º Trimestre</option>
+                                <option value="2">2º Trimestre</option>
+                                <option value="3">3º Trimestre</option>
+                                <option value="4">4º Trimestre</option>
+                            </select>
+                            <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">1º Semestre</option>
+                                <option value="2">2º Semestre</option>
+                            </select>
                         </div>
                         <div id="ctrl-performance" class="hidden flex items-center gap-2">
                             <select id="perf-period-type" onchange="Produtividade.Performance.carregarRanking()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
@@ -121,7 +130,6 @@
     <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
-            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
@@ -139,29 +147,26 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
                     <div class="flex items-end justify-between">
-                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-dias">1</p>
+                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p>
                         <i class="fas fa-calendar-day text-2xl text-slate-100"></i>
                     </div>
                     <p class="text-[10px] text-slate-400 mt-1 font-bold">Data Selecionada</p>
                 </div>
-
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
                         <p class="text-2xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
                     </div>
-                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total" class="text-slate-700">--</span></p>
+                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total">--</span></p>
                 </div>
-
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <p class="text-xs font-bold text-slate-400 uppercase mb-2">Médias Diárias</p>
                     <div class="space-y-2">
                         <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Time (Todas)</span>
+                            <span class="text-[10px] text-slate-500 font-bold uppercase">Time</span>
                             <span class="text-lg font-black text-slate-800" id="kpi-media-todas">--</span>
                         </div>
                         <div class="w-full h-px bg-slate-100"></div>
@@ -171,24 +176,16 @@
                         </div>
                     </div>
                 </div>
-
                 <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between">
                     <div>
                         <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
                         <div class="flex items-center justify-between">
                             <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                            <div id="icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
+                            <i class="fas fa-chart-pie text-xl text-white/80"></i>
                         </div>
                     </div>
-                    <p class="text-[10px] text-white/60 mt-1 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
+                    <p class="text-[10px] text-white/60 mt-1 font-medium">Real vs Esperado</p>
                 </div>
-            </div>
-
-            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
-                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
-                <button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
-                    <i class="fas fa-times mr-1"></i> Limpar Filtro
-                </button>
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -199,7 +196,7 @@
                                 <th class="px-4 py-2 text-center w-28 bg-slate-100/50 border-r border-slate-200">
                                     <div class="flex flex-col items-center gap-1">
                                         <span class="text-[10px] text-slate-400">Ação em Massa</span>
-                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer">
+                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer hover:border-blue-400">
                                             <option value="">Aplicar...</option>
                                             <option value="1">Todos 100%</option>
                                             <option value="0.5">Todos 50%</option>
@@ -224,7 +221,26 @@
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
-            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Produção do Período</p>
+                    <p class="text-2xl font-black text-blue-700 mt-1" id="cons-kpi-total">--</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Média Diária (Equipe)</p>
+                    <p class="text-2xl font-black text-slate-700 mt-1" id="cons-kpi-media">--</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Dias Considerados</p>
+                    <p class="text-2xl font-black text-slate-700 mt-1" id="cons-kpi-dias">--</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Melhor Dia</p>
+                    <p class="text-xl font-black text-emerald-600 mt-1" id="cons-kpi-melhor">--</p>
+                </div>
+            </div>
+
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto custom-scrollbar">
                     <table class="w-full text-sm text-left">
                         <thead id="cons-table-header"></thead>
@@ -235,6 +251,23 @@
         </div>
 
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gradient-to-br from-yellow-100 to-amber-100 p-4 rounded-xl shadow-sm border border-amber-200 relative overflow-hidden">
+                    <i class="fas fa-trophy absolute right-4 top-4 text-4xl text-amber-300 opacity-50"></i>
+                    <p class="text-xs font-bold text-amber-700 uppercase">Campeão (Produção)</p>
+                    <p class="text-xl font-black text-amber-900 mt-2" id="perf-kpi-campeao">--</p>
+                    <p class="text-xs font-bold text-amber-600 mt-1" id="perf-kpi-campeao-val">0 docs</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Produção do Time</p>
+                    <p class="text-2xl font-black text-blue-700 mt-1" id="perf-kpi-total">--</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Média por Assistente</p>
+                    <p class="text-2xl font-black text-slate-700 mt-1" id="perf-kpi-media">--</p>
+                </div>
+            </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
