@@ -18,6 +18,13 @@
         .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        
+        /* Estilo para as Sub-Abas de Equipe */
+        .sub-tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
+        .sub-tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; background-color: #eff6ff; }
+        .sub-tab-btn:not(.active) { color: #64748b; }
+        .sub-tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -67,7 +74,6 @@
                             <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
                             <input type="text" id="search-user" onkeyup="Gestao.Equipe.filtrar()" placeholder="Buscar colaborador..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
                         </div>
-                        <span id="total-users" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full border border-blue-200">0</span>
                     </div>
                     
                     <div class="flex gap-2 w-full sm:w-auto justify-end">
@@ -80,6 +86,15 @@
                             <i class="fas fa-plus"></i> Novo
                         </button>
                     </div>
+                </div>
+
+                <div class="flex border-b border-slate-200">
+                    <button onclick="Gestao.Equipe.mudarFiltro('ativos')" id="btn-sub-ativos" class="sub-tab-btn active flex-1 py-3 text-sm font-bold text-center">
+                        <i class="fas fa-check-circle mr-2 text-emerald-500"></i> Ativos (<span id="count-ativos">0</span>)
+                    </button>
+                    <button onclick="Gestao.Equipe.mudarFiltro('inativos')" id="btn-sub-inativos" class="sub-tab-btn flex-1 py-3 text-sm font-bold text-center">
+                        <i class="fas fa-times-circle mr-2 text-red-500"></i> Inativos / Finalizados (<span id="count-inativos">0</span>)
+                    </button>
                 </div>
 
                 <div class="overflow-y-auto flex-1 p-2 space-y-2 relative custom-scrollbar bg-slate-50/50" id="user-list">

@@ -1,10 +1,15 @@
 Gestao.Equipe = {
+    filtroAtual: 'ativos', // Estado inicial
+
     carregar: async function() {
         try {
+            // Carrega e ordena por nome
             const { data, error } = await Gestao.supabase.from('usuarios').select('*').order('nome');
             if (error) throw error;
             Gestao.dados.usuarios = data || [];
-            this.renderizar(Gestao.dados.usuarios);
+            
+            this.atualizarContadores();
+            this.filtrar(); // Chama filtrar para aplicar o filtro atual (ativos)
             this.popularSelectMetas();
         } catch (err) {
             console.error("Erro ao carregar equipe:", err);
@@ -12,12 +17,30 @@ Gestao.Equipe = {
         }
     },
 
+    atualizarContadores: function() {
+        // Considera "Inativo" quem tem ativo=false OU contrato=FINALIZADO
+        const ativos = Gestao.dados.usuarios.filter(u => u.ativo !== false && u.contrato !== 'FINALIZADO').length;
+        const inativos = Gestao.dados.usuarios.length - ativos;
+
+        document.getElementById('count-ativos').innerText = ativos;
+        document.getElementById('count-inativos').innerText = inativos;
+    },
+
+    mudarFiltro: function(novoFiltro) {
+        this.filtroAtual = novoFiltro;
+        
+        // Atualiza estilo das abas
+        document.getElementById('btn-sub-ativos').className = `sub-tab-btn flex-1 py-3 text-sm font-bold text-center ${novoFiltro === 'ativos' ? 'active' : ''}`;
+        document.getElementById('btn-sub-inativos').className = `sub-tab-btn flex-1 py-3 text-sm font-bold text-center ${novoFiltro === 'inativos' ? 'active' : ''}`;
+
+        this.filtrar(); // Re-renderiza a lista
+    },
+
     renderizar: function(lista) {
         const container = document.getElementById('user-list');
-        document.getElementById('total-users').innerText = lista.length;
         
         if (lista.length === 0) {
-            container.innerHTML = '<div class="p-10 text-center text-slate-400">Nenhum colaborador encontrado.</div>';
+            container.innerHTML = '<div class="p-10 text-center text-slate-400">Nenhum colaborador encontrado nesta categoria.</div>';
             return;
         }
 
@@ -30,12 +53,19 @@ Gestao.Equipe = {
             if (u.funcao === 'Gestora') iconClass = 'fa-user-shield text-purple-500';
             if (u.funcao === 'Auditora') iconClass = 'fa-search text-orange-500';
 
-            // Estilo visual para desativados (u.ativo pode ser undefined se a coluna não existir, assume true)
+            // Estilo visual
             const isAtivo = u.ativo !== false; 
-            const opacityClass = isAtivo ? '' : 'opacity-60 grayscale bg-slate-100';
-            // Se contrato for FINALIZADO ou ativo for false, mostra a tag
-            const labelFinalizado = u.contrato === 'FINALIZADO' ? '<span class="ml-2 text-[10px] bg-red-100 text-red-600 px-1 rounded border border-red-200">FINALIZADO</span>' : '';
-            const statusLabel = (!isAtivo && u.contrato !== 'FINALIZADO') ? '<span class="ml-2 text-[10px] bg-gray-100 text-gray-600 px-1 rounded border border-gray-200">INATIVO</span>' : labelFinalizado;
+            const isFinalizado = u.contrato === 'FINALIZADO';
+            
+            const opacityClass = (isAtivo && !isFinalizado) ? '' : 'opacity-75 bg-slate-50';
+            
+            // Labels
+            let statusLabel = '';
+            if (isFinalizado) {
+                statusLabel = '<span class="ml-2 text-[10px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded border border-red-200 font-bold">FINALIZADO</span>';
+            } else if (!isAtivo) {
+                statusLabel = '<span class="ml-2 text-[10px] bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded border border-gray-300 font-bold">INATIVO</span>';
+            }
 
             html += `
             <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition group shadow-sm ${opacityClass}">
@@ -58,9 +88,22 @@ Gestao.Equipe = {
 
     filtrar: function() {
         const term = document.getElementById('search-user').value.toLowerCase();
-        const filtered = Gestao.dados.usuarios.filter(u => 
-            u.nome.toLowerCase().includes(term) || String(u.id).includes(term)
-        );
+        
+        const filtered = Gestao.dados.usuarios.filter(u => {
+            // 1. Filtro de Texto (Busca)
+            const matchText = u.nome.toLowerCase().includes(term) || String(u.id).includes(term);
+            if (!matchText) return false;
+
+            // 2. Filtro de Aba (Ativos vs Inativos)
+            const isAtivoReal = (u.ativo !== false && u.contrato !== 'FINALIZADO');
+            
+            if (this.filtroAtual === 'ativos') {
+                return isAtivoReal; // Só mostra quem está ativo E não finalizado
+            } else {
+                return !isAtivoReal; // Mostra quem está inativo OU finalizado
+            }
+        });
+
         this.renderizar(filtered);
     },
 
@@ -110,7 +153,6 @@ Gestao.Equipe = {
         for (const row of linhas) {
             const keys = Object.keys(row);
             
-            // 1. Identificar Colunas
             const kId = keys.find(k => ['id assistente', 'id', 'matricula'].includes(norm(k)));
             const kNome = keys.find(k => ['nome assist', 'assistente', 'nome'].includes(norm(k)));
             const kContrato = keys.find(k => ['contrato'].includes(norm(k)));
@@ -125,11 +167,9 @@ Gestao.Equipe = {
 
             if (!id || !nome || nome.toLowerCase() === 'total') continue;
 
-            // 2. Lógica de Função e Contrato
             let funcao = 'Assistente';
             let contrato = 'PJ';
             
-            // Verifica explicitamente se é FINALIZADO
             if (rawContrato === 'FINALIZADO') {
                 contrato = 'FINALIZADO';
             } else if (rawContrato === 'CLT') {
@@ -140,9 +180,6 @@ Gestao.Equipe = {
                 funcao = 'Gestora'; contrato = 'PJ'; 
             }
             
-            // 3. Lógica de Ativo/Inativo
-            // Se for FINALIZADO no contrato, já conta como inativo visualmente, mas mantemos o flag 'ativo' 
-            // no banco como false para garantir que não apareça em selects de metas.
             const ativo = (rawSituacao === 'ATIVO' && contrato !== 'FINALIZADO');
 
             const payload = {
@@ -153,7 +190,6 @@ Gestao.Equipe = {
                 ativo: ativo
             };
 
-            // 4. Verifica se precisa atualizar ou criar
             if (mapDb[id]) {
                 const uDb = mapDb[id];
                 if (norm(uDb.nome) !== norm(nome) || uDb.funcao !== funcao || uDb.contrato !== contrato || uDb.ativo !== ativo) {
@@ -213,7 +249,6 @@ Gestao.Equipe = {
             document.getElementById('form-user-senha').value = user.senha;
             document.getElementById('form-user-funcao').value = user.funcao;
             
-            // Garante que o contrato do banco esteja selecionado, mesmo que seja FINALIZADO
             inputContrato.value = user.contrato || 'PJ'; 
             
             inputAtivo.value = (user.ativo !== false).toString(); 
