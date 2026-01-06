@@ -54,9 +54,9 @@
                     </div>
                     
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
-                        <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="Produtividade.importarExcel(this)">
-                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar arquivo Excel/CSV">
-                            <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar</span>
+                        <input type="file" id="input-excel" accept=".xlsx, .csv" multiple class="hidden" onchange="Produtividade.importarEmMassa(this)">
+                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar um ou múltiplos arquivos">
+                            <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar em Massa</span>
                         </button>
                         <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados do dia atual">
                             <i class="fas fa-trash-alt"></i>
@@ -130,6 +130,7 @@
     <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
+            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
@@ -188,6 +189,13 @@
                 </div>
             </div>
 
+            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
+                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
+                <button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
+                    <i class="fas fa-times mr-1"></i> Limpar Filtro
+                </button>
+            </div>
+
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -196,7 +204,7 @@
                                 <th class="px-4 py-2 text-center w-28 bg-slate-100/50 border-r border-slate-200">
                                     <div class="flex flex-col items-center gap-1">
                                         <span class="text-[10px] text-slate-400">Ação em Massa</span>
-                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer hover:border-blue-400">
+                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer">
                                             <option value="">Aplicar...</option>
                                             <option value="1">Todos 100%</option>
                                             <option value="0.5">Todos 50%</option>
@@ -256,7 +264,7 @@
                     <i class="fas fa-trophy absolute right-4 top-4 text-4xl text-amber-300 opacity-50"></i>
                     <p class="text-xs font-bold text-amber-700 uppercase">Campeão (Produção)</p>
                     <p class="text-xl font-black text-amber-900 mt-2" id="perf-kpi-campeao">--</p>
-                    <p class="text-xs font-bold text-amber-600 mt-1" id="perf-kpi-campeao-val">0 docs</p>
+                    <p class="text-xs font-bold text-amber-600 mt-1" id="perf-kpi-campeao-val"></p>
                 </div>
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <p class="text-xs font-bold text-slate-400 uppercase">Produção do Time</p>
