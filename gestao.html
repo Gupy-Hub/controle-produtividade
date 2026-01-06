@@ -40,16 +40,16 @@
                 </div>
 
                 <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end">
-                    <button onclick="mudarAba('equipe')" id="btn-equipe" class="tab-btn active px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Gestao.mudarAba('equipe')" id="btn-equipe" class="tab-btn active px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-users"></i> Equipe
                     </button>
-                    <button onclick="mudarAba('producao')" id="btn-producao" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Gestao.mudarAba('producao')" id="btn-producao" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-chart-line"></i> Prod. Individual
                     </button>
-                    <button onclick="mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-bullseye"></i> Assertividade
                     </button>
-                    <button onclick="mudarAba('empresas')" id="btn-empresas" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="Gestao.mudarAba('empresas')" id="btn-empresas" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-building"></i> Empresas
                     </button>
                 </div>
@@ -65,18 +65,18 @@
                     <div class="flex items-center gap-2 w-full sm:w-auto">
                         <div class="relative w-full sm:w-64">
                             <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
-                            <input type="text" id="search-user" onkeyup="filtrarUsuarios()" placeholder="Buscar colaborador..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
+                            <input type="text" id="search-user" onkeyup="Gestao.Equipe.filtrar()" placeholder="Buscar colaborador..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
                         </div>
                         <span id="total-users" class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full border border-blue-200">0</span>
                     </div>
                     
                     <div class="flex gap-2 w-full sm:w-auto justify-end">
-                        <input type="file" id="input-import-users" accept=".xlsx, .csv" class="hidden" onchange="importarUsuarios(this)">
+                        <input type="file" id="input-import-users" accept=".xlsx, .csv" class="hidden" onchange="Gestao.Equipe.importar(this)">
                         <button onclick="document.getElementById('input-import-users').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
                             <i class="fas fa-file-excel"></i> Importar
                         </button>
                         
-                        <button onclick="abrirModalUsuario()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
+                        <button onclick="Gestao.Equipe.abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
                             <i class="fas fa-plus"></i> Novo
                         </button>
                     </div>
@@ -105,7 +105,7 @@
 
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Colaborador</label>
-                            <select id="meta-user" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
+                            <select id="meta-user" onchange="Gestao.Producao.carregar()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
                                 <option>Carregando...</option>
                             </select>
                         </div>
@@ -119,7 +119,7 @@
                                 <input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500">
                             </div>
                         </div>
-                        <button onclick="salvarMeta()" id="btn-meta" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 active:scale-95">
+                        <button onclick="Gestao.Producao.salvar()" id="btn-meta" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 active:scale-95">
                             Gravar Meta
                         </button>
                     </div>
@@ -127,7 +127,7 @@
                     <div class="border-l border-slate-100 pl-6 flex flex-col">
                         <div class="flex justify-between items-center mb-3">
                             <h4 class="text-sm font-bold text-slate-700">Histórico Recente</h4>
-                            <button onclick="loadMetasAtuais()" class="text-xs text-blue-600 hover:underline font-bold"><i class="fas fa-sync"></i> Atualizar</button>
+                            <button onclick="Gestao.Producao.carregar()" class="text-xs text-blue-600 hover:underline font-bold"><i class="fas fa-sync"></i> Atualizar</button>
                         </div>
                         <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar max-h-[400px]" id="meta-list">
                             <div class="text-xs text-slate-400 italic text-center py-4">Selecione um usuário para ver.</div>
@@ -164,7 +164,7 @@
                                 </div>
                             </div>
                         </div>
-                        <button onclick="salvarAssertividade()" id="btn-assert" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-purple-200 active:scale-95">
+                        <button onclick="Gestao.Assertividade.salvar()" id="btn-assert" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-purple-200 active:scale-95">
                             Gravar Meta Global
                         </button>
                     </div>
@@ -184,10 +184,10 @@
                 <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div class="relative w-full sm:w-80">
                         <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
-                        <input type="text" id="search-empresa" onkeyup="filtrarEmpresas()" placeholder="Buscar empresa por nome ou ID..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
+                        <input type="text" id="search-empresa" onkeyup="Gestao.Empresas.filtrar()" placeholder="Buscar empresa por nome ou ID..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
                     </div>
                     
-                    <button onclick="abrirModalEmpresa()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
+                    <button onclick="Gestao.Empresas.abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
                         <i class="fas fa-plus"></i> Nova Empresa
                     </button>
                 </div>
@@ -217,7 +217,7 @@
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
             <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                 <h3 class="font-bold text-slate-800" id="modal-user-title">Novo Colaborador</h3>
-                <button onclick="fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                <button onclick="Gestao.fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
             </div>
             <div class="p-6 space-y-4">
                 <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Login)</label><input type="number" id="form-user-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
@@ -229,8 +229,8 @@
                 </div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onclick="salvarUsuario()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar</button>
-                <button onclick="excluirUsuario()" id="btn-user-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
+                <button onclick="Gestao.Equipe.salvar()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar</button>
+                <button onclick="Gestao.Equipe.excluir()" id="btn-user-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
             </div>
         </div>
     </div>
@@ -239,10 +239,11 @@
         <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100">
             <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
                 <h3 class="font-bold text-slate-800" id="modal-empresa-title">Nova Empresa</h3>
-                <button onclick="fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+                <button onclick="Gestao.fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
             </div>
             <div class="p-6 space-y-4">
-                <input type="hidden" id="form-empresa-uid"> <div class="grid grid-cols-3 gap-4">
+                <input type="hidden" id="form-empresa-uid"> 
+                <div class="grid grid-cols-3 gap-4">
                     <div class="col-span-1"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID Empresa</label><input type="number" id="form-empresa-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
                     <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Entrada Mesa</label><input type="date" id="form-empresa-data" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
                 </div>
@@ -251,443 +252,17 @@
                 <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Observação</label><textarea id="form-empresa-obs" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none resize-none"></textarea></div>
             </div>
             <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onclick="salvarEmpresa()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar Empresa</button>
-                <button onclick="excluirEmpresa()" id="btn-empresa-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
+                <button onclick="Gestao.Empresas.salvar()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar Empresa</button>
+                <button onclick="Gestao.Empresas.excluir()" id="btn-empresa-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
             </div>
         </div>
     </div>
 
-    <script>
-        let allUsers = [];
-        let allEmpresas = [];
-        let _supabase = null;
+    <script src="js/gestao/main.js"></script>
+    <script src="js/gestao/equipe.js"></script>
+    <script src="js/gestao/producao.js"></script>
+    <script src="js/gestao/assertividade.js"></script>
+    <script src="js/gestao/empresas.js"></script>
 
-        document.addEventListener('DOMContentLoaded', init);
-
-        async function init() {
-            if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
-                _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
-            } else {
-                alert("Erro: Configuração do Supabase não encontrada.");
-                return;
-            }
-
-            // Define datas padrão nos inputs
-            const today = new Date().toISOString().substring(0, 10);
-            const inputsDate = ['meta-date', 'assert-date', 'form-empresa-data'];
-            inputsDate.forEach(id => {
-                const el = document.getElementById(id);
-                if(el) el.value = today;
-            });
-
-            // Carrega dados iniciais
-            mudarAba('equipe'); // Aba padrão
-            await loadUsers();
-            await loadMetasAtuais();
-            await loadAssertividade();
-            await loadEmpresas();
-
-            // Listeners
-            document.getElementById('meta-user').addEventListener('change', loadMetasAtuais);
-        }
-
-        // --- SISTEMA DE ABAS ---
-        function mudarAba(aba) {
-            // Esconde todas as seções
-            document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-            // Remove classe ativa de todos botões
-            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            
-            // Ativa seleção
-            document.getElementById(`tab-${aba}`).classList.remove('hidden');
-            document.getElementById(`btn-${aba}`).classList.add('active');
-        }
-
-        // --- MÓDULO: EQUIPE ---
-        async function loadUsers() {
-            try {
-                const { data, error } = await _supabase.from('usuarios').select('*').order('nome');
-                if (error) throw error;
-                allUsers = data || [];
-                renderUsers(allUsers);
-                populateSelect(allUsers);
-            } catch (err) {
-                console.error(err);
-                document.getElementById('user-list').innerHTML = `<div class="p-4 text-center text-red-500">Erro ao carregar equipe.</div>`;
-            }
-        }
-
-        function renderUsers(lista) {
-            const container = document.getElementById('user-list');
-            document.getElementById('total-users').innerText = lista.length;
-            
-            if (lista.length === 0) {
-                container.innerHTML = '<div class="p-10 text-center text-slate-400">Nenhum colaborador encontrado.</div>';
-                return;
-            }
-
-            let html = '';
-            lista.forEach(u => {
-                const userJson = JSON.stringify(u).replace(/"/g, '&quot;');
-                const icon = u.funcao === 'Gestora' ? '<i class="fas fa-user-shield text-purple-500"></i>' : '<i class="fas fa-user text-slate-400"></i>';
-                
-                html += `
-                <div class="flex items-center justify-between p-3 bg-white rounded-lg border border-slate-200 hover:border-blue-300 transition group shadow-sm">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 flex items-center justify-center bg-slate-50 rounded-full text-xs font-bold text-slate-600 border border-slate-100">${u.id}</div>
-                        <div>
-                            <div class="font-bold text-sm text-slate-700 flex items-center gap-2">${u.nome} ${icon}</div>
-                            <div class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">${u.funcao} • ${u.contrato || 'PJ'}</div>
-                        </div>
-                    </div>
-                    <button onclick="abrirModalUsuario(${userJson})" class="text-slate-400 hover:text-blue-600 px-3 py-1 text-xs font-bold border border-slate-100 rounded hover:bg-slate-50 transition">
-                        <i class="fas fa-pen"></i> Editar
-                    </button>
-                </div>`;
-            });
-            container.innerHTML = html;
-        }
-
-        function populateSelect(lista) {
-            const sel = document.getElementById('meta-user');
-            sel.innerHTML = '<option value="">Selecione...</option>';
-            sel.innerHTML += '<option value="all" class="font-bold text-blue-700 bg-blue-50">⭐ TODOS OS ASSISTENTES</option>';
-            const assistentes = lista.filter(u => u.funcao === 'Assistente');
-            assistentes.forEach(u => { sel.innerHTML += `<option value="${u.id}">${u.nome}</option>`; });
-        }
-
-        function filtrarUsuarios() {
-            const term = document.getElementById('search-user').value.toLowerCase();
-            const filtered = allUsers.filter(u => u.nome.toLowerCase().includes(term) || String(u.id).includes(term));
-            renderUsers(filtered);
-        }
-
-        // --- IMPORTAÇÃO ---
-        async function importarUsuarios(input) {
-            const file = input.files[0];
-            if (!file) return;
-            if(!confirm("Deseja importar este arquivo? IDs existentes terão nome atualizado, novos serão criados.")) { input.value = ""; return; }
-
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    let workbook;
-                    try { workbook = XLSX.read(data, { type: 'array' }); } 
-                    catch { const dec = new TextDecoder('iso-8859-1'); workbook = XLSX.read(dec.decode(data), { type: 'string', raw: true }); }
-                    
-                    const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const json = XLSX.utils.sheet_to_json(sheet);
-                    await processarImportacao(json);
-                } catch (err) { alert("Erro arquivo: " + err.message); }
-                input.value = "";
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-        async function processarImportacao(linhas) {
-            const norm = t => t ? t.toString().toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, "") : "";
-            const updates = []; const inserts = [];
-            const mapDb = {}; allUsers.forEach(u => mapDb[u.id] = u.nome);
-
-            for (const row of linhas) {
-                const keys = Object.keys(row);
-                const kId = keys.find(k => ['id','id_assistente','matricula'].includes(norm(k)));
-                const kNome = keys.find(k => norm(k).includes('nome') || norm(k).includes('assistente'));
-                if (!kId || !kNome) continue;
-
-                const id = parseInt(row[kId]); const nome = row[kNome] ? row[kNome].toString().trim() : "";
-                if (!id || !nome || nome.toLowerCase() === 'total') continue;
-
-                if (mapDb[id]) {
-                    if (norm(mapDb[id]) !== norm(nome)) updates.push({id, nome});
-                } else {
-                    inserts.push({ id, nome, senha: '123456', funcao: 'Assistente', contrato: 'PJ', ativo: true });
-                }
-            }
-
-            try {
-                for (const u of updates) await _supabase.from('usuarios').update({nome: u.nome}).eq('id', u.id);
-                if (inserts.length) await _supabase.from('usuarios').insert(inserts);
-                alert(`Importação: ${inserts.length} criados, ${updates.length} atualizados.`);
-                loadUsers();
-            } catch (err) { alert("Erro BD: " + err.message); }
-        }
-
-        // --- MÓDULO: PRODUÇÃO INDIVIDUAL ---
-        async function loadMetasAtuais() {
-            const container = document.getElementById('meta-list');
-            const uid = document.getElementById('meta-user').value;
-            if (!uid) { container.innerHTML = '<div class="text-xs text-slate-400 italic text-center py-10">Selecione um usuário.</div>'; return; }
-
-            try {
-                let query = _supabase.from('metas').select('*, usuarios(nome)').order('data_inicio', { ascending: false });
-                if (uid !== 'all') query = query.eq('usuario_id', uid); else query = query.limit(50);
-                
-                const { data } = await query;
-                if (!data?.length) { container.innerHTML = '<div class="text-xs text-slate-400 text-center py-4">Sem histórico.</div>'; return; }
-
-                let html = ''; const hoje = new Date().toISOString().split('T')[0];
-                data.forEach(m => {
-                    const isFuture = m.data_inicio > hoje;
-                    const style = isFuture ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-white border-slate-100 text-slate-700';
-                    html += `<div class="p-3 rounded-lg border mb-2 ${style} shadow-sm text-sm flex justify-between items-center">
-                        <div>
-                            <div class="font-bold">${m.usuarios?.nome}</div>
-                            <div class="text-xs opacity-75">Início: ${m.data_inicio.split('-').reverse().join('/')}</div>
-                        </div>
-                        <div class="text-lg font-black">${m.valor_meta}</div>
-                    </div>`;
-                });
-                container.innerHTML = html;
-            } catch (e) { console.error(e); }
-        }
-
-        async function salvarMeta() {
-            const uid = document.getElementById('meta-user').value;
-            const data = document.getElementById('meta-date').value;
-            const val = document.getElementById('meta-value').value;
-            if (!uid || !data || !val) return alert("Preencha todos campos.");
-
-            try {
-                const payload = uid === 'all' 
-                    ? allUsers.filter(u => u.funcao==='Assistente').map(u => ({ usuario_id: u.id, data_inicio: data, valor_meta: parseInt(val) }))
-                    : { usuario_id: uid, data_inicio: data, valor_meta: parseInt(val) };
-                
-                const { error } = await _supabase.from('metas').upsert(payload, { onConflict: 'usuario_id,data_inicio' });
-                if (error) throw error;
-                
-                alert("Meta salva!");
-                loadMetasAtuais();
-            } catch (e) { alert("Erro: " + e.message); }
-        }
-
-        // --- MÓDULO: ASSERTIVIDADE ---
-        async function loadAssertividade() {
-            try {
-                const { data } = await _supabase.from('metas_assertividade').select('*').order('data_inicio', {ascending:false});
-                const container = document.getElementById('assert-list');
-                if(!data?.length) { container.innerHTML = '<div class="text-center text-xs text-slate-400 py-4">Vazio.</div>'; return; }
-                
-                let html = ''; const hoje = new Date().toISOString().split('T')[0];
-                data.forEach(m => {
-                    const isFuture = m.data_inicio > hoje;
-                    html += `<div class="p-3 mb-2 rounded-lg border ${isFuture ? 'bg-purple-50 border-purple-200' : 'bg-white border-slate-100'} flex justify-between items-center shadow-sm">
-                        <div class="text-sm"><span class="block text-xs font-bold text-slate-400 uppercase">Vigência</span>${m.data_inicio.split('-').reverse().join('/')}</div>
-                        <div class="text-xl font-black text-purple-700">${m.valor_minimo}%</div>
-                    </div>`;
-                });
-                container.innerHTML = html;
-            } catch (e) { console.error(e); }
-        }
-
-        async function salvarAssertividade() {
-            const data = document.getElementById('assert-date').value;
-            const val = document.getElementById('assert-value').value;
-            if (!data || !val) return alert("Preencha campos.");
-            try {
-                const { error } = await _supabase.from('metas_assertividade').insert({ data_inicio: data, valor_minimo: parseFloat(val) });
-                if (error) throw error;
-                alert("Salvo!"); loadAssertividade();
-            } catch (e) { alert("Erro: " + e.message); }
-        }
-
-        // --- MÓDULO: EMPRESAS (NOVO) ---
-        async function loadEmpresas() {
-            try {
-                // Verifica se tabela existe tentando um select simples. Se der erro, avisa.
-                const { data, error } = await _supabase.from('empresas').select('*').order('nome');
-                
-                const container = document.getElementById('lista-empresas');
-                if (error) {
-                    console.warn("Tabela empresas pode não existir.", error);
-                    container.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500 text-xs">Erro: Tabela 'empresas' não encontrada ou erro de conexão.</td></tr>`;
-                    return;
-                }
-
-                allEmpresas = data || [];
-                renderEmpresas(allEmpresas);
-            } catch (err) {
-                console.error(err);
-            }
-        }
-
-        function renderEmpresas(lista) {
-            const container = document.getElementById('lista-empresas');
-            if (lista.length === 0) {
-                container.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 text-xs">Nenhuma empresa cadastrada.</td></tr>`;
-                return;
-            }
-
-            let html = '';
-            lista.forEach(e => {
-                const dataFmt = e.data_entrada ? e.data_entrada.split('-').reverse().join('/') : '-';
-                const empresaJson = JSON.stringify(e).replace(/"/g, '&quot;');
-                
-                html += `
-                <tr class="hover:bg-slate-50 transition border-b border-slate-50 group">
-                    <td class="px-6 py-4 font-bold text-slate-600">#${e.id}</td>
-                    <td class="px-6 py-4 font-bold text-slate-800">${e.nome}</td>
-                    <td class="px-6 py-4 text-blue-600 text-xs font-mono bg-blue-50/50 rounded px-2 w-fit">${e.subdominio || '-'}</td>
-                    <td class="px-6 py-4 text-center text-slate-500 text-xs">${dataFmt}</td>
-                    <td class="px-6 py-4 text-slate-500 text-xs max-w-xs truncate" title="${e.observacao || ''}">${e.observacao || '-'}</td>
-                    <td class="px-6 py-4 text-center">
-                        <button onclick="abrirModalEmpresa(${empresaJson})" class="text-slate-400 hover:text-blue-600 transition">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    </td>
-                </tr>`;
-            });
-            container.innerHTML = html;
-        }
-
-        function filtrarEmpresas() {
-            const term = document.getElementById('search-empresa').value.toLowerCase();
-            const filtered = allEmpresas.filter(e => 
-                e.nome.toLowerCase().includes(term) || 
-                String(e.id).includes(term) ||
-                (e.subdominio && e.subdominio.toLowerCase().includes(term))
-            );
-            renderEmpresas(filtered);
-        }
-
-        async function salvarEmpresa() {
-            const id = document.getElementById('form-empresa-id').value;
-            const nome = document.getElementById('form-empresa-nome').value;
-            const sub = document.getElementById('form-empresa-sub').value;
-            const data = document.getElementById('form-empresa-data').value;
-            const obs = document.getElementById('form-empresa-obs').value;
-            // Campo oculto para saber se é edição (embora usemos ID fixo como PK, vamos usar upsert)
-            // Assumindo que o ID digitado é a Primary Key
-            
-            if (!id || !nome) return alert("ID e Nome são obrigatórios.");
-
-            try {
-                const payload = {
-                    id: parseInt(id),
-                    nome: nome,
-                    subdominio: sub,
-                    data_entrada: data || null,
-                    observacao: obs
-                };
-
-                const { error } = await _supabase.from('empresas').upsert(payload);
-                if (error) throw error;
-
-                alert("Empresa salva com sucesso!");
-                fecharModais();
-                loadEmpresas();
-            } catch (err) {
-                alert("Erro ao salvar: " + err.message);
-            }
-        }
-
-        async function excluirEmpresa() {
-            const id = document.getElementById('form-empresa-id').value;
-            if (!confirm(`Tem certeza que deseja excluir a empresa ID ${id}?`)) return;
-
-            try {
-                const { error } = await _supabase.from('empresas').delete().eq('id', id);
-                if (error) throw error;
-                alert("Empresa excluída.");
-                fecharModais();
-                loadEmpresas();
-            } catch (err) {
-                alert("Erro ao excluir: " + err.message);
-            }
-        }
-
-        // --- MODAIS ---
-        function fecharModais() {
-            document.getElementById('modal-user').classList.add('hidden');
-            document.getElementById('modal-empresa').classList.add('hidden');
-        }
-
-        function abrirModalUsuario(user = null) {
-            const m = document.getElementById('modal-user');
-            m.classList.remove('hidden'); m.classList.add('flex');
-            
-            const btnDel = document.getElementById('btn-user-delete');
-            const inputId = document.getElementById('form-user-id');
-            
-            if (user) {
-                document.getElementById('modal-user-title').innerText = "Editar Colaborador";
-                inputId.value = user.id; inputId.disabled = true; inputId.classList.add('bg-slate-100');
-                document.getElementById('form-user-nome').value = user.nome;
-                document.getElementById('form-user-senha').value = user.senha;
-                document.getElementById('form-user-funcao').value = user.funcao;
-                document.getElementById('form-user-contrato').value = user.contrato || 'PJ';
-                btnDel.classList.remove('hidden');
-            } else {
-                document.getElementById('modal-user-title').innerText = "Novo Colaborador";
-                inputId.value = ""; inputId.disabled = false; inputId.classList.remove('bg-slate-100');
-                document.getElementById('form-user-nome').value = "";
-                document.getElementById('form-user-senha').value = "";
-                document.getElementById('form-user-funcao').value = "Assistente";
-                document.getElementById('form-user-contrato').value = "PJ";
-                btnDel.classList.add('hidden');
-            }
-        }
-
-        function abrirModalEmpresa(empresa = null) {
-            const m = document.getElementById('modal-empresa');
-            m.classList.remove('hidden'); m.classList.add('flex');
-            
-            const btnDel = document.getElementById('btn-empresa-delete');
-            const inputId = document.getElementById('form-empresa-id');
-
-            if (empresa) {
-                document.getElementById('modal-empresa-title').innerText = "Editar Empresa";
-                inputId.value = empresa.id; inputId.disabled = true; inputId.classList.add('bg-slate-100');
-                document.getElementById('form-empresa-nome').value = empresa.nome;
-                document.getElementById('form-empresa-sub').value = empresa.subdominio || '';
-                document.getElementById('form-empresa-data').value = empresa.data_entrada || '';
-                document.getElementById('form-empresa-obs').value = empresa.observacao || '';
-                btnDel.classList.remove('hidden');
-            } else {
-                document.getElementById('modal-empresa-title').innerText = "Nova Empresa";
-                inputId.value = ""; inputId.disabled = false; inputId.classList.remove('bg-slate-100');
-                document.getElementById('form-empresa-nome').value = "";
-                document.getElementById('form-empresa-sub').value = "";
-                document.getElementById('form-empresa-data').value = new Date().toISOString().substring(0, 10);
-                document.getElementById('form-empresa-obs').value = "";
-                btnDel.classList.add('hidden');
-            }
-        }
-
-        // Funções de CRUD Usuário (reaproveitadas do código anterior para manter lógica)
-        async function salvarUsuario() {
-            const id = document.getElementById('form-user-id').value;
-            const nome = document.getElementById('form-user-nome').value;
-            const senha = document.getElementById('form-user-senha').value;
-            const funcao = document.getElementById('form-user-funcao').value;
-            const contrato = document.getElementById('form-user-contrato').value;
-            
-            if(!id || !nome) return alert("Campos obrigatórios.");
-            const payload = { id: parseInt(id), nome, senha, funcao, contrato };
-            
-            try {
-                if (document.getElementById('form-user-id').disabled) {
-                     const { error } = await _supabase.from('usuarios').update(payload).eq('id', id);
-                     if (error) throw error;
-                } else {
-                     const { error } = await _supabase.from('usuarios').insert(payload);
-                     if (error) throw error;
-                }
-                fecharModais(); loadUsers();
-            } catch (e) { alert("Erro: " + e.message); }
-        }
-
-        async function excluirUsuario() {
-            const id = document.getElementById('form-user-id').value;
-            if(!confirm("Excluir usuário?")) return;
-            try {
-                const { error } = await _supabase.from('usuarios').delete().eq('id', id);
-                if (error) throw error;
-                fecharModais(); loadUsers();
-            } catch (e) { alert("Erro: " + e.message); }
-        }
-
-    </script>
 </body>
 </html>
