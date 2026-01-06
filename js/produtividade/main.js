@@ -1,3 +1,4 @@
+//
 window.Produtividade = window.Produtividade || { supabase: null };
 
 Produtividade.init = async function() {
@@ -65,6 +66,7 @@ Produtividade.importarEmMassa = async function(input) {
 
     if(!confirm(`Importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
 
+    // Carrega usuários para mapear Nome -> ID
     const { data: usersDB } = await Produtividade.supabase.from('usuarios').select('id, nome');
     const mapUsuarios = {};
     (usersDB || []).forEach(u => mapUsuarios[Importacao.normalizar(u.nome)] = u.id);
@@ -86,26 +88,32 @@ Produtividade.importarEmMassa = async function(input) {
                 const findKey = (t) => keys.find(k => k.trim() === t || norm(k) === t || norm(k).includes(t));
 
                 const kNome = findKey('assistente') || findKey('nome');
-                // Ignora linha de total ou vazia
+                // Ignora linha de total ou vazia onde o nome contenha "Total"
                 if (!kNome || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
 
-                // Mapeamento de Colunas (Focado no seu Excel)
-                // Procura a coluna exata "documentos_validados", se não achar, procura "total"
-                const kTotal = keys.find(k => k.trim() === 'documentos_validados') || findKey('total');
+                // Mapeamento de Colunas (Atualizado para sua planilha 05012026.xlsx)
+                // Procura exatamente as colunas do seu arquivo primeiro
+                const kTotal = keys.find(k => k.trim() === 'documentos_validados') || 
+                               findKey('total') || 
+                               findKey('producao') || 
+                               findKey('qtd');
+
                 const kFifo = findKey('documentos_validados_fifo') || findKey('fifo');
-                const kGT = findKey('gradual_total');
-                const kGP = findKey('gradual_parcial');
-                const kPFC = findKey('perfil_fc');
+                const kGT = findKey('documentos_validados_gradual_total') || findKey('gradual_total');
+                const kGP = findKey('documentos_validados_gradual_parcial') || findKey('gradual_parcial');
+                const kPFC = findKey('documentos_validados_perfil_fc') || findKey('perfil_fc');
 
                 // Identifica Usuário
                 const nomeRaw = row[kNome] ? row[kNome].toString() : "";
                 const uid = mapUsuarios[norm(nomeRaw)];
 
                 if (uid) {
+                    // Função auxiliar robusta para converter números
                     const pInt = (v) => {
                         if (typeof v === 'number') return v;
                         if (!v) return 0;
-                        const s = v.toString().replace(/\./g, '').replace(',', '.');
+                        // Remove pontos de milhar e troca vírgula decimal por ponto
+                        const s = v.toString().trim().replace(/\./g, '').replace(',', '.');
                         return parseInt(s) || 0;
                     };
 
@@ -122,21 +130,24 @@ Produtividade.importarEmMassa = async function(input) {
             });
 
             if (updates.length > 0) {
-                await Produtividade.supabase
+                const { error } = await Produtividade.supabase
                     .from('producao')
                     .upsert(updates, { onConflict: 'usuario_id, data_referencia' });
+                
+                if (error) throw error;
                 totalImportados += updates.length;
             }
 
         } catch (err) {
-            console.error(err);
+            console.error("Erro na importação:", err);
             erros++;
         }
     }
 
     input.value = "";
-    alert(`Importação finalizada!\nRegistros: ${totalImportados}\nArquivos com erro: ${erros}`);
+    alert(`Importação finalizada!\nRegistros processados: ${totalImportados}\nArquivos com erro: ${erros}`);
     
+    // Recarrega a tela se estiver na aba geral
     if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
         Produtividade.Geral.carregarTela();
     }

@@ -1,3 +1,5 @@
+//
+
 Produtividade.Geral = {
     dadosDoDia: [],
     
@@ -9,7 +11,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Carregando...</td></tr>';
 
         try {
-            // Busca dados com join
             const { data: producao, error } = await Produtividade.supabase
                 .from('producao')
                 .select('*, usuarios!inner(id, nome, funcao, contrato)')
@@ -17,7 +18,6 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
-            // Busca metas vigentes
             const { data: metas } = await Produtividade.supabase
                 .from('metas')
                 .select('*')
@@ -34,6 +34,14 @@ Produtividade.Geral = {
         }
     },
 
+    // Função auxiliar para tratar o fator com segurança
+    getFator: function(valor) {
+        if (valor === null || valor === undefined || isNaN(Number(valor))) {
+            return 1; // Padrão 100% se vier vazio ou inválido
+        }
+        return Number(valor);
+    },
+
     renderizarTabela: function(dados, metas) {
         const tbody = document.getElementById('tabela-corpo');
         if (!dados || dados.length === 0) {
@@ -42,7 +50,6 @@ Produtividade.Geral = {
             return;
         }
 
-        // Ordenação segura (evita crash se nome for null)
         dados.sort((a, b) => {
             const nomeA = a.usuarios?.nome || '';
             const nomeB = b.usuarios?.nome || '';
@@ -51,27 +58,24 @@ Produtividade.Geral = {
 
         let html = '';
         dados.forEach(item => {
-            // Meta
+            // Tratamento de Meta
             const metaUser = metas.find(m => m.usuario_id === item.usuario_id) || { valor_meta: 650 };
             const metaDiaria = Number(metaUser.valor_meta) || 650;
             
-            // Fator (Dias Calc)
-            // Se vier null do banco, consideramos 1 (100%). Se vier número, respeitamos.
-            const fator = item.fator_multiplicador !== null ? Number(item.fator_multiplicador) : 1;
+            // CORREÇÃO: Usa a função auxiliar para garantir número
+            const fator = this.getFator(item.fator_multiplicador);
             
-            // Cálculos
+            // Cálculos Seguros
             const metaCalc = Math.round(metaDiaria * fator);
             const totalProd = Number(item.quantidade) || 0;
             
-            // Proteção contra divisão por zero
             let pct = 0;
             if (metaCalc > 0) {
                 pct = (totalProd / metaCalc) * 100;
             } else if (totalProd > 0) {
-                pct = 100; // Se produziu e meta era 0, é 100% (ou infinito)
+                pct = 100; 
             }
 
-            // Estilos
             let corPct = 'text-slate-600';
             if (pct >= 100) corPct = 'text-emerald-600 font-bold';
             else if (pct < 80) corPct = 'text-red-500 font-bold';
@@ -88,8 +92,7 @@ Produtividade.Geral = {
                     </select>
                 </td>
                 <td class="px-6 py-3 font-bold text-slate-700">${item.usuarios?.nome || 'Desc.'}</td>
-                <td class="px-6 py-3 text-center">${fator}</td>
-                <td class="px-6 py-3 text-center font-bold text-blue-700">${totalProd.toLocaleString('pt-BR')}</td>
+                <td class="px-6 py-3 text-center">${fator}</td> <td class="px-6 py-3 text-center font-bold text-blue-700">${totalProd.toLocaleString('pt-BR')}</td>
                 <td class="px-6 py-3 text-center text-slate-500">${item.fifo || 0}</td>
                 <td class="px-6 py-3 text-center text-slate-500">${item.gradual_total || 0}</td>
                 <td class="px-6 py-3 text-center text-slate-500">${item.gradual_parcial || 0}</td>
@@ -105,12 +108,13 @@ Produtividade.Geral = {
         let totalMeta = 0;
         let clt = 0, pj = 0;
         let ativos = 0;
+        let assistProd = 0; // Para calcular média individual correta
 
         dados.forEach(d => {
             const qtd = Number(d.quantidade) || 0;
-            const fator = d.fator_multiplicador !== null ? Number(d.fator_multiplicador) : 1;
+            // CORREÇÃO: Mesma segurança no fator aqui
+            const fator = this.getFator(d.fator_multiplicador);
             
-            // Meta
             const m = metas.find(x => x.usuario_id === d.usuario_id) || { valor_meta: 650 };
             const mVal = Number(m.valor_meta) || 650;
 
@@ -118,12 +122,16 @@ Produtividade.Geral = {
             totalMeta += Math.round(mVal * fator);
 
             if (d.usuarios?.contrato === 'CLT') clt++; else pj++;
-            if (fator > 0) ativos++;
+            
+            // Só conta na média se o fator for > 0 (quem trabalhou)
+            if (fator > 0) {
+                ativos++;
+                assistProd += qtd;
+            }
         });
 
         const totalPessoas = clt + pj;
         
-        // Renderiza
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-meta-total', totalMeta.toLocaleString('pt-BR'));
         
@@ -140,8 +148,9 @@ Produtividade.Geral = {
 
         const media = ativos > 0 ? Math.round(totalProd / ativos) : 0;
         this.setTxt('kpi-media-todas', media.toLocaleString('pt-BR'));
+        // Atualiza a média individual também
+        this.setTxt('kpi-media-assist', media.toLocaleString('pt-BR')); 
         
-        // Estilo do card PCT
         const cardPct = document.getElementById('card-pct');
         if(cardPct) {
             if(pctGlobal >= 100) cardPct.className = "bg-gradient-to-br from-emerald-600 to-teal-600 p-3 rounded-xl shadow-lg shadow-emerald-200 text-white flex flex-col justify-between";
@@ -156,7 +165,7 @@ Produtividade.Geral = {
     },
 
     zerarKPIs: function() {
-        ['kpi-total', 'kpi-meta-total', 'kpi-media-todas', 'kpi-pct'].forEach(id => this.setTxt(id, '--'));
+        ['kpi-total', 'kpi-meta-total', 'kpi-media-todas', 'kpi-pct', 'kpi-media-assist'].forEach(id => this.setTxt(id, '--'));
         this.setTxt('kpi-count-clt', '0');
         this.setTxt('kpi-count-pj', '0');
     },
