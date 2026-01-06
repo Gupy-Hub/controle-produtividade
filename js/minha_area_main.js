@@ -35,12 +35,6 @@ const MA_Main = {
             const elFiltro = document.getElementById('container-filtro-user');
             if(elFiltro) elFiltro.classList.remove('hidden');
             
-            const elAviso = document.getElementById('aviso-edicao');
-            if(elAviso) {
-                elAviso.classList.remove('hidden');
-                if(f === 'Auditora') elAviso.innerHTML = '<i class="fas fa-search"></i> Modo Auditoria';
-            }
-            
             const selUser = document.getElementById('filtro-user');
             if(selUser) selUser.addEventListener('change', () => this.atualizarDashboard());
         }
@@ -107,15 +101,17 @@ const MA_Main = {
         
         localStorage.setItem('produtividade_data_ref', valData);
 
-        // Atualiza Check-in
         if(typeof MA_Checkin !== 'undefined') MA_Checkin.verificar(valData);
 
         const [y, m, d] = valData.split('-').map(Number);
-        
-        // CORREÇÃO DE LÓGICA DE DUPLICIDADE
-        let isGestoraViewSelf = false;
-        let viewingTime = false;
+        const ano = y;
+        const mes = m;
+        const dataInicio = new Date(ano, mes-1, 1).toISOString().split('T')[0];
+        const dataFim = new Date(ano, mes, 0).toISOString().split('T')[0];
+
         let targetName = this.usersMap[this.sessao.id];
+        let viewingTime = false;
+        let isGestoraViewSelf = false;
 
         if (this.isMgr) {
             const val = document.getElementById('filtro-user').value;
@@ -124,25 +120,15 @@ const MA_Main = {
             else targetName = this.usersMap[val];
         }
 
-        const elConteudo = document.getElementById('conteudo-principal');
-        const elAviso = document.getElementById('aviso-gestora-view');
-
         if (isGestoraViewSelf) {
-            // Se for gestora vendo a si mesma, esconde TUDO do painel e mostra aviso
-            elConteudo.classList.add('hidden');
-            elAviso.classList.remove('hidden');
+            document.getElementById('conteudo-principal').classList.add('hidden');
+            document.getElementById('aviso-gestora-view').classList.remove('hidden');
             if(typeof MA_Feedback !== 'undefined') MA_Feedback.carregar();
-            return; // Sai da função para não carregar dados desnecessários
+            return;
         } else {
-            // Se for assistente ou gestora vendo time/assistente
-            elConteudo.classList.remove('hidden');
-            elAviso.classList.add('hidden');
+            document.getElementById('conteudo-principal').classList.remove('hidden');
+            document.getElementById('aviso-gestora-view').classList.add('hidden');
         }
-
-        const ano = y;
-        const mes = m;
-        const dataInicio = new Date(ano, mes-1, 1).toISOString().split('T')[0];
-        const dataFim = new Date(ano, mes, 0).toISOString().split('T')[0];
 
         const { data: rawData } = await _supabase.from('producao')
             .select('*')
@@ -163,26 +149,29 @@ const MA_Main = {
                 const mediaFator = headcount ? sumFatores/headcount : 1;
 
                 dadosFinais.push({
-                    data_referencia: dia, 
+                    data_referencia: dia,
+                    nome: 'Time',
                     quantidade: headcount ? Math.round(total / headcount) : 0,
                     meta_diaria: 650, 
                     meta_ajustada: Math.round(650 * mediaFator),
-                    observacao: `Média de ${headcount} assistentes`
+                    fator: mediaFator
                 });
             });
         } else {
             Object.keys(dadosNormalizados).sort().forEach(dia => {
                 const dPessoa = dadosNormalizados[dia][targetName];
+                // Pega o fator do sistema para calcular a meta corretamente
+                const fator = Sistema.Dados.obterFator(targetName, dia);
+                
                 if (dPessoa) {
-                    const fator = Sistema.Dados.obterFator(targetName, dia);
                     dadosFinais.push({
-                        id: dPessoa.id_ref, 
+                        id: dPessoa.id_ref,
+                        nome: targetName,
                         data_referencia: dia, 
                         quantidade: dPessoa.quantidade,
-                        meta_diaria: dPessoa.meta_diaria,
-                        meta_ajustada: Math.round(dPessoa.meta_diaria * fator),
-                        observacao: dPessoa.observacao, 
-                        observacao_gestora: dPessoa.observacao_gestora
+                        meta_diaria: 650,
+                        meta_ajustada: Math.round(650 * fator), // Meta calculada pelo fator
+                        fator: fator
                     });
                 }
             });
@@ -190,7 +179,8 @@ const MA_Main = {
 
         if(typeof MA_Diario !== 'undefined') {
             MA_Diario.atualizarKPIs(dadosFinais);
-            MA_Diario.atualizarTabela(dadosFinais, viewingTime);
+            // IMPORTANTE: Passamos rawData para calcular a média do time na tabela
+            MA_Diario.atualizarTabela(dadosFinais, viewingTime, rawData);
         }
         
         if (!document.getElementById('tab-evolucao').classList.contains('hidden')) {
