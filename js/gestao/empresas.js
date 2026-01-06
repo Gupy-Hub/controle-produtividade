@@ -7,7 +7,7 @@ Gestao.Empresas = {
             if (error) throw error;
             Gestao.dados.empresas = data || [];
             this.idsSelecionados.clear();
-            this.filtrar(); // Aplica busca e renderiza
+            this.filtrar(); 
             this.atualizarBotaoExclusaoMassa();
         } catch (err) { console.error(err); }
     },
@@ -78,32 +78,53 @@ Gestao.Empresas = {
         const countSpan = document.getElementById('count-sel-empresa');
         const count = this.idsSelecionados.size;
         
-        countSpan.innerText = count;
-        if (count > 0) {
-            btn.classList.remove('hidden'); btn.classList.add('flex');
-        } else {
-            btn.classList.add('hidden'); btn.classList.remove('flex');
+        if(countSpan) countSpan.innerText = count;
+        if(btn) {
+            if (count > 0) { btn.classList.remove('hidden'); btn.classList.add('flex'); } 
+            else { btn.classList.add('hidden'); btn.classList.remove('flex'); }
         }
     },
 
+    // --- EXCLUSÃO INTELIGENTE ---
     excluirMassa: async function() {
-        const count = this.idsSelecionados.size;
-        if (!confirm(`ATENÇÃO: Deseja EXCLUIR ${count} empresas selecionadas?`)) return;
+        const ids = Array.from(this.idsSelecionados);
+        const count = ids.length;
+        
+        if (!confirm(`Deseja tentar excluir ${count} empresas selecionadas?\n\nEmpresas com vínculo em documentos NÃO serão excluídas.`)) return;
 
-        try {
-            const ids = Array.from(this.idsSelecionados);
-            const { error } = await Gestao.supabase.from('empresas').delete().in('id', ids);
-            if (error) throw error;
-            alert("Exclusão realizada.");
-            this.carregar();
-        } catch (err) { alert("Erro ao excluir: " + err.message); }
+        const btn = document.getElementById('btn-delete-mass-empresa');
+        const txtOriginal = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        btn.disabled = true;
+
+        let excluidos = 0;
+        let mantidos = 0;
+
+        for (const id of ids) {
+            const { error } = await Gestao.supabase.from('empresas').delete().eq('id', id);
+            
+            if (error) {
+                // Falha (vínculo ou outro erro)
+                mantidos++;
+            } else {
+                // Sucesso
+                excluidos++;
+                this.idsSelecionados.delete(id);
+            }
+        }
+
+        btn.innerHTML = txtOriginal;
+        btn.disabled = false;
+
+        alert(`Processo finalizado!\n\n✅ Excluídos: ${excluidos}\n🔒 Mantidos (possuem vínculos): ${mantidos}`);
+        this.carregar();
     },
 
     excluirIndividual: async function(id) {
         if (!confirm(`Excluir empresa #${id}?`)) return;
         try {
             const { error } = await Gestao.supabase.from('empresas').delete().eq('id', id);
-            if (error) throw error;
+            if (error) throw new Error("Empresa possui vínculos e não pode ser excluída.");
             this.carregar();
         } catch (err) { alert("Erro: " + err.message); }
     },
@@ -190,7 +211,7 @@ Gestao.Empresas = {
         } catch (err) { alert("Erro BD: " + err.message); }
     },
 
-    // Modal
+    // Modal e CRUD
     abrirModal: function(e) {
         const m = document.getElementById('modal-empresa'); m.classList.remove('hidden'); m.classList.add('flex');
         const idInput = document.getElementById('form-empresa-id');

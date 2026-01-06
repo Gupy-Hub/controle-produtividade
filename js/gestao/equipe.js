@@ -23,7 +23,7 @@ Gestao.Equipe = {
 
     mudarFiltro: function(novo) {
         this.filtroAtual = novo;
-        this.idsSelecionados.clear(); // Limpa seleção ao mudar aba
+        this.idsSelecionados.clear(); 
         this.atualizarBotaoExclusaoMassa();
         
         document.getElementById('btn-sub-ativos').className = `sub-tab-btn flex-1 py-3 text-sm font-bold text-center ${novo==='ativos'?'active':''}`;
@@ -74,15 +74,11 @@ Gestao.Equipe = {
         }).join('');
     },
 
-    // --- LÓGICA DE SELEÇÃO E EXCLUSÃO EM MASSA ---
-    
+    // --- SELEÇÃO ---
     toggleSelecao: function(id) {
-        if (this.idsSelecionados.has(id)) {
-            this.idsSelecionados.delete(id);
-        } else {
-            this.idsSelecionados.add(id);
-        }
-        this.filtrar(); // Re-renderiza para atualizar estilo
+        if (this.idsSelecionados.has(id)) this.idsSelecionados.delete(id);
+        else this.idsSelecionados.add(id);
+        this.filtrar(); 
         this.atualizarBotaoExclusaoMassa();
     },
 
@@ -108,38 +104,60 @@ Gestao.Equipe = {
         const countSpan = document.getElementById('count-sel-equipe');
         const count = this.idsSelecionados.size;
         
-        countSpan.innerText = count;
-        if (count > 0) {
-            btn.classList.remove('hidden');
-            btn.classList.add('flex');
-        } else {
-            btn.classList.add('hidden');
-            btn.classList.remove('flex');
+        if (countSpan) countSpan.innerText = count;
+        if (btn) {
+            if (count > 0) {
+                btn.classList.remove('hidden'); btn.classList.add('flex');
+            } else {
+                btn.classList.add('hidden'); btn.classList.remove('flex');
+            }
         }
     },
 
+    // --- NOVA LÓGICA DE EXCLUSÃO INTELIGENTE ---
     excluirMassa: async function() {
-        const count = this.idsSelecionados.size;
-        if (!confirm(`ATENÇÃO: Deseja EXCLUIR PERMANENTEMENTE ${count} colaboradores selecionados?\nIsso apagará todo o histórico de produção deles.`)) return;
+        const ids = Array.from(this.idsSelecionados);
+        const count = ids.length;
+        
+        if (!confirm(`Deseja tentar excluir ${count} colaboradores selecionados?\n\nColaboradores com histórico de produção NÃO serão excluídos, apenas removidos da seleção.`)) return;
 
-        try {
-            const ids = Array.from(this.idsSelecionados);
-            const { error } = await Gestao.supabase.from('usuarios').delete().in('id', ids);
+        // Feedback visual
+        const btn = document.getElementById('btn-delete-mass-equipe');
+        const txtOriginal = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        btn.disabled = true;
+
+        let excluidos = 0;
+        let mantidos = 0;
+
+        // Processa um por um para garantir que erros individuais não travem o lote
+        for (const id of ids) {
+            const { error } = await Gestao.supabase.from('usuarios').delete().eq('id', id);
             
-            if (error) throw error;
-            
-            alert("Exclusão realizada com sucesso.");
-            this.carregar();
-        } catch (err) {
-            alert("Erro ao excluir: " + err.message);
+            if (error) {
+                // Se deu erro (ex: constraint de chave estrangeira), conta como mantido
+                mantidos++;
+            } else {
+                // Sucesso
+                excluidos++;
+                this.idsSelecionados.delete(id); // Remove da seleção
+            }
         }
+
+        // Restaura botão
+        btn.innerHTML = txtOriginal;
+        btn.disabled = false;
+
+        alert(`Processo finalizado!\n\n✅ Excluídos com sucesso: ${excluidos}\n🔒 Mantidos (possuem histórico): ${mantidos}`);
+        
+        this.carregar();
     },
 
     excluirIndividual: async function(id) {
         if(!confirm("Deseja excluir este usuário permanentemente?")) return;
         try {
             const { error } = await Gestao.supabase.from('usuarios').delete().eq('id', id);
-            if (error) throw error;
+            if (error) throw new Error("Não é possível excluir usuário com histórico de produção. Tente inativá-lo.");
             this.carregar();
         } catch(e) { alert("Erro: " + e.message); }
     },
@@ -149,16 +167,12 @@ Gestao.Equipe = {
         const file = input.files[0];
         if (!file) return;
 
-        // VALIDAÇÃO DO NOME DO ARQUIVO
         if (!file.name.toLowerCase().startsWith('assistentes')) {
-            alert("⚠️ Arquivo inválido!\nO nome do arquivo deve começar com 'Assistentes'.\nExemplo: 'Assistentes.xlsx - 01.01.csv'");
-            input.value = "";
-            return;
+            alert("⚠️ Arquivo inválido!\nO nome do arquivo deve começar com 'Assistentes'.");
+            input.value = ""; return;
         }
 
-        if (!confirm("Confirmar importação de 'ASSISTENTES'?\n\nIsso atualizará os cadastros existentes pelo ID.")) { 
-            input.value = ""; return; 
-        }
+        if (!confirm("Confirmar importação de 'ASSISTENTES'?")) { input.value = ""; return; }
 
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -224,6 +238,7 @@ Gestao.Equipe = {
 
         try {
             let countUpd = 0;
+            // Updates um a um para evitar problemas
             for (const u of updates) {
                 await Gestao.supabase.from('usuarios').update(u).eq('id', u.id);
                 countUpd++;
@@ -286,11 +301,12 @@ Gestao.Equipe = {
     },
 
     excluir: async function() {
-        if(!confirm("Excluir usuário?")) return;
+        if(!confirm("Deseja excluir?")) return;
         try {
             const id = document.getElementById('form-user-id').value;
-            await Gestao.supabase.from('usuarios').delete().eq('id', id);
+            const { error } = await Gestao.supabase.from('usuarios').delete().eq('id', id);
+            if (error) throw new Error("Não é possível excluir usuário com histórico.");
             Gestao.fecharModais(); this.carregar();
-        } catch(e) { alert("Erro: " + e.message); }
+        } catch(e) { alert(e.message); }
     }
 };
