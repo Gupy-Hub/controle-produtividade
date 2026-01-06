@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão Administrativa</title>
+    <link rel="shortcut icon" href="#">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -142,10 +144,19 @@
 
     <script>
         let allUsers = [];
+        let _supabase = null; // Variável global para o cliente Supabase
 
         document.addEventListener('DOMContentLoaded', init);
 
         async function init() { 
+            // 1. Inicializa Conexão (CORREÇÃO CRÍTICA)
+            if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+                _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+            } else {
+                alert("Erro: Credenciais do Supabase não encontradas. Verifique js/config.js");
+                return;
+            }
+
             try { 
                 const today = new Date().toISOString().substring(0, 10); 
                 document.getElementById('meta-date').value = today; 
@@ -160,7 +171,7 @@
 
             } catch (e) { 
                 console.error("Erro no INIT:", e); 
-                alert("Ocorreu um erro ao inicializar: " + e.message); 
+                // alert("Ocorreu um erro ao inicializar: " + e.message); 
             } 
         }
 
@@ -306,7 +317,6 @@
 
             try { 
                 let error = null; 
-                // Chave de conflito sem espaços para evitar erro 400
                 const conflictKey = 'usuario_id,data_inicio';
 
                 if (uid === 'all') { 
