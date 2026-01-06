@@ -21,6 +21,7 @@
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        /* Ajustes de Scroll */
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
@@ -80,10 +81,11 @@
                         </div>
                         <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
                             <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
-                                <option value="mes">Mensal</option>
-                                <option value="trimestre">Trimestral</option>
-                                <option value="semestre">Semestral</option>
-                                <option value="ano_mes">Anual</option>
+                                <option value="mes">Mensal (Semanas)</option>
+                                <option value="trimestre">Trimestral (Meses)</option>
+                                <option value="semestre">Semestral (Meses)</option>
+                                <option value="ano_mes">Anual (Meses)</option>
+                                <option value="ano_trim">Anual (Trimestres)</option>
                                 <option value="dia">Diário</option>
                             </select>
                         </div>
@@ -119,6 +121,7 @@
     <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
+            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
@@ -136,22 +139,56 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
+                    <div class="flex items-end justify-between">
+                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-dias">1</p>
+                        <i class="fas fa-calendar-day text-2xl text-slate-100"></i>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-1 font-bold">Data Selecionada</p>
+                </div>
+
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
                         <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
                         <p class="text-2xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
                     </div>
-                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total">--</span></p>
+                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total" class="text-slate-700">--</span></p>
                 </div>
+
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Médias Diárias</p>
+                    <div class="space-y-2">
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] text-slate-500 font-bold uppercase">Time (Todas)</span>
+                            <span class="text-lg font-black text-slate-800" id="kpi-media-todas">--</span>
+                        </div>
+                        <div class="w-full h-px bg-slate-100"></div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-[10px] text-slate-500 font-bold uppercase">Individual</span>
+                            <span class="text-lg font-black text-emerald-600" id="kpi-media-assist">--</span>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between">
                     <div>
                         <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
                         <div class="flex items-center justify-between">
                             <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                            <i class="fas fa-chart-pie text-xl text-white/80"></i>
+                            <div id="icon-pct" class="text-xl text-white/80"><i class="fas fa-chart-pie"></i></div>
                         </div>
                     </div>
+                    <p class="text-[10px] text-white/60 mt-1 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
+            </div>
+
+            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
+                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
+                <button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
+                    <i class="fas fa-times mr-1"></i> Limpar Filtro
+                </button>
             </div>
 
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
