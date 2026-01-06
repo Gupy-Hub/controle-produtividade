@@ -1,75 +1,73 @@
-// js/login.js
+const Login = {
+    entrar: async function() {
+        const idInput = document.getElementById('login-id').value.trim();
+        const senhaInput = document.getElementById('login-senha').value.trim();
+        const btn = document.getElementById('btn-login');
+        const msg = document.getElementById('msg-erro');
 
-async function fazerLogin() {
-    const idInput = document.getElementById('login-id');
-    const senhaInput = document.getElementById('login-senha');
-    const btn = document.getElementById('btn-login');
-
-    const id = idInput.value.trim();
-    const senha = senhaInput.value.trim();
-
-    if (!id || !senha) {
-        alert("Por favor, preencha o ID e a Senha.");
-        return;
-    }
-
-    // Feedback visual de carregamento
-    const textoOriginal = btn.innerText;
-    btn.innerText = "Verificando...";
-    btn.disabled = true;
-    btn.classList.add('opacity-70', 'cursor-not-allowed');
-
-    try {
-        // 1. Verifica se as credenciais globais existem
-        if (!window.SUPABASE_URL || !window.SUPABASE_KEY) {
-            throw new Error("Erro de configuração: Credenciais do Supabase não encontradas no config.js");
+        if (!idInput || !senhaInput) {
+            this.mostrarErro("Preencha ID e Senha.");
+            return;
         }
 
-        // 2. Inicializa o cliente Supabase
-        // (Mesmo que já tenha sido inicializado em outros lugares, aqui garantimos localmente para o login)
-        const _supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        // Feedback Visual
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
+        msg.classList.add('hidden');
 
-        // 3. Consulta o banco de dados
-        const { data, error } = await _supabase
-            .from('usuarios')
-            .select('*')
-            .eq('id', parseInt(id))
-            .single();
+        try {
+            // Inicializa Supabase se necessário (caso Sistema.js ainda não tenha feito)
+            if (!Sistema.supabase && window.supabase) {
+                Sistema.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+            }
 
-        if (error) {
-            // Se o erro for "PGRST116", significa que não encontrou linhas (ID incorreto)
-            if (error.code === 'PGRST116') {
+            // Busca usuário pelo ID (login)
+            const { data, error } = await Sistema.supabase
+                .from('usuarios')
+                .select('*')
+                .eq('id', parseInt(idInput))
+                .single();
+
+            if (error || !data) {
                 throw new Error("Usuário não encontrado.");
             }
-            throw error; // Outros erros de conexão
+
+            // Valida Senha (comparação simples conforme solicitado, ideal seria hash)
+            // Valida também se está ATIVO
+            if (data.senha !== senhaInput) {
+                throw new Error("Senha incorreta.");
+            }
+
+            if (data.ativo === false || data.contrato === 'FINALIZADO') {
+                throw new Error("Acesso negado. Usuário inativo.");
+            }
+
+            // Sucesso: Salva na sessão e redireciona
+            localStorage.setItem('usuario_logado', JSON.stringify(data));
+
+            // Redirecionamento inteligente
+            if (data.funcao === 'Gestora' || data.funcao === 'Auditora') {
+                window.location.href = 'gestao.html';
+            } else {
+                window.location.href = 'minha_area.html';
+            }
+
+        } catch (err) {
+            console.error(err);
+            this.mostrarErro(err.message === "JSON object requested, multiple (or no) rows returned" ? "Usuário não encontrado." : err.message);
+            btn.disabled = false;
+            btn.innerText = 'Entrar no Sistema';
         }
+    },
 
-        // 4. Verifica a senha (Comparação simples conforme seu sistema atual)
-        if (data && String(data.senha) === senha) {
-            // Sucesso! Salva na sessão
-            const usuarioSessao = {
-                id: data.id,
-                nome: data.nome,
-                funcao: data.funcao, // 'Assistente', 'Gestora', etc.
-                contrato: data.contrato
-            };
-
-            localStorage.setItem('usuario', JSON.stringify(usuarioSessao));
-
-            // Redirecionamento baseado na função (Opcional, ou vai direto para produtividade)
-            // Por padrão, vamos para a tela principal
-            window.location.href = 'produtividade.html'; 
-        } else {
-            throw new Error("Senha incorreta.");
-        }
-
-    } catch (err) {
-        console.error("Erro no login:", err);
-        alert(err.message || "Erro ao conectar ao servidor.");
-        
-        // Restaura o botão
-        btn.innerText = textoOriginal;
-        btn.disabled = false;
-        btn.classList.remove('opacity-70', 'cursor-not-allowed');
+    mostrarErro: function(texto) {
+        const msg = document.getElementById('msg-erro');
+        msg.innerText = texto;
+        msg.classList.remove('hidden');
     }
-}
+};
+
+// Permite login com Enter
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') Login.entrar();
+});

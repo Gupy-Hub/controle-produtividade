@@ -1,84 +1,67 @@
-// js/layout.js
-
-document.addEventListener("DOMContentLoaded", () => {
-    criarNavbar();
-    configurarLogout();
-});
-
-function criarNavbar() {
-    const usuario = JSON.parse(localStorage.getItem('usuario'));
-    if (!usuario) return;
-
-    const paginas = [
-        { 
-            nome: "Produtividade", // ALTERADO DE "Painel Geral"
-            link: "produtividade.html", 
-            icone: "fas fa-chart-line",
-            permissoes: ['Gestora', 'Auditora'] 
-        },
-        { 
-            nome: "Minha Área", 
-            link: "minha_area.html", 
-            icone: "fas fa-id-card",
-            permissoes: ['Gestora', 'Auditora', 'Assistente'] 
-        },
-        { 
-            nome: "Gestão", 
-            link: "gestao.html", 
-            icone: "fas fa-cogs",
-            permissoes: ['Gestora', 'Auditora'] 
-        },
-        { 
-            nome: "Biblioteca", 
-            link: "biblioteca.html", 
-            icone: "fas fa-book",
-            permissoes: ['Gestora', 'Auditora', 'Assistente'] 
+const Layout = {
+    renderizar: function() {
+        // Não renderiza layout na tela de login
+        if (window.location.pathname.includes('index.html') || window.location.pathname.endsWith('/')) {
+            return;
         }
-    ];
 
-    const navbar = document.createElement("header");
-    navbar.className = "fixed top-0 left-0 w-full h-10 bg-slate-900 text-white z-[60] flex items-center justify-between px-4 shadow-md";
-    navbar.id = "main-navbar";
+        const usuario = JSON.parse(localStorage.getItem('usuario_logado'));
+        if (!usuario) return; // Sistema.js vai redirecionar
 
-    const logoHtml = `
-        <div class="flex items-center gap-2">
-            <span class="font-black text-sm tracking-tight text-blue-400">PERFORMANCE<span class="text-white">PRO</span></span>
-        </div>
-    `;
+        const primeiroNome = usuario.nome.split(' ')[0];
+        const isGestao = ['Gestora', 'Auditora', 'Admin'].includes(usuario.funcao);
 
-    let linksHtml = '<nav class="hidden md:flex items-center gap-1 h-full">';
-    const paginaAtual = window.location.pathname.split("/").pop();
+        // HTML do Menu Superior (Estilo atualizado)
+        const navHtml = `
+        <nav class="bg-slate-900 text-white shadow-lg mb-0">
+            <div class="max-w-[1400px] mx-auto px-4">
+                <div class="flex items-center justify-between h-16">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-600 w-8 h-8 rounded flex items-center justify-center font-bold">P</div>
+                        <span class="font-bold text-lg tracking-tight">Performance Pro</span>
+                    </div>
 
-    paginas.forEach(p => {
-        if (p.permissoes.includes(usuario.funcao)) {
-            const ativo = paginaAtual === p.link;
-            const classeAtivo = ativo ? "bg-slate-800 text-blue-400 border-b-2 border-blue-400" : "text-slate-400 hover:text-white hover:bg-slate-800";
-            linksHtml += `<a href="${p.link}" class="${classeAtivo} h-full px-3 flex items-center gap-2 text-xs font-bold transition-all"><i class="${p.icone}"></i> ${p.nome}</a>`;
-        }
-    });
-    linksHtml += '</nav>';
+                    <div class="hidden md:flex items-center space-x-1">
+                        <a href="minha_area.html" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 transition ${this.isActive('minha_area')}">
+                            <i class="fas fa-user mr-2"></i>Minha Área
+                        </a>
+                        
+                        <a href="produtividade.html" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 transition ${this.isActive('produtividade')}">
+                            <i class="fas fa-chart-line mr-2"></i>Painel Produtividade
+                        </a>
 
-    const perfilHtml = `
-        <div class="flex items-center gap-3">
-            <div class="flex items-center gap-2 text-xs">
-                <div class="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center font-bold text-[10px] text-white">${usuario.nome.charAt(0)}</div>
-                <span class="font-bold text-slate-300 hidden sm:inline">${usuario.nome}</span>
+                        <a href="ferramentas.html" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 transition ${this.isActive('ferramentas')}">
+                            <i class="fas fa-tools mr-2"></i>Ferramentas
+                        </a>
+
+                        ${isGestao ? `
+                        <a href="gestao.html" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 transition ${this.isActive('gestao')}">
+                            <i class="fas fa-cogs mr-2"></i>Gestão
+                        </a>` : ''}
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <div class="text-right hidden sm:block">
+                            <p class="text-xs text-slate-400 uppercase font-bold">Olá,</p>
+                            <p class="text-sm font-bold text-white leading-none">${primeiroNome}</p>
+                        </div>
+                        <button onclick="Sistema.sair()" class="bg-slate-800 hover:bg-red-600 text-white p-2 rounded-full transition shadow-sm border border-slate-700" title="Sair">
+                            <i class="fas fa-power-off text-xs"></i>
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="h-4 w-px bg-slate-700 mx-1"></div>
-            <button id="btn-logout" class="text-slate-400 hover:text-red-400 transition text-xs" title="Sair"><i class="fas fa-power-off"></i></button>
-        </div>
-    `;
+        </nav>
+        `;
 
-    navbar.innerHTML = logoHtml + linksHtml + perfilHtml;
-    document.body.prepend(navbar);
-    document.body.classList.add('pt-10');
-}
+        // Injeta no início do body
+        document.body.insertAdjacentHTML('afterbegin', navHtml);
+    },
 
-function configurarLogout() {
-    const btn = document.getElementById("btn-logout");
-    if (btn) {
-        btn.addEventListener("click", () => {
-            if(confirm("Sair do sistema?")) { localStorage.removeItem("usuario"); window.location.href = "index.html"; }
-        });
+    isActive: function(pagina) {
+        return window.location.pathname.includes(pagina) ? 'bg-blue-700 text-white shadow-inner' : 'text-slate-300';
     }
-}
+};
+
+// Renderiza assim que o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', () => Layout.renderizar());
