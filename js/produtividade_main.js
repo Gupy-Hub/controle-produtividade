@@ -46,41 +46,41 @@ function importarExcel(input) {
 
     const reader = new FileReader();
     reader.onload = async (e) => {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        // --- ALTERAÇÃO: Tentar pegar a data do NOME DO ARQUIVO primeiro ---
-        let dataDetectada = null;
-        const fileName = file.name.split('.')[0]; // Pega '05012026' de '05012026.xlsx'
-
-        // Regex para validar apenas números com 8 dígitos (DDMMAAAA)
-        if (/^\d{8}$/.test(fileName.trim())) {
-            const dia = fileName.substring(0, 2);
-            const mes = fileName.substring(2, 4);
-            const ano = fileName.substring(4, 8);
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
             
-            // Cria formato ISO (YYYY-MM-DD)
-            dataDetectada = `${ano}-${mes}-${dia}`;
-            console.log(`Data detectada pelo arquivo: ${dataDetectada}`);
-        } else {
-            // Fallback: Tenta pegar da primeira aba se o nome do arquivo não for uma data
-            const firstSheetName = workbook.SheetNames[0]; 
-            if (/^\d{8}$/.test(firstSheetName.trim())) {
-                const dia = firstSheetName.substring(0, 2);
-                const mes = firstSheetName.substring(2, 4);
-                const ano = firstSheetName.substring(4, 8);
+            // --- DETECÇÃO DA DATA NO NOME DO ARQUIVO ---
+            let dataDetectada = null;
+            const fileName = file.name.split('.')[0]; // Pega '05012026' de '05012026.xlsx'
+
+            // Regex para validar apenas números com 8 dígitos (DDMMAAAA)
+            if (/^\d{8}$/.test(fileName.trim())) {
+                const dia = fileName.substring(0, 2);
+                const mes = fileName.substring(2, 4);
+                const ano = fileName.substring(4, 8);
                 dataDetectada = `${ano}-${mes}-${dia}`;
+                console.log(`Data detectada pelo arquivo: ${dataDetectada}`);
+            } else {
+                // Fallback: Tenta pegar da primeira aba
+                const firstSheetName = workbook.SheetNames[0]; 
+                if (/^\d{8}$/.test(firstSheetName.trim())) {
+                    const dia = firstSheetName.substring(0, 2);
+                    const mes = firstSheetName.substring(2, 4);
+                    const ano = firstSheetName.substring(4, 8);
+                    dataDetectada = `${ano}-${mes}-${dia}`;
+                }
             }
+
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+            await processarDadosImportados(jsonData, dataDetectada);
+        } catch (err) {
+            console.error("Erro crítico ao ler Excel:", err);
+            alert("Erro ao ler o arquivo. Verifique se é um Excel válido.");
         }
-
-        // Pega os dados da primeira aba
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        
-        // defval: "" garante que células vazias venham como string vazia
-        const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-
-        await processarDadosImportados(jsonData, dataDetectada);
         input.value = "";
     };
     reader.readAsArrayBuffer(file);
@@ -89,7 +89,6 @@ function importarExcel(input) {
 async function processarDadosImportados(dados, dataRefImportacao) {
     let dataRef = "";
 
-    // Lógica de Prioridade da Data
     if (dataRefImportacao) {
         dataRef = dataRefImportacao;
         const inputDate = document.getElementById('global-date');
@@ -98,17 +97,15 @@ async function processarDadosImportados(dados, dataRefImportacao) {
             inputDate.classList.add('bg-yellow-100'); 
             setTimeout(() => inputDate.classList.remove('bg-yellow-100'), 1000);
         }
-        alert(`Data identificada: ${dataRef.split('-').reverse().join('/')}.\nOs dados serão salvos nesta data.`);
     } else {
-        // Se não achou data, usa a selecionada no painel
         dataRef = document.getElementById('global-date').value;
-        if(!confirm(`Não foi possível detectar a data no nome do arquivo (ex: 05012026.xlsx). \nDeseja importar para a data selecionada no painel: ${dataRef.split('-').reverse().join('/')}?`)) {
+        if(!confirm(`Não foi possível detectar a data no nome do arquivo.\nDeseja importar para a data selecionada: ${dataRef.split('-').reverse().join('/')}?`)) {
             return;
         }
     }
 
     if (!dataRef) { 
-        alert("Erro: Nenhuma data válida selecionada."); 
+        alert("Erro: Nenhuma data válida."); 
         return; 
     }
     
@@ -118,32 +115,43 @@ async function processarDadosImportados(dados, dataRefImportacao) {
     const mapUsuarios = {};
     if(usersDB) usersDB.forEach(u => mapUsuarios[u.nome.trim().toLowerCase()] = u.id);
 
-    // Função auxiliar para achar chaves insensíveis a maiúsculas/minúsculas
+    // --- FUNÇÃO DE BUSCA DE COLUNA MELHORADA ---
     const findKey = (row, possibilities) => {
-        return Object.keys(row).find(k => possibilities.some(p => k.toLowerCase() === p || k.toLowerCase().includes(p)));
+        const keys = Object.keys(row);
+        
+        // 1. Prioridade: Match EXATO (Ignora maiúsculas/minúsculas)
+        // Isso garante que 'assistente' seja escolhido antes de 'id_assistente'
+        const exact = keys.find(k => possibilities.some(p => k.trim().toLowerCase() === p.toLowerCase()));
+        if (exact) return exact;
+
+        // 2. Fallback: Match PARCIAL (Contém)
+        return keys.find(k => possibilities.some(p => {
+            const keyLower = k.trim().toLowerCase();
+            // IMPORTANTE: Ignora colunas que começam com 'id_' ou 'cod' para não pegar IDs numéricos
+            if (keyLower.startsWith('id_') || keyLower.startsWith('id ') || keyLower.startsWith('cod')) return false;
+            return keyLower.includes(p.toLowerCase());
+        }));
     };
 
     for (const row of dados) {
-        // --- ALTERAÇÃO: Mapeamento de colunas atualizado para o seu arquivo ---
+        // Busca coluna de nome (prioriza 'assistente' exato)
+        const keyNome = findKey(row, ['assistente', 'analista', 'nome', 'funcionário']);
         
-        // Procura 'assistente' ou 'nome'
-        const keyNome = findKey(row, ['assistente', 'analista', 'nome', 'funcionário', 'funcionario']);
-        
-        // Procura 'documentos_validados' (exato) ou 'total'
-        // Usamos find específico para garantir que pegue a coluna de total e não as parciais
-        let keyQtd = Object.keys(row).find(k => k.toLowerCase().trim() === 'documentos_validados');
+        // Busca coluna de quantidade total
+        let keyQtd = Object.keys(row).find(k => k.trim().toLowerCase() === 'documentos_validados'); // Prioridade máxima
         if (!keyQtd) keyQtd = findKey(row, ['quantidade', 'total', 'qtd']);
         
         if (keyNome && keyQtd) {
             const nomePlanilha = String(row[keyNome]).trim();
-            // Pula linha de "Total" ou vazias
-            if (nomePlanilha.toLowerCase() === 'total' || !nomePlanilha) continue;
+            
+            // Ignora linhas de totalização ou vazias
+            if (!nomePlanilha || nomePlanilha.toLowerCase() === 'total' || nomePlanilha.toLowerCase().includes('total geral')) continue;
 
             const qtd = parseInt(row[keyQtd]) || 0;
             const uid = mapUsuarios[nomePlanilha.toLowerCase()];
             
             if (uid) {
-                // --- Mapeamento das colunas específicas do seu Excel ---
+                // Mapeamento das colunas específicas
                 const fifo = parseInt(row['documentos_validados_fifo'] || row['FIFO'] || row['fifo'] || 0);
                 const gTotal = parseInt(row['documentos_validados_gradual_total'] || row['Gradual Total'] || row['gradual total'] || 0);
                 const gParcial = parseInt(row['documentos_validados_gradual_parcial'] || row['Gradual Parcial'] || row['gradual parcial'] || 0);
@@ -163,16 +171,20 @@ async function processarDadosImportados(dados, dataRefImportacao) {
                     }, { onConflict: 'usuario_id, data_referencia' });
                 
                 if (!error) count++;
-                else console.error("Erro ao salvar:", error);
+                else console.error(`Erro ao salvar ${nomePlanilha}:`, error);
             } else {
-                console.warn(`Usuário não encontrado no banco: ${nomePlanilha}`);
+                console.warn(`Usuário não encontrado no banco: ${nomePlanilha} (Verifique se o nome na planilha é igual ao do sistema)`);
             }
         }
     }
     
     const dataFmt = dataRef.split('-').reverse().join('/');
-    alert(`${count} registros importados com sucesso para o dia ${dataFmt}!`);
-    atualizarDataGlobal(dataRef);
+    if (count > 0) {
+        alert(`${count} registros importados com sucesso para o dia ${dataFmt}!`);
+        atualizarDataGlobal(dataRef);
+    } else {
+        alert(`Nenhum dado importado. Verifique se os nomes na coluna 'Assistente' batem com o cadastro.`);
+    }
 }
 
 // --- FUNÇÃO PARA MUDAR O CONTEXTO DOS SELETORES ---
