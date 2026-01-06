@@ -59,75 +59,53 @@ Produtividade.mudarAba = function(aba) {
     }
 };
 
-// --- IMPORTAÇÃO EM MASSA CORRIGIDA ---
 Produtividade.importarEmMassa = async function(input) {
     const files = input.files;
     if (!files || files.length === 0) return;
 
-    if(!confirm(`Deseja importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
+    if(!confirm(`Importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
 
-    // 1. Carrega Usuários para Mapeamento (Nome -> ID)
     const { data: usersDB } = await Produtividade.supabase.from('usuarios').select('id, nome');
     const mapUsuarios = {};
-    const activeIds = new Set();
-    
-    (usersDB || []).forEach(u => {
-        mapUsuarios[Importacao.normalizar(u.nome)] = u.id;
-        activeIds.add(u.id);
-    });
+    (usersDB || []).forEach(u => mapUsuarios[Importacao.normalizar(u.nome)] = u.id);
 
     let totalImportados = 0;
-    let arquivosProcessados = 0;
     let erros = 0;
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
             const leitura = await Importacao.lerArquivo(file);
-            
-            // Lógica de Data: Prioriza nome do arquivo, senão usa painel
-            let dataRef = leitura.dataSugestionada;
-            if (!dataRef) dataRef = document.getElementById('global-date').value;
-
+            let dataRef = leitura.dataSugestionada || document.getElementById('global-date').value;
             const updates = [];
             
             leitura.dados.forEach(row => {
                 const keys = Object.keys(row);
                 const norm = Importacao.normalizar;
-                const getKey = (term) => keys.find(k => k.trim() === term || norm(k) === term || norm(k).includes(term));
-                
-                // Mapeamento baseado no seu CSV (05012026.xlsx)
-                const kNome = getKey('assistente');
-                const kId = getKey('id_assistente');
-                
-                // Ignora linha de "Total"
-                if (!kNome && !kId) return;
-                const nomeVal = row[kNome] ? row[kNome].toString() : '';
-                if (nomeVal.toLowerCase().includes('total')) return;
+                // Helper para busca flexível
+                const findKey = (t) => keys.find(k => k.trim() === t || norm(k) === t || norm(k).includes(t));
 
-                // Colunas de Valores
-                const kTotal = keys.find(k => k.trim() === 'documentos_validados') || getKey('total'); // Prioriza nome exato
-                const kFifo = keys.find(k => k.trim() === 'documentos_validados_fifo') || getKey('fifo');
-                const kGT = keys.find(k => k.trim() === 'documentos_validados_gradual_total') || getKey('gradual_total');
-                const kGP = keys.find(k => k.trim() === 'documentos_validados_gradual_parcial') || getKey('gradual_parcial');
-                const kPFC = keys.find(k => k.trim() === 'documentos_validados_perfil_fc') || getKey('perfil_fc');
+                const kNome = findKey('assistente') || findKey('nome');
+                // Ignora linha de total ou vazia
+                if (!kNome || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
 
-                let uid = null;
-                // Tenta ID
-                if (kId && row[kId]) {
-                    const idVal = parseInt(row[kId]);
-                    if (activeIds.has(idVal)) uid = idVal;
-                }
-                // Tenta Nome
-                if (!uid && kNome && row[kNome]) {
-                    uid = mapUsuarios[norm(row[kNome])];
-                }
+                // Mapeamento de Colunas (Focado no seu Excel)
+                // Procura a coluna exata "documentos_validados", se não achar, procura "total"
+                const kTotal = keys.find(k => k.trim() === 'documentos_validados') || findKey('total');
+                const kFifo = findKey('documentos_validados_fifo') || findKey('fifo');
+                const kGT = findKey('gradual_total');
+                const kGP = findKey('gradual_parcial');
+                const kPFC = findKey('perfil_fc');
+
+                // Identifica Usuário
+                const nomeRaw = row[kNome] ? row[kNome].toString() : "";
+                const uid = mapUsuarios[norm(nomeRaw)];
 
                 if (uid) {
                     const pInt = (v) => {
                         if (typeof v === 'number') return v;
                         if (!v) return 0;
-                        const s = v.toString().replace(/\./g, '').replace(',', '.'); // Remove ponto de milhar
+                        const s = v.toString().replace(/\./g, '').replace(',', '.');
                         return parseInt(s) || 0;
                     };
 
@@ -144,23 +122,20 @@ Produtividade.importarEmMassa = async function(input) {
             });
 
             if (updates.length > 0) {
-                const { error } = await Produtividade.supabase
+                await Produtividade.supabase
                     .from('producao')
                     .upsert(updates, { onConflict: 'usuario_id, data_referencia' });
-                
-                if (error) throw error;
                 totalImportados += updates.length;
-                arquivosProcessados++;
             }
 
         } catch (err) {
-            console.error(`Erro arquivo ${file.name}:`, err);
+            console.error(err);
             erros++;
         }
     }
 
     input.value = "";
-    alert(`Finalizado!\n\nProcessados: ${arquivosProcessados}\nRegistros: ${totalImportados}\nErros: ${erros}`);
+    alert(`Importação finalizada!\nRegistros: ${totalImportados}\nArquivos com erro: ${erros}`);
     
     if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
         Produtividade.Geral.carregarTela();
