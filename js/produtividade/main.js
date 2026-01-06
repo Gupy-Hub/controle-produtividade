@@ -152,10 +152,8 @@ Produtividade.importarEmMassa = async function(input) {
     
     // ATUALIZAÇÃO INTELIGENTE DA TELA
     if (ultimaDataDetectada) {
-        // Se o arquivo tinha data (ex: 02012026), muda a tela para essa data
         Produtividade.atualizarDataGlobal(ultimaDataDetectada);
     } else if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {
-        // Se não, apenas recarrega a data atual
         Produtividade.Geral.carregarTela();
     }
 };

@@ -21,7 +21,7 @@ const Importacao = {
                     let workbook;
                     
                     // Verifica assinatura do arquivo (Magic Bytes)
-                    // Se começar com 50 4B 03 04, é um Excel/ZIP. Se não, é CSV/Texto.
+                    // Se começar com 50 4B 03 04, é um Excel/ZIP real.
                     const isZip = data.length > 4 && 
                                   data[0] === 0x50 && data[1] === 0x4B && 
                                   data[2] === 0x03 && data[3] === 0x04;
@@ -40,8 +40,8 @@ const Importacao = {
                             workbook = XLSX.read(data, { type: 'array', cellDates: true });
                         }
                     } else {
-                        // --- AQUI É O CAMINHO DO CSV ---
-                        // Decodifica como texto. 'iso-8859-1' é o padrão do Excel no Brasil para acentos.
+                        // --- TRATAMENTO DE CSV ---
+                        // Decodifica como texto usando ISO-8859-1 (padrão Brasil/Excel)
                         const decoder = new TextDecoder('iso-8859-1'); 
                         const text = decoder.decode(data);
                         
@@ -64,7 +64,6 @@ const Importacao = {
                     }
 
                     const firstSheet = workbook.SheetNames[0];
-                    // 'defval: ""' garante que células vazias não quebrem o layout
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "", raw: false });
                     
                     resolve({ dados: jsonData, dataSugestionada: dataDetectada, nomeArquivo: file.name });
