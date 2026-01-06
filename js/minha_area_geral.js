@@ -1,46 +1,145 @@
 // js/minha_area_geral.js
 
-// ... (MA_Checkin mantido igual) ...
 const MA_Checkin = {
+    // Busca o último dia trabalhado no banco
     obterUltimoDiaTrabalhado: async function() {
         const hoje = new Date().toISOString().split('T')[0];
-        const { data, error } = await _supabase.from('producao').select('data_referencia').eq('usuario_id', MA_Main.sessao.id).lt('data_referencia', hoje).order('data_referencia', { ascending: false }).limit(1).single();
+        const { data, error } = await _supabase
+            .from('producao')
+            .select('data_referencia')
+            .eq('usuario_id', MA_Main.sessao.id)
+            .lt('data_referencia', hoje)
+            .order('data_referencia', { ascending: false })
+            .limit(1)
+            .single();
+
         if (error || !data) return null;
         return data.data_referencia;
     },
+
     verificar: async function(dataVisualizadaNoPainel) {
-        const container = document.getElementById('container-checkin'); if (!container) return; container.innerHTML = '';
+        const container = document.getElementById('container-checkin');
+        if (!container) return;
+        
+        // NOTA: Não limpamos aqui para evitar "piscar" vazio enquanto carrega.
+        // A limpeza será feita logo antes de inserir o novo botão.
+
         if (MA_Main.isMgr) {
+            // --- VISÃO GESTORA ---
             const dataRef = dataVisualizadaNoPainel;
+            
+            // Busca dados
             const { data: checkins } = await _supabase.from('checkins').select('usuario_id').eq('data_referencia', dataRef);
             const { data: users } = await _supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').eq('ativo', true);
+            
+            // --- LIMPEZA DE SEGURANÇA (CORREÇÃO DE DUPLICIDADE) ---
+            container.innerHTML = '';
+
             if (users && checkins) {
-                const total = users.length; const feitos = checkins.length; const checkedIds = checkins.map(c => c.usuario_id); const pendentes = users.filter(u => !checkedIds.includes(u.id));
+                const total = users.length;
+                const feitos = checkins.length;
+                const checkedIds = checkins.map(c => c.usuario_id);
+                const pendentes = users.filter(u => !checkedIds.includes(u.id));
+
                 const colorClass = feitos === total ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200';
-                const btn = document.createElement('button'); btn.className = `flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition shadow-sm ${colorClass}`; btn.innerHTML = `<i class="fas fa-tasks"></i> Check-in (${dataRef.split('-').reverse().slice(0,2).join('/')}): ${feitos}/${total}`; btn.onclick = () => this.abrirModalPendencias(pendentes); container.appendChild(btn);
+                
+                const btn = document.createElement('button');
+                btn.className = `flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-bold transition shadow-sm ${colorClass}`;
+                
+                // Formata data DD/MM
+                const dataFmt = dataRef.split('-').reverse().slice(0,2).join('/');
+                btn.innerHTML = `<i class="fas fa-tasks"></i> Check-in (${dataFmt}): ${feitos}/${total}`;
+                btn.onclick = () => this.abrirModalPendencias(pendentes);
+                
+                container.appendChild(btn);
             }
+
         } else {
-            const dataAlvo = await this.obterUltimoDiaTrabalhado(); if (!dataAlvo) return;
+            // --- VISÃO ASSISTENTE ---
+            const dataAlvo = await this.obterUltimoDiaTrabalhado();
+            
+            // --- LIMPEZA DE SEGURANÇA (CORREÇÃO DE DUPLICIDADE) ---
+            // Limpa antes de decidir se vai mostrar algo ou não
+            container.innerHTML = '';
+
+            if (!dataAlvo) return; // Se nunca trabalhou, não mostra nada
+
             const dataAlvoFmt = dataAlvo.split('-').reverse().join('/');
-            const { data: checkData } = await _supabase.from('checkins').select('*').eq('usuario_id', MA_Main.sessao.id).eq('data_referencia', dataAlvo).single();
-            const jaFez = !!checkData; const btn = document.createElement('button');
-            if (jaFez) { btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold cursor-default shadow-sm opacity-80"; btn.innerHTML = `<i class="fas fa-check-double"></i> Dia ${dataAlvoFmt.slice(0,5)} Validado`; } 
-            else { btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition shadow-sm animate-pulse"; btn.innerHTML = `<i class="fas fa-exclamation-circle"></i> Validar ${dataAlvoFmt}`; btn.title = "Clique para confirmar que os dados deste dia estão corretos"; btn.onclick = () => this.realizarCheckin(dataAlvo, dataAlvoFmt); }
+
+            const { data: checkData } = await _supabase.from('checkins')
+                .select('*')
+                .eq('usuario_id', MA_Main.sessao.id)
+                .eq('data_referencia', dataAlvo)
+                .single();
+
+            const jaFez = !!checkData;
+            const btn = document.createElement('button');
+            
+            if (jaFez) {
+                // Já validou
+                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-bold cursor-default shadow-sm opacity-80";
+                btn.innerHTML = `<i class="fas fa-check-double"></i> Dia ${dataAlvoFmt.slice(0,5)} Validado`;
+            } else {
+                // Pendente
+                btn.className = "flex items-center gap-2 px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 transition shadow-sm animate-pulse";
+                btn.innerHTML = `<i class="fas fa-exclamation-circle"></i> Validar ${dataAlvoFmt}`;
+                btn.title = "Clique para confirmar que os dados deste dia estão corretos";
+                btn.onclick = () => this.realizarCheckin(dataAlvo, dataAlvoFmt);
+            }
             container.appendChild(btn);
         }
     },
+
     realizarCheckin: async function(dataRef, dataFmt) {
-        const { data: prod } = await _supabase.from('producao').select('quantidade').eq('usuario_id', MA_Main.sessao.id).eq('data_referencia', dataRef).single();
+        // Busca quantidade para exibir na confirmação
+        const { data: prod } = await _supabase.from('producao')
+            .select('quantidade')
+            .eq('usuario_id', MA_Main.sessao.id)
+            .eq('data_referencia', dataRef)
+            .single();
+            
         const qtd = prod ? prod.quantidade : 0;
+
         if (!confirm(`CONFIRMAÇÃO DE DADOS\n\nData: ${dataFmt}\nSua Produção: ${qtd} documentos\n\nVocê confirma que estes dados estão corretos?`)) return;
-        const { error } = await _supabase.from('checkins').insert({ usuario_id: MA_Main.sessao.id, data_referencia: dataRef });
-        if (error) { if(error.code === '23505') { alert("Check-in já realizado para esta data!"); this.verificar(null); } else { alert('Erro ao realizar check-in: ' + error.message); } } else { alert("Dados validados com sucesso!"); this.verificar(null); }
+
+        const { error } = await _supabase.from('checkins').insert({
+            usuario_id: MA_Main.sessao.id,
+            data_referencia: dataRef
+        });
+
+        if (error) {
+            if(error.code === '23505') {
+                alert("Check-in já realizado para esta data!");
+                this.verificar(null);
+            } else {
+                alert('Erro ao realizar check-in: ' + error.message);
+            }
+        } else {
+            alert("Dados validados com sucesso!");
+            this.verificar(null);
+        }
     },
+
     abrirModalPendencias: function(listaPendentes) {
-        const modal = document.getElementById('modal-pendencias'); const listaBody = document.getElementById('lista-pendentes-body');
-        if (listaPendentes.length === 0) { listaBody.innerHTML = '<div class="text-center py-8 text-emerald-500 font-bold"><i class="fas fa-check-circle text-4xl mb-2 block"></i>Todos realizaram o check-in!</div>'; } 
-        else { let html = '<ul class="space-y-2">'; listaPendentes.forEach(u => { html += `<li class="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100"><div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-200">${u.nome.charAt(0)}</div><span class="text-sm font-bold text-slate-700">${u.nome}</span></li>`; }); html += '</ul>'; listaBody.innerHTML = html; }
-        modal.classList.remove('hidden'); modal.classList.add('flex');
+        const modal = document.getElementById('modal-pendencias');
+        const listaBody = document.getElementById('lista-pendentes-body');
+        
+        if (listaPendentes.length === 0) {
+            listaBody.innerHTML = '<div class="text-center py-8 text-emerald-500 font-bold"><i class="fas fa-check-circle text-4xl mb-2 block"></i>Todos realizaram o check-in!</div>';
+        } else {
+            let html = '<ul class="space-y-2">';
+            listaPendentes.forEach(u => {
+                html += `<li class="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100">
+                    <div class="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 font-bold text-xs border border-slate-200">${u.nome.charAt(0)}</div>
+                    <span class="text-sm font-bold text-slate-700">${u.nome}</span>
+                </li>`;
+            });
+            html += '</ul>';
+            listaBody.innerHTML = html;
+        }
+        
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
     }
 };
 
@@ -67,39 +166,29 @@ const MA_Diario = {
         let total = 0;
         let metaTotal = 0;
         
-        // 1. CÁLCULO DE TOTAL E META
         if (viewingTime && rawData) {
-            // CORREÇÃO: Visão Time -> Soma TODA a produção de TODOS os assistentes do mês
-            // Filtra rawData para apenas assistentes
+            // Visão Time: Soma tudo de todos os assistentes
             const assistentesData = rawData.filter(r => MA_Main.userRoles[r.usuario_id] === 'Assistente');
-            
             total = assistentesData.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
             
-            // Meta Total do Time no Mês = Soma das metas diárias de cada assistente
-            // (Considerando fatores de abono)
             assistentesData.forEach(r => {
                 const nome = MA_Main.usersMap[r.usuario_id];
                 const fator = Sistema.Dados.obterFator(nome, r.data_referencia);
                 metaTotal += Math.round(650 * fator);
             });
         } else {
-            // Visão Individual (dadosFinais já tem os dados da pessoa)
+            // Visão Individual
             total = dadosFinais.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
             if(dadosFinais.length > 0) dadosFinais.forEach(d => metaTotal += d.meta_ajustada); 
-            else metaTotal = 650 * 22; // Estimativa se vazio
+            else metaTotal = 650 * 22; 
         }
 
-        // 2. DIAS E MÉDIA
         const diasProdutivos = dadosFinais.filter(d => d.quantidade > 0).length;
         
-        // Na visão TIME, a Média Diária é "Média por Pessoa por Dia" (igual ao consolidado)
-        // Na visão INDIVIDUAL, é "Média do Indivíduo"
         let media = 0;
         if (viewingTime) {
-            // Média no card de time geralmente é a média per capita
-            // Mas para o card "Média Diária" fazer sentido com a meta "650", 
-            // precisamos da média POR PESSOA.
-            // dadosFinais na visão time já contém a média do time por dia.
+            // Média por pessoa (Total / (Pessoas * Dias)) ou Média das médias diárias
+            // Para simplificar e manter coerência com o gráfico: Média das médias diárias do time
             const somaMediasDiarias = dadosFinais.reduce((acc, curr) => acc + curr.quantidade, 0);
             media = dadosFinais.length > 0 ? Math.round(somaMediasDiarias / dadosFinais.length) : 0;
         } else {
@@ -176,9 +265,6 @@ const MA_Diario = {
                 obsHtml += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100">
                     <i class="fas fa-info-circle mr-1"></i> <strong>${tipoAbono}:</strong> ${motivo}
                 </div>`;
-            } else if (viewingTime) {
-                // Na visão time, mostra quantos assistentes
-                obsHtml = `<span class="text-xs text-slate-400">Média calculada sobre o time ativo.</span>`;
             }
 
             const dFmt = item.data_referencia.split('-').reverse().join('/');
@@ -198,66 +284,7 @@ const MA_Diario = {
     atualizarMetaBD: async function() { alert("Ação não permitida."); } 
 };
 
-// ... (MA_Evolucao, MA_Comparativo, MA_Feedback mantidos iguais) ...
-const MA_Evolucao = {
-    chart: null,
-    renderizarGraficos: async function(periodo) {
-        document.querySelectorAll('.chart-selector-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById(`chart-btn-${periodo}`).classList.add('active');
-        const valData = document.getElementById('global-date').value; if(!valData) return;
-        const [y, m, d] = valData.split('-').map(Number); const refDate = new Date(y, m-1, d);
-        const ano = refDate.getFullYear(); const mes = refDate.getMonth();
-        let dInicio, dFim;
-        if (periodo === 'mes') { dInicio = new Date(ano, mes, 1).toISOString().split('T')[0]; dFim = new Date(ano, mes + 1, 0).toISOString().split('T')[0]; } 
-        else if (periodo === 'trimestre') { const trimStart = Math.floor(mes / 3) * 3; dInicio = new Date(ano, trimStart, 1).toISOString().split('T')[0]; dFim = new Date(ano, trimStart + 3, 0).toISOString().split('T')[0]; } 
-        else if (periodo === 'semestre') { const semStart = mes < 6 ? 0 : 6; dInicio = new Date(ano, semStart, 1).toISOString().split('T')[0]; dFim = new Date(ano, semStart + 6, 0).toISOString().split('T')[0]; } 
-        else if (periodo === 'ano') { dInicio = `${ano}-01-01`; dFim = `${ano}-12-31`; }
-        
-        let targetName = MA_Main.usersMap[MA_Main.sessao.id]; let viewingTime = false;
-        if(MA_Main.isMgr) { const val = document.getElementById('filtro-user').value; if(val === 'time') viewingTime = true; else if(val !== 'me') targetName = MA_Main.usersMap[val]; }
-        const { data: rawData } = await _supabase.from('producao').select('*').gte('data_referencia', dInicio).lte('data_referencia', dFim).order('data_referencia');
-        const grouped = MA_Diario.normalizarDados(rawData || []); const agruparPorMes = (periodo === 'ano');
-        const processedTime = {}, processedMain = {};
-        Object.keys(grouped).sort().forEach(date => {
-            let label = agruparPorMes ? date.substring(0, 7) : date; const prods = Object.values(grouped[date]); const total = prods.reduce((a,b) => a + b.quantidade, 0); const count = prods.length; const avg = count ? Math.round(total / count) : 0;
-            if(!processedTime[label]) { processedTime[label] = {sum:0, cnt:0}; processedMain[label] = 0; } processedTime[label].sum += avg; processedTime[label].cnt++;
-            let valUser = 0; if(grouped[date][targetName]) { valUser = grouped[date][targetName].quantidade; } processedMain[label] += valUser; 
-        });
-        const labels = Object.keys(processedTime).sort(); const dataMain = [], dataBench = []; let statsDias = 0, statsBest = 0, statsBatida = 0;
-        labels.forEach(k => {
-            let valTime = Math.round(processedTime[k].sum / processedTime[k].cnt); let valMainFinal = processedMain[k];
-            if (agruparPorMes) valMainFinal = Math.round(valMainFinal / processedTime[k].cnt); 
-            const displayMain = viewingTime ? valTime : valMainFinal; dataMain.push(displayMain); dataBench.push(viewingTime ? 650 : valTime);
-            if(displayMain > 0) { statsDias++; if(displayMain > statsBest) statsBest = displayMain; if(displayMain >= 650) statsBatida++; }
-        });
-        document.getElementById('evo-dias').innerText = statsDias; document.getElementById('evo-taxa').innerText = statsDias ? Math.round((statsBatida/statsDias)*100) + '%' : '0%'; document.getElementById('evo-best').innerText = statsBest;
-        const ctx = document.getElementById('chartPrincipal').getContext('2d'); if(this.chart) this.chart.destroy();
-        const gradient = ctx.createLinearGradient(0, 0, 0, 400); gradient.addColorStop(0, 'rgba(37, 99, 235, 0.2)'); gradient.addColorStop(1, 'rgba(37, 99, 235, 0)');
-        this.chart = new Chart(ctx, { type: 'line', data: { labels: labels.map(k => agruparPorMes ? k.split('-').reverse().join('/') : k.split('-').reverse().slice(0, 2).join('/')), datasets: [ { label: viewingTime ? 'Média Equipa' : targetName, data: dataMain, borderColor: '#2563eb', backgroundColor: gradient, borderWidth: 3, tension: 0.4, fill: true }, { label: viewingTime ? 'Meta (650)' : 'Média Equipa', data: dataBench, borderColor: viewingTime ? '#10b981' : '#94a3b8', borderWidth: 2, borderDash: [6, 6], tension: 0.4, fill: false } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true }, x: { grid: { display: false } } } } });
-    }
-};
-
-const MA_Comparativo = {
-    atualizar: async function(dadosFinais, viewingTime, targetName, inicio, fim) {
-        const valL = document.getElementById('comp-media-user'); const valR = document.getElementById('comp-media-time'); const elMsg = document.getElementById('comp-mensagem');
-        const { data: all } = await _supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
-        const norm = MA_Diario.normalizarDados(all||[]); let sumMedias=0, cntDias=0;
-        Object.values(norm).forEach(diaObj => { const arr = Object.values(diaObj); const tot = arr.reduce((a,b)=>a+b.quantidade,0); const headCount = arr.filter(p => p.quantidade > 0).length; if(headCount > 0) { sumMedias += (tot/headCount); cntDias++; } });
-        const mediaGeral = cntDias ? Math.round(sumMedias/cntDias) : 0;
-        const diasTrabUser = dadosFinais.filter(d => d.quantidade > 0); const totUser = diasTrabUser.reduce((a,b)=>a+b.quantidade,0); const mediaUser = diasTrabUser.length ? Math.round(totUser/diasTrabUser.length) : 0;
-        valL.innerText = mediaUser; valR.innerText = viewingTime ? 650 : mediaGeral; 
-        document.getElementById('label-media-selecionada').innerText = viewingTime ? "Média da Equipa" : `Média ${targetName}`;
-        document.getElementById('label-media-benchmark').innerText = viewingTime ? "Meta Esperada" : "Média Geral da Equipa";
-        const diff = mediaUser - (viewingTime ? 650 : mediaGeral);
-        if (diff > 0) elMsg.innerHTML = `<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`; else if (diff < 0) elMsg.innerHTML = `<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo do esperado</span>`; else elMsg.innerHTML = `<span class="text-slate-500">Exatamente na média.</span>`;
-    }
-};
-
-const MA_Feedback = {
-    carregar: async function() {
-        const el = document.getElementById('lista-feedbacks'); const { data } = await _supabase.from('feedbacks').select('*').order('created_at', {ascending:true});
-        if(!data || !data.length) { el.innerHTML = '<div class="text-center text-slate-300 py-12">Nenhum feedback encontrado.</div>'; return; }
-        let html=''; data.forEach(m => { const isPub = m.usuario_alvo_id === null; const isMe = m.usuario_alvo_id == MA_Main.sessao.id; const isMine = m.autor_nome === MA_Main.sessao.nome; if(isPub || isMe || isMine) { const align = isMine ? 'ml-auto bg-blue-600 text-white rounded-tr-none' : 'mr-auto bg-white text-slate-700 border border-slate-100 rounded-tl-none'; const subColor = isMine ? 'text-blue-200' : 'text-slate-400'; const badge = isPub ? '📢 TIME' : (isMine && m.usuario_alvo_id ? `🔒 ${MA_Main.usersMap[m.usuario_alvo_id]}` : '🔒 PRIVADO'); html += `<div class="max-w-[80%] p-4 rounded-2xl shadow-sm mb-4 ${align}"><div class="flex justify-between items-center mb-2 text-xs font-bold uppercase tracking-wide opacity-90"><span>${m.autor_nome} <span class="opacity-70 ml-1 scale-75 inline-block border border-current px-1 rounded">${badge}</span></span><span class="${subColor}">${new Date(m.created_at).toLocaleDateString()}</span></div><p class="leading-relaxed whitespace-pre-wrap font-medium">${m.mensagem}</p></div>`; } }); el.innerHTML = html; el.scrollTop = el.scrollHeight;
-    },
-    enviar: async function() { const txt = document.getElementById('input-feedback').value; const dest = document.getElementById('feedback-destinatario').value; if(!txt.trim()) return; const aid = dest !== 'time' ? parseInt(dest) : null; await _supabase.from('feedbacks').insert({ usuario_alvo_id: aid, autor_nome: MA_Main.sessao.nome, autor_funcao: MA_Main.sessao.funcao, mensagem: txt }); document.getElementById('input-feedback').value = ''; this.carregar(); }
-};
+// ... Mantenha o resto do arquivo igual (MA_Evolucao, etc.) ...
+const MA_Evolucao={chart:null,renderizarGraficos:async function(periodo){document.querySelectorAll('.chart-selector-btn').forEach(b=>b.classList.remove('active'));document.getElementById(`chart-btn-${periodo}`).classList.add('active');const valData=document.getElementById('global-date').value;if(!valData)return;const[y,m,d]=valData.split('-').map(Number);const refDate=new Date(y,m-1,d);const ano=refDate.getFullYear();const mes=refDate.getMonth();let dInicio,dFim;if(periodo==='mes'){dInicio=new Date(ano,mes,1).toISOString().split('T')[0];dFim=new Date(ano,mes+1,0).toISOString().split('T')[0];}else if(periodo==='trimestre'){const trimStart=Math.floor(mes/3)*3;dInicio=new Date(ano,trimStart,1).toISOString().split('T')[0];dFim=new Date(ano,trimStart+3,0).toISOString().split('T')[0];}else if(periodo==='semestre'){const semStart=mes<6?0:6;dInicio=new Date(ano,semStart,1).toISOString().split('T')[0];dFim=new Date(ano,semStart+6,0).toISOString().split('T')[0];}else if(periodo==='ano'){dInicio=`${ano}-01-01`;dFim=`${ano}-12-31`;}let targetName=MA_Main.usersMap[MA_Main.sessao.id];let viewingTime=false;if(MA_Main.isMgr){const val=document.getElementById('filtro-user').value;if(val==='time')viewingTime=true;else if(val!=='me')targetName=MA_Main.usersMap[val];}const{data:rawData}=await _supabase.from('producao').select('*').gte('data_referencia',dInicio).lte('data_referencia',dFim).order('data_referencia');const grouped=MA_Diario.normalizarDados(rawData||[]);const agruparPorMes=(periodo==='ano');const processedTime={},processedMain={};Object.keys(grouped).sort().forEach(date=>{let label=agruparPorMes?date.substring(0,7):date;const prods=Object.values(grouped[date]);const total=prods.reduce((a,b)=>a+b.quantidade,0);const count=prods.length;const avg=count?Math.round(total/count):0;if(!processedTime[label]){processedTime[label]={sum:0,cnt:0};processedMain[label]=0;}processedTime[label].sum+=avg;processedTime[label].cnt++;let valUser=0;if(grouped[date][targetName]){valUser=grouped[date][targetName].quantidade;}processedMain[label]+=valUser;});const labels=Object.keys(processedTime).sort();const dataMain=[],dataBench=[];let statsDias=0,statsBest=0,statsBatida=0;labels.forEach(k=>{let valTime=Math.round(processedTime[k].sum/processedTime[k].cnt);let valMainFinal=processedMain[k];if(agruparPorMes)valMainFinal=Math.round(valMainFinal/processedTime[k].cnt);const displayMain=viewingTime?valTime:valMainFinal;dataMain.push(displayMain);dataBench.push(viewingTime?650:valTime);if(displayMain>0){statsDias++;if(displayMain>statsBest)statsBest=displayMain;if(displayMain>=650)statsBatida++;}});document.getElementById('evo-dias').innerText=statsDias;document.getElementById('evo-taxa').innerText=statsDias?Math.round((statsBatida/statsDias)*100)+'%':'0%';document.getElementById('evo-best').innerText=statsBest;const ctx=document.getElementById('chartPrincipal').getContext('2d');if(this.chart)this.chart.destroy();const gradient=ctx.createLinearGradient(0,0,0,400);gradient.addColorStop(0,'rgba(37, 99, 235, 0.2)');gradient.addColorStop(1,'rgba(37, 99, 235, 0)');this.chart=new Chart(ctx,{type:'line',data:{labels:labels.map(k=>agruparPorMes?k.split('-').reverse().join('/'):k.split('-').reverse().slice(0,2).join('/')),datasets:[{label:viewingTime?'Média Equipa':targetName,data:dataMain,borderColor:'#2563eb',backgroundColor:gradient,borderWidth:3,tension:0.4,fill:true},{label:viewingTime?'Meta (650)':'Média Equipa',data:dataBench,borderColor:viewingTime?'#10b981':'#94a3b8',borderWidth:2,borderDash:[6,6],tension:0.4,fill:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'}},scales:{y:{beginAtZero:true},x:{grid:{display:false}}}}});}};
+const MA_Comparativo={atualizar:async function(dadosFinais,viewingTime,targetName,inicio,fim){const valL=document.getElementById('comp-media-user');const valR=document.getElementById('comp-media-time');const elMsg=document.getElementById('comp-mensagem');const{data:all}=await _supabase.from('producao').select('*').gte('data_referencia',inicio).lte('data_referencia',fim);const norm=MA_Diario.normalizarDados(all||[]);let sumMedias=0,cntDias=0;Object.values(norm).forEach(diaObj=>{const arr=Object.values(diaObj);const tot=arr.reduce((a,b)=>a+b.quantidade,0);const headCount=arr.filter(p=>p.quantidade>0).length;if(headCount>0){sumMedias+=(tot/headCount);cntDias++;}});const mediaGeral=cntDias?Math.round(sumMedias/cntDias):0;const diasTrabUser=dadosFinais.filter(d=>d.quantidade>0);const totUser=diasTrabUser.reduce((a,b)=>a+b.quantidade,0);const mediaUser=diasTrabUser.length?Math.round(totUser/diasTrabUser.length):0;valL.innerText=mediaUser;valR.innerText=viewingTime?650:mediaGeral;document.getElementById('label-media-selecionada').innerText=viewingTime?"Média da Equipa":`Média ${targetName}`;document.getElementById('label-media-benchmark').innerText=viewingTime?"Meta Esperada":"Média Geral da Equipa";const diff=mediaUser-(viewingTime?650:mediaGeral);if(diff>0)elMsg.innerHTML=`<span class="text-emerald-600 font-black text-xl">+${diff}</span> <span class="text-slate-400 text-sm font-normal">acima do esperado</span>`;else if(diff<0)elMsg.innerHTML=`<span class="text-rose-500 font-black text-xl">${diff}</span> <span class="text-slate-400 text-sm font-normal">abaixo do esperado</span>`;else elMsg.innerHTML=`<span class="text-slate-500">Exatamente na média.</span>`;}};
+const MA_Feedback={carregar:async function(){const el=document.getElementById('lista-feedbacks');const{data}=await _supabase.from('feedbacks').select('*').order('created_at',{ascending:true});if(!data||!data.length){el.innerHTML='<div class="text-center text-slate-300 py-12">Nenhum feedback encontrado.</div>';return;}let html='';data.forEach(m=>{const isPub=m.usuario_alvo_id===null;const isMe=m.usuario_alvo_id==MA_Main.sessao.id;const isMine=m.autor_nome===MA_Main.sessao.nome;if(isPub||isMe||isMine){const align=isMine?'ml-auto bg-blue-600 text-white rounded-tr-none':'mr-auto bg-white text-slate-700 border border-slate-100 rounded-tl-none';const subColor=isMine?'text-blue-200':'text-slate-400';const badge=isPub?'📢 TIME':(isMine&&m.usuario_alvo_id?`🔒 ${MA_Main.usersMap[m.usuario_alvo_id]}`:'🔒 PRIVADO');html+=`<div class="max-w-[80%] p-4 rounded-2xl shadow-sm mb-4 ${align}"><div class="flex justify-between items-center mb-2 text-xs font-bold uppercase tracking-wide opacity-90"><span>${m.autor_nome} <span class="opacity-70 ml-1 scale-75 inline-block border border-current px-1 rounded">${badge}</span></span><span class="${subColor}">${new Date(m.created_at).toLocaleDateString()}</span></div><p class="leading-relaxed whitespace-pre-wrap font-medium">${m.mensagem}</p></div>`;}});el.innerHTML=html;el.scrollTop=el.scrollHeight;},enviar:async function(){const txt=document.getElementById('input-feedback').value;const dest=document.getElementById('feedback-destinatario').value;if(!txt.trim())return;const aid=dest!=='time'?parseInt(dest):null;await _supabase.from('feedbacks').insert({usuario_alvo_id:aid,autor_nome:MA_Main.sessao.nome,autor_funcao:MA_Main.sessao.funcao,mensagem:txt});document.getElementById('input-feedback').value='';this.carregar();}};
