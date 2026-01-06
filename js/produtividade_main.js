@@ -49,23 +49,35 @@ function importarExcel(input) {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
         
-        // 1. Pega o nome da primeira aba
-        const firstSheetName = workbook.SheetNames[0]; // Ex: "01012026"
-        
-        // 2. Tenta extrair a data do nome da aba
+        // --- ALTERAÇÃO: Tentar pegar a data do NOME DO ARQUIVO primeiro ---
         let dataDetectada = null;
-        
+        const fileName = file.name.split('.')[0]; // Pega '05012026' de '05012026.xlsx'
+
         // Regex para validar apenas números com 8 dígitos (DDMMAAAA)
-        if (/^\d{8}$/.test(firstSheetName.trim())) {
-            const dia = firstSheetName.substring(0, 2);
-            const mes = firstSheetName.substring(2, 4);
-            const ano = firstSheetName.substring(4, 8);
+        if (/^\d{8}$/.test(fileName.trim())) {
+            const dia = fileName.substring(0, 2);
+            const mes = fileName.substring(2, 4);
+            const ano = fileName.substring(4, 8);
             
-            // Cria formato ISO (YYYY-MM-DD) para o input type="date" e banco
+            // Cria formato ISO (YYYY-MM-DD)
             dataDetectada = `${ano}-${mes}-${dia}`;
+            console.log(`Data detectada pelo arquivo: ${dataDetectada}`);
+        } else {
+            // Fallback: Tenta pegar da primeira aba se o nome do arquivo não for uma data
+            const firstSheetName = workbook.SheetNames[0]; 
+            if (/^\d{8}$/.test(firstSheetName.trim())) {
+                const dia = firstSheetName.substring(0, 2);
+                const mes = firstSheetName.substring(2, 4);
+                const ano = firstSheetName.substring(4, 8);
+                dataDetectada = `${ano}-${mes}-${dia}`;
+            }
         }
 
+        // Pega os dados da primeira aba
+        const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
+        
+        // defval: "" garante que células vazias venham como string vazia
         const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
 
         await processarDadosImportados(jsonData, dataDetectada);
@@ -74,28 +86,29 @@ function importarExcel(input) {
     reader.readAsArrayBuffer(file);
 }
 
-async function processarDadosImportados(dados, dataDaAba) {
+async function processarDadosImportados(dados, dataRefImportacao) {
     let dataRef = "";
 
     // Lógica de Prioridade da Data
-    if (dataDaAba) {
-        // Se achou data no nome da aba, USA ELA e atualiza o painel
-        dataRef = dataDaAba;
+    if (dataRefImportacao) {
+        dataRef = dataRefImportacao;
         const inputDate = document.getElementById('global-date');
         if (inputDate) {
             inputDate.value = dataRef;
-            // Atualiza visualmente para o usuário saber que mudou
             inputDate.classList.add('bg-yellow-100'); 
             setTimeout(() => inputDate.classList.remove('bg-yellow-100'), 1000);
         }
-        alert(`Data identificada na aba: ${dataRef.split('-').reverse().join('/')}.\nOs dados serão salvos nesta data.`);
+        alert(`Data identificada: ${dataRef.split('-').reverse().join('/')}.\nOs dados serão salvos nesta data.`);
     } else {
-        // Se não, usa a data que já estava selecionada no input
+        // Se não achou data, usa a selecionada no painel
         dataRef = document.getElementById('global-date').value;
+        if(!confirm(`Não foi possível detectar a data no nome do arquivo (ex: 05012026.xlsx). \nDeseja importar para a data selecionada no painel: ${dataRef.split('-').reverse().join('/')}?`)) {
+            return;
+        }
     }
 
     if (!dataRef) { 
-        alert("Erro: Nenhuma data selecionada e o nome da aba não contém uma data válida (DDMMAAAA)."); 
+        alert("Erro: Nenhuma data válida selecionada."); 
         return; 
     }
     
@@ -105,24 +118,36 @@ async function processarDadosImportados(dados, dataDaAba) {
     const mapUsuarios = {};
     if(usersDB) usersDB.forEach(u => mapUsuarios[u.nome.trim().toLowerCase()] = u.id);
 
+    // Função auxiliar para achar chaves insensíveis a maiúsculas/minúsculas
     const findKey = (row, possibilities) => {
-        return Object.keys(row).find(k => possibilities.some(p => k.toLowerCase().includes(p)));
+        return Object.keys(row).find(k => possibilities.some(p => k.toLowerCase() === p || k.toLowerCase().includes(p)));
     };
 
     for (const row of dados) {
-        const keyNome = findKey(row, ['analista', 'nome', 'funcionário', 'funcionario']);
-        const keyQtd = findKey(row, ['quantidade', 'total', 'qtd']);
+        // --- ALTERAÇÃO: Mapeamento de colunas atualizado para o seu arquivo ---
+        
+        // Procura 'assistente' ou 'nome'
+        const keyNome = findKey(row, ['assistente', 'analista', 'nome', 'funcionário', 'funcionario']);
+        
+        // Procura 'documentos_validados' (exato) ou 'total'
+        // Usamos find específico para garantir que pegue a coluna de total e não as parciais
+        let keyQtd = Object.keys(row).find(k => k.toLowerCase().trim() === 'documentos_validados');
+        if (!keyQtd) keyQtd = findKey(row, ['quantidade', 'total', 'qtd']);
         
         if (keyNome && keyQtd) {
             const nomePlanilha = String(row[keyNome]).trim();
+            // Pula linha de "Total" ou vazias
+            if (nomePlanilha.toLowerCase() === 'total' || !nomePlanilha) continue;
+
             const qtd = parseInt(row[keyQtd]) || 0;
             const uid = mapUsuarios[nomePlanilha.toLowerCase()];
             
-            if (uid && qtd > 0) {
-                const fifo = parseInt(row['FIFO'] || row['fifo'] || 0);
-                const gTotal = parseInt(row['Gradual Total'] || row['gradual total'] || 0);
-                const gParcial = parseInt(row['Gradual Parcial'] || row['gradual parcial'] || 0);
-                const perfilFc = parseInt(row['Perfil FC'] || row['perfil fc'] || 0);
+            if (uid) {
+                // --- Mapeamento das colunas específicas do seu Excel ---
+                const fifo = parseInt(row['documentos_validados_fifo'] || row['FIFO'] || row['fifo'] || 0);
+                const gTotal = parseInt(row['documentos_validados_gradual_total'] || row['Gradual Total'] || row['gradual total'] || 0);
+                const gParcial = parseInt(row['documentos_validados_gradual_parcial'] || row['Gradual Parcial'] || row['gradual parcial'] || 0);
+                const perfilFc = parseInt(row['documentos_validados_perfil_fc'] || row['Perfil FC'] || row['perfil fc'] || 0);
 
                 const { error } = await _supabase
                     .from('producao')
@@ -138,6 +163,9 @@ async function processarDadosImportados(dados, dataDaAba) {
                     }, { onConflict: 'usuario_id, data_referencia' });
                 
                 if (!error) count++;
+                else console.error("Erro ao salvar:", error);
+            } else {
+                console.warn(`Usuário não encontrado no banco: ${nomePlanilha}`);
             }
         }
     }
@@ -149,28 +177,21 @@ async function processarDadosImportados(dados, dataDaAba) {
 
 // --- FUNÇÃO PARA MUDAR O CONTEXTO DOS SELETORES ---
 window.mudarAba = function(aba) {
-    // 1. Esconde Abas
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-    
-    // 2. Reseta Botões
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
-    // 3. Mostra Aba Atual
     const tabEl = document.getElementById(`tab-${aba}`);
     if (tabEl) tabEl.classList.remove('hidden');
     
-    // 4. Ativa Botão Atual
     const btnEl = document.getElementById(`btn-${aba}`);
     if (btnEl) btnEl.classList.add('active');
 
-    // 5. GERENCIA SELETORES DO TOPO
     const ctrls = ['ctrl-geral', 'ctrl-consolidado', 'ctrl-performance'];
     ctrls.forEach(id => {
         const el = document.getElementById(id);
         if(el) el.classList.add('hidden');
     });
 
-    // Mostra o específico e carrega dados
     if (aba === 'geral') {
         const c = document.getElementById('ctrl-geral');
         if(c) c.classList.remove('hidden');
