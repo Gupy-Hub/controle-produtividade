@@ -8,7 +8,6 @@ const Importacao = {
 
     lerArquivo: function(origem) {
         return new Promise((resolve, reject) => {
-            // Verifica se 'origem' é um input HTML (tem .files) ou se já é o arquivo direto
             const file = origem.files ? origem.files[0] : origem;
             
             if (!file) return reject("Nenhum arquivo identificado.");
@@ -28,15 +27,20 @@ const Importacao = {
                     if (isZip) {
                         try {
                             // TENTATIVA 1: Leitura Padrão (Array)
-                            // É a mais rápida, mas falha se o ZIP estiver com tamanho incorreto
                             workbook = XLSX.read(data, { type: 'array', cellDates: true });
                         } catch (eZip) {
-                            console.warn("Erro na leitura padrão (Array). Tentando modo Binário...", eZip);
+                            // Verifica se é o erro conhecido de compressão "Bad uncompressed size"
+                            const erroConhecido = eZip.message && (eZip.message.includes("Bad uncompressed size") || eZip.message.includes("corrupted zip"));
+                            
+                            if (erroConhecido) {
+                                console.log(`%c[Info] Arquivo '${file.name}' com cabeçalho ZIP incorreto. Aplicando correção automática...`, "color: orange");
+                            } else {
+                                console.warn("Erro na leitura padrão. Tentando modo Binário...", eZip);
+                            }
                             
                             try {
-                                // TENTATIVA 2: Workaround para erro "Bad uncompressed size"
-                                // Converte o buffer para string binária manualmente.
-                                // O parser 'binary' do SheetJS ignora erros de tamanho no ZIP.
+                                // TENTATIVA 2: Workaround para arquivos corrompidos/exportados incorretamente
+                                // Converte para string binária manualmente para ignorar validação de tamanho do ZIP
                                 let binary = "";
                                 const len = data.byteLength;
                                 for (let i = 0; i < len; i++) {
@@ -67,8 +71,11 @@ const Importacao = {
                     
                     if (match) {
                         // Assume formato Dia-Mes-Ano se vier do nome brasileiro (ex: 05012026)
-                        // Converte para YYYY-MM-DD para o banco
                         dataDetectada = `${match[3]}-${match[2]}-${match[1]}`; 
+                    }
+
+                    if (!workbook || !workbook.SheetNames || workbook.SheetNames.length === 0) {
+                        throw new Error("Não foi possível ler nenhuma aba do arquivo.");
                     }
 
                     const firstSheet = workbook.SheetNames[0];
@@ -77,7 +84,7 @@ const Importacao = {
                     resolve({ dados: jsonData, dataSugestionada: dataDetectada, nomeArquivo: file.name });
                 } catch (err) {
                     console.error(err);
-                    reject(`Erro ao ler ${file.name}: ${err.message}`);
+                    reject(`Erro crítico ao ler ${file.name}: ${err.message}`);
                 }
             };
             reader.readAsArrayBuffer(file);
