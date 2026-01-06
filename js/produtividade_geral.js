@@ -8,349 +8,153 @@ const Geral = {
     toggleSemana: function() {
         const mode = document.getElementById('view-mode').value;
         const selSemana = document.getElementById('select-semana');
-        
-        if (mode === 'semana') {
-            selSemana.classList.remove('hidden');
-        } else {
-            selSemana.classList.add('hidden');
-        }
+        if (mode === 'semana') selSemana.classList.remove('hidden'); else selSemana.classList.add('hidden');
         this.carregarTela();
     },
     
     excluirDadosDia: async function() {
-        const modo = document.getElementById('view-mode').value;
-        if (modo !== 'dia') {
-            alert("Para excluir dados, selecione o modo de visualização 'Apenas o Dia' no filtro 'Visualizar'.");
-            return;
-        }
-        
+        if (document.getElementById('view-mode').value !== 'dia') { alert("Use a visualização 'Dia'."); return; }
         const data = this.dataVisualizada;
-        if (!data) { alert("Data não selecionada."); return; }
-        
-        const [ano, mes, dia] = data.split('-');
-        const dataFmt = `${dia}/${mes}/${ano}`;
-
-        if (!confirm(`ATENÇÃO: Você está prestes a EXCLUIR TODOS os lançamentos do dia ${dataFmt}.\n\nEsta ação é irreversível e geralmente usada para corrigir importações feitas na data errada.\n\nTem certeza absoluta?`)) {
-            return;
-        }
-
-        try {
-            const { error } = await _supabase
-                .from('producao')
-                .delete()
-                .eq('data_referencia', data);
-
-            if (error) throw error;
-
-            alert('Dados excluídos com sucesso!');
-            this.carregarTela();
-
-        } catch (e) {
-            console.error(e);
-            alert('Erro ao excluir dados: ' + e.message);
-        }
+        if (!data) return;
+        if (!confirm(`EXCLUIR dados de ${data}?`)) return;
+        const { error } = await _supabase.from('producao').delete().eq('data_referencia', data);
+        if (error) alert("Erro ao excluir."); else { alert("Excluído!"); this.carregarTela(); }
     },
     
     carregarTela: async function() {
-        const modo = document.getElementById('view-mode').value;
-        const globalInput = document.getElementById('global-date');
-        const isoDate = globalInput && globalInput.value ? globalInput.value : new Date().toISOString().split('T')[0];
-        
-        this.dataVisualizada = isoDate; 
-        const [ano, mes, dia] = isoDate.split('-').map(Number);
+        const mode = document.getElementById('view-mode').value;
+        const globalDate = document.getElementById('global-date').value || new Date().toISOString().split('T')[0];
+        this.dataVisualizada = globalDate;
+        const [ano, mes] = globalDate.split('-').map(Number);
 
-        const bulkSelect = document.getElementById('bulk-fator');
-        if(bulkSelect) bulkSelect.value = "";
-
-        let inicio, fim;
-        
-        if (modo === 'dia') { 
-            inicio = isoDate; fim = isoDate; 
-        } 
-        else if (modo === 'mes') { 
-            const dateIni = new Date(ano, mes - 1, 1);
-            const dateFim = new Date(ano, mes, 0);
-            inicio = dateIni.toLocaleDateString('en-CA'); 
-            fim = dateFim.toLocaleDateString('en-CA');
-        } 
-        else if (modo === 'semana') {
+        let s, e;
+        if (mode === 'dia') { s=e=globalDate; }
+        else if (mode === 'mes') { s = new Date(ano, mes-1, 1).toLocaleDateString('en-CA'); e = new Date(ano, mes, 0).toLocaleDateString('en-CA'); }
+        else {
             const numSemana = parseInt(document.getElementById('select-semana').value) || 1;
             const ultimoDiaMes = new Date(ano, mes, 0).getDate();
-            
-            let semanaAtual = 1;
-            let dataIniSemana = null;
-            let dataFimSemana = null;
-
+            let semanaAtual = 1, dataIniSemana = null, dataFimSemana = null;
             for (let d = 1; d <= ultimoDiaMes; d++) {
                 const dataLoop = new Date(ano, mes - 1, d);
-                const diaSemana = dataLoop.getDay(); 
-
-                if (semanaAtual === numSemana) {
-                    if (!dataIniSemana) dataIniSemana = new Date(dataLoop);
-                    dataFimSemana = new Date(dataLoop);
-                }
-
-                if (diaSemana === 6) {
-                    semanaAtual++;
-                }
+                if (semanaAtual === numSemana) { if (!dataIniSemana) dataIniSemana = new Date(dataLoop); dataFimSemana = new Date(dataLoop); }
+                if (dataLoop.getDay() === 6) semanaAtual++;
                 if (semanaAtual > numSemana) break;
             }
-
-            if (dataIniSemana && dataFimSemana) {
-                inicio = dataIniSemana.toLocaleDateString('en-CA');
-                fim = dataFimSemana.toLocaleDateString('en-CA');
-            } else {
-                inicio = isoDate; fim = isoDate;
-            }
+            if (dataIniSemana && dataFimSemana) { s = dataIniSemana.toLocaleDateString('en-CA'); e = dataFimSemana.toLocaleDateString('en-CA'); }
+            else { s=e=globalDate; }
         }
+        this.periodoInicio = s; this.periodoFim = e;
 
-        this.periodoInicio = inicio;
-        this.periodoFim = fim;
-
-        const { data } = await _supabase
-            .from('producao')
-            .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc') 
-            .gte('data_referencia', inicio)
-            .lte('data_referencia', fim);
-            
-        let dadosFiltrados = data || [];
-        this.listaAtual = Sistema.Dados.normalizar(dadosFiltrados);
+        const { data } = await _supabase.from('producao').select('*').gte('data_referencia', s).lte('data_referencia', e);
+        this.listaAtual = Sistema.Dados.normalizar(data || []);
         this.renderizar();
     },
 
-    contarDiasUteis: function(inicioStr, fimStr) {
-        if(!inicioStr || !fimStr) return 0;
-        let count = 0;
-        let cur = new Date(inicioStr + 'T12:00:00');
-        const end = new Date(fimStr + 'T12:00:00');
-        let safety = 0;
-        while(cur <= end && safety < 366) {
-            const d = cur.getDay();
-            if(d !== 0 && d !== 6) count++;
-            cur.setDate(cur.getDate() + 1);
-            safety++;
-        }
-        return count; 
+    contarDiasUteis: function(s, e) {
+        let c=0, d=new Date(s+'T12:00:00'), f=new Date(e+'T12:00:00');
+        while(d<=f){ if(d.getDay()!==0 && d.getDay()!==6)c++; d.setDate(d.getDate()+1); }
+        return c;
     },
 
     mudarFator: function(nome, valor) {
-        const modo = document.getElementById('view-mode').value;
-        if (modo !== 'dia') {
-            alert("Atenção: Altere o fator apenas visualizando o 'Dia' específico.");
-            this.renderizar(); 
-            return;
+        if(document.getElementById('view-mode').value !== 'dia') { alert("Apenas no modo Dia."); return; }
+        let m = "";
+        if(valor==="0"||valor==="0.5") {
+            m = prompt("Motivo:", Sistema.Dados.obterMotivo(nome, this.dataVisualizada));
+            if(m===null) { this.renderizar(); return; }
         }
-
-        let motivo = "";
-        
-        // --- AQUI ESTÁ A LÓGICA DE PERGUNTA ---
-        if (valor === "0" || valor === "0.5") {
-            const motivoAtual = Sistema.Dados.obterMotivo(nome, this.dataVisualizada);
-            motivo = prompt(`Informe o motivo para o ajuste de ${valor === "0" ? "ABONO TOTAL" : "MEIO PERÍODO"} de ${nome}:`, motivoAtual);
-            
-            if (motivo === null) {
-                this.renderizar();
-                return;
-            }
-        }
-
         Sistema.Dados.definirFator(nome, this.dataVisualizada, valor);
-        Sistema.Dados.definirMotivo(nome, this.dataVisualizada, motivo);
-        
+        Sistema.Dados.definirMotivo(nome, this.dataVisualizada, m);
         this.carregarTela();
     },
 
     mudarFatorTodos: function(valor) {
-        if (!valor) return; 
-        const modo = document.getElementById('view-mode').value;
-        if (modo !== 'dia') {
-            alert("Atenção: A alteração em massa só é permitida na visão 'Apenas o Dia'.");
-            document.getElementById('bulk-fator').value = "";
-            return;
+        if(!valor) return;
+        if(document.getElementById('view-mode').value !== 'dia') { alert("Apenas no modo Dia."); return; }
+        let m = "";
+        if(valor==="0"||valor==="0.5") {
+            m = prompt("Motivo (Todos):");
+            if(m===null) { document.getElementById('bulk-fator').value=""; return; }
         }
-
-        let motivo = "";
-        
-        if (valor === "0" || valor === "0.5") {
-            motivo = prompt(`Informe o motivo para aplicar ${valor === "0" ? "ABONO TOTAL" : "MEIO PERÍODO"} para TODAS as assistentes:`);
-            if (motivo === null) {
-                document.getElementById('bulk-fator').value = "";
-                return;
-            }
+        if(confirm("Aplicar a todos?")) {
+            this.listaAtual.forEach(u => { if(!u.inativo) { Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor); Sistema.Dados.definirMotivo(u.nome, this.dataVisualizada, m); } });
+            this.carregarTela();
         }
-
-        if (!confirm("Tem certeza que deseja aplicar esta alteração para TODAS as assistentes listadas?")) {
-            document.getElementById('bulk-fator').value = "";
-            return;
-        }
-
-        this.listaAtual.forEach(u => {
-            if (!u.inativo) {
-                Sistema.Dados.definirFator(u.nome, this.dataVisualizada, valor);
-                Sistema.Dados.definirMotivo(u.nome, this.dataVisualizada, motivo);
-            }
-        });
-        this.carregarTela(); 
     },
 
-    selecionar: function(nome) {
-        if (this.selecionado === nome) this.selecionado = null; else this.selecionado = nome;
-        this.renderizar();
-    },
-    limparSelecao: function() { this.selecionado = null; this.renderizar(); },
+    selecionar: function(n) { this.selecionado = this.selecionado===n?null:n; this.renderizar(); },
+    limparSelecao: function() { this.selecionado=null; this.renderizar(); },
 
     renderizar: function() {
-        const tbody = document.getElementById('tabela-corpo'); 
-        if(!tbody) return;
-        tbody.innerHTML = '';
-        const modo = document.getElementById('view-mode').value;
-
-        // Configuração do Bulk Select
-        const bulkSelect = document.getElementById('bulk-fator');
-        if (bulkSelect) {
-            if (modo !== 'dia') {
-                bulkSelect.disabled = true;
-                bulkSelect.classList.add('opacity-50', 'cursor-not-allowed');
-            } else {
-                bulkSelect.disabled = false;
-                bulkSelect.classList.remove('opacity-50', 'cursor-not-allowed');
-            }
-        }
-
-        const ativos = this.listaAtual.filter(u => !u.inativo);
-        
+        const tbody = document.getElementById('tabela-corpo'); tbody.innerHTML='';
+        const mode = document.getElementById('view-mode').value;
+        const ativos = this.listaAtual.filter(u=>!u.inativo);
         const totalProd = this.selecionado 
-            ? this.listaAtual.filter(u => u.nome === this.selecionado).reduce((a, b) => a + b.total, 0)
-            : ativos.reduce((a, b) => a + b.total, 0);
+            ? this.listaAtual.filter(u=>u.nome===this.selecionado).reduce((a,b)=>a+b.total,0)
+            : ativos.reduce((a,b)=>a+b.total,0);
 
-        // --- LÓGICA DE HEADCOUNT ---
-        let hcConsiderado = 0;
-        let diasDisplay = 0;
-        let diasLabel = "";
-        const diasUteisPeriodo = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
-
-        if (modo === 'dia') {
-            let qtdMeio = 0; let qtdAbonado = 0;
-            this.listaAtual.forEach(u => {
-                const diaInfo = u.diasMap[this.dataVisualizada];
-                if (diaInfo) { 
-                    if (diaInfo.fator === 0.5) qtdMeio++; 
-                    else if (diaInfo.fator === 0) qtdAbonado++; 
-                }
-            });
-            
-            if (this.selecionado) {
-                hcConsiderado = 1;
-                diasLabel = "Assistente Selecionada";
-            } else {
-                const reducaoParesMeio = Math.floor(qtdMeio / 2);
-                hcConsiderado = ativos.length - qtdAbonado - reducaoParesMeio;
-                diasLabel = "Ativos (Dia)";
+        const diasUteis = this.contarDiasUteis(this.periodoInicio, this.periodoFim);
+        
+        let clt=0, pj=0;
+        ativos.forEach(u => {
+            const user = Sistema.Dados.usuariosCache[u.ids.values().next().value];
+            if(user) {
+                if(user.contrato === 'CLT') clt++;
+                else if(user.contrato === 'PJ') pj++;
             }
-            diasDisplay = diasUteisPeriodo;
-
-            document.getElementById('kpi-hc').innerText = hcConsiderado;
-            
-            const elInfoAbonados = document.getElementById('info-abonados');
-            if(elInfoAbonados) {
-                elInfoAbonados.classList.add('hidden'); 
-                if ((qtdMeio > 0 || qtdAbonado > 0) && !this.selecionado) {
-                    let texto = [];
-                    if (qtdMeio > 0) texto.push(`${qtdMeio} Meio Período`);
-                    if (qtdAbonado > 0) texto.push(`${qtdAbonado} Abonado(s)`);
-                    elInfoAbonados.innerText = texto.join(', ');
-                    elInfoAbonados.classList.remove('hidden');
-                }
-            }
-
+        });
+        const totalPessoas = clt + pj;
+        
+        if (totalPessoas > 0) {
+            document.getElementById('kpi-pct-clt').innerText = Math.round((clt/totalPessoas)*100) + '%';
+            document.getElementById('kpi-pct-pj').innerText = Math.round((pj/totalPessoas)*100) + '%';
         } else {
-            const hcManual = Sistema.Dados.obterBaseHC(this.dataVisualizada);
-            if (this.selecionado) {
-                hcConsiderado = 1;
-                diasDisplay = this.listaAtual.filter(u => u.nome === this.selecionado)[0]?.dias || 0;
-                diasLabel = "Dias do Colaborador";
-                document.getElementById('kpi-hc').innerText = "1";
-            } else {
-                hcConsiderado = hcManual;
-                diasDisplay = diasUteisPeriodo;
-                diasLabel = "Dias Úteis (Calendário)";
-                document.getElementById('kpi-hc').innerHTML = `${hcManual} <span class="text-[10px] text-slate-400 font-normal">Base Definida</span>`;
-            }
-            
-            const elInfoAbonados = document.getElementById('info-abonados');
-            if(elInfoAbonados) elInfoAbonados.classList.add('hidden');
+            document.getElementById('kpi-pct-clt').innerText = '0%';
+            document.getElementById('kpi-pct-pj').innerText = '0%';
         }
+        document.getElementById('kpi-count-clt').innerText = clt;
+        document.getElementById('kpi-count-pj').innerText = pj;
 
-        document.getElementById('kpi-dias').innerText = diasDisplay;
-        document.getElementById('kpi-dias-label').innerText = diasLabel;
-        
-        const metaDiaria = 650;
-        const metaTotalEsperada = diasUteisPeriodo * hcConsiderado * metaDiaria;
-        const metaMediaIndividual = diasUteisPeriodo * metaDiaria;
-        const mediaRealAnalista = hcConsiderado ? Math.round(totalProd / hcConsiderado) : 0;
+        let hc = (mode === 'dia') ? totalPessoas : Sistema.Dados.obterBaseHC(this.dataVisualizada);
+        if (this.selecionado) hc = 1;
 
+        document.getElementById('kpi-dias').innerText = diasUteis;
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString();
-        document.getElementById('kpi-meta-total').innerText = metaTotalEsperada.toLocaleString();
-        document.getElementById('kpi-media').innerText = mediaRealAnalista.toLocaleString();
-        document.getElementById('kpi-meta-media').innerText = metaMediaIndividual.toLocaleString();
+        const metaTotal = diasUteis * hc * 650;
+        document.getElementById('kpi-meta-total').innerText = metaTotal.toLocaleString();
 
-        const percentual = metaTotalEsperada > 0 ? Math.round((totalProd / metaTotalEsperada) * 100) : 0;
-        document.getElementById('kpi-pct').innerText = percentual + '%';
-        document.getElementById('kpi-pct-detail').innerText = `${totalProd.toLocaleString()} / ${metaTotalEsperada.toLocaleString()}`;
+        const mediaTodas = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
+        document.getElementById('kpi-media-todas').innerText = mediaTodas.toLocaleString();
+
+        const mediaInd = hc > 0 ? Math.round(mediaTodas / hc) : 0;
+        document.getElementById('kpi-media-assist').innerText = mediaInd.toLocaleString();
+        document.getElementById('kpi-meta-media').innerText = "650";
+
+        const pct = metaTotal > 0 ? Math.round((totalProd/metaTotal)*100) : 0;
+        document.getElementById('kpi-pct').innerText = pct + '%';
         
-        const cardPct = document.getElementById('card-pct');
-        const iconPct = document.getElementById('icon-pct');
-        if (cardPct) {
-            cardPct.classList.remove('from-indigo-600', 'to-blue-700', 'from-red-600', 'to-rose-700', 'shadow-blue-200', 'shadow-rose-200');
-            if (percentual < 100) {
-                cardPct.classList.add('from-red-600', 'to-rose-700', 'shadow-rose-200');
-                if(iconPct) iconPct.innerHTML = '<i class="fas fa-times-circle text-xl text-white/50"></i>';
-            } else {
-                cardPct.classList.add('from-indigo-600', 'to-blue-700', 'shadow-blue-200');
-                if(iconPct) iconPct.innerHTML = '<i class="fas fa-check-circle text-xl text-white/50"></i>';
-            }
-        }
-
         const selHeader = document.getElementById('selection-header');
-        if (this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText = this.selecionado; } 
+        if(this.selecionado) { selHeader.classList.remove('hidden'); document.getElementById('selected-name').innerText=this.selecionado; }
         else selHeader.classList.add('hidden');
 
-        if(this.listaAtual.length === 0) { tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400">Sem dados.</td></tr>'; return; }
+        if(this.listaAtual.length===0) tbody.innerHTML='<tr><td colspan="9" class="text-center py-4">Sem dados.</td></tr>';
 
         this.listaAtual.forEach(u => {
-            const isSelected = this.selecionado === u.nome;
-            const rowClass = isSelected ? "selected-row" : "hover:bg-slate-50";
-            const opacity = u.inativo ? "row-ignored" : "";
+            const isSel = this.selecionado===u.nome;
+            const cls = isSel ? 'selected-row' : 'hover:bg-slate-50';
+            const op = u.inativo ? 'row-ignored' : '';
+            let f = 1;
+            if(mode==='dia') { const d=u.diasMap[this.dataVisualizada]; f=d?d.fator:1; }
             
-            let fator = 1;
-            if (modo === 'dia') {
-                 const infoDia = u.diasMap[this.dataVisualizada];
-                 fator = infoDia ? infoDia.fator : 1;
-            } else {
-                 fator = 1; 
-            }
-            const fatorClass = fator === 1 ? 'st-1' : (fator === 0.5 ? 'st-05' : 'st-0');
-            const disabled = modo !== 'dia' ? 'disabled opacity-50 cursor-not-allowed' : '';
-
-            // --- EXIBIÇÃO DO MOTIVO (Ícone de Info) ---
             const motivo = Sistema.Dados.obterMotivo(u.nome, this.dataVisualizada);
-            const motivoIcon = motivo ? `<i class="fas fa-info-circle text-blue-400 ml-2 text-xs" title="${motivo}"></i>` : '';
+            const icon = motivo ? `<i class="fas fa-info-circle text-blue-400 ml-1 text-xs" title="${motivo}"></i>` : '';
+            
+            const pctInd = u.meta > 0 ? Math.round((u.total/u.meta)*100) : 0;
+            const bdg = pctInd>=100 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
 
-            const selectHtml = `
-            <div class="flex items-center justify-center">
-                <select class="status-select ${fatorClass} ${disabled}" onclick="event.stopPropagation()" onchange="Geral.mudarFator('${u.nome}', this.value)">
-                    <option value="1" ${fator===1?'selected':''}>100%</option>
-                    <option value="0.5" ${fator===0.5?'selected':''}>50%</option>
-                    <option value="0" ${fator===0?'selected':''}>0%</option>
-                </select>
-                ${motivoIcon}
-            </div>`;
+            const sel = `<div class="flex items-center justify-center"><select class="status-select ${f===1?'st-1':(f===0.5?'st-05':'st-0')} ${mode!=='dia'?'disabled':''}" onchange="Geral.mudarFator('${u.nome}', this.value)" onclick="event.stopPropagation()"><option value="1" ${f===1?'selected':''}>100%</option><option value="0.5" ${f===0.5?'selected':''}>50%</option><option value="0" ${f===0?'selected':''}>0%</option></select>${icon}</div>`;
 
-            const pctIndividual = u.meta > 0 ? Math.round((u.total / u.meta) * 100) : 0;
-            let badgeClass = pctIndividual >= 100 ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-rose-100 text-rose-800 border-rose-200';
-            const pctBadge = `<span class="${badgeClass} px-2 py-1 rounded text-xs font-bold border">${pctIndividual}%</span>`;
-
-            tbody.innerHTML += `<tr class="${rowClass} ${opacity} transition border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${selectHtml}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome}</td><td class="px-6 py-4 text-center text-slate-500">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center text-slate-600">${u.fifo}</td><td class="px-6 py-4 text-center text-slate-600">${u.gt}</td><td class="px-6 py-4 text-center text-slate-600">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center">${pctBadge}</td></tr>`;
+            tbody.innerHTML += `<tr class="${cls} ${op} border-b border-slate-100 cursor-pointer"><td class="px-4 py-4 text-center">${sel}</td><td class="px-6 py-4 font-bold text-slate-700" onclick="Geral.selecionar('${u.nome}')">${u.nome}</td><td class="px-6 py-4 text-center">${u.dias}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center">${u.fifo}</td><td class="px-6 py-4 text-center">${u.gt}</td><td class="px-6 py-4 text-center">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${u.meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${bdg} px-2 py-1 rounded text-xs font-bold border">${pctInd}%</span></td></tr>`;
         });
     }
 };

@@ -18,12 +18,11 @@ const Sistema = {
         usuariosCache: {},
         metasCache: [],
         fatoresCache: {}, 
-        motivosCache: {}, // ESSENCIAL PARA O ABONO
+        motivosCache: {}, // Cache de Motivos
         basesHcCache: {}, 
         inicializado: false,
 
         inicializar: async function() {
-            // Carrega Caches do LocalStorage
             const savedFator = localStorage.getItem('produtividade_fatores_v2');
             this.fatoresCache = savedFator ? JSON.parse(savedFator) : {};
 
@@ -82,13 +81,11 @@ const Sistema = {
 
         definirMotivo: function(nome, dataRef, motivo) {
             if (!this.motivosCache[dataRef]) this.motivosCache[dataRef] = {};
-            
             if (motivo && motivo.trim() !== "") {
                 this.motivosCache[dataRef][nome] = motivo;
             } else {
                 delete this.motivosCache[dataRef][nome];
             }
-            
             localStorage.setItem('produtividade_motivos_v1', JSON.stringify(this.motivosCache));
         },
 
