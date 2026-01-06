@@ -128,7 +128,6 @@ const Geral = {
 
         const mediaInd = hc > 0 ? Math.round(mediaTodas / hc) : 0;
         document.getElementById('kpi-media-assist').innerText = mediaInd.toLocaleString();
-        document.getElementById('kpi-meta-media').innerText = "650";
 
         const pct = metaTotal > 0 ? Math.round((totalProd/metaTotal)*100) : 0;
         document.getElementById('kpi-pct').innerText = pct + '%';

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gestão de Produtividade</title>
+    <link rel="shortcut icon" href="#">
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -13,23 +14,19 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; } 
-        
         .tab-btn { transition: all 0.2s; position: relative; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
         .tab-btn:not(.active) { color: #64748b; }
         .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
-
         .selected-row { background-color: #eff6ff !important; border-left: 4px solid #2563eb; }
         .me-row { background-color: #f0f9ff; border-left: 4px solid #60a5fa; }
         .top-row { background-color: #fffbeb; border-left: 4px solid #f59e0b; }
         .row-ignored { opacity: 0.6; background-color: #f8fafc; filter: grayscale(0.8); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
         .scroll-top-wrapper { transform: rotateX(180deg); }
         .scroll-top-wrapper table { transform: rotateX(180deg); }
-        
         .status-select { background: transparent; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none; transition: all 0.2s; }
         .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } 
         .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } 
@@ -44,7 +41,6 @@
     <div class="bg-white border-b border-slate-200 sticky top-14 z-30 shadow-sm">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
-                
                 <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
                     <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
@@ -56,7 +52,6 @@
                             <input type="date" id="global-date" onchange="atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
                         </div>
                     </div>
-
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
                         <input type="file" id="input-excel" accept=".xlsx, .csv" class="hidden" onchange="importarExcel(this)">
                         <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar arquivo Excel">
@@ -66,7 +61,6 @@
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </div>
-
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200" id="top-bar-controls">
                         <div id="ctrl-geral" class="flex items-center gap-2">
                             <select id="view-mode" onchange="Geral.toggleSemana()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
@@ -85,7 +79,7 @@
                         <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
                             <select id="cons-period-type" onchange="Cons.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
                                 <option value="mes">Mensal (Semanas)</option>
-                                <option value="trimestre">Trimestral (Meses)</option>
+                                <option value="trimestre">Trimestre (Meses)</option>
                                 <option value="semestre">Semestral (Meses)</option>
                                 <option value="ano_mes">Anual (Meses)</option>
                                 <option value="ano_trim">Anual (Trimestres)</option>
@@ -112,7 +106,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
                     <button onclick="mudarAba('geral')" id="btn-geral" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-check-circle"></i> Validação
@@ -189,14 +182,12 @@
                     <p class="text-[10px] text-white/60 mt-1 font-medium" id="kpi-pct-detail">Real vs Esperado</p>
                 </div>
             </div>
-
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
                 <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
                 <button onclick="Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
                     <i class="fas fa-times mr-1"></i> Limpar Filtro
                 </button>
             </div>
-
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
@@ -286,7 +277,6 @@
                         <p class="text-[9px] text-white/60 mt-1 font-medium">Real vs Meta do Período</p>
                     </div>
                 </div>
-
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h3 class="font-bold text-slate-700">Ranking Detalhado (Por Produção)</h3>
