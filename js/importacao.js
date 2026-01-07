@@ -20,32 +20,15 @@ const Importacao = {
                     const data = new Uint8Array(e.target.result);
                     let workbook;
                     
-                    // Verifica assinatura do arquivo (Magic Bytes)
-                    // Se começar com 50 4B 03 04, é um Excel/ZIP real.
-                    const isZip = data.length > 4 && 
-                                  data[0] === 0x50 && data[1] === 0x4B && 
-                                  data[2] === 0x03 && data[3] === 0x04;
-
-                    if (isZip) {
-                        // Se for Excel (.xlsx), tenta ler modo binário para evitar erros de compressão
-                        try {
-                            let binary = "";
-                            const len = data.byteLength;
-                            for (let i = 0; i < len; i++) {
-                                binary += String.fromCharCode(data[i]);
-                            }
-                            workbook = XLSX.read(binary, { type: 'binary', cellDates: true });
-                        } catch (eBin) {
-                            console.warn("Falha no modo binário, tentando array...", eBin);
-                            workbook = XLSX.read(data, { type: 'array', cellDates: true });
-                        }
-                    } else {
-                        // --- TRATAMENTO DE CSV ---
-                        // Decodifica como texto usando ISO-8859-1 (padrão Brasil/Excel)
-                        const decoder = new TextDecoder('iso-8859-1'); 
+                    // CORREÇÃO: Passamos o buffer direto para a biblioteca XLSX.
+                    // Ela detecta automaticamente se é ZIP (Excel) ou Texto (CSV) e tenta adivinhar o encoding (UTF-8 vs ANSI)
+                    try {
+                        workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                    } catch (eRead) {
+                        // Fallback: Se falhar, tenta forçar leitura como texto (ISO-8859-1 para legados BR)
+                        console.warn("Falha na detecção automática, tentando forçar ISO-8859-1...");
+                        const decoder = new TextDecoder('iso-8859-1');
                         const text = decoder.decode(data);
-                        
-                        // Lê o texto como planilha
                         workbook = XLSX.read(text, { type: 'string', raw: false });
                     }
                     
@@ -64,6 +47,7 @@ const Importacao = {
                     }
 
                     const firstSheet = workbook.SheetNames[0];
+                    // 'defval: ""' garante que células vazias não quebrem o layout
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "", raw: false });
                     
                     resolve({ dados: jsonData, dataSugestionada: dataDetectada, nomeArquivo: file.name });
