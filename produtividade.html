@@ -109,42 +109,42 @@
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
                 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-32">
-                    <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition">
-                        <i class="fas fa-file-contract text-6xl text-blue-600"></i>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-24">
+                    <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition">
+                        <i class="fas fa-file-contract text-5xl text-blue-600"></i>
                     </div>
                     <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Produção Total</p>
-                        <h3 class="text-3xl font-black text-slate-800 mt-1 tracking-tight" id="kpi-total">--</h3>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção Total</p>
+                        <h3 class="text-2xl font-black text-slate-800 mt-0.5 tracking-tight" id="kpi-total">--</h3>
                     </div>
-                    <div class="flex items-center gap-2 mt-2">
+                    <div class="flex items-center gap-1.5 mt-1">
                         <span class="text-[10px] font-bold text-slate-400 uppercase">Meta Global:</span>
-                        <span class="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100" id="kpi-meta-total">--</span>
+                        <span class="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">--</span>
                     </div>
                 </div>
 
-                <div class="bg-gradient-to-br from-indigo-600 to-blue-600 p-4 rounded-2xl shadow-lg shadow-blue-200 text-white relative overflow-hidden flex flex-col justify-between h-32">
+                <div class="bg-gradient-to-br from-indigo-600 to-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200 text-white relative overflow-hidden flex flex-col justify-between h-24">
                     <div class="absolute right-[-10px] top-[-10px] opacity-20 rotate-12">
-                        <i class="fas fa-chart-pie text-7xl"></i>
+                        <i class="fas fa-chart-pie text-6xl"></i>
                     </div>
                     <div>
-                        <p class="text-[10px] font-bold text-blue-100 uppercase tracking-wider mb-1">Atingimento da Meta</p>
-                        <h3 class="text-4xl font-black tracking-tight" id="kpi-pct">--%</h3>
+                        <p class="text-[9px] font-bold text-blue-100 uppercase tracking-wider mb-0.5">Atingimento da Meta</p>
+                        <h3 class="text-3xl font-black tracking-tight" id="kpi-pct">--%</h3>
                     </div>
-                    <div class="w-full bg-black/20 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div class="w-full bg-black/20 h-1.5 rounded-full mt-1 overflow-hidden">
                         <div id="kpi-pct-bar" class="h-full bg-white/90 rounded-full transition-all duration-500" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-32">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Composição da Equipe</p>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Composição da Equipe</p>
                     
                     <div class="w-full">
-                        <div class="flex justify-between items-end mb-1">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase">CLT</span>
-                            <span class="text-xs font-bold text-blue-600" id="kpi-clt-val">0 (0%)</span>
+                        <div class="flex justify-between items-end mb-0.5">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">CLT</span>
+                            <span class="text-[10px] font-bold text-blue-600" id="kpi-clt-val">0 (0%)</span>
                         </div>
                         <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                             <div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
@@ -152,46 +152,44 @@
                     </div>
 
                     <div class="w-full">
-                        <div class="flex justify-between items-end mb-1">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase">PJ</span>
-                            <span class="text-xs font-bold text-purple-600" id="kpi-pj-val">0 (0%)</span>
+                        <div class="flex justify-between items-end mb-0.5">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">PJ</span>
+                            <span class="text-[10px] font-bold text-purple-600" id="kpi-pj-val">0 (0%)</span>
                         </div>
                         <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                             <div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
                         </div>
                     </div>
-                    
-                    <div id="kpi-count-clt" class="hidden"></div>
                 </div>
 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-32">
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
                     <div class="flex justify-between items-start">
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
-                        <i class="fas fa-calendar-day text-slate-200 text-xl"></i>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
+                        <i class="fas fa-calendar-day text-slate-200 text-lg"></i>
                     </div>
                     <div class="flex items-baseline gap-1">
-                        <h3 class="text-3xl font-black text-slate-700" id="kpi-dias-val">--</h3>
-                        <span class="text-sm font-bold text-slate-400" id="kpi-dias-total">/ --</span>
+                        <h3 class="text-2xl font-black text-slate-700" id="kpi-dias-val">--</h3>
+                        <span class="text-xs font-bold text-slate-400" id="kpi-dias-total">/ --</span>
                     </div>
                     <span id="kpi-dias" class="hidden"></span>
-                    <p class="text-[10px] text-slate-400 font-medium">Dias com produção registrada</p>
+                    <p class="text-[9px] text-slate-400 font-medium">Dias com produção registrada</p>
                 </div>
 
-                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-32">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Produtividade Média</p>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produtividade Média</p>
                     
                     <div class="flex items-center justify-between">
                         <div class="flex flex-col">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase">Do Time</span>
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">Do Time</span>
                             <span class="text-xl font-black text-slate-800" id="kpi-media-todas">--</span>
                         </div>
                         <div class="h-8 w-px bg-slate-100"></div>
                         <div class="flex flex-col items-end">
-                            <span class="text-[10px] font-bold text-slate-500 uppercase">Meta/Rep</span>
-                            <span class="text-lg font-bold text-emerald-600" id="kpi-meta-individual">120</span>
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">Meta/Rep</span>
+                            <span class="text-base font-bold text-emerald-600" id="kpi-meta-individual">120</span>
                         </div>
                     </div>
-                    <div class="w-full bg-slate-50 h-1 mt-1 rounded-full"></div>
+                    <div class="w-full bg-slate-50 h-1 mt-0.5 rounded-full"></div>
                 </div>
             </div>
 
