@@ -10,7 +10,6 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
@@ -25,11 +24,6 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .status-select { background: transparent; font-weight: bold; font-size: 0.75rem; padding: 2px 6px; border-radius: 6px; cursor: pointer; outline: none; transition: all 0.2s; }
-        .st-1 { color: #15803d; background-color: #dcfce7; border: 1px solid #86efac; } 
-        .st-05 { color: #a16207; background-color: #fef9c3; border: 1px solid #fde047; } 
-        .st-0 { color: #b91c1c; background-color: #fee2e2; border: 1px solid #fca5a5; } 
     </style>
 </head>
 <body class="bg-slate-100">
@@ -38,9 +32,10 @@
     <script src="js/importacao.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm">
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
         <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
+                
                 <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
                     <div class="flex items-center gap-3">
                         <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
@@ -58,7 +53,7 @@
                         <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar um ou múltiplos arquivos">
                             <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar em Massa</span>
                         </button>
-                        <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados do dia atual">
+                        <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados da visualização atual">
                             <i class="fas fa-trash-alt"></i>
                         </button>
                     </div>
@@ -70,13 +65,6 @@
                                 <option value="mes">Mês da Data</option>
                                 <option value="semana">Semana Específica</option>
                             </select>
-                            <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
-                                <option value="1">Semana 1</option>
-                                <option value="2">Semana 2</option>
-                                <option value="3">Semana 3</option>
-                                <option value="4">Semana 4</option>
-                                <option value="5">Semana 5</option>
-                            </select>
                         </div>
                         <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
                             <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
@@ -86,16 +74,6 @@
                                 <option value="ano_mes">Anual (Meses)</option>
                                 <option value="ano_trim">Anual (Trimestres)</option>
                                 <option value="dia">Diário</option>
-                            </select>
-                            <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
-                                <option value="1">1º Trimestre</option>
-                                <option value="2">2º Trimestre</option>
-                                <option value="3">3º Trimestre</option>
-                                <option value="4">4º Trimestre</option>
-                            </select>
-                            <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
-                                <option value="1">1º Semestre</option>
-                                <option value="2">2º Semestre</option>
                             </select>
                         </div>
                         <div id="ctrl-performance" class="hidden flex items-center gap-2">
@@ -131,61 +109,89 @@
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-32">
+                    <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition">
+                        <i class="fas fa-file-contract text-6xl text-blue-600"></i>
+                    </div>
                     <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Equipe</p>
-                        <div class="flex items-center justify-between mt-1 h-full">
-                            <div class="text-center">
-                                <p class="text-lg font-black text-blue-800" id="kpi-pct-clt">0%</p>
-                                <p class="text-[9px] text-slate-400 uppercase font-bold">CLT (<span id="kpi-count-clt">0</span>)</p>
-                            </div>
-                            <div class="h-8 w-px bg-slate-200 mx-2"></div>
-                            <div class="text-center">
-                                <p class="text-lg font-black text-indigo-800" id="kpi-pct-pj">0%</p>
-                                <p class="text-[9px] text-slate-400 uppercase font-bold">PJ (<span id="kpi-count-pj">0</span>)</p>
-                            </div>
-                        </div>
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Produção Total</p>
+                        <h3 class="text-3xl font-black text-slate-800 mt-1 tracking-tight" id="kpi-total">--</h3>
+                    </div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Meta Global:</span>
+                        <span class="text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100" id="kpi-meta-total">--</span>
                     </div>
                 </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Dias Úteis</p>
-                    <div class="flex items-end justify-between">
-                        <p class="text-2xl font-black text-slate-800 tracking-tighter" id="kpi-dias">--</p>
-                        <i class="fas fa-calendar-day text-2xl text-slate-100"></i>
+
+                <div class="bg-gradient-to-br from-indigo-600 to-blue-600 p-4 rounded-2xl shadow-lg shadow-blue-200 text-white relative overflow-hidden flex flex-col justify-between h-32">
+                    <div class="absolute right-[-10px] top-[-10px] opacity-20 rotate-12">
+                        <i class="fas fa-chart-pie text-7xl"></i>
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-1 font-bold">Data Selecionada</p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                     <div>
-                        <p class="text-xs font-bold text-slate-400 uppercase mb-1">Produção Total</p>
-                        <p class="text-2xl font-black text-blue-600 tracking-tighter" id="kpi-total">--</p>
+                        <p class="text-[10px] font-bold text-blue-100 uppercase tracking-wider mb-1">Atingimento da Meta</p>
+                        <h3 class="text-4xl font-black tracking-tight" id="kpi-pct">--%</h3>
                     </div>
-                    <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta: <span id="kpi-meta-total">--</span></p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Médias Diárias</p>
-                    <div class="space-y-2">
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Time</span>
-                            <span class="text-lg font-black text-slate-800" id="kpi-media-todas">--</span>
-                        </div>
-                        <div class="w-full h-px bg-slate-100"></div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-[10px] text-slate-500 font-bold uppercase">Individual</span>
-                            <span class="text-lg font-black text-emerald-600" id="kpi-media-assist">--</span>
-                        </div>
+                    <div class="w-full bg-black/20 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div id="kpi-pct-bar" class="h-full bg-white/90 rounded-full transition-all duration-500" style="width: 0%"></div>
                     </div>
                 </div>
-                <div id="card-pct" class="bg-gradient-to-br from-indigo-600 to-blue-700 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between">
-                    <div>
-                        <p class="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1">Atingimento Global</p>
-                        <div class="flex items-center justify-between">
-                            <p class="text-2xl font-black tracking-tighter" id="kpi-pct">--%</p>
-                            <i class="fas fa-chart-pie text-xl text-white/80"></i>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-32">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Composição da Equipe</p>
+                    
+                    <div class="w-full">
+                        <div class="flex justify-between items-end mb-1">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase">CLT</span>
+                            <span class="text-xs font-bold text-blue-600" id="kpi-clt-val">0 (0%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
                         </div>
                     </div>
-                    <p class="text-[10px] text-white/60 mt-1 font-medium">Real vs Esperado</p>
+
+                    <div class="w-full">
+                        <div class="flex justify-between items-end mb-1">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase">PJ</span>
+                            <span class="text-xs font-bold text-purple-600" id="kpi-pj-val">0 (0%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <div id="kpi-count-clt" class="hidden"></div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-32">
+                    <div class="flex justify-between items-start">
+                        <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
+                        <i class="fas fa-calendar-day text-slate-200 text-xl"></i>
+                    </div>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-3xl font-black text-slate-700" id="kpi-dias-val">--</h3>
+                        <span class="text-sm font-bold text-slate-400" id="kpi-dias-total">/ --</span>
+                    </div>
+                    <span id="kpi-dias" class="hidden"></span>
+                    <p class="text-[10px] text-slate-400 font-medium">Dias com produção registrada</p>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-32">
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Produtividade Média</p>
+                    
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase">Do Time</span>
+                            <span class="text-xl font-black text-slate-800" id="kpi-media-todas">--</span>
+                        </div>
+                        <div class="h-8 w-px bg-slate-100"></div>
+                        <div class="flex flex-col items-end">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase">Meta/Rep</span>
+                            <span class="text-lg font-bold text-emerald-600" id="kpi-meta-individual">120</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-50 h-1 mt-1 rounded-full"></div>
                 </div>
             </div>
 

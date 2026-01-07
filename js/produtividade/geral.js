@@ -12,7 +12,7 @@ Produtividade.Geral = {
 
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
-        // 1. Datas de Busca
+        // 1. Definição do Período
         let dataInicio = dataSelecionada;
         let dataFim = dataSelecionada;
 
@@ -22,7 +22,7 @@ Produtividade.Geral = {
             dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
         }
         
-        // 2. Carrega Dados (incluindo contrato)
+        // 2. Carrega Produção
         const { data: producao, error } = await Produtividade.supabase
             .from('producao')
             .select('*, usuarios!inner(nome, id, contrato)')
@@ -30,7 +30,7 @@ Produtividade.Geral = {
             .lte('data_referencia', dataFim);
 
         if (error) {
-            console.error("Erro ao carregar dados:", error);
+            console.error("Erro ao carregar:", error);
             return;
         }
 
@@ -74,16 +74,13 @@ Produtividade.Geral = {
                 mapa[uid].gradual_parcial += (row.gradual_parcial || 0);
                 mapa[uid].perfil_fc += (row.perfil_fc || 0);
                 
-                // Soma dias efetivos
-                let fator = 1;
-                if (row.fator !== undefined && row.fator !== null) fator = row.fator;
+                let fator = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 mapa[uid].dias_calc += fator;
             });
             dadosAgrupados = Object.values(mapa);
         } else {
             dadosAgrupados = dadosBrutos.map(row => {
-                let fator = 1;
-                if (row.fator !== undefined && row.fator !== null) fator = row.fator;
+                let fator = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 return { ...row, fator: fator, dias_calc: fator };
             });
         }
@@ -109,14 +106,15 @@ Produtividade.Geral = {
             return total;
         };
         const totalUteisMes = getDiasUteisMes(ano, mes);
-        const elDias = document.getElementById('kpi-dias');
-        if (elDias) elDias.innerText = `${diasComDados} / ${totalUteisMes}`;
+        
+        // Atualiza Card de Dias (Separado em Valor e Total)
+        if(document.getElementById('kpi-dias-val')) document.getElementById('kpi-dias-val').innerText = diasComDados;
+        if(document.getElementById('kpi-dias-total')) document.getElementById('kpi-dias-total').innerText = `/ ${totalUteisMes}`;
 
-        // --- CÁLCULO DE TOTAIS E EQUIPES ---
+        // --- CÁLCULOS TOTAIS ---
         let totalProducao = 0;
         let totalDiasPonderados = 0;
 
-        // Stats: clt vs pj
         let stats = {
             clt: { qtd: 0, producao: 0 },
             pj: { qtd: 0, producao: 0 }
@@ -126,64 +124,46 @@ Produtividade.Geral = {
             totalProducao += reg.quantidade;
             totalDiasPonderados += reg.dias_calc;
 
-            // Define contrato com segurança
-            let contrato = 'PJ';
-            if (reg.usuarios && reg.usuarios.contrato) {
-                contrato = reg.usuarios.contrato.toUpperCase();
-            }
-            
+            const contrato = reg.usuarios && reg.usuarios.contrato ? reg.usuarios.contrato.toUpperCase() : 'PJ';
             const tipo = (contrato === 'CLT') ? 'clt' : 'pj';
 
             stats[tipo].qtd++;
             stats[tipo].producao += reg.quantidade;
         });
 
+        // Porcentagens de Share (Produção)
         const pctCLT = totalProducao > 0 ? (stats.clt.producao / totalProducao) * 100 : 0;
         const pctPJ = totalProducao > 0 ? (stats.pj.producao / totalProducao) * 100 : 0;
 
-        // --- ATUALIZA CARD EQUIPE (HARD RESET E NOVO LAYOUT) ---
-        const elEquipe = document.getElementById('kpi-count-clt');
-        if (elEquipe) {
-            // Remove qualquer classe antiga para evitar conflitos
-            elEquipe.className = '';
-            // Aplica as classes novas de layout
-            elEquipe.className = 'w-full flex flex-col justify-center gap-2 h-full py-1'; 
-            
-            // Define o HTML novo
-            elEquipe.innerHTML = `
-                <div class="flex items-center justify-between bg-blue-50 rounded px-2 py-1 border border-blue-100">
-                    <div class="flex flex-col leading-none">
-                        <span class="text-[10px] font-bold text-slate-500 uppercase">CLT</span>
-                        <span class="text-sm font-bold text-blue-700">${stats.clt.qtd} <span class="text-[9px] font-normal text-slate-400">pessoas</span></span>
-                    </div>
-                    <div class="text-right leading-none">
-                        <span class="text-xs font-bold text-blue-600">${pctCLT.toFixed(0)}%</span>
-                        <div class="text-[9px] text-slate-400">prod.</div>
-                    </div>
-                </div>
-
-                <div class="flex items-center justify-between bg-purple-50 rounded px-2 py-1 border border-purple-100">
-                    <div class="flex flex-col leading-none">
-                        <span class="text-[10px] font-bold text-slate-500 uppercase">PJ</span>
-                        <span class="text-sm font-bold text-purple-700">${stats.pj.qtd} <span class="text-[9px] font-normal text-slate-400">pessoas</span></span>
-                    </div>
-                    <div class="text-right leading-none">
-                        <span class="text-xs font-bold text-purple-600">${pctPJ.toFixed(0)}%</span>
-                        <div class="text-[9px] text-slate-400">prod.</div>
-                    </div>
-                </div>
-            `;
-        }
+        // --- ATUALIZA CARD EQUIPE (BARRAS E TEXTOS) ---
+        // CLT
+        if(document.getElementById('kpi-clt-val')) 
+            document.getElementById('kpi-clt-val').innerText = `${stats.clt.qtd} (${pctCLT.toFixed(0)}%)`;
+        if(document.getElementById('kpi-clt-bar')) 
+            document.getElementById('kpi-clt-bar').style.width = `${pctCLT}%`;
+        
+        // PJ
+        if(document.getElementById('kpi-pj-val')) 
+            document.getElementById('kpi-pj-val').innerText = `${stats.pj.qtd} (${pctPJ.toFixed(0)}%)`;
+        if(document.getElementById('kpi-pj-bar')) 
+            document.getElementById('kpi-pj-bar').style.width = `${pctPJ}%`;
 
         // --- OUTROS KPIs ---
         const metaCalculada = totalDiasPonderados * this.META_DIARIA_POR_PESSOA;
         const atingimento = metaCalculada > 0 ? (totalProducao / metaCalculada) * 100 : 0;
         const media = totalDiasPonderados > 0 ? Math.round(totalProducao / totalDiasPonderados) : 0;
 
+        // Produção Total
         if(document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = totalProducao.toLocaleString('pt-BR');
         if(document.getElementById('kpi-meta-total')) document.getElementById('kpi-meta-total').innerText = metaCalculada.toLocaleString('pt-BR');
+        
+        // Atingimento (Com barra de progresso)
         if(document.getElementById('kpi-pct')) document.getElementById('kpi-pct').innerText = atingimento.toFixed(1) + "%";
+        if(document.getElementById('kpi-pct-bar')) document.getElementById('kpi-pct-bar').style.width = `${Math.min(atingimento, 100)}%`;
+
+        // Médias
         if(document.getElementById('kpi-media-todas')) document.getElementById('kpi-media-todas').innerText = media;
+        if(document.getElementById('kpi-meta-individual')) document.getElementById('kpi-meta-individual').innerText = this.META_DIARIA_POR_PESSOA;
     },
 
     renderizarTabela: function(modo) {
@@ -213,11 +193,9 @@ Produtividade.Geral = {
                 pctTexto = "Abn";
             }
 
-            // Select de Fator (100%, 50%, Abonar)
             let ctrlFator = `<span class="text-xs font-bold text-slate-500">${Number(diasConsiderados).toLocaleString('pt-BR')}d</span>`;
             if (modo === 'dia') {
                 const valFator = (row.fator !== undefined) ? row.fator : 1;
-                // Prepara classes CSS baseadas no valor
                 let selectClass = "text-[10px] font-bold border rounded p-1 outline-none text-slate-700";
                 if (valFator == 0) selectClass = "text-[10px] font-bold border rounded p-1 outline-none text-red-500 bg-red-50";
 
@@ -230,27 +208,25 @@ Produtividade.Geral = {
                 `;
             }
 
-            // Define Badge e Nome com Segurança
-            let contratoBadge = '';
+            let badgeContrato = '';
             let nomeUsuario = 'Desconhecido';
             
             if (row.usuarios) {
                 nomeUsuario = row.usuarios.nome;
                 if (row.usuarios.contrato === 'CLT') {
-                    contratoBadge = `<span class="ml-2 text-[9px] bg-blue-50 text-blue-600 px-1 rounded border border-blue-100 font-bold">CLT</span>`;
+                    badgeContrato = `<span class="ml-2 text-[9px] bg-blue-50 text-blue-600 px-1 rounded border border-blue-100 font-bold">CLT</span>`;
                 } else {
-                    contratoBadge = `<span class="ml-2 text-[9px] bg-purple-50 text-purple-600 px-1 rounded border border-purple-100 font-bold">PJ</span>`;
+                    badgeContrato = `<span class="ml-2 text-[9px] bg-purple-50 text-purple-600 px-1 rounded border border-purple-100 font-bold">PJ</span>`;
                 }
             }
 
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
             
-            // Monta HTML da linha com cuidado
             tr.innerHTML = `
                 <td class="px-4 py-3 text-center">${ctrlFator}</td>
                 <td class="px-6 py-3 font-bold text-slate-700">
-                    ${nomeUsuario} ${contratoBadge}
+                    ${nomeUsuario} ${badgeContrato}
                 </td>
                 <td class="px-6 py-3 text-center text-slate-500 font-bold bg-slate-50/50">${Number(diasConsiderados).toLocaleString('pt-BR')}</td>
                 <td class="px-6 py-3 text-center font-black text-blue-700 text-lg">${(row.quantidade || 0)}</td>
@@ -273,16 +249,14 @@ Produtividade.Geral = {
             .update({ fator: parseFloat(novoFator) })
             .eq('id', prodId);
 
-        if (error) alert("Erro ao atualizar: " + error.message);
+        if (error) alert("Erro: " + error.message);
         else this.carregarTela();
     },
 
     mudarFatorTodos: async function(novoFator) {
         if (novoFator === "") return;
-        const elBulk = document.getElementById('bulk-fator');
-        
         if (!confirm(`Aplicar fator ${novoFator} para TODOS?`)) {
-            if(elBulk) elBulk.value = "";
+            document.getElementById('bulk-fator').value = "";
             return;
         }
 
@@ -294,8 +268,7 @@ Produtividade.Geral = {
 
         if (error) alert("Erro: " + error.message);
         else this.carregarTela();
-        
-        if(elBulk) elBulk.value = "";
+        document.getElementById('bulk-fator').value = "";
     },
     
     limparSelecao: function() { this.carregarTela(); },
