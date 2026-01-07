@@ -1,201 +1,172 @@
-//
-
 Produtividade.Geral = {
-    dadosDoDia: [],
+    // Configuração de Meta Padrão (ajuste conforme sua necessidade)
+    META_DIARIA_POR_PESSOA: 120, 
+
+    dadosDia: [],
     
     carregarTela: async function() {
-        const dataRef = document.getElementById('global-date').value;
-        const tbody = document.getElementById('tabela-corpo');
-        if(!dataRef || !tbody) return;
+        const dateInput = document.getElementById('global-date');
+        const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
 
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10"><i class="fas fa-spinner fa-spin"></i> Carregando...</td></tr>';
+        // 1. Carregar dados do Banco para o dia selecionado
+        const { data: producao, error } = await Produtividade.supabase
+            .from('producao')
+            .select('*, usuarios(nome, id)')
+            .eq('data_referencia', dataSelecionada);
 
-        try {
-            const { data: producao, error } = await Produtividade.supabase
-                .from('producao')
-                .select('*, usuarios!inner(id, nome, funcao, contrato)')
-                .eq('data_referencia', dataRef);
-
-            if (error) throw error;
-
-            const { data: metas } = await Produtividade.supabase
-                .from('metas')
-                .select('*')
-                .lte('data_inicio', dataRef)
-                .order('data_inicio', { ascending: false });
-
-            this.dadosDoDia = producao || [];
-            this.renderizarTabela(this.dadosDoDia, metas || []);
-            this.atualizarKPIs(this.dadosDoDia, metas || []);
-
-        } catch (err) {
-            console.error(err);
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
-        }
-    },
-
-    // Função auxiliar para tratar o fator com segurança
-    getFator: function(valor) {
-        if (valor === null || valor === undefined || isNaN(Number(valor))) {
-            return 1; // Padrão 100% se vier vazio ou inválido
-        }
-        return Number(valor);
-    },
-
-    renderizarTabela: function(dados, metas) {
-        const tbody = document.getElementById('tabela-corpo');
-        if (!dados || dados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400">Nenhum dado. Importe a planilha do dia.</td></tr>';
-            this.zerarKPIs();
+        if (error) {
+            console.error("Erro ao carregar dados:", error);
             return;
         }
 
-        dados.sort((a, b) => {
-            const nomeA = a.usuarios?.nome || '';
-            const nomeB = b.usuarios?.nome || '';
-            return nomeA.localeCompare(nomeB);
+        this.dadosDia = producao || [];
+
+        // 2. Calcular KPIs
+        this.atualizarKPIs(dataSelecionada);
+
+        // 3. Renderizar Tabela
+        this.renderizarTabela();
+        
+        // Atualiza nome selecionado no topo se houver filtro
+        const nomeFiltro = document.getElementById('selected-name');
+        if(nomeFiltro) nomeFiltro.innerText = "";
+    },
+
+    atualizarKPIs: function(dataRef) {
+        // --- CÁLCULO DE DIAS ÚTEIS ---
+        const [ano, mes, dia] = dataRef.split('-').map(Number); // ex: 2026, 01, 02
+        
+        // Função auxiliar: conta dias úteis (seg-sex) no mês inteiro e até o dia atual
+        const getDiasUteis = (y, m, dLimit) => {
+            let totalMes = 0;
+            let decorrido = 0;
+            const ultimoDiaMes = new Date(y, m, 0).getDate(); // m já vem correto do split? (1=Jan). Date usa 1 para pegar o dia 0 do prox mes
+            
+            for (let i = 1; i <= ultimoDiaMes; i++) {
+                let dt = new Date(y, m - 1, i); // Mes no Date é 0-11
+                let diaSem = dt.getDay();
+                if (diaSem !== 0 && diaSem !== 6) { // 0=Dom, 6=Sab
+                    totalMes++;
+                    if (i <= dLimit) decorrido++;
+                }
+            }
+            return { decorrido, totalMes };
+        };
+
+        const uteis = getDiasUteis(ano, mes, dia);
+        
+        // Atualiza Card de Dias Úteis
+        const elDias = document.getElementById('kpi-dias');
+        if (elDias) elDias.innerText = `${uteis.decorrido} / ${uteis.totalMes}`;
+
+        // --- CÁLCULO DE TOTAIS ---
+        let totalProducao = 0;
+        let countCLT = 0;
+        let countPJ = 0; // Se você tiver essa distinção no banco, senão conta tudo junto
+        
+        // Itera sobre os dados carregados
+        this.dadosDia.forEach(reg => {
+            totalProducao += (reg.quantidade || 0);
+            // Simulação de contagem (se tiver campo 'tipo_contrato' no usuario, use ele. Aqui conto todos como CLT por enquanto)
+            countCLT++; 
         });
 
-        let html = '';
-        dados.forEach(item => {
-            // Tratamento de Meta
-            const metaUser = metas.find(m => m.usuario_id === item.usuario_id) || { valor_meta: 650 };
-            const metaDiaria = Number(metaUser.valor_meta) || 650;
-            
-            // CORREÇÃO: Usa a função auxiliar para garantir número
-            const fator = this.getFator(item.fator_multiplicador);
-            
-            // Cálculos Seguros
-            const metaCalc = Math.round(metaDiaria * fator);
-            const totalProd = Number(item.quantidade) || 0;
-            
-            let pct = 0;
-            if (metaCalc > 0) {
-                pct = (totalProd / metaCalc) * 100;
-            } else if (totalProd > 0) {
-                pct = 100; 
-            }
+        // Meta do Dia (Qtd Pessoas * Meta Individual)
+        const metaDia = (countCLT + countPJ) * this.META_DIARIA_POR_PESSOA;
+        const atingimento = metaDia > 0 ? (totalProducao / metaDia) * 100 : 0;
 
-            let corPct = 'text-slate-600';
-            if (pct >= 100) corPct = 'text-emerald-600 font-bold';
-            else if (pct < 80) corPct = 'text-red-500 font-bold';
+        // Atualiza Cards
+        if(document.getElementById('kpi-total')) 
+            document.getElementById('kpi-total').innerText = totalProducao.toLocaleString('pt-BR');
+        
+        if(document.getElementById('kpi-meta-total')) 
+            document.getElementById('kpi-meta-total').innerText = metaDia.toLocaleString('pt-BR');
 
-            const selClass = fator === 1 ? 'st-1' : (fator === 0 ? 'st-0' : 'st-05');
+        if(document.getElementById('kpi-pct')) 
+            document.getElementById('kpi-pct').innerText = atingimento.toFixed(1) + "%";
+            
+        // Atualiza card de equipe (exemplo simples)
+        if(document.getElementById('kpi-count-clt')) document.getElementById('kpi-count-clt').innerText = countCLT;
+        if(document.getElementById('kpi-pct-clt')) document.getElementById('kpi-pct-clt').innerText = "100%"; // Ajustar conforme lógica real
+        
+        // Médias
+        const media = (countCLT + countPJ) > 0 ? Math.round(totalProducao / (countCLT + countPJ)) : 0;
+        if(document.getElementById('kpi-media-todas'))
+            document.getElementById('kpi-media-todas').innerText = media;
+    },
 
-            html += `
-            <tr class="hover:bg-slate-50 transition border-b border-slate-50 text-xs">
-                <td class="px-4 py-2 text-center border-r border-slate-100">
-                    <select onchange="Produtividade.Geral.atualizarFator(${item.id}, this.value)" class="status-select ${selClass}">
-                        <option value="1" ${fator === 1 ? 'selected' : ''}>100%</option>
-                        <option value="0.5" ${fator === 0.5 ? 'selected' : ''}>50%</option>
-                        <option value="0" ${fator === 0 ? 'selected' : ''}>Abono</option>
-                    </select>
+    renderizarTabela: function() {
+        const tbody = document.getElementById('tabela-corpo');
+        if (!tbody) return;
+        tbody.innerHTML = "";
+
+        if (this.dadosDia.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-slate-400">Nenhum dado encontrado para esta data.</td></tr>`;
+            return;
+        }
+
+        // Ordena por maior produção
+        this.dadosDia.sort((a, b) => b.quantidade - a.quantidade);
+
+        this.dadosDia.forEach(row => {
+            const metaIndividual = this.META_DIARIA_POR_PESSOA;
+            const pct = metaIndividual > 0 ? (row.quantidade / metaIndividual) * 100 : 0;
+            
+            // Definição de cores baseada na % da meta
+            let corStatus = "text-red-600 bg-red-50";
+            if (pct >= 100) corStatus = "text-emerald-600 bg-emerald-50";
+            else if (pct >= 80) corStatus = "text-yellow-600 bg-yellow-50";
+
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+            tr.innerHTML = `
+                <td class="px-4 py-3 text-center">
+                    <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
                 </td>
-                <td class="px-6 py-3 font-bold text-slate-700">${item.usuarios?.nome || 'Desc.'}</td>
-                <td class="px-6 py-3 text-center">${fator}</td> <td class="px-6 py-3 text-center font-bold text-blue-700">${totalProd.toLocaleString('pt-BR')}</td>
-                <td class="px-6 py-3 text-center text-slate-500">${item.fifo || 0}</td>
-                <td class="px-6 py-3 text-center text-slate-500">${item.gradual_total || 0}</td>
-                <td class="px-6 py-3 text-center text-slate-500">${item.gradual_parcial || 0}</td>
-                <td class="px-6 py-3 text-center font-mono text-slate-600">${metaCalc}</td>
-                <td class="px-6 py-3 text-center ${corPct}">${pct.toFixed(1)}%</td>
-            </tr>`;
+                <td class="px-6 py-3 font-bold text-slate-700">
+                    ${row.usuarios ? row.usuarios.nome : 'Desconhecido'}
+                    <div class="text-[10px] text-slate-400 font-normal">ID: ${row.usuario_id}</div>
+                </td>
+                <td class="px-6 py-3 text-center text-slate-500">1</td>
+                <td class="px-6 py-3 text-center font-black text-blue-700 text-lg">${(row.quantidade || 0)}</td>
+                <td class="px-6 py-3 text-center text-slate-600">${(row.fifo || 0)}</td>
+                <td class="px-6 py-3 text-center text-slate-600">${(row.gradual_total || 0)}</td>
+                <td class="px-6 py-3 text-center text-slate-600">${(row.gradual_parcial || 0)}</td>
+                <td class="px-6 py-3 text-center text-slate-400">${metaIndividual}</td>
+                <td class="px-6 py-3 text-center">
+                    <span class="${corStatus} px-2 py-1 rounded text-xs font-bold border border-current opacity-80">
+                        ${pct.toFixed(0)}%
+                    </span>
+                </td>
+            `;
+            tbody.appendChild(tr);
         });
-        tbody.innerHTML = html;
     },
-
-    atualizarKPIs: function(dados, metas) {
-        let totalProd = 0;
-        let totalMeta = 0;
-        let clt = 0, pj = 0;
-        let ativos = 0;
-        let assistProd = 0; // Para calcular média individual correta
-
-        dados.forEach(d => {
-            const qtd = Number(d.quantidade) || 0;
-            // CORREÇÃO: Mesma segurança no fator aqui
-            const fator = this.getFator(d.fator_multiplicador);
-            
-            const m = metas.find(x => x.usuario_id === d.usuario_id) || { valor_meta: 650 };
-            const mVal = Number(m.valor_meta) || 650;
-
-            totalProd += qtd;
-            totalMeta += Math.round(mVal * fator);
-
-            if (d.usuarios?.contrato === 'CLT') clt++; else pj++;
-            
-            // Só conta na média se o fator for > 0 (quem trabalhou)
-            if (fator > 0) {
-                ativos++;
-                assistProd += qtd;
-            }
-        });
-
-        const totalPessoas = clt + pj;
-        
-        this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-        this.setTxt('kpi-meta-total', totalMeta.toLocaleString('pt-BR'));
-        
-        const pctGlobal = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
-        this.setTxt('kpi-pct', pctGlobal.toFixed(1) + '%');
-
-        this.setTxt('kpi-count-clt', clt);
-        this.setTxt('kpi-count-pj', pj);
-        
-        if(totalPessoas > 0) {
-            this.setTxt('kpi-pct-clt', Math.round((clt/totalPessoas)*100) + '%');
-            this.setTxt('kpi-pct-pj', Math.round((pj/totalPessoas)*100) + '%');
-        }
-
-        const media = ativos > 0 ? Math.round(totalProd / ativos) : 0;
-        this.setTxt('kpi-media-todas', media.toLocaleString('pt-BR'));
-        // Atualiza a média individual também
-        this.setTxt('kpi-media-assist', media.toLocaleString('pt-BR')); 
-        
-        const cardPct = document.getElementById('card-pct');
-        if(cardPct) {
-            if(pctGlobal >= 100) cardPct.className = "bg-gradient-to-br from-emerald-600 to-teal-600 p-3 rounded-xl shadow-lg shadow-emerald-200 text-white flex flex-col justify-between";
-            else if(pctGlobal >= 80) cardPct.className = "bg-gradient-to-br from-blue-600 to-indigo-600 p-3 rounded-xl shadow-lg shadow-blue-200 text-white flex flex-col justify-between";
-            else cardPct.className = "bg-gradient-to-br from-red-600 to-rose-600 p-3 rounded-xl shadow-lg shadow-red-200 text-white flex flex-col justify-between";
-        }
-    },
-
-    setTxt: function(id, val) {
-        const el = document.getElementById(id);
-        if(el) el.innerText = val;
-    },
-
-    zerarKPIs: function() {
-        ['kpi-total', 'kpi-meta-total', 'kpi-media-todas', 'kpi-pct', 'kpi-media-assist'].forEach(id => this.setTxt(id, '--'));
-        this.setTxt('kpi-count-clt', '0');
-        this.setTxt('kpi-count-pj', '0');
-    },
-
-    atualizarFator: async function(id, val) {
-        try {
-            await Produtividade.supabase.from('producao').update({ fator_multiplicador: parseFloat(val) }).eq('id', id);
-            this.carregarTela();
-        } catch(e) { alert(e.message); }
-    },
-
-    mudarFatorTodos: async function(val) {
-        if(!val || !confirm("Aplicar a todos?")) return;
-        try {
-            const dt = document.getElementById('global-date').value;
-            await Produtividade.supabase.from('producao').update({ fator_multiplicador: parseFloat(val) }).eq('data_referencia', dt);
-            this.carregarTela();
-        } catch(e) { alert(e.message); }
+    
+    // Funções extras (limpar filtro, excluir, etc) podem ser mantidas ou adicionadas conforme necessidade
+    limparSelecao: function() {
+        this.carregarTela();
     },
 
     excluirDadosDia: async function() {
-        const dt = document.getElementById('global-date').value;
-        if(!confirm(`Excluir dados de ${dt}?`)) return;
-        try {
-            await Produtividade.supabase.from('producao').delete().eq('data_referencia', dt);
-            alert("Excluído.");
+        if(!confirm("Tem certeza que deseja apagar TODOS os dados desta data?")) return;
+        const dateInput = document.getElementById('global-date');
+        const data = dateInput.value;
+        
+        const { error } = await Produtividade.supabase
+            .from('producao')
+            .delete()
+            .eq('data_referencia', data);
+            
+        if(error) alert("Erro ao excluir: " + error.message);
+        else {
+            alert("Dados excluídos.");
             this.carregarTela();
-        } catch(e) { alert(e.message); }
+        }
     },
     
-    toggleSemana: function() { /* Futuro */ },
-    limparSelecao: function() { /* Futuro */ }
+    toggleSemana: function() {
+        // Lógica futura para alternar visualização
+        this.carregarTela();
+    }
 };
