@@ -1,5 +1,5 @@
 Produtividade.Geral = {
-    META_DIARIA_POR_PESSOA: 120, // Meta padrão
+    META_DIARIA_POR_PESSOA: 120, // Meta padrão de documentos por dia
 
     dadosView: [], 
     
@@ -8,11 +8,11 @@ Produtividade.Geral = {
         const viewModeEl = document.getElementById('view-mode');
         
         const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-        const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; 
+        const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; // 'dia' ou 'mes'
 
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
-        // 1. Define Datas de Início e Fim
+        // 1. Define Datas de Início e Fim da consulta
         let dataInicio = dataSelecionada;
         let dataFim = dataSelecionada;
 
@@ -22,7 +22,7 @@ Produtividade.Geral = {
             dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
         }
         
-        // 2. Carrega Produção (trazendo o contrato para separar CLT/PJ)
+        // 2. Carrega Produção (buscando o contrato do usuário)
         const { data: producao, error } = await Produtividade.supabase
             .from('producao')
             .select('*, usuarios!inner(nome, id, contrato)')
@@ -30,11 +30,11 @@ Produtividade.Geral = {
             .lte('data_referencia', dataFim);
 
         if (error) {
-            console.error("Erro ao carregar:", error);
+            console.error("Erro ao carregar dados:", error);
             return;
         }
 
-        // 3. Busca dias úteis do mês (Contexto para o card Dias Úteis)
+        // 3. Busca dias úteis do mês (Contexto para o KPI de Dias Úteis)
         const inicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
         const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}`;
         
@@ -54,6 +54,7 @@ Produtividade.Geral = {
         let dadosAgrupados = [];
 
         if (modo === 'mes') {
+            // Agrupa produção do mês por usuário
             const mapa = {};
             dadosBrutos.forEach(row => {
                 const uid = row.usuario_id;
@@ -74,11 +75,13 @@ Produtividade.Geral = {
                 mapa[uid].gradual_parcial += (row.gradual_parcial || 0);
                 mapa[uid].perfil_fc += (row.perfil_fc || 0);
                 
+                // Soma os fatores (dias efetivos)
                 const fatorDia = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 mapa[uid].dias_calc += fatorDia;
             });
             dadosAgrupados = Object.values(mapa);
         } else {
+            // Modo Dia: Mapeia individualmente
             dadosAgrupados = dadosBrutos.map(row => ({
                 ...row,
                 fator: (row.fator !== undefined && row.fator !== null) ? row.fator : 1,
@@ -94,7 +97,7 @@ Produtividade.Geral = {
     atualizarKPIs: function(dados, diasTrabalhadosTime, dataRef) {
         const [ano, mes] = dataRef.split('-').map(Number);
 
-        // --- KPI DIAS ÚTEIS ---
+        // --- KPI 1: DIAS ÚTEIS ---
         const diasComDados = diasTrabalhadosTime.length;
         const getDiasUteisMes = (y, m) => {
             let total = 0;
@@ -110,11 +113,11 @@ Produtividade.Geral = {
         const elDias = document.getElementById('kpi-dias');
         if (elDias) elDias.innerText = `${diasComDados} / ${totalUteisMes}`;
 
-        // --- TOTAIS E CÁLCULO POR EQUIPE (CLT vs PJ) ---
+        // --- PREPARAÇÃO DOS TOTAIS ---
         let totalProducao = 0;
         let totalDiasPonderados = 0;
 
-        // Inicializa contadores
+        // Stats para o Card Equipe
         let stats = {
             clt: { qtd: 0, producao: 0 },
             pj: { qtd: 0, producao: 0 }
@@ -132,18 +135,17 @@ Produtividade.Geral = {
             stats[tipo].producao += reg.quantidade;
         });
 
-        // Calcula Porcentagens
         const pctCLT = totalProducao > 0 ? (stats.clt.producao / totalProducao) * 100 : 0;
         const pctPJ = totalProducao > 0 ? (stats.pj.producao / totalProducao) * 100 : 0;
 
-        // --- ATUALIZA O CARD EQUIPE (VISUAL ORGANIZADO) ---
+        // --- ATUALIZAÇÃO DO CARD EQUIPE (LIMPO E PADRONIZADO) ---
         const elEquipe = document.getElementById('kpi-count-clt');
         if (elEquipe) {
-            // Remove classes que deixam a fonte gigante
-            elEquipe.classList.remove('text-3xl', 'text-4xl', 'font-black');
-            elEquipe.className = 'w-full flex flex-col gap-2 pt-1'; // Container flex vertical com espaçamento
+            // 1. Remove classes antigas que quebram o layout (ex: texto gigante)
+            elEquipe.className = ''; 
+            elEquipe.classList.add('w-full', 'flex', 'flex-col', 'gap-2', 'pt-1'); // Novo container flex
             
-            // HTML formatado com barras de fundo para organizar
+            // 2. Insere APENAS o novo HTML organizado
             elEquipe.innerHTML = `
                 <div class="flex items-center justify-between bg-blue-50 rounded px-2 py-1 border border-blue-100">
                     <div class="flex flex-col leading-none">
@@ -169,7 +171,7 @@ Produtividade.Geral = {
             `;
         }
 
-        // --- OUTROS KPIs ---
+        // --- OUTROS KPIs (Produção, Meta, %) ---
         const metaCalculada = totalDiasPonderados * this.META_DIARIA_POR_PESSOA;
         const atingimento = metaCalculada > 0 ? (totalProducao / metaCalculada) * 100 : 0;
         const media = totalDiasPonderados > 0 ? Math.round(totalProducao / totalDiasPonderados) : 0;
@@ -190,6 +192,7 @@ Produtividade.Geral = {
             return;
         }
 
+        // Ordena por maior produção
         this.dadosView.sort((a, b) => b.quantidade - a.quantidade);
 
         this.dadosView.forEach(row => {
@@ -207,6 +210,7 @@ Produtividade.Geral = {
                 pctTexto = "Abn";
             }
 
+            // Controle de Fator
             let ctrlFator = `<span class="text-xs font-bold text-slate-500">${Number(diasConsiderados).toLocaleString('pt-BR')}d</span>`;
             if (modo === 'dia') {
                 const valFator = row.fator !== undefined ? row.fator : 1;
@@ -220,7 +224,7 @@ Produtividade.Geral = {
                 `;
             }
 
-            // Exibe badge do contrato na tabela
+            // Badge de Contrato na Tabela
             const badgeContrato = (row.usuarios.contrato === 'CLT')
                 ? `<span class="ml-2 text-[9px] bg-blue-50 text-blue-600 px-1 rounded border border-blue-100">CLT</span>`
                 : `<span class="ml-2 text-[9px] bg-purple-50 text-purple-600 px-1 rounded border border-purple-100">PJ</span>`;
@@ -257,7 +261,10 @@ Produtividade.Geral = {
 
     mudarFatorTodos: async function(novoFator) {
         if (novoFator === "") return;
-        if (!confirm(`Aplicar fator ${novoFator} para TODOS?`)) return;
+        if (!confirm(`Aplicar fator ${novoFator} para TODOS?`)) {
+            document.getElementById('bulk-fator').value = "";
+            return;
+        }
         const dataRef = document.getElementById('global-date').value;
         const { error } = await Produtividade.supabase
             .from('producao')
