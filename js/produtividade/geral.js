@@ -1,8 +1,7 @@
 Produtividade.Geral = {
-    META_DIARIA_POR_PESSOA: 120, // Ajuste sua meta aqui
+    META_DIARIA_POR_PESSOA: 120, // Ajuste sua meta padrão aqui
 
-    dadosView: [], // Dados filtrados para a tabela
-    dadosMesInteiro: [], // Para cálculos de dias úteis globais
+    dadosView: [], 
     
     carregarTela: async function() {
         const dateInput = document.getElementById('global-date');
@@ -11,20 +10,18 @@ Produtividade.Geral = {
         const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
         const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; // 'dia', 'mes', 'semana'
 
-        // 1. Definir Período de Busca (Inicio e Fim)
+        // Define datas de inicio e fim
         let dataInicio = dataSelecionada;
         let dataFim = dataSelecionada;
-
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
-        // Se for visualização Mensal, pega do dia 1 até o último dia do mês
         if (modoVisualizacao === 'mes') {
             dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
             const ultimoDia = new Date(ano, mes, 0).getDate();
             dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
         }
         
-        // --- CONSULTA 1: Dados para a Tabela (Respeita o Filtro Dia/Mês) ---
+        // Carrega dados (INCLUINDO O FATOR AGORA)
         const { data: producao, error } = await Produtividade.supabase
             .from('producao')
             .select('*, usuarios!inner(nome, id)')
@@ -32,22 +29,19 @@ Produtividade.Geral = {
             .lte('data_referencia', dataFim);
 
         if (error) {
-            console.error("Erro ao carregar dados:", error);
+            console.error("Erro ao carregar:", error);
             return;
         }
 
-        // --- CONSULTA 2: Contexto de Dias Úteis do Mês (Para o Card KPI) ---
-        // Mesmo se estiver vendo só o "Dia", precisamos saber que é o "Dia 3 de 20"
+        // Busca dias úteis do mês para contexto
         const inicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
         const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}`;
-        
         const { data: diasDb } = await Produtividade.supabase
             .from('producao')
             .select('data_referencia')
             .gte('data_referencia', inicioMes)
             .lte('data_referencia', fimMes);
 
-        // Processa dias únicos trabalhados pelo time no mês
         const diasUnicosSet = new Set(diasDb ? diasDb.map(d => d.data_referencia) : []);
         const diasTrabalhadosTime = Array.from(diasUnicosSet).sort();
 
@@ -58,140 +52,124 @@ Produtividade.Geral = {
         let dadosAgrupados = [];
 
         if (modo === 'mes') {
-            // Agrupa por usuário para somar o mês
             const mapa = {};
             dadosBrutos.forEach(row => {
                 const uid = row.usuario_id;
                 if (!mapa[uid]) {
                     mapa[uid] = {
-                        usuario_id: uid,
-                        usuarios: row.usuarios,
+                        ...row,
                         quantidade: 0,
-                        fifo: 0,
-                        gradual_total: 0,
-                        gradual_parcial: 0,
-                        perfil_fc: 0,
-                        dias_trabalhados: new Set() // Para contar dias individuais
+                        dias_calc: 0 // Será a soma dos fatores (ex: 1 + 1 + 0.5 = 2.5 dias)
                     };
                 }
                 mapa[uid].quantidade += (row.quantidade || 0);
-                mapa[uid].fifo += (row.fifo || 0);
-                mapa[uid].gradual_total += (row.gradual_total || 0);
-                mapa[uid].gradual_parcial += (row.gradual_parcial || 0);
-                mapa[uid].perfil_fc += (row.perfil_fc || 0);
-                mapa[uid].dias_trabalhados.add(row.data_referencia);
+                // Se o fator não existir no banco (null), assume 1
+                const fatorDia = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
+                mapa[uid].dias_calc += fatorDia;
             });
-            // Converte de volta para array
-            dadosAgrupados = Object.values(mapa).map(u => ({
-                ...u,
-                dias_calc: u.dias_trabalhados.size // Converte Set para número
-            }));
+            dadosAgrupados = Object.values(mapa);
         } else {
-            // Modo Dia: Apenas mapeia e define dias_calc = 1
+            // Modo Dia
             dadosAgrupados = dadosBrutos.map(row => ({
                 ...row,
-                dias_calc: 1
+                // Garante que fator seja numérico, padrão 1
+                fator: (row.fator !== undefined && row.fator !== null) ? row.fator : 1,
+                dias_calc: (row.fator !== undefined && row.fator !== null) ? row.fator : 1
             }));
         }
 
         this.dadosView = dadosAgrupados;
         this.atualizarKPIs(dadosAgrupados, diasTrabalhadosTime, dataRef, modo);
-        this.renderizarTabela();
-        
-        // Limpa nome selecionado se houver recarga
-        const nomeFiltro = document.getElementById('selected-name');
-        if(nomeFiltro && nomeFiltro.innerText === "") nomeFiltro.innerText = "";
+        this.renderizarTabela(modo);
     },
 
     atualizarKPIs: function(dados, diasTrabalhadosTime, dataRef, modo) {
-        // --- KPI 1: Dias Úteis (Baseado no TRABALHO REAL DO TIME) ---
+        // KPI Dias Úteis
         const totalDiasNoMes = diasTrabalhadosTime.length;
-        
-        // Descobre a posição do dia selecionado (ex: é o 3º dia trabalhado do mês?)
         let diaAtualIndex = diasTrabalhadosTime.indexOf(dataRef) + 1;
-        if (diaAtualIndex === 0 && modo === 'dia') diaAtualIndex = '-'; // Data sem produção
-        if (modo === 'mes') diaAtualIndex = totalDiasNoMes; // Se vê o mês, mostra total
-
+        if (diaAtualIndex === 0 && modo === 'dia') diaAtualIndex = '-';
+        if (modo === 'mes') diaAtualIndex = totalDiasNoMes;
+        
         const elDias = document.getElementById('kpi-dias');
         if (elDias) elDias.innerText = `${diaAtualIndex} / ${totalDiasNoMes}`;
 
-        // --- KPI 2: Totais de Produção ---
+        // KPIs Totais
         let totalProducao = 0;
-        let totalDiasIndividuaisSomados = 0; // Soma dos dias de cada pessoa
+        let totalDiasPonderados = 0; // Soma dos dias/fatores de todo mundo
 
         dados.forEach(reg => {
             totalProducao += reg.quantidade;
-            totalDiasIndividuaisSomados += (reg.dias_calc || 1);
+            totalDiasPonderados += reg.dias_calc;
         });
 
-        // Contagem de Pessoas (Ativas no período)
-        const countPessoas = dados.length;
-
-        // Meta Calculada
-        // Se for DIA: Meta = Pessoas * MetaDiaria
-        // Se for MES: Meta = Soma(DiasTrabalhadosDeCadaUm) * MetaDiaria
-        const metaCalculada = totalDiasIndividuaisSomados * this.META_DIARIA_POR_PESSOA;
-        
+        // Meta Calculada (Baseada no Fator Real)
+        const metaCalculada = totalDiasPonderados * this.META_DIARIA_POR_PESSOA;
         const atingimento = metaCalculada > 0 ? (totalProducao / metaCalculada) * 100 : 0;
+        const media = totalDiasPonderados > 0 ? Math.round(totalProducao / totalDiasPonderados) : 0;
 
-        // Renderiza KPIs
-        if(document.getElementById('kpi-total')) 
-            document.getElementById('kpi-total').innerText = totalProducao.toLocaleString('pt-BR');
-        
-        if(document.getElementById('kpi-meta-total')) 
-            document.getElementById('kpi-meta-total').innerText = metaCalculada.toLocaleString('pt-BR');
-
-        if(document.getElementById('kpi-pct')) 
-            document.getElementById('kpi-pct').innerText = atingimento.toFixed(1) + "%";
-            
-        // Contadores de Equipe
-        if(document.getElementById('kpi-count-clt')) document.getElementById('kpi-count-clt').innerText = countPessoas;
-        
-        // Média Diária (Total Produção / Total Dias Pessoas)
-        const media = totalDiasIndividuaisSomados > 0 ? Math.round(totalProducao / totalDiasIndividuaisSomados) : 0;
-        if(document.getElementById('kpi-media-todas'))
-            document.getElementById('kpi-media-todas').innerText = media;
-            
-        // Individual (apenas exemplo visual, pega o melhor ou média)
-        if(document.getElementById('kpi-media-assist'))
-            document.getElementById('kpi-media-assist').innerText = media; 
+        // Renderiza
+        if(document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = totalProducao.toLocaleString('pt-BR');
+        if(document.getElementById('kpi-meta-total')) document.getElementById('kpi-meta-total').innerText = metaCalculada.toLocaleString('pt-BR');
+        if(document.getElementById('kpi-pct')) document.getElementById('kpi-pct').innerText = atingimento.toFixed(1) + "%";
+        if(document.getElementById('kpi-count-clt')) document.getElementById('kpi-count-clt').innerText = dados.length;
+        if(document.getElementById('kpi-media-todas')) document.getElementById('kpi-media-todas').innerText = media;
     },
 
-    renderizarTabela: function() {
+    renderizarTabela: function(modo) {
         const tbody = document.getElementById('tabela-corpo');
         if (!tbody) return;
         tbody.innerHTML = "";
 
         if (this.dadosView.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-slate-400">Nenhum dado encontrado para este período.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-slate-400">Nenhum dado encontrado.</td></tr>`;
             return;
         }
 
-        // Ordena por produção (maior para menor)
+        // Ordena
         this.dadosView.sort((a, b) => b.quantidade - a.quantidade);
 
         this.dadosView.forEach(row => {
-            // Meta individual baseada nos dias que ELA trabalhou
-            const diasDela = row.dias_calc || 1;
-            const metaIndividual = diasDela * this.META_DIARIA_POR_PESSOA;
-            
+            // Calcula meta baseada no fator (dias_calc)
+            const diasConsiderados = row.dias_calc; 
+            const metaIndividual = Math.round(diasConsiderados * this.META_DIARIA_POR_PESSOA);
             const pct = metaIndividual > 0 ? (row.quantidade / metaIndividual) * 100 : 0;
             
+            // Cores
             let corStatus = "text-red-600 bg-red-50";
             if (pct >= 100) corStatus = "text-emerald-600 bg-emerald-50";
             else if (pct >= 80) corStatus = "text-yellow-600 bg-yellow-50";
+            
+            // Se for abonado (meta 0)
+            let pctTexto = pct.toFixed(0) + "%";
+            if (metaIndividual === 0) {
+                corStatus = "text-slate-500 bg-slate-100";
+                pctTexto = "Abn";
+            }
+
+            // Controle de Fator (Select na primeira coluna se for Dia)
+            let ctrlFator = `<span class="text-xs font-bold text-slate-500">${diasConsiderados}d</span>`;
+            if (modo === 'dia') {
+                const valFator = row.fator !== undefined ? row.fator : 1;
+                ctrlFator = `
+                    <select onchange="Produtividade.Geral.mudarFatorIndividual('${row.id || row.producao_id}', this.value)" 
+                            class="text-[10px] font-bold border rounded p-1 outline-none ${valFator == 0 ? 'text-red-500 bg-red-50' : 'text-slate-700'}">
+                        <option value="1" ${valFator == 1 ? 'selected' : ''}>100%</option>
+                        <option value="0.5" ${valFator == 0.5 ? 'selected' : ''}>50%</option>
+                        <option value="0" ${valFator == 0 ? 'selected' : ''}>Abonar</option>
+                    </select>
+                `;
+            }
 
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
             tr.innerHTML = `
                 <td class="px-4 py-3 text-center">
-                    <input type="checkbox" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                    ${ctrlFator}
                 </td>
                 <td class="px-6 py-3 font-bold text-slate-700">
                     ${row.usuarios ? row.usuarios.nome : 'Desconhecido'}
-                    <div class="text-[10px] text-slate-400 font-normal">ID: ${row.usuario_id}</div>
                 </td>
-                <td class="px-6 py-3 text-center text-slate-500 font-bold bg-slate-50/50">${diasDela}</td>
+                <td class="px-6 py-3 text-center text-slate-500 font-bold bg-slate-50/50">${Number(diasConsiderados).toLocaleString('pt-BR')}</td>
                 <td class="px-6 py-3 text-center font-black text-blue-700 text-lg">${(row.quantidade || 0)}</td>
                 <td class="px-6 py-3 text-center text-slate-600">${(row.fifo || 0)}</td>
                 <td class="px-6 py-3 text-center text-slate-600">${(row.gradual_total || 0)}</td>
@@ -199,46 +177,74 @@ Produtividade.Geral = {
                 <td class="px-6 py-3 text-center text-slate-400 text-xs">${metaIndividual}</td>
                 <td class="px-6 py-3 text-center">
                     <span class="${corStatus} px-2 py-1 rounded text-xs font-bold border border-current opacity-80">
-                        ${pct.toFixed(0)}%
+                        ${pctTexto}
                     </span>
                 </td>
             `;
             tbody.appendChild(tr);
         });
     },
-    
-    limparSelecao: function() {
-        this.carregarTela();
-    },
 
-    excluirDadosDia: async function() {
-        if(!confirm("Tem certeza que deseja apagar TODOS os dados da visualização atual?")) return;
-        const dateInput = document.getElementById('global-date');
-        const viewMode = document.getElementById('view-mode').value;
-        const data = dateInput.value;
+    // --- FUNÇÕES DE AÇÃO (Novas) ---
+
+    // Muda o fator de UM registro (chamado pelo select da linha)
+    mudarFatorIndividual: async function(prodId, novoFator) {
+        if (!prodId) return; // Precisa do ID da linha 'producao'
         
-        let query = Produtividade.supabase.from('producao').delete();
+        // Em modo 'dia', row.id pode não vir direto se não mapeamos 'producao.id'
+        // Mas vamos tentar atualizar pelo ID do registro
+        
+        // Para garantir, vamos fazer update por usuario + data (mais seguro se ID faltar)
+        // Precisamos achar o usuario_id na lista local
+        const regLocal = this.dadosView.find(r => r.id == prodId || r.producao_id == prodId); // Ajuste conforme seu select
+        // Na query do select usamos '*', então 'id' é o id da produção.
+        
+        const { error } = await Produtividade.supabase
+            .from('producao')
+            .update({ fator: parseFloat(novoFator) })
+            .eq('id', prodId);
 
-        if (viewMode === 'mes') {
-            const [ano, mes] = data.split('-');
-            const inicio = `${ano}-${mes}-01`;
-            const fim = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`;
-            query = query.gte('data_referencia', inicio).lte('data_referencia', fim);
+        if (error) {
+            alert("Erro ao atualizar: " + error.message);
         } else {
-            query = query.eq('data_referencia', data);
-        }
-            
-        const { error } = await query;
-            
-        if(error) alert("Erro ao excluir: " + error.message);
-        else {
-            alert("Dados excluídos.");
+            // Atualiza localmente para feedback instantâneo (opcional, ou recarrega)
             this.carregarTela();
         }
     },
+
+    // Muda o fator de TODOS os registros do dia atual
+    mudarFatorTodos: async function(novoFator) {
+        if (novoFator === "") return;
+        if (!confirm(`Aplicar fator ${novoFator == 0 ? 'ABONAR' : novoFator} para TODOS na tela?`)) {
+            document.getElementById('bulk-fator').value = "";
+            return;
+        }
+
+        const dateInput = document.getElementById('global-date');
+        const dataRef = dateInput.value;
+
+        // Atualiza no banco onde data_referencia = hoje
+        const { error } = await Produtividade.supabase
+            .from('producao')
+            .update({ fator: parseFloat(novoFator) })
+            .eq('data_referencia', dataRef);
+
+        if (error) {
+            alert("Erro ao atualizar em massa: " + error.message);
+        } else {
+            this.carregarTela();
+        }
+        document.getElementById('bulk-fator').value = "";
+    },
     
-    // Função chamada ao mudar o select "Visualização"
-    toggleSemana: function() {
-        this.carregarTela();
-    }
+    limparSelecao: function() { this.carregarTela(); },
+    
+    excluirDadosDia: async function() {
+        if(!confirm("Excluir dados desta visualização?")) return;
+        const data = document.getElementById('global-date').value;
+        const { error } = await Produtividade.supabase.from('producao').delete().eq('data_referencia', data);
+        if(!error) this.carregarTela();
+    },
+    
+    toggleSemana: function() { this.carregarTela(); }
 };
