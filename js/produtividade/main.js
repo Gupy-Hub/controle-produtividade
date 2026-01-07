@@ -71,16 +71,16 @@ Produtividade.importarEmMassa = async function(input) {
 
     if(!confirm(`Importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
 
-    // 1. Carrega todos os usuários para memória
+    // 1. Busca usuários e IDs válidos
     const { data: usersDB } = await Produtividade.supabase.from('usuarios').select('id, nome');
     
-    // Cria mapa de busca rápida
-    const mapUsuarios = {};
+    const validIds = new Set((usersDB || []).map(u => u.id)); // Lista rápida de IDs
+    const mapUsuarios = {}; // Mapa Nome -> ID (para fallback)
     (usersDB || []).forEach(u => mapUsuarios[Importacao.normalizar(u.nome)] = u.id);
 
     let totalImportados = 0;
     let erros = 0;
-    let nomesNaoEncontrados = [];
+    let naoEncontrados = []; // Log de erros
     let ultimaDataDetectada = null;
 
     for (let i = 0; i < files.length; i++) {
@@ -97,34 +97,44 @@ Produtividade.importarEmMassa = async function(input) {
                 const norm = Importacao.normalizar;
                 const findKey = (t) => keys.find(k => k.trim() === t || norm(k) === t || norm(k).includes(t));
 
+                // Colunas de Identificação
+                const kId = findKey('id') || findKey('id_assistente') || findKey('matricula');
                 const kNome = findKey('assistente') || findKey('nome');
-                
-                // Ignora linhas de total ou vazias
-                if (!kNome || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
 
-                // --- LÓGICA DE BUSCA MELHORADA ---
+                // Pula linha de Total ou Vazia
+                if ((!kId && !kNome) || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
+
+                let uid = null;
                 const nomeRaw = row[kNome] ? row[kNome].toString() : "";
-                const nomeBusca = norm(nomeRaw);
-                let uid = mapUsuarios[nomeBusca]; // 1. Tenta match exato
 
-                // 2. Se não achar exato, tenta busca inteligente
-                if (!uid && nomeBusca.length > 2) {
-                    const primeiroNome = nomeBusca.split(' ')[0];
-                    
-                    // Procura no array original do banco
-                    const matchUser = usersDB.find(u => {
-                        const dbNome = norm(u.nome);
-                        // Verifica se o nome do banco CONTÉM o nome da planilha (ex: "Isabela Cruz" contém "Isabela")
-                        // OU se o primeiro nome é idêntico e único (ex: "Samaria Batista" vs "Samaria Teixeira")
-                        return dbNome === nomeBusca || 
-                               dbNome.includes(nomeBusca) || 
-                               (dbNome.split(' ')[0] === primeiroNome && nomeBusca.split(' ')[0] === primeiroNome);
-                    });
-                    
-                    if (matchUser) uid = matchUser.id;
+                // ESTRATÉGIA 1: Tenta pelo ID (Prioridade Máxima) 🏆
+                if (kId && row[kId]) {
+                    // Remove pontos e converte pra número (ex: "1.074.360" -> 1074360)
+                    const idLimpo = parseInt(row[kId].toString().replace(/\./g, '').trim());
+                    if (validIds.has(idLimpo)) {
+                        uid = idLimpo;
+                    }
                 }
-                // -------------------------------
 
+                // ESTRATÉGIA 2: Se falhar o ID, tenta pelo Nome (Fallback Inteligente)
+                if (!uid && nomeRaw) {
+                    const nomeBusca = norm(nomeRaw);
+                    uid = mapUsuarios[nomeBusca]; // Match exato
+
+                    // Match flexível (Primeiro nome ou Contém)
+                    if (!uid && nomeBusca.length > 2) {
+                        const primeiroNome = nomeBusca.split(' ')[0];
+                        const matchUser = usersDB.find(u => {
+                            const dbNome = norm(u.nome);
+                            return dbNome === nomeBusca || 
+                                   dbNome.includes(nomeBusca) || 
+                                   (dbNome.split(' ')[0] === primeiroNome && nomeBusca.split(' ')[0] === primeiroNome);
+                        });
+                        if (matchUser) uid = matchUser.id;
+                    }
+                }
+
+                // Mapeamento das Métricas
                 const kTotal = keys.find(k => k === 'documentos_validados') || findKey('total') || findKey('qtd');
                 const kFifo = keys.find(k => k === 'documentos_validados_fifo') || findKey('fifo');
                 const kGT = keys.find(k => k === 'documentos_validados_gradual_total') || findKey('gradual_total');
@@ -148,8 +158,10 @@ Produtividade.importarEmMassa = async function(input) {
                         gradual_parcial: pInt(row[kGP]),
                         perfil_fc: pInt(row[kPFC])
                     });
-                } else if (nomeRaw.trim().length > 0) {
-                    if(!nomesNaoEncontrados.includes(nomeRaw)) nomesNaoEncontrados.push(nomeRaw);
+                } else {
+                    // Se não achou nem por ID nem por Nome, registra erro
+                    const ident = row[kId] ? `ID: ${row[kId]}` : (nomeRaw || "Linha desconhecida");
+                    if(!naoEncontrados.includes(ident)) naoEncontrados.push(ident);
                 }
             });
 
@@ -170,10 +182,10 @@ Produtividade.importarEmMassa = async function(input) {
     
     let msg = `Importação finalizada!\nRegistros salvos: ${totalImportados}`;
     if (erros > 0) msg += `\nArquivos com erro: ${erros}`;
-    if (nomesNaoEncontrados.length > 0) {
-        msg += `\n\n⚠️ Atenção: ${nomesNaoEncontrados.length} nomes não encontrados:\n` + 
-               nomesNaoEncontrados.slice(0, 5).join(', ') + 
-               (nomesNaoEncontrados.length > 5 ? '...' : '');
+    if (naoEncontrados.length > 0) {
+        msg += `\n\n⚠️ Não encontrados (${naoEncontrados.length}):\n` + 
+               naoEncontrados.slice(0, 5).join(', ') + 
+               (naoEncontrados.length > 5 ? '...' : '');
     }
     alert(msg);
     
