@@ -23,6 +23,7 @@ Produtividade.atualizarDataGlobal = function(novaData) {
     if (!novaData) return;
     localStorage.setItem('produtividade_data_ref', novaData);
     
+    // Atualiza visualmente o input se ele não tiver a data correta
     const dateInput = document.getElementById('global-date');
     if (dateInput && dateInput.value !== novaData) {
         dateInput.value = novaData;
@@ -71,23 +72,24 @@ Produtividade.importarEmMassa = async function(input) {
 
     if(!confirm(`Importar ${files.length} arquivo(s)?`)) { input.value = ""; return; }
 
-    // Busca usuários para mapeamento
     const { data: usersDB } = await Produtividade.supabase.from('usuarios').select('id, nome');
     const mapUsuarios = {};
     (usersDB || []).forEach(u => mapUsuarios[Importacao.normalizar(u.nome)] = u.id);
 
     let totalImportados = 0;
     let erros = 0;
-    let nomesNaoEncontrados = []; // CORREÇÃO: Lista para feedback
-    let ultimaDataDetectada = null;
+    let nomesNaoEncontrados = []; // CORREÇÃO: Array para rastrear falhas de mapeamento
+    let ultimaDataDetectada = null; 
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         try {
             const leitura = await Importacao.lerArquivo(file);
             
-            // Usa data do arquivo ou do input global
+            // Prioriza a data do arquivo. Se não tiver, usa a do calendário.
             let dataRef = leitura.dataSugestionada || document.getElementById('global-date').value;
+            
+            // Guarda a data detectada para atualizar a tela no final
             if (leitura.dataSugestionada) ultimaDataDetectada = leitura.dataSugestionada;
 
             const updates = [];
@@ -95,15 +97,14 @@ Produtividade.importarEmMassa = async function(input) {
             leitura.dados.forEach(row => {
                 const keys = Object.keys(row);
                 const norm = Importacao.normalizar;
+                // Helper para busca flexível
                 const findKey = (t) => keys.find(k => k.trim() === t || norm(k) === t || norm(k).includes(t));
 
-                // Procura coluna de nome/assistente
                 const kNome = findKey('assistente') || findKey('nome');
-                
-                // Pula linha de total ou vazia
+                // Ignora linha de total ou vazia
                 if (!kNome || (row[kNome] && row[kNome].toString().toLowerCase().includes('total'))) return;
 
-                // Mapeia colunas da planilha
+                // Mapeamento Exato (Baseado no CSV)
                 const kTotal = keys.find(k => k === 'documentos_validados') || findKey('total') || findKey('qtd');
                 const kFifo = keys.find(k => k === 'documentos_validados_fifo') || findKey('fifo');
                 const kGT = keys.find(k => k === 'documentos_validados_gradual_total') || findKey('gradual_total');
@@ -131,8 +132,8 @@ Produtividade.importarEmMassa = async function(input) {
                         gradual_parcial: pInt(row[kGP]),
                         perfil_fc: pInt(row[kPFC])
                     });
-                } else if (nomeRaw.trim().length > 0) {
-                    // Se não achou e não é linha vazia, adiciona aos não encontrados
+                } else if (nomeRaw.trim() !== "") {
+                    // CORREÇÃO: Se não achou o ID e o nome não é vazio, registra o erro
                     if(!nomesNaoEncontrados.includes(nomeRaw)) nomesNaoEncontrados.push(nomeRaw);
                 }
             });
@@ -152,16 +153,19 @@ Produtividade.importarEmMassa = async function(input) {
 
     input.value = "";
     
-    // CORREÇÃO: Alerta detalhado
+    // CORREÇÃO: Mensagem de feedback melhorada
     let msg = `Importação finalizada!\nRegistros salvos: ${totalImportados}`;
     if (erros > 0) msg += `\nArquivos com erro: ${erros}`;
+    
     if (nomesNaoEncontrados.length > 0) {
-        msg += `\n\n⚠️ ${nomesNaoEncontrados.length} nomes não mapeados (verifique cadastro):\n` + 
+        msg += `\n\n⚠️ ATENÇÃO: ${nomesNaoEncontrados.length} nomes não foram encontrados no sistema:\n` + 
                nomesNaoEncontrados.slice(0, 5).join(', ') + 
                (nomesNaoEncontrados.length > 5 ? '...' : '');
     }
+    
     alert(msg);
     
+    // ATUALIZAÇÃO INTELIGENTE DA TELA
     if (ultimaDataDetectada) {
         Produtividade.atualizarDataGlobal(ultimaDataDetectada);
     } else if (Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) {

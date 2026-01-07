@@ -25,8 +25,8 @@ const Importacao = {
                     try {
                         workbook = XLSX.read(data, { type: 'array', cellDates: true });
                     } catch (eRead) {
-                        // Fallback: Se falhar, tenta forçar leitura como texto (ISO-8859-1 para legados BR)
-                        console.warn("Falha na detecção automática, tentando forçar ISO-8859-1...");
+                        console.warn("Falha na leitura automática, tentando modo texto...", eRead);
+                        // Fallback para arquivos muito antigos ou específicos
                         const decoder = new TextDecoder('iso-8859-1');
                         const text = decoder.decode(data);
                         workbook = XLSX.read(text, { type: 'string', raw: false });
@@ -47,7 +47,6 @@ const Importacao = {
                     }
 
                     const firstSheet = workbook.SheetNames[0];
-                    // 'defval: ""' garante que células vazias não quebrem o layout
                     const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: "", raw: false });
                     
                     resolve({ dados: jsonData, dataSugestionada: dataDetectada, nomeArquivo: file.name });
