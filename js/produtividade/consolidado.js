@@ -1,227 +1,179 @@
 Produtividade.Consolidado = {
-    dadosCarregados: null, 
-    diasUteisPeriodo: 0,
-    diasTrabalhadosPeriodo: 0,
-    
+    dadosCache: null, // Armazena os dados brutos para recalculo rápido
+    diasUteis: 0,
+    diasTrabalhados: 0,
+
     init: function() { this.carregar(); },
     togglePeriodo: function() { this.carregar(); },
 
     carregar: async function() {
-        const tbody = document.getElementById('cons-table-body');
+        const container = document.getElementById('lista-consolidada');
         const periodTypeEl = document.getElementById('cons-period-type');
         const dateInput = document.getElementById('global-date');
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="100%" class="text-center py-4 text-slate-400"><i class="fas fa-spinner fa-spin"></i> Carregando dados...</td></tr>';
+        if(container) container.innerHTML = '<div class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl"></i><br>Calculando dados...</div>';
         
         try {
             const dataRef = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
             const tipoPeriodo = periodTypeEl ? periodTypeEl.value : 'mes';
             const [ano, mes, dia] = dataRef.split('-').map(Number);
 
-            // 1. Definição do Intervalo e Colunas
+            // 1. Definição do Intervalo (Mesma lógica do Geral para consistência)
             let dataInicio, dataFim;
-            let colunas = [];
-            let funcAgrupamento;
-
+            
             if (tipoPeriodo === 'mes') { 
                 dataInicio = `${ano}-${String(mes).padStart(2,'0')}-01`;
                 const ultimoDia = new Date(ano, mes, 0).getDate();
                 dataFim = `${ano}-${String(mes).padStart(2,'0')}-${ultimoDia}`;
-                
-                const semanas = Produtividade.Geral.getSemanasDoMes ? Produtividade.Geral.getSemanasDoMes(ano, mes) : [];
-                if(semanas.length === 0) {
-                     colunas = [{label:'Total', id:'total'}];
-                     funcAgrupamento = () => 'total';
-                } else {
-                    semanas.forEach((s, i) => colunas.push({ label: `Sem ${i+1}`, id: `s${i+1}`, inicio: s.inicio, fim: s.fim }));
-                    funcAgrupamento = (dataReg) => {
-                        const idx = semanas.findIndex(s => dataReg >= s.inicio && dataReg <= s.fim);
-                        return idx >= 0 ? `s${idx+1}` : null;
-                    };
-                }
             } else if (tipoPeriodo === 'trimestre') {
                 const trimestres = [ [1,3], [4,6], [7,9], [10,12] ];
                 const currentTri = trimestres.find(t => mes >= t[0] && mes <= t[1]);
                 dataInicio = `${ano}-${String(currentTri[0]).padStart(2,'0')}-01`;
                 const ultimoDia = new Date(ano, currentTri[1], 0).getDate();
                 dataFim = `${ano}-${String(currentTri[1]).padStart(2,'0')}-${ultimoDia}`;
-                
-                const nomesMeses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                for(let m=currentTri[0]; m<=currentTri[1]; m++) colunas.push({ label: nomesMeses[m-1], id: `m${m}` });
-                funcAgrupamento = (dataReg) => { return `m${parseInt(dataReg.split('-')[1])}`; };
             } else if (tipoPeriodo === 'ano_mes') {
                 dataInicio = `${ano}-01-01`; dataFim = `${ano}-12-31`;
-                const nomesMeses = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-                nomesMeses.forEach((nm, i) => colunas.push({ label: nm, id: `m${i+1}` }));
-                funcAgrupamento = (dataReg) => { return `m${parseInt(dataReg.split('-')[1])}`; };
             } else { 
+                // Diário
                 dataInicio = `${ano}-${String(mes).padStart(2,'0')}-01`;
                 const ultimoDia = new Date(ano, mes, 0).getDate();
                 dataFim = `${ano}-${String(mes).padStart(2,'0')}-${ultimoDia}`;
-                for(let i=1; i<=ultimoDia; i++) colunas.push({ label: String(i), id: `d${i}` });
-                funcAgrupamento = (dataReg) => { return `d${parseInt(dataReg.split('-')[2])}`; };
             }
 
-            // 2. Busca Dados
+            // 2. Busca Dados no Banco
             const { data, error } = await Produtividade.supabase
                 .from('producao')
-                .select('*, usuarios!inner(nome, id)')
+                .select('quantidade, fifo, gradual_parcial, gradual_total, perfil_fc, data_referencia, usuario_id')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim);
                 
             if (error) throw error;
-            this.dadosCarregados = { data, colunas, funcAgrupamento };
 
-            // 3. Calcula Dias
-            this.diasUteisPeriodo = this.calcularDiasUteis(dataInicio, dataFim);
-            const diasTrabalhadosSet = new Set(data.map(d => d.data_referencia));
-            this.diasTrabalhadosPeriodo = diasTrabalhadosSet.size;
+            // 3. Processamento dos Totais
+            const totais = {
+                geral: 0,
+                fifo: 0,
+                gParcial: 0,
+                gTotal: 0,
+                perfil: 0,
+                assistentesUnicos: new Set(),
+                diasComProducao: new Set()
+            };
 
-            // 4. Processa e Renderiza
-            this.processarKPIsETabela();
+            data.forEach(d => {
+                totais.geral += (d.quantidade || 0);
+                totais.fifo += (d.fifo || 0);
+                totais.gParcial += (d.gradual_parcial || 0);
+                totais.gTotal += (d.gradual_total || 0);
+                totais.perfil += (d.perfil_fc || 0);
+                totais.assistentesUnicos.add(d.usuario_id);
+                totais.diasComProducao.add(d.data_referencia);
+            });
+
+            // 4. Salva no Cache e Calcula Dias
+            this.dadosCache = totais;
+            this.diasUteis = this.calcularDiasUteis(dataInicio, dataFim);
+            this.diasTrabalhados = totais.diasComProducao.size;
+
+            // 5. Renderiza a Tela
+            this.renderizarLista();
 
         } catch (e) {
             console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="100%" class="text-red-500 text-center py-4">Erro: ${e.message}</td></tr>`;
+            if(container) container.innerHTML = `<div class="text-red-500 text-center py-4">Erro: ${e.message}</div>`;
         }
     },
 
-    processarKPIsETabela: function() {
-        const { data, colunas, funcAgrupamento } = this.dadosCarregados;
-        const tbody = document.getElementById('cons-table-body');
-        const thead = document.getElementById('cons-table-header');
+    renderizarLista: function() {
+        const container = document.getElementById('lista-consolidada');
+        if (!container || !this.dadosCache) return;
 
-        // Totais Acumulados
-        let totalGeral = 0;
-        let totalFifo = 0;
-        let totalGParcial = 0;
-        let totalGTotal = 0;
-        let totalPerfil = 0;
+        const totais = this.dadosCache;
         
-        const mapUser = {};
-
-        data.forEach(d => {
-            const uid = d.usuario_id;
-            if (!mapUser[uid]) {
-                mapUser[uid] = { 
-                    nome: d.usuarios.nome, 
-                    total: 0, 
-                    colunas: {} 
-                };
-                colunas.forEach(c => mapUser[uid].colunas[c.id] = 0);
-            }
-            
-            const qtd = d.quantidade || 0;
-            mapUser[uid].total += qtd;
-            
-            const colId = funcAgrupamento(d.data_referencia);
-            if (colId && mapUser[uid].colunas[colId] !== undefined) {
-                mapUser[uid].colunas[colId] += qtd;
-            }
-
-            totalGeral += qtd;
-            totalFifo += (d.fifo || 0);
-            totalGParcial += (d.gradual_parcial || 0);
-            totalGTotal += (d.gradual_total || 0);
-            totalPerfil += (d.perfil_fc || 0);
-        });
-
-        // --- 1. CARD ASSISTENTES (Manual vs Sistema) ---
-        const totalAssistentesSistema = Object.keys(mapUser).length;
+        // Controle de Assistentes (Input Manual vs Sistema)
         const inputAssist = document.getElementById('cons-input-assistentes');
-        const labelFound = document.getElementById('cons-found-assistentes');
+        let qtdAssistentes = totais.assistentesUnicos.size; // Padrão do sistema
         
-        // Se input for inválido ou zero (primeira carga), assume sistema
-        let totalAssistentesConsiderados = parseInt(inputAssist ? inputAssist.value : 0);
-        if (totalAssistentesConsiderados <= 0 || isNaN(totalAssistentesConsiderados)) {
-            totalAssistentesConsiderados = totalAssistentesSistema;
-            if(inputAssist) inputAssist.value = totalAssistentesSistema;
-        }
-        
-        if (labelFound) labelFound.innerText = totalAssistentesSistema;
-
-        // --- 2. CARD DIAS ---
-        if(document.getElementById('cons-kpi-dias-val')) 
-            document.getElementById('cons-kpi-dias-val').innerText = this.diasUteisPeriodo;
-        if(document.getElementById('cons-kpi-dias-total')) 
-            document.getElementById('cons-kpi-dias-total').innerText = `/ ${this.diasTrabalhadosPeriodo} trab`;
-
-        // --- 3. CARD PRODUÇÃO DETALHADA ---
-        if(document.getElementById('cons-kpi-total-geral')) document.getElementById('cons-kpi-total-geral').innerText = totalGeral.toLocaleString('pt-BR');
-        // Lista Detalhada
-        if(document.getElementById('cons-list-fifo')) document.getElementById('cons-list-fifo').innerText = totalFifo.toLocaleString('pt-BR');
-        if(document.getElementById('cons-list-gp')) document.getElementById('cons-list-gp').innerText = totalGParcial.toLocaleString('pt-BR');
-        if(document.getElementById('cons-list-gt')) document.getElementById('cons-list-gt').innerText = totalGTotal.toLocaleString('pt-BR');
-        if(document.getElementById('cons-list-pfc')) document.getElementById('cons-list-pfc').innerText = totalPerfil.toLocaleString('pt-BR');
-
-        // --- 4. MÉDIAS ---
-        
-        // Média Validação Diária (Dias Úteis) = Total Produção / Dias Úteis
-        const mediaDiaUteis = this.diasUteisPeriodo > 0 ? Math.round(totalGeral / this.diasUteisPeriodo) : 0;
-        if(document.getElementById('cons-media-equipe-dia')) document.getElementById('cons-media-equipe-dia').innerText = mediaDiaUteis.toLocaleString('pt-BR');
-
-        // Média Validação (Todas Assistentes) = Total Produção / Total Assistentes
-        const mediaPorAssTotal = totalAssistentesConsiderados > 0 ? Math.round(totalGeral / totalAssistentesConsiderados) : 0;
-        
-        // Média Validação Diária (Por Assistentes) = (Total Produção / Total Assistentes) / Dias Úteis
-        const mediaPorAssDia = this.diasUteisPeriodo > 0 ? Math.round(mediaPorAssTotal / this.diasUteisPeriodo) : 0;
-
-        if(document.getElementById('cons-media-ass-periodo')) document.getElementById('cons-media-ass-periodo').innerText = mediaPorAssTotal.toLocaleString('pt-BR');
-        if(document.getElementById('cons-media-ass-dia')) document.getElementById('cons-media-ass-dia').innerText = mediaPorAssDia.toLocaleString('pt-BR');
-
-
-        // --- TABELA ---
-        this.renderizarCabecalho(thead, colunas);
-        
-        if (totalAssistentesSistema === 0) {
-            tbody.innerHTML = '<tr><td colspan="100%" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>';
-            return;
+        if (inputAssist) {
+            const valManual = parseInt(inputAssist.value);
+            // Se o input tiver valor válido e diferente de 0, usamos ele. 
+            // Se for 0 (inicial) ou vazio, setamos o do sistema.
+            if (!isNaN(valManual) && valManual > 0) {
+                qtdAssistentes = valManual;
+            } else {
+                inputAssist.value = qtdAssistentes;
+            }
         }
 
-        let html = '';
-        Object.values(mapUser).sort((a,b) => b.total - a.total).forEach(u => {
-            let colsHtml = '';
-            colunas.forEach(c => {
-                const val = u.colunas[c.id];
-                const style = val === 0 ? 'text-slate-300' : 'text-slate-600 font-semibold';
-                colsHtml += `<td class="px-3 py-3 text-center ${style} border-l border-slate-50">${val.toLocaleString('pt-BR')}</td>`;
-            });
+        // Cálculos das Médias
+        // 1. Total validação diária (Dias uteis) -> Média da Equipe por Dia
+        const mediaEquipeDiaUtil = this.diasUteis > 0 ? Math.round(totais.geral / this.diasUteis) : 0;
 
-            // Média na tabela: Total Pessoal / Dias Úteis Gerais (padronizado)
-            const mediaInd = this.diasUteisPeriodo > 0 ? Math.round(u.total / this.diasUteisPeriodo) : 0;
+        // 2. Média validação diária (Todas assistentes) -> Total / Qtd Assistentes (Produção Per Capita no Período)
+        const mediaPorAssistenteTotal = qtdAssistentes > 0 ? Math.round(totais.geral / qtdAssistentes) : 0;
 
-            html += `<tr class="border-b border-slate-100 hover:bg-slate-50 transition text-xs">
-                <td class="px-4 py-3 font-bold text-slate-700 whitespace-nowrap">${u.nome}</td>
-                <td class="px-4 py-3 text-center font-black text-blue-700 bg-blue-50/30">${u.total.toLocaleString('pt-BR')}</td>
-                <td class="px-4 py-3 text-center text-slate-500">${mediaInd.toLocaleString('pt-BR')}</td>
-                ${colsHtml}
-            </tr>`;
-        });
-        tbody.innerHTML = html;
+        // 3. Média validação diária (Por Assistentes) -> (Total / Qtd Assistentes) / Dias Uteis (Produção Per Capita por Dia)
+        const mediaPorAssistenteDia = this.diasUteis > 0 ? Math.round(mediaPorAssistenteTotal / this.diasUteis) : 0;
+
+        // HTML da Lista
+        container.innerHTML = `
+            <div class="space-y-4">
+                <div class="flex justify-between items-center py-2 border-b border-slate-100">
+                    <span class="text-sm font-bold text-slate-600">Total de dias úteis / trabalhado</span>
+                    <span class="text-lg font-black text-slate-800">${this.diasUteis} <span class="text-slate-400 text-xs font-normal">/ ${this.diasTrabalhados}</span></span>
+                </div>
+
+                <div class="space-y-2 pb-2 border-b border-slate-100">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-500">Total de documentos Fifo</span>
+                        <span class="font-bold text-slate-700">${totais.fifo.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-500">Total de documentos Gradual Parcial</span>
+                        <span class="font-bold text-slate-700">${totais.gParcial.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-500">Total de documentos Gradual Total</span>
+                        <span class="font-bold text-slate-700">${totais.gTotal.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-slate-500">Total de documentos Perfil Fc</span>
+                        <span class="font-bold text-slate-700">${totais.perfil.toLocaleString('pt-BR')}</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center py-2 bg-blue-50/50 px-3 -mx-3 rounded-lg border border-blue-50">
+                    <span class="text-sm font-bold text-blue-800 uppercase">Total de documentos validados</span>
+                    <span class="text-2xl font-black text-blue-700">${totais.geral.toLocaleString('pt-BR')}</span>
+                </div>
+
+                <div class="space-y-3 pt-2">
+                    <div class="flex justify-between items-center">
+                        <span class="text-sm font-bold text-slate-600">Total validação diária (Dias úteis)</span>
+                        <span class="text-lg font-black text-slate-700">${mediaEquipeDiaUtil.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-slate-600">Média validação diária (Todas assistentes)</span>
+                            <span class="text-[10px] text-slate-400 italic">Total / Nº Assistentes</span>
+                        </div>
+                        <span class="text-lg font-black text-indigo-600">${mediaPorAssistenteTotal.toLocaleString('pt-BR')}</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <div class="flex flex-col">
+                            <span class="text-sm font-bold text-slate-600">Média validação diária (Por Assistentes)</span>
+                            <span class="text-[10px] text-slate-400 italic">Média Total / Dias Úteis</span>
+                        </div>
+                        <span class="text-lg font-black text-emerald-600">${mediaPorAssistenteDia.toLocaleString('pt-BR')}</span>
+                    </div>
+                </div>
+            </div>
+        `;
     },
 
     recalcularMedias: function() {
-        // Gatilho para quando o usuário muda o número de assistentes manualmente
-        if (this.dadosCarregados) {
-            this.processarKPIsETabela();
-        }
-    },
-
-    renderizarCabecalho: function(thead, colunas) {
-        if(!thead) return;
-        let colsHtml = '';
-        colunas.forEach(c => {
-            colsHtml += `<th class="px-3 py-3 text-center border-l border-slate-200 min-w-[60px]">${c.label}</th>`;
-        });
-
-        thead.innerHTML = `
-            <tr class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wide border-b border-slate-200">
-                <th class="px-4 py-3 text-left w-48">Assistente</th>
-                <th class="px-4 py-3 text-center text-blue-700 bg-blue-50/50 w-24">Total</th>
-                <th class="px-4 py-3 text-center w-20">Méd/Dia</th>
-                ${colsHtml}
-            </tr>
-        `;
+        // Função chamada pelo onchange do input no HTML
+        this.renderizarLista();
     },
 
     calcularDiasUteis: function(inicio, fim) {
