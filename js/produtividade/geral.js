@@ -1,5 +1,5 @@
 Produtividade.Geral = {
-    META_PADRAO: 650, // Meta padrão corrigida para 650
+    META_PADRAO: 650, // Meta padrão (650 docs/dia)
     usuarioSelecionado: null,
 
     dadosView: [], 
@@ -12,8 +12,7 @@ Produtividade.Geral = {
         const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
         const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; 
         
-        // --- 1. CONTROLE DE INTERFACE (VISIBILIDADE) ---
-        // Fazemos isso aqui dentro para garantir que a tela esteja sempre no estado certo
+        // Controle de visibilidade dos seletores
         if (weekSelectEl) {
             if (modoVisualizacao === 'semana') weekSelectEl.classList.remove('hidden');
             else weekSelectEl.classList.add('hidden');
@@ -26,18 +25,16 @@ Produtividade.Geral = {
 
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
-        // --- 2. DEFINIÇÃO DO PERÍODO DE BUSCA ---
+        // 1. Definição do Período
         let dataInicio = dataSelecionada;
         let dataFim = dataSelecionada;
 
         if (modoVisualizacao === 'mes') {
-            // Do dia 01 ao último dia do mês
             dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
             const ultimoDia = new Date(ano, mes, 0).getDate();
             dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
         } 
         else if (modoVisualizacao === 'semana') {
-            // Calcula intervalo da semana (1-7, 8-14...)
             const numSemana = parseInt(weekSelectEl ? weekSelectEl.value : 1);
             const diaInicioSemana = (numSemana - 1) * 7 + 1;
             let diaFimSemana = numSemana * 7;
@@ -46,7 +43,6 @@ Produtividade.Geral = {
             if (diaFimSemana > ultimoDiaMes) diaFimSemana = ultimoDiaMes;
             
             if (diaInicioSemana > ultimoDiaMes) {
-                // Caso a semana comece depois do fim do mês
                 dataInicio = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDiaMes}`;
                 dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDiaMes}`;
             } else {
@@ -55,7 +51,7 @@ Produtividade.Geral = {
             }
         }
         
-        // --- 3. CARREGAMENTO DE DADOS ---
+        // 2. Carrega Produção
         const { data: producao, error } = await Produtividade.supabase
             .from('producao')
             .select('*, usuarios!inner(nome, id, contrato)')
@@ -63,18 +59,17 @@ Produtividade.Geral = {
             .lte('data_referencia', dataFim);
 
         if (error) {
-            console.error("Erro ao carregar produção:", error);
+            console.error("Erro ao carregar:", error);
             return;
         }
 
+        // 3. Carrega Metas Históricas
         const { data: metasDb } = await Produtividade.supabase
             .from('metas')
             .select('*')
             .order('data_inicio', { ascending: true });
 
-        // --- 4. CONTEXTO DE DIAS ÚTEIS ---
-        // Se for visualização de DIA, queremos o contexto do MÊS (ex: "Dia 5/22")
-        // Se for Mês/Semana, queremos o contexto daquele período
+        // 4. Contexto de Dias Úteis
         let inicioContexto = dataInicio;
         let fimContexto = dataFim;
         
@@ -105,8 +100,8 @@ Produtividade.Geral = {
             return metaVigente ? metaVigente.valor_meta : this.META_PADRAO;
         };
 
-        // AGRUPAMENTO
         if (modo === 'mes' || modo === 'semana') {
+            // Agrupamento por Usuário
             const mapa = {};
             dadosBrutos.forEach(row => {
                 const uid = row.usuario_id;
@@ -138,7 +133,7 @@ Produtividade.Geral = {
             });
             dadosAgrupados = Object.values(mapa).map(u => ({ ...u, dias_unicos_count: u.dias_unicos_set.size }));
         } else {
-            // MODO DIA
+            // Modo Dia
             dadosAgrupados = dadosBrutos.map(row => {
                 const fator = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 const metaDoDia = getMetaParaData(row.usuario_id, row.data_referencia);
@@ -152,7 +147,7 @@ Produtividade.Geral = {
             });
         }
 
-        // FILTRO DE USUÁRIO
+        // Filtro de Usuário
         const elHeader = document.getElementById('selection-header');
         const elName = document.getElementById('selected-name');
         let dadosFiltrados = dadosAgrupados;
@@ -221,16 +216,23 @@ Produtividade.Geral = {
         const pctCLT = totalProducao > 0 ? (stats.clt.producao / totalProducao) * 100 : 0;
         const pctPJ = totalProducao > 0 ? (stats.pj.producao / totalProducao) * 100 : 0;
 
+        // --- ATUALIZA CARDS ---
         if(document.getElementById('kpi-clt-val')) document.getElementById('kpi-clt-val').innerText = `${stats.clt.qtd} (${pctCLT.toFixed(0)}%)`;
         if(document.getElementById('kpi-clt-bar')) document.getElementById('kpi-clt-bar').style.width = `${pctCLT}%`;
         
         if(document.getElementById('kpi-pj-val')) document.getElementById('kpi-pj-val').innerText = `${stats.pj.qtd} (${pctPJ.toFixed(0)}%)`;
         if(document.getElementById('kpi-pj-bar')) document.getElementById('kpi-pj-bar').style.width = `${pctPJ}%`;
 
+        // Cálculo dos Indicadores
         const atingimento = totalMeta > 0 ? (totalProducao / totalMeta) * 100 : 0;
+        
+        // Média de Produção (Time)
         const mediaProducao = totalDiasPonderados > 0 ? Math.round(totalProducao / totalDiasPonderados) : 0;
-        // Se a meta calculada for 0 (ninguém trabalhou ou abonado), mostra a padrão
-        const mediaMeta = totalDiasPonderados > 0 ? Math.round(totalMeta / totalDiasPonderados) : this.META_PADRAO;
+        
+        // CORREÇÃO: Média da META (por Pessoa/Período e não por dia)
+        const qtdPessoas = dados.length;
+        // Se houver pessoas, a meta mostrada é a média das metas totais delas no período
+        const mediaMeta = qtdPessoas > 0 ? Math.round(totalMeta / qtdPessoas) : this.META_PADRAO;
 
         if(document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = totalProducao.toLocaleString('pt-BR');
         if(document.getElementById('kpi-meta-total')) document.getElementById('kpi-meta-total').innerText = totalMeta.toLocaleString('pt-BR');
@@ -268,6 +270,7 @@ Produtividade.Geral = {
                 pctTexto = "Abn";
             }
 
+            // Fator Select
             let ctrlFator = `<span class="text-xs font-bold text-slate-500">${Number(row.dias_calc).toLocaleString('pt-BR')}d</span>`;
             if (modo === 'dia') {
                 const valFator = (row.fator !== undefined) ? row.fator : 1;
@@ -318,7 +321,6 @@ Produtividade.Geral = {
         });
     },
 
-    // Função auxiliar para o botão de troca de modo
     toggleSemana: function() {
         this.carregarTela();
     },
