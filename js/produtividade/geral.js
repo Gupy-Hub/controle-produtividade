@@ -8,7 +8,7 @@ Produtividade.Geral = {
         const viewModeEl = document.getElementById('view-mode');
         
         const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-        const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; // 'dia', 'mes'
+        const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; 
 
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
@@ -136,23 +136,34 @@ Produtividade.Geral = {
         const pctCLT = totalProducao > 0 ? (stats.clt.producao / totalProducao) * 100 : 0;
         const pctPJ = totalProducao > 0 ? (stats.pj.producao / totalProducao) * 100 : 0;
 
-        // --- ATUALIZA O CARD EQUIPE ---
+        // --- ATUALIZA O CARD EQUIPE (VISUAL ORGANIZADO) ---
         const elEquipe = document.getElementById('kpi-count-clt');
         if (elEquipe) {
-            // Remove classes antigas e ajusta tamanho
+            // Remove classes que deixam a fonte gigante
             elEquipe.classList.remove('text-3xl', 'text-4xl', 'font-black');
-            elEquipe.classList.add('text-sm'); 
+            elEquipe.className = 'w-full flex flex-col gap-2 pt-1'; // Container flex vertical com espaçamento
             
-            // HTML detalhado
+            // HTML formatado com barras de fundo para organizar
             elEquipe.innerHTML = `
-                <div class="flex flex-col w-full px-1">
-                    <div class="flex justify-between items-center border-b border-slate-100 pb-1 mb-1">
-                        <span class="font-bold text-slate-600">CLT: ${stats.clt.qtd}</span>
-                        <span class="text-blue-600 font-bold text-xs">${pctCLT.toFixed(0)}%</span>
+                <div class="flex items-center justify-between bg-blue-50 rounded px-2 py-1 border border-blue-100">
+                    <div class="flex flex-col leading-none">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">CLT</span>
+                        <span class="text-sm font-bold text-blue-700">${stats.clt.qtd} <span class="text-[9px] font-normal text-slate-400">pessoas</span></span>
                     </div>
-                    <div class="flex justify-between items-center">
-                        <span class="font-bold text-slate-600">PJ: ${stats.pj.qtd}</span>
-                        <span class="text-indigo-600 font-bold text-xs">${pctPJ.toFixed(0)}%</span>
+                    <div class="text-right leading-none">
+                        <span class="text-xs font-bold text-blue-600">${pctCLT.toFixed(0)}%</span>
+                        <div class="text-[9px] text-slate-400">prod.</div>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-between bg-purple-50 rounded px-2 py-1 border border-purple-100">
+                    <div class="flex flex-col leading-none">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase">PJ</span>
+                        <span class="text-sm font-bold text-purple-700">${stats.pj.qtd} <span class="text-[9px] font-normal text-slate-400">pessoas</span></span>
+                    </div>
+                    <div class="text-right leading-none">
+                        <span class="text-xs font-bold text-purple-600">${pctPJ.toFixed(0)}%</span>
+                        <div class="text-[9px] text-slate-400">prod.</div>
                     </div>
                 </div>
             `;
@@ -212,7 +223,7 @@ Produtividade.Geral = {
             // Exibe badge do contrato na tabela
             const badgeContrato = (row.usuarios.contrato === 'CLT')
                 ? `<span class="ml-2 text-[9px] bg-blue-50 text-blue-600 px-1 rounded border border-blue-100">CLT</span>`
-                : `<span class="ml-2 text-[9px] bg-indigo-50 text-indigo-600 px-1 rounded border border-indigo-100">PJ</span>`;
+                : `<span class="ml-2 text-[9px] bg-purple-50 text-purple-600 px-1 rounded border border-purple-100">PJ</span>`;
 
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
