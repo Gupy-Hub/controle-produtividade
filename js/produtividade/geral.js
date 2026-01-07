@@ -12,24 +12,34 @@ Produtividade.Geral = {
         const dataSelecionada = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
         const modoVisualizacao = viewModeEl ? viewModeEl.value : 'dia'; 
         
-        // Controla visibilidade do seletor de semana
-        this.toggleSemana();
+        // Garante a visibilidade correta dos seletores
+        const selectSemana = document.getElementById('select-semana');
+        const ctrlFatorMassa = document.getElementById('bulk-fator');
+
+        if (selectSemana) {
+            if (modoVisualizacao === 'semana') selectSemana.classList.remove('hidden');
+            else selectSemana.classList.add('hidden');
+        }
+        if (ctrlFatorMassa) {
+            ctrlFatorMassa.disabled = (modoVisualizacao !== 'dia');
+        }
 
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
-        // 1. Definição do Período Dinâmico (Inicio e Fim exatos)
+        // 1. Definição do Período Dinâmico
         let dataInicio = dataSelecionada;
         let dataFim = dataSelecionada;
 
         if (modoVisualizacao === 'mes') {
+            // Mês inteiro: Dia 01 até o último dia do mês
             dataInicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
             const ultimoDia = new Date(ano, mes, 0).getDate();
             dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
         } 
         else if (modoVisualizacao === 'semana') {
-            const numSemana = parseInt(weekSelectEl.value || 1);
+            const numSemana = parseInt(weekSelectEl ? weekSelectEl.value : 1);
             
-            // Calcula inicio e fim da semana (1-7, 8-14...)
+            // Calcula intervalo da semana (1-7, 8-14...)
             const diaInicioSemana = (numSemana - 1) * 7 + 1;
             let diaFimSemana = numSemana * 7;
             const ultimoDiaMes = new Date(ano, mes, 0).getDate();
@@ -37,7 +47,6 @@ Produtividade.Geral = {
             if (diaFimSemana > ultimoDiaMes) diaFimSemana = ultimoDiaMes;
             
             if (diaInicioSemana > ultimoDiaMes) {
-                // Semana fora do mês (ex: semana 5 num mês de 28 dias)
                 dataInicio = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDiaMes}`;
                 dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDiaMes}`;
             } else {
@@ -45,9 +54,8 @@ Produtividade.Geral = {
                 dataFim = `${ano}-${String(mes).padStart(2, '0')}-${String(diaFimSemana).padStart(2, '0')}`;
             }
         }
-        // Se for 'dia', mantemos dataInicio = dataFim = dataSelecionada
         
-        // 2. Carrega Produção do Período Definido
+        // 2. Carrega Produção do Período
         const { data: producao, error } = await Produtividade.supabase
             .from('producao')
             .select('*, usuarios!inner(nome, id, contrato)')
@@ -59,38 +67,54 @@ Produtividade.Geral = {
             return;
         }
 
-        // 3. Carrega Metas (Para cálculo personalizado)
+        // 3. Carrega Metas (Para cálculo histórico correto)
         const { data: metasDb } = await Produtividade.supabase
             .from('metas')
             .select('*')
             .order('data_inicio', { ascending: true });
 
-        // 4. Identifica Dias Únicos Trabalhados pela EQUIPE neste período exato
-        // (Isso serve de base para o KPI quando nenhum usuário está selecionado)
-        const diasUnicosSet = new Set(producao ? producao.map(d => d.data_referencia) : []);
+        // 4. Carrega contexto de dias úteis (baseado no período selecionado)
+        // Se for 'dia', queremos saber os úteis do MÊS inteiro para mostrar "Dia 5/22"
+        // Se for 'mes' ou 'semana', queremos os úteis daquele intervalo exato
+        let inicioContexto = dataInicio;
+        let fimContexto = dataFim;
+        
+        if (modoVisualizacao === 'dia') {
+             inicioContexto = `${ano}-${String(mes).padStart(2, '0')}-01`;
+             const ultimoDia = new Date(ano, mes, 0).getDate();
+             fimContexto = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+        }
+
+        const { data: diasDb } = await Produtividade.supabase
+            .from('producao')
+            .select('data_referencia')
+            .gte('data_referencia', inicioContexto)
+            .lte('data_referencia', fimContexto);
+
+        const diasUnicosSet = new Set(diasDb ? diasDb.map(d => d.data_referencia) : []);
         const diasTrabalhadosTime = Array.from(diasUnicosSet).sort();
 
-        this.processarDados(producao, metasDb || [], modoVisualizacao, diasTrabalhadosTime, dataInicio, dataFim);
+        this.processarDados(producao, metasDb || [], modoVisualizacao, diasTrabalhadosTime, inicioContexto, fimContexto);
     },
 
-    processarDados: function(dadosBrutos, listaMetas, modo, diasTrabalhadosTime, dataInicio, dataFim) {
+    processarDados: function(dadosBrutos, listaMetas, modo, diasTrabalhadosTime, inicioContexto, fimContexto) {
         let dadosAgrupados = [];
 
-        // Helper: Encontra meta vigente
+        // Helper: Encontra meta vigente para um usuário em uma data específica
         const getMetaParaData = (uid, dataRefString) => {
             const metasUser = listaMetas.filter(m => m.usuario_id == uid);
             const metaVigente = metasUser.filter(m => m.data_inicio <= dataRefString).pop();
             return metaVigente ? metaVigente.valor_meta : this.META_PADRAO;
         };
 
-        // Agrupamento
+        // AGRUPAMENTO: Soma tudo se for Mês ou Semana
         if (modo === 'mes' || modo === 'semana') {
             const mapa = {};
             dadosBrutos.forEach(row => {
                 const uid = row.usuario_id;
                 if (!mapa[uid]) {
                     mapa[uid] = {
-                        ...row,
+                        ...row, 
                         quantidade: 0,
                         fifo: 0,
                         gradual_total: 0,
@@ -111,12 +135,13 @@ Produtividade.Geral = {
                 mapa[uid].dias_calc += fator;
                 mapa[uid].dias_unicos_set.add(row.data_referencia);
 
+                // Meta acumulada: (Meta do Dia * Fator do Dia) somado dia a dia
                 const metaDoDia = getMetaParaData(uid, row.data_referencia);
                 mapa[uid].meta_acumulada += Math.round(metaDoDia * fator);
             });
             dadosAgrupados = Object.values(mapa).map(u => ({ ...u, dias_unicos_count: u.dias_unicos_set.size }));
         } else {
-            // Modo Dia
+            // Modo Dia: Linha a linha
             dadosAgrupados = dadosBrutos.map(row => {
                 const fator = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 const metaDoDia = getMetaParaData(row.usuario_id, row.data_referencia);
@@ -130,7 +155,7 @@ Produtividade.Geral = {
             });
         }
 
-        // Filtro de Usuário
+        // Filtro de Usuário Selecionado
         const elHeader = document.getElementById('selection-header');
         const elName = document.getElementById('selected-name');
         
@@ -146,27 +171,27 @@ Produtividade.Geral = {
         }
 
         this.dadosView = dadosFiltrados;
-        this.atualizarKPIs(dadosFiltrados, diasTrabalhadosTime, dataInicio, dataFim, modo);
+        this.atualizarKPIs(dadosFiltrados, diasTrabalhadosTime, inicioContexto, fimContexto, modo);
         this.renderizarTabela(modo);
     },
 
-    atualizarKPIs: function(dados, diasTrabalhadosTime, dataInicio, dataFim, modo) {
-        // --- KPI DIAS ÚTEIS (Cálculo Dinâmico) ---
+    atualizarKPIs: function(dados, diasTrabalhadosTime, inicioContexto, fimContexto, modo) {
+        // --- KPI DIAS ÚTEIS ---
         
-        // 1. Numerador: Dias Trabalhados (Filtro Usuario vs Time)
+        // 1. Numerador: Dias Trabalhados
         let diasComDados = 0;
         if (this.usuarioSelecionado && dados.length > 0) {
-            // Se tem usuário selecionado, usa os dias DELE
+            // Se tem usuário selecionado, quantos dias ELE trabalhou
             diasComDados = dados[0].dias_unicos_count || 0;
         } else {
-            // Se é visão de time, usa os dias únicos que a equipe trabalhou no período
+            // Se é time, quantas datas tiveram produção no período
+            // (Nota: diasTrabalhadosTime vem carregado com o intervalo de contexto correto)
             diasComDados = diasTrabalhadosTime.length;
         }
 
-        // 2. Denominador: Dias Úteis do Calendário (No Intervalo Selecionado)
+        // 2. Denominador: Dias Úteis do Calendário (Intervalo Exato)
         const getDiasUteisIntervalo = (inicio, fim) => {
             let count = 0;
-            // Cria datas com fuso corrigido ou simples string parsing
             let curr = new Date(inicio + 'T00:00:00');
             let end = new Date(fim + 'T00:00:00');
 
@@ -177,17 +202,7 @@ Produtividade.Geral = {
             }
             return count;
         };
-
-        // Se for "Dia", o contexto útil é o MÊS inteiro (padrão de dashboards diários)
-        // Se for "Semana" ou "Mês", respeita o intervalo
-        let totalUteis = 0;
-        if (modo === 'dia') {
-             const [y, m] = dataInicio.split('-').map(Number);
-             const ultimoDia = new Date(y, m, 0).getDate();
-             totalUteis = getDiasUteisIntervalo(`${y}-${String(m).padStart(2,'0')}-01`, `${y}-${String(m).padStart(2,'0')}-${ultimoDia}`);
-        } else {
-             totalUteis = getDiasUteisIntervalo(dataInicio, dataFim);
-        }
+        const totalUteis = getDiasUteisIntervalo(inicioContexto, fimContexto);
 
         if(document.getElementById('kpi-dias-val')) document.getElementById('kpi-dias-val').innerText = diasComDados;
         if(document.getElementById('kpi-dias-total')) document.getElementById('kpi-dias-total').innerText = `/ ${totalUteis}`;
@@ -264,8 +279,9 @@ Produtividade.Geral = {
                 pctTexto = "Abn";
             }
 
-            // Fator
+            // Fator (Só é editável no modo DIA. No Mês/Semana mostramos o total acumulado)
             let ctrlFator = `<span class="text-xs font-bold text-slate-500">${Number(row.dias_calc).toLocaleString('pt-BR')}d</span>`;
+            
             if (modo === 'dia') {
                 const valFator = (row.fator !== undefined) ? row.fator : 1;
                 let selectClass = "text-[10px] font-bold border rounded p-1 outline-none text-slate-700";
@@ -316,22 +332,23 @@ Produtividade.Geral = {
     },
 
     toggleSemana: function() {
+        // Função apenas de interface para exibir/ocultar select
+        // Agora, ao final, chama o carregamento para garantir que os dados atualizem
         const viewMode = document.getElementById('view-mode').value;
         const selectSemana = document.getElementById('select-semana');
         const ctrlFatorMassa = document.getElementById('bulk-fator');
 
-        // Proteção contra erro de elemento nulo
         if (selectSemana) {
-            if (viewMode === 'semana') {
-                selectSemana.classList.remove('hidden');
-            } else {
-                selectSemana.classList.add('hidden');
-            }
+            if (viewMode === 'semana') selectSemana.classList.remove('hidden');
+            else selectSemana.classList.add('hidden');
         }
         
         if (ctrlFatorMassa) {
             ctrlFatorMassa.disabled = (viewMode !== 'dia');
         }
+
+        // CORREÇÃO CRÍTICA: Recarregar dados ao trocar o modo
+        this.carregarTela();
     },
 
     selecionarUsuario: function(id, nome) {
