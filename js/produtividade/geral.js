@@ -1,5 +1,6 @@
 Produtividade.Geral = {
-    META_PADRAO: 120, // Usado apenas se não houver meta definida no banco
+    META_PADRAO: 120, 
+    usuarioSelecionado: null, // Estado para guardar o filtro de usuário
 
     dadosView: [], 
     
@@ -12,6 +13,7 @@ Produtividade.Geral = {
 
         const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
 
+        // 1. Definição do Período
         let dataInicio = dataSelecionada;
         let dataFim = dataSelecionada;
 
@@ -21,7 +23,7 @@ Produtividade.Geral = {
             dataFim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
         }
         
-        // 1. Carrega Produção
+        // 2. Carrega Produção
         const { data: producao, error } = await Produtividade.supabase
             .from('producao')
             .select('*, usuarios!inner(nome, id, contrato)')
@@ -29,20 +31,17 @@ Produtividade.Geral = {
             .lte('data_referencia', dataFim);
 
         if (error) {
-            console.error("Erro ao carregar produção:", error);
+            console.error("Erro ao carregar:", error);
             return;
         }
 
-        // 2. Carrega Metas (Histórico Completo)
-        // Precisamos de todas as metas para saber qual estava valendo em cada dia
-        const { data: metasDb, error: errMeta } = await Produtividade.supabase
+        // 3. Carrega Metas (Para cálculo personalizado)
+        const { data: metasDb } = await Produtividade.supabase
             .from('metas')
             .select('*')
-            .order('data_inicio', { ascending: true }); // Ordem crescente para facilitar a busca
+            .order('data_inicio', { ascending: true });
 
-        if (errMeta) console.error("Erro ao carregar metas:", errMeta);
-
-        // 3. Carrega Dias Úteis (Contexto)
+        // 4. Carrega Dias Úteis do Time (Contexto Geral)
         const inicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
         const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}`;
         
@@ -61,12 +60,9 @@ Produtividade.Geral = {
     processarDados: function(dadosBrutos, listaMetas, modo, diasTrabalhadosTime, dataRef) {
         let dadosAgrupados = [];
 
-        // Helper para encontrar a meta vigente de um usuário em uma data
+        // Helper: Encontra meta vigente
         const getMetaParaData = (uid, dataRefString) => {
-            // Filtra metas do usuário
             const metasUser = listaMetas.filter(m => m.usuario_id == uid);
-            // Encontra a última meta cuja data_inicio seja <= dataRef
-            // Como a lista já veio ordenada por data_inicio, pegamos a última que satisfaz
             const metaVigente = metasUser.filter(m => m.data_inicio <= dataRefString).pop();
             return metaVigente ? metaVigente.valor_meta : this.META_PADRAO;
         };
@@ -84,7 +80,8 @@ Produtividade.Geral = {
                         gradual_parcial: 0,
                         perfil_fc: 0,
                         dias_calc: 0,
-                        meta_acumulada: 0 // Nova propriedade
+                        meta_acumulada: 0,
+                        dias_unicos_set: new Set() // Para contar dias trabalhados individuais
                     };
                 }
                 mapa[uid].quantidade += (row.quantidade || 0);
@@ -95,29 +92,48 @@ Produtividade.Geral = {
                 
                 const fator = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 mapa[uid].dias_calc += fator;
+                mapa[uid].dias_unicos_set.add(row.data_referencia);
 
-                // Calcula meta deste dia específico e soma
                 const metaDoDia = getMetaParaData(uid, row.data_referencia);
                 mapa[uid].meta_acumulada += Math.round(metaDoDia * fator);
             });
-            dadosAgrupados = Object.values(mapa);
+            // Converte Set para número ao finalizar
+            dadosAgrupados = Object.values(mapa).map(u => ({ ...u, dias_unicos_count: u.dias_unicos_set.size }));
         } else {
             // Modo Dia
             dadosAgrupados = dadosBrutos.map(row => {
                 const fator = (row.fator !== undefined && row.fator !== null) ? row.fator : 1;
                 const metaDoDia = getMetaParaData(row.usuario_id, row.data_referencia);
-                
                 return { 
                     ...row, 
                     fator: fator, 
                     dias_calc: fator,
-                    meta_acumulada: Math.round(metaDoDia * fator) // Meta do dia ajustada pelo fator (ex: 50%)
+                    meta_acumulada: Math.round(metaDoDia * fator),
+                    dias_unicos_count: 1
                 };
             });
         }
 
-        this.dadosView = dadosAgrupados;
-        this.atualizarKPIs(dadosAgrupados, diasTrabalhadosTime, dataRef);
+        // --- LÓGICA DE FILTRO (SELEÇÃO DE USUÁRIO) ---
+        const elHeader = document.getElementById('selection-header');
+        const elName = document.getElementById('selected-name');
+        
+        let dadosFiltrados = dadosAgrupados;
+        
+        if (this.usuarioSelecionado) {
+            // Filtra apenas o usuário clicado
+            dadosFiltrados = dadosAgrupados.filter(d => d.usuario_id == this.usuarioSelecionado.id);
+            
+            // Atualiza Header de Seleção
+            if(elHeader) elHeader.classList.remove('hidden');
+            if(elName) elName.innerText = this.usuarioSelecionado.nome;
+        } else {
+            if(elHeader) elHeader.classList.add('hidden');
+            if(elName) elName.innerText = "";
+        }
+
+        this.dadosView = dadosFiltrados;
+        this.atualizarKPIs(dadosFiltrados, diasTrabalhadosTime, dataRef);
         this.renderizarTabela(modo);
     },
 
@@ -125,7 +141,15 @@ Produtividade.Geral = {
         const [ano, mes] = dataRef.split('-').map(Number);
 
         // --- KPI DIAS ÚTEIS ---
-        const diasComDados = diasTrabalhadosTime.length;
+        // Se tiver usuário selecionado, mostra dias que ELE trabalhou. Se não, dias do TIME.
+        let diasComDados = 0;
+        
+        if (this.usuarioSelecionado && dados.length > 0) {
+            diasComDados = dados[0].dias_unicos_count || 0;
+        } else {
+            diasComDados = diasTrabalhadosTime.length;
+        }
+
         const getDiasUteisMes = (y, m) => {
             let total = 0;
             const ultimoDia = new Date(y, m, 0).getDate();
@@ -153,7 +177,7 @@ Produtividade.Geral = {
 
         dados.forEach(reg => {
             totalProducao += reg.quantidade;
-            totalMeta += reg.meta_acumulada; // Soma a meta personalizada de cada um
+            totalMeta += reg.meta_acumulada;
             totalDiasPonderados += reg.dias_calc;
 
             const contrato = reg.usuarios && reg.usuarios.contrato ? reg.usuarios.contrato.toUpperCase() : 'PJ';
@@ -175,9 +199,7 @@ Produtividade.Geral = {
 
         // --- OUTROS KPIs ---
         const atingimento = totalMeta > 0 ? (totalProducao / totalMeta) * 100 : 0;
-        // Média de produção por dia trabalhado
         const mediaProducao = totalDiasPonderados > 0 ? Math.round(totalProducao / totalDiasPonderados) : 0;
-        // Média da META por dia trabalhado (para exibir no card)
         const mediaMeta = totalDiasPonderados > 0 ? Math.round(totalMeta / totalDiasPonderados) : this.META_PADRAO;
 
         if(document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = totalProducao.toLocaleString('pt-BR');
@@ -200,6 +222,7 @@ Produtividade.Geral = {
             return;
         }
 
+        // Ordena
         this.dadosView.sort((a, b) => b.quantidade - a.quantidade);
 
         this.dadosView.forEach(row => {
@@ -216,6 +239,7 @@ Produtividade.Geral = {
                 pctTexto = "Abn";
             }
 
+            // Fator Select
             let ctrlFator = `<span class="text-xs font-bold text-slate-500">${Number(row.dias_calc).toLocaleString('pt-BR')}d</span>`;
             if (modo === 'dia') {
                 const valFator = (row.fator !== undefined) ? row.fator : 1;
@@ -233,6 +257,8 @@ Produtividade.Geral = {
 
             let badgeContrato = '';
             let nomeUsuario = 'Desconhecido';
+            let uid = row.usuario_id; 
+
             if (row.usuarios) {
                 nomeUsuario = row.usuarios.nome;
                 if (row.usuarios.contrato === 'CLT') {
@@ -246,7 +272,8 @@ Produtividade.Geral = {
             tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
             tr.innerHTML = `
                 <td class="px-4 py-3 text-center">${ctrlFator}</td>
-                <td class="px-6 py-3 font-bold text-slate-700">
+                <td class="px-6 py-3 font-bold text-slate-700 cursor-pointer hover:text-blue-600 hover:underline underline-offset-2 transition"
+                    onclick="Produtividade.Geral.selecionarUsuario('${uid}', '${nomeUsuario}')" title="Clique para ver detalhes">
                     ${nomeUsuario} ${badgeContrato}
                 </td>
                 <td class="px-6 py-3 text-center text-slate-500 font-bold bg-slate-50/50">${Number(row.dias_calc).toLocaleString('pt-BR')}</td>
@@ -261,6 +288,18 @@ Produtividade.Geral = {
             `;
             tbody.appendChild(tr);
         });
+    },
+
+    // --- AÇÕES DO USUÁRIO ---
+    
+    selecionarUsuario: function(id, nome) {
+        this.usuarioSelecionado = { id, nome };
+        this.carregarTela(); // Recarrega para aplicar o filtro visualmente
+    },
+
+    limparSelecao: function() {
+        this.usuarioSelecionado = null;
+        this.carregarTela();
     },
 
     mudarFatorIndividual: async function(prodId, novoFator) {
@@ -288,8 +327,6 @@ Produtividade.Geral = {
         else this.carregarTela();
         document.getElementById('bulk-fator').value = "";
     },
-    
-    limparSelecao: function() { this.carregarTela(); },
     
     excluirDadosDia: async function() {
         if(!confirm("Excluir dados visualizados?")) return;
