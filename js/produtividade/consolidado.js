@@ -1,5 +1,5 @@
 Produtividade.Consolidado = {
-    dadosCarregados: null, // Armazena dados para recalculo rápido
+    dadosCarregados: null, 
     diasUteisPeriodo: 0,
     diasTrabalhadosPeriodo: 0,
     
@@ -8,7 +8,6 @@ Produtividade.Consolidado = {
 
     carregar: async function() {
         const tbody = document.getElementById('cons-table-body');
-        const thead = document.getElementById('cons-table-header');
         const periodTypeEl = document.getElementById('cons-period-type');
         const dateInput = document.getElementById('global-date');
 
@@ -24,7 +23,6 @@ Produtividade.Consolidado = {
             let colunas = [];
             let funcAgrupamento;
 
-            // --- Lógica de Datas (Igual à anterior, mantendo a estrutura dinâmica) ---
             if (tipoPeriodo === 'mes') { 
                 dataInicio = `${ano}-${String(mes).padStart(2,'0')}-01`;
                 const ultimoDia = new Date(ano, mes, 0).getDate();
@@ -72,9 +70,9 @@ Produtividade.Consolidado = {
                 .lte('data_referencia', dataFim);
                 
             if (error) throw error;
-            this.dadosCarregados = { data, colunas, funcAgrupamento }; // Guarda para recalculo local
+            this.dadosCarregados = { data, colunas, funcAgrupamento };
 
-            // 3. Calcula Dias Úteis e Trabalhados
+            // 3. Calcula Dias
             this.diasUteisPeriodo = this.calcularDiasUteis(dataInicio, dataFim);
             const diasTrabalhadosSet = new Set(data.map(d => d.data_referencia));
             this.diasTrabalhadosPeriodo = diasTrabalhadosSet.size;
@@ -116,13 +114,11 @@ Produtividade.Consolidado = {
             const qtd = d.quantidade || 0;
             mapUser[uid].total += qtd;
             
-            // Distribuição nas Colunas
             const colId = funcAgrupamento(d.data_referencia);
             if (colId && mapUser[uid].colunas[colId] !== undefined) {
                 mapUser[uid].colunas[colId] += qtd;
             }
 
-            // Somatórios Globais
             totalGeral += qtd;
             totalFifo += (d.fifo || 0);
             totalGParcial += (d.gradual_parcial || 0);
@@ -130,47 +126,51 @@ Produtividade.Consolidado = {
             totalPerfil += (d.perfil_fc || 0);
         });
 
-        // --- ATUALIZAÇÃO DOS CARDS (KPIs) ---
-        
-        // 1. Assistentes (Detectado vs Manual)
+        // --- 1. CARD ASSISTENTES (Manual vs Sistema) ---
         const totalAssistentesSistema = Object.keys(mapUser).length;
         const inputAssist = document.getElementById('cons-input-assistentes');
         const labelFound = document.getElementById('cons-found-assistentes');
         
-        // Se o input for 0 ou vazio (primeiro carregamento), assume o do sistema
-        let totalAssistentesConsiderados = parseInt(inputAssist.value);
+        // Se input for inválido ou zero (primeira carga), assume sistema
+        let totalAssistentesConsiderados = parseInt(inputAssist ? inputAssist.value : 0);
         if (totalAssistentesConsiderados <= 0 || isNaN(totalAssistentesConsiderados)) {
             totalAssistentesConsiderados = totalAssistentesSistema;
-            inputAssist.value = totalAssistentesSistema;
+            if(inputAssist) inputAssist.value = totalAssistentesSistema;
         }
         
         if (labelFound) labelFound.innerText = totalAssistentesSistema;
 
-        // 2. Dias
-        document.getElementById('cons-kpi-dias-display').innerText = `${this.diasUteisPeriodo} / ${this.diasTrabalhadosPeriodo}`;
+        // --- 2. CARD DIAS ---
+        if(document.getElementById('cons-kpi-dias-val')) 
+            document.getElementById('cons-kpi-dias-val').innerText = this.diasUteisPeriodo;
+        if(document.getElementById('cons-kpi-dias-total')) 
+            document.getElementById('cons-kpi-dias-total').innerText = `/ ${this.diasTrabalhadosPeriodo} trab`;
 
-        // 3. Totais por Tipo
-        document.getElementById('cons-kpi-total-geral').innerText = totalGeral.toLocaleString('pt-BR');
-        document.getElementById('cons-kpi-fifo').innerText = totalFifo.toLocaleString('pt-BR');
-        document.getElementById('cons-kpi-gparcial').innerText = totalGParcial.toLocaleString('pt-BR');
-        document.getElementById('cons-kpi-gtotal').innerText = totalGTotal.toLocaleString('pt-BR');
-        document.getElementById('cons-kpi-perfil').innerText = totalPerfil.toLocaleString('pt-BR');
+        // --- 3. CARD PRODUÇÃO DETALHADA ---
+        if(document.getElementById('cons-kpi-total-geral')) document.getElementById('cons-kpi-total-geral').innerText = totalGeral.toLocaleString('pt-BR');
+        // Lista Detalhada
+        if(document.getElementById('cons-list-fifo')) document.getElementById('cons-list-fifo').innerText = totalFifo.toLocaleString('pt-BR');
+        if(document.getElementById('cons-list-gp')) document.getElementById('cons-list-gp').innerText = totalGParcial.toLocaleString('pt-BR');
+        if(document.getElementById('cons-list-gt')) document.getElementById('cons-list-gt').innerText = totalGTotal.toLocaleString('pt-BR');
+        if(document.getElementById('cons-list-pfc')) document.getElementById('cons-list-pfc').innerText = totalPerfil.toLocaleString('pt-BR');
 
-        // 4. Médias Calculadas
-        // Validação Diária (Dias Úteis) = Total / Dias Úteis
-        const mediaDiaUteis = this.diasUteisPeriodo > 0 ? Math.round(totalGeral / this.diasUteisPeriodo) : 0;
+        // --- 4. MÉDIAS ---
         
-        // Média por Assistente (Total) = Total / Nº Assistentes
+        // Média Validação Diária (Dias Úteis) = Total Produção / Dias Úteis
+        const mediaDiaUteis = this.diasUteisPeriodo > 0 ? Math.round(totalGeral / this.diasUteisPeriodo) : 0;
+        if(document.getElementById('cons-media-equipe-dia')) document.getElementById('cons-media-equipe-dia').innerText = mediaDiaUteis.toLocaleString('pt-BR');
+
+        // Média Validação (Todas Assistentes) = Total Produção / Total Assistentes
         const mediaPorAssTotal = totalAssistentesConsiderados > 0 ? Math.round(totalGeral / totalAssistentesConsiderados) : 0;
         
-        // Média por Assistente (Diária) = (Total / Nº Assistentes) / Dias Úteis
+        // Média Validação Diária (Por Assistentes) = (Total Produção / Total Assistentes) / Dias Úteis
         const mediaPorAssDia = this.diasUteisPeriodo > 0 ? Math.round(mediaPorAssTotal / this.diasUteisPeriodo) : 0;
 
-        document.getElementById('cons-media-dia-uteis').innerText = mediaDiaUteis.toLocaleString('pt-BR');
-        document.getElementById('cons-media-ass-total').innerText = mediaPorAssTotal.toLocaleString('pt-BR');
-        document.getElementById('cons-media-ass-dia').innerText = mediaPorAssDia.toLocaleString('pt-BR');
+        if(document.getElementById('cons-media-ass-periodo')) document.getElementById('cons-media-ass-periodo').innerText = mediaPorAssTotal.toLocaleString('pt-BR');
+        if(document.getElementById('cons-media-ass-dia')) document.getElementById('cons-media-ass-dia').innerText = mediaPorAssDia.toLocaleString('pt-BR');
 
-        // --- RENDERIZAÇÃO DA TABELA ---
+
+        // --- TABELA ---
         this.renderizarCabecalho(thead, colunas);
         
         if (totalAssistentesSistema === 0) {
@@ -187,7 +187,7 @@ Produtividade.Consolidado = {
                 colsHtml += `<td class="px-3 py-3 text-center ${style} border-l border-slate-50">${val.toLocaleString('pt-BR')}</td>`;
             });
 
-            // Média na tabela continua sendo a real (Total / Dias Úteis do período)
+            // Média na tabela: Total Pessoal / Dias Úteis Gerais (padronizado)
             const mediaInd = this.diasUteisPeriodo > 0 ? Math.round(u.total / this.diasUteisPeriodo) : 0;
 
             html += `<tr class="border-b border-slate-100 hover:bg-slate-50 transition text-xs">
@@ -201,7 +201,7 @@ Produtividade.Consolidado = {
     },
 
     recalcularMedias: function() {
-        // Chamado quando o usuário altera o input manual de assistentes
+        // Gatilho para quando o usuário muda o número de assistentes manualmente
         if (this.dadosCarregados) {
             this.processarKPIsETabela();
         }

@@ -65,7 +65,6 @@
                                 <option value="mes">Mês da Data</option>
                                 <option value="semana">Semana Específica</option>
                             </select>
-                            
                             <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
                                 <option value="1">Semana 1</option>
                                 <option value="2">Semana 2</option>
@@ -120,7 +119,6 @@
         <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
-                
                 <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-24">
                     <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition">
                         <i class="fas fa-file-contract text-5xl text-blue-600"></i>
@@ -134,7 +132,6 @@
                         <span class="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">--</span>
                     </div>
                 </div>
-
                 <div class="bg-gradient-to-br from-indigo-600 to-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200 text-white relative overflow-hidden flex flex-col justify-between h-24">
                     <div class="absolute right-[-10px] top-[-10px] opacity-20 rotate-12">
                         <i class="fas fa-chart-pie text-6xl"></i>
@@ -147,10 +144,8 @@
                         <div id="kpi-pct-bar" class="h-full bg-white/90 rounded-full transition-all duration-500" style="width: 0%"></div>
                     </div>
                 </div>
-
                 <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
                     <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Composição da Equipe</p>
-                    
                     <div class="w-full">
                         <div class="flex justify-between items-end mb-0.5">
                             <span class="text-[9px] font-bold text-slate-500 uppercase">CLT</span>
@@ -160,7 +155,6 @@
                             <div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
                         </div>
                     </div>
-
                     <div class="w-full">
                         <div class="flex justify-between items-end mb-0.5">
                             <span class="text-[9px] font-bold text-slate-500 uppercase">PJ</span>
@@ -171,7 +165,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
                     <div class="flex justify-between items-start">
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
@@ -181,13 +174,10 @@
                         <h3 class="text-2xl font-black text-slate-700" id="kpi-dias-val">--</h3>
                         <span class="text-xs font-bold text-slate-400" id="kpi-dias-total">/ --</span>
                     </div>
-                    <span id="kpi-dias" class="hidden"></span>
                     <p class="text-[9px] text-slate-400 font-medium">Dias com produção registrada</p>
                 </div>
-
                 <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
                     <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produtividade Média</p>
-                    
                     <div class="flex items-center justify-between">
                         <div class="flex flex-col">
                             <span class="text-[9px] font-bold text-slate-500 uppercase">Do Time</span>
@@ -244,78 +234,80 @@
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="bg-blue-50 p-4 rounded-xl shadow-sm border border-blue-100 flex flex-col justify-between">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+                <div class="bg-blue-50 p-3 rounded-2xl shadow-sm border border-blue-100 flex flex-col justify-between h-24 relative group">
                     <div class="flex justify-between items-start">
-                        <p class="text-xs font-bold text-blue-700 uppercase tracking-wide">Total Assistentes</p>
-                        <i class="fas fa-users text-blue-300"></i>
+                        <p class="text-[10px] font-bold text-blue-700 uppercase tracking-wide">Total Assistentes</p>
+                        <i class="fas fa-users text-blue-300 text-lg"></i>
                     </div>
-                    <div class="flex items-center gap-2 mt-1">
-                        <input type="number" id="cons-input-assistentes" onchange="Produtividade.Consolidado.recalcularMedias()" class="text-3xl font-black text-blue-800 bg-transparent outline-none w-20 border-b-2 border-blue-200 focus:border-blue-500 transition" value="0">
-                        <span class="text-xs text-blue-500 font-bold">(Editável)</span>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="cons-input-assistentes" onchange="Produtividade.Consolidado.recalcularMedias()" class="text-2xl font-black text-blue-800 bg-transparent outline-none w-16 border-b-2 border-blue-200 focus:border-blue-500 transition" value="0">
+                        <i class="fas fa-pen text-[10px] text-blue-400 opacity-50 group-hover:opacity-100"></i>
                     </div>
-                    <p class="text-[10px] text-blue-400 mt-1">Encontrados: <span id="cons-found-assistentes">0</span></p>
+                    <p class="text-[9px] text-blue-400 mt-1">Encontrados no sistema: <span id="cons-found-assistentes">0</span></p>
                 </div>
 
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase">Dias Úteis / Trab.</p>
-                    <p class="text-2xl font-black text-slate-700 mt-2" id="cons-kpi-dias-display">--</p>
-                </div>
-
-                <div class="bg-emerald-50 p-4 rounded-xl shadow-sm border border-emerald-100 md:col-span-2">
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-24">
                     <div class="flex justify-between items-start">
-                        <p class="text-xs font-bold text-emerald-700 uppercase">Total Documentos Validados</p>
-                        <i class="fas fa-check-circle text-emerald-300"></i>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
+                        <i class="fas fa-calendar-check text-slate-200 text-lg"></i>
                     </div>
-                    <p class="text-4xl font-black text-emerald-800 mt-1" id="cons-kpi-total-geral">--</p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">FIFO</p>
-                    <p class="text-xl font-black text-slate-700" id="cons-kpi-fifo">--</p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Gradual Parcial</p>
-                    <p class="text-xl font-black text-slate-700" id="cons-kpi-gparcial">--</p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Gradual Total</p>
-                    <p class="text-xl font-black text-slate-700" id="cons-kpi-gtotal">--</p>
-                </div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase">Perfil FC</p>
-                    <p class="text-xl font-black text-slate-700" id="cons-kpi-perfil">--</p>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Validação Diária (Equipe)</p>
-                    <div class="flex items-baseline gap-2">
-                        <p class="text-2xl font-black text-slate-700" id="cons-media-dia-uteis">--</p>
-                        <span class="text-xs text-slate-400">docs/dia útil</span>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-2xl font-black text-slate-700" id="cons-kpi-dias-val">--</h3>
+                        <span class="text-xs font-bold text-slate-400" id="cons-kpi-dias-total">/ --</span>
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-1">Total Produção / Dias Úteis</p>
+                    <p class="text-[9px] text-slate-400 font-medium">Dias Úteis / Trabalhados</p>
                 </div>
 
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média / Assistente (Total)</p>
-                    <div class="flex items-baseline gap-2">
-                        <p class="text-2xl font-black text-blue-600" id="cons-media-ass-total">--</p>
-                        <span class="text-xs text-slate-400">docs/pessoa</span>
+                <div class="bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100 flex flex-col h-24 relative overflow-hidden">
+                    <div class="flex justify-between items-center mb-1">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase">Validados</p>
+                        <span class="text-sm font-black text-emerald-600" id="cons-kpi-total-geral">--</span>
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-1">Total Produção / Nº Assistentes</p>
+                    <div class="flex flex-col justify-between h-full gap-0.5 overflow-y-auto no-scrollbar">
+                        <div class="flex justify-between items-center text-[9px] border-b border-slate-50 pb-0.5">
+                            <span class="font-bold text-slate-500">FIFO</span>
+                            <span class="text-slate-700 font-bold" id="cons-list-fifo">--</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[9px] border-b border-slate-50 pb-0.5">
+                            <span class="font-bold text-slate-500">G. Parcial</span>
+                            <span class="text-slate-700 font-bold" id="cons-list-gp">--</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[9px] border-b border-slate-50 pb-0.5">
+                            <span class="font-bold text-slate-500">G. Total</span>
+                            <span class="text-slate-700 font-bold" id="cons-list-gt">--</span>
+                        </div>
+                        <div class="flex justify-between items-center text-[9px]">
+                            <span class="font-bold text-slate-500">Perfil FC</span>
+                            <span class="text-slate-700 font-bold" id="cons-list-pfc">--</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-1">Média / Assistente (Diária)</p>
-                    <div class="flex items-baseline gap-2">
-                        <p class="text-2xl font-black text-indigo-600" id="cons-media-ass-dia">--</p>
-                        <span class="text-xs text-slate-400">docs/dia</span>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Média Diária (Equipe)</p>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-2xl font-black text-slate-700" id="cons-media-equipe-dia">--</h3>
+                        <span class="text-[9px] text-slate-400">docs</span>
                     </div>
-                    <p class="text-[10px] text-slate-400 mt-1">Média Total / Dias Úteis</p>
+                    <div class="w-full bg-slate-50 h-1 mt-0.5 rounded-full"></div>
+                    <p class="text-[9px] text-slate-400 mt-1">Total / Dias Úteis</p>
+                </div>
+
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Por Assistente</p>
+                    
+                    <div class="flex flex-col gap-1 mt-1">
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-[9px] font-bold text-slate-500">Total (Período)</span>
+                            <span class="text-sm font-black text-blue-600" id="cons-media-ass-periodo">--</span>
+                        </div>
+                        <div class="w-full bg-slate-50 h-px"></div>
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-[9px] font-bold text-slate-500">Média (Dia)</span>
+                            <span class="text-sm font-black text-indigo-600" id="cons-media-ass-dia">--</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
