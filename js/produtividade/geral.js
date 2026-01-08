@@ -1,10 +1,11 @@
 Produtividade.Geral = {
     initialized: false,
-    dadosOriginais: [],
+    dadosOriginais: [], // Dados agrupados para a tabela
+    cacheData: [],      // Dados brutos para os KPIs
+    cacheDatas: { start: null, end: null }, // Datas selecionadas
     usuarioSelecionado: null,
     
     init: function() { 
-        // Recupera preferências salvas
         const lastViewMode = localStorage.getItem('lastViewMode');
         if (lastViewMode) {
             document.getElementById('view-mode').value = lastViewMode;
@@ -17,7 +18,7 @@ Produtividade.Geral = {
     
     toggleSemana: function() {
         const mode = document.getElementById('view-mode').value;
-        localStorage.setItem('lastViewMode', mode); // Salva preferência
+        localStorage.setItem('lastViewMode', mode);
 
         const sem = document.getElementById('select-semana');
         if(mode === 'semana') sem.classList.remove('hidden'); else sem.classList.add('hidden');
@@ -106,6 +107,10 @@ Produtividade.Geral = {
 
             if (error) throw error;
             
+            // --- CACHE DE DADOS PARA FILTRO ---
+            this.cacheData = data;
+            this.cacheDatas = { start: dataInicio, end: dataFim };
+
             let dadosAgrupados = {};
             data.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
@@ -129,16 +134,19 @@ Produtividade.Geral = {
                 d.gt += (Number(item.gradual_total) || 0);
                 d.gp += (Number(item.gradual_parcial) || 0);
                 d.fc += (Number(item.perfil_fc) || 0);
-                
-                // Contagem de dias (frequência)
                 d.dias += 1; 
-                // Soma de dias úteis (para cálculo de meta)
                 d.diasUteis += f; 
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
-            this.renderizarTabela();
-            this.atualizarKPIs(data, dataInicio, dataFim);
+            
+            // Se já tiver alguém selecionado (ex: após refresh), re-filtra
+            if (this.usuarioSelecionado) {
+                this.filtrarUsuario(this.usuarioSelecionado, document.getElementById('selected-name').textContent);
+            } else {
+                this.renderizarTabela();
+                this.atualizarKPIs(data, dataInicio, dataFim);
+            }
 
         } catch (error) {
             console.error("Erro ao carregar:", error);
@@ -158,16 +166,14 @@ Produtividade.Geral = {
 
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
-            
-            // Dados de Cargo e Perfil
             const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
+            
             let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
             if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
             const perfilExibicao = perfilRaw;
 
             const metaBase = d.meta_real;
 
-            // --- VISUALIZAÇÃO DETALHADA (DIA ÚNICO) ---
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
                 const metaCalc = metaBase * r.fator;
@@ -227,11 +233,7 @@ Produtividade.Geral = {
                     </td>
                 `;
                 tbody.appendChild(tr);
-            } 
-            
-            // --- VISUALIZAÇÃO AGRUPADA (SEMANA/MÊS) ---
-            else {
-                // Cálculo da Meta Total = Meta Diária * Dias Úteis Efetivos (Soma dos Fatores)
+            } else {
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
@@ -277,7 +279,6 @@ Produtividade.Geral = {
         }
     },
     
-    // Funções de atualização (Fator, Exclusão, KPIs)
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
@@ -398,17 +399,33 @@ Produtividade.Geral = {
         }
     },
 
+    // --- FUNÇÕES DE FILTRO E SELEÇÃO ---
+
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
         document.getElementById('selected-name').textContent = nome;
+        
+        // 1. Filtra a tabela (visual)
         this.renderizarTabela();
+
+        // 2. Filtra os KPIs (cards)
+        // Pega os dados do cache e filtra apenas para este ID
+        const dadosFiltrados = this.cacheData.filter(r => r.usuario.id === id);
+        
+        // Recalcula KPIs com os dados filtrados
+        this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
     },
 
     limparSelecao: function() {
         this.usuarioSelecionado = null;
         document.getElementById('selection-header').classList.add('hidden');
+        
+        // 1. Restaura a tabela completa
         this.renderizarTabela();
+
+        // 2. Restaura os KPIs completos (usa o cache total)
+        this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
 
     atualizarKPIs: function(data, dataInicio, dataFim) {
@@ -422,12 +439,15 @@ Produtividade.Geral = {
         let usersCLT = new Set();
         let usersPJ = new Set();
         
+        // Verifica se há um usuário filtrado para ajustar o contexto
+        const isSingleUser = this.usuarioSelecionado !== null;
+
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
             const metaUser = Number(r.usuario.meta_diaria) > 0 ? Number(r.usuario.meta_diaria) : 650;
             const metaCalc = metaUser * r.fator;
             
-            // Geral (Inclui Auditoras)
+            // 1. SOMA TUDO NO GERAL (Inclusive Auditoras se elas estiverem na lista filtrada)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
@@ -436,13 +456,21 @@ Produtividade.Geral = {
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
             if(perfil === 'USER') perfil = 'PJ';
 
-            // Média (Exclui Auditoras)
-            if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+            // Contagem de Perfil (Mostra o perfil do usuário atual ou a soma do time)
+            if(perfil === 'CLT') usersCLT.add(r.usuario.id);
+            else usersPJ.add(r.usuario.id);
+
+            // 2. LÓGICA DE MÉDIA
+            // Se tiver filtrado apenas UM usuário, a média deve ser dele (mesmo que seja auditora)
+            if (isSingleUser) {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
-                
-                if(perfil === 'CLT') usersCLT.add(r.usuario.id);
-                else usersPJ.add(r.usuario.id);
+            } else {
+                // Se for o time todo, exclui Auditoras/Gestoras da média
+                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                    totalProdAssistentes += qtd;
+                    countAssistentes.add(r.usuario.id);
+                }
             }
         });
 
@@ -483,9 +511,9 @@ Produtividade.Geral = {
         const elDiasTotal = document.getElementById('kpi-dias-total');
         if(elDiasTotal) elDiasTotal.innerText = ""; 
 
-        // MÉDIA (Assistentes)
-        const numAssistentes = countAssistentes.size;
-        const media = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
+        // MÉDIA (Assistentes ou Usuário Selecionado)
+        const numConsiderados = countAssistentes.size;
+        const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
         const elMedia = document.getElementById('kpi-media-todas');
         if(elMedia) elMedia.innerText = media;
     }
