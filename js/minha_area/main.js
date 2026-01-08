@@ -8,7 +8,6 @@ MinhaArea.init = async function() {
     const storedUser = localStorage.getItem('usuario_logado');
     // Se não estiver na tela de login e não tiver usuário, sai
     if (!storedUser && !window.location.pathname.includes('index.html')) {
-        // window.location.href = 'index.html'; // Comentado para evitar loop se estiver testando local
         console.warn("Usuário não logado.");
         return;
     }
@@ -28,13 +27,33 @@ MinhaArea.init = async function() {
         window._supabase = MinhaArea.supabase;
     }
 
-    MinhaArea.renderizaData();
+    // Inicializa o input de data com a data atual (YYYY-MM-DD)
+    const dateInput = document.getElementById('ma-global-date');
+    if (dateInput) {
+        dateInput.value = MinhaArea.dataAtual.toISOString().split('T')[0];
+    }
+
     MinhaArea.mudarAba('geral');
+};
+
+// Nova função para atualizar data quando o input mudar (estilo Produtividade)
+MinhaArea.atualizarDataGlobal = function(val) {
+    if (!val) return;
+    const [ano, mes, dia] = val.split('-').map(Number);
+    // Cria data preservando fuso local ou definindo meio-dia para evitar problemas de UTC
+    MinhaArea.dataAtual = new Date(ano, mes - 1, dia);
+
+    // Recarrega a aba ativa
+    const activeBtn = document.querySelector('.tab-btn.active');
+    if (activeBtn) {
+        const abaAtiva = activeBtn.id.replace('btn-ma-', '');
+        MinhaArea.mudarAba(abaAtiva);
+    }
 };
 
 MinhaArea.mudarAba = function(aba) {
     document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.ma-tab').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
     const view = document.getElementById(`ma-tab-${aba}`);
     const btn = document.getElementById(`btn-ma-${aba}`);
@@ -48,30 +67,6 @@ MinhaArea.mudarAba = function(aba) {
     else if (aba === 'comparativo' && MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
     else if (aba === 'assertividade' && MinhaArea.Assertividade) MinhaArea.Assertividade.carregar();
     else if (aba === 'feedback' && MinhaArea.Feedback) MinhaArea.Feedback.carregar();
-};
-
-MinhaArea.alterarMes = function(delta) {
-    MinhaArea.dataAtual.setMonth(MinhaArea.dataAtual.getMonth() + delta);
-    MinhaArea.renderizaData();
-    
-    const activeBtn = document.querySelector('.ma-tab.active');
-    if (activeBtn) {
-        const abaAtiva = activeBtn.id.replace('btn-ma-', '');
-        MinhaArea.mudarAba(abaAtiva);
-    }
-};
-
-MinhaArea.renderizaData = function() {
-    const displayMes = document.getElementById('display-mes');
-    const displayAno = document.getElementById('display-ano');
-
-    // CORREÇÃO DO ERRO CRÍTICO:
-    // Se os elementos não existem na página atual (ex: estou na página Gestão), para aqui.
-    if (!displayMes || !displayAno) return;
-
-    const meses = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    displayMes.innerText = meses[MinhaArea.dataAtual.getMonth()];
-    displayAno.innerText = MinhaArea.dataAtual.getFullYear();
 };
 
 MinhaArea.getPeriodo = function() {

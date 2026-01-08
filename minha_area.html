@@ -13,50 +13,68 @@
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
-        .ma-tab { transition: all 0.2s; border-bottom: 3px solid transparent; color: #64748b; font-weight: 600; cursor: pointer; }
-        .ma-tab:hover { color: #3b82f6; }
-        .ma-tab.active { color: #2563eb; border-bottom-color: #2563eb; background-color: #eff6ff; }
-        .card-stat { transition: transform 0.2s; }
-        .card-stat:hover { transform: translateY(-3px); }
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
+        
+        /* Abas (Estilo Produtividade) */
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        
+        /* Animações */
         .animate-enter { animation: enter 0.4s ease-out; }
         @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .custom-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        
+        .custom-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .card-stat { transition: transform 0.2s; }
+        .card-stat:hover { transform: translateY(-3px); }
     </style>
 </head>
-<body class="bg-slate-50">
+<body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm">
-        <div class="max-w-6xl mx-auto px-4">
-            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-16 py-2 md:py-0">
-                <div class="flex items-center gap-3 mb-2 md:mb-0 w-full md:w-auto">
-                    <div class="bg-blue-600 text-white w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg shadow-blue-200 shadow-lg transform rotate-3">
-                        <i class="fas fa-user-astronaut"></i>
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
+                
+                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
+                            <i class="fas fa-user-astronaut text-slate-400 text-lg"></i>
+                            <h1 class="text-lg font-black text-slate-700 tracking-tight">Minha Área</h1>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
+                            <i class="fas fa-calendar-alt text-blue-500"></i>
+                            <input type="date" id="ma-global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                        </div>
                     </div>
-                    <div>
-                        <h1 class="text-lg font-black text-slate-800 leading-tight">Minha Área</h1>
-                        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-wider" id="user-role-label">Carregando...</p>
+                    
+                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200 hidden md:flex">
+                        <span id="user-role-label" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded border border-slate-100">Carregando...</span>
                     </div>
                 </div>
 
-                <div class="flex gap-1 overflow-x-auto w-full md:w-auto no-scrollbar">
-                    <button onclick="MinhaArea.mudarAba('geral')" id="btn-ma-geral" class="ma-tab active py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
+                    <button onclick="MinhaArea.mudarAba('geral')" id="btn-ma-geral" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-home"></i> Geral
                     </button>
-                    <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="ma-tab py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
+                    <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-chart-line"></i> Evolução
                     </button>
-                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="ma-tab py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
+                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-users"></i> Comparativo
                     </button>
-                    <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="ma-tab py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
+                    <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-bullseye"></i> Qualidade
                     </button>
-                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="ma-tab py-3 px-4 text-sm flex items-center gap-2 whitespace-nowrap rounded-t-lg">
+                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-comments"></i> Feedback
                     </button>
                 </div>
@@ -64,21 +82,12 @@
         </div>
     </div>
 
-    <div class="max-w-6xl mx-auto px-4 py-8">
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8 animate-enter gap-4">
+        <div class="flex items-center justify-between mb-6 animate-enter">
             <div>
                 <h2 class="text-2xl font-bold text-slate-800">Olá, <span id="user-name-display" class="text-blue-600">Colaborador</span>! 👋</h2>
-                <p class="text-sm text-slate-500">Aqui estão seus resultados mensais.</p>
-            </div>
-            
-            <div class="bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
-                <button onclick="MinhaArea.alterarMes(-1)" class="w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-500 transition"><i class="fas fa-chevron-left"></i></button>
-                <div class="text-center w-40 border-x border-slate-100 px-2">
-                    <span id="display-mes" class="block text-xs font-bold text-blue-500 uppercase tracking-widest">Mês</span>
-                    <span id="display-ano" class="block text-xl font-black text-slate-700 leading-none">Ano</span>
-                </div>
-                <button onclick="MinhaArea.alterarMes(1)" class="w-10 h-10 rounded-lg hover:bg-slate-100 text-slate-500 transition"><i class="fas fa-chevron-right"></i></button>
+                <p class="text-sm text-slate-500">Confira seus indicadores de performance.</p>
             </div>
         </div>
 
@@ -152,7 +161,7 @@
                     <h3 class="font-bold text-slate-700">Histórico Diário</h3>
                     <span class="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded border border-slate-200">Detalhado</span>
                 </div>
-                <div class="overflow-x-auto max-h-[400px] custom-scroll">
+                <div class="overflow-x-auto max-h-[500px] custom-scroll">
                     <table class="w-full text-sm text-left">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs sticky top-0 z-10 shadow-sm">
                             <tr>
@@ -233,8 +242,7 @@
         </div>
 
         <div id="ma-tab-feedback" class="ma-view hidden animate-enter">
-             </div>
-
+        </div>
     </div>
 
     <script src="js/minha_area/main.js"></script>
