@@ -3,7 +3,7 @@ Produtividade.Consolidado = {
     ultimoCache: { key: null, data: null },
     basesManuaisHC: {}, 
     dadosCalculados: null,
-    defaultHC: 17, // PADRÃO DEFINIDO PELO USUÁRIO
+    defaultHC: 17, // PADRÃO DEFINIDO (Inteiro)
 
     // --- FUNÇÕES UTILITÁRIAS ---
 
@@ -15,7 +15,6 @@ Produtividade.Consolidado = {
         while (dataAtual <= ultimoDiaMes) {
             let inicio = new Date(dataAtual);
             let fim = new Date(dataAtual);
-            // Avança até o próximo Domingo ou fim do mês
             while (fim.getDay() !== 0 && fim < ultimoDiaMes) {
                 fim.setDate(fim.getDate() + 1);
             }
@@ -29,7 +28,6 @@ Produtividade.Consolidado = {
         return semanas;
     },
 
-    // Calcula dias úteis totais do período (calendário cheio)
     calcularDiasUteisCalendario: function(dataInicio, dataFim) {
         let count = 0;
         let cur = new Date(dataInicio + 'T12:00:00'); 
@@ -42,7 +40,6 @@ Produtividade.Consolidado = {
         return count;
     },
 
-    // Calcula dias úteis APENAS até hoje (para médias reais)
     calcularDiasUteisDecorridos: function(dataInicio, dataFim) {
         const hoje = new Date();
         hoje.setHours(12,0,0,0); 
@@ -50,10 +47,7 @@ Produtividade.Consolidado = {
         let inicio = new Date(dataInicio + 'T12:00:00');
         let fim = new Date(dataFim + 'T12:00:00');
         
-        // Se o período começa no futuro
         if (inicio > hoje) return 0;
-
-        // Se o fim do período é no futuro, corta no dia de hoje
         if (fim > hoje) fim = hoje;
 
         let count = 0;
@@ -75,7 +69,8 @@ Produtividade.Consolidado = {
 
     mudarBasePeriodo: function(colIndex, novoValor) {
         if(!novoValor || novoValor < 0) return;
-        this.basesManuaisHC[colIndex] = parseFloat(novoValor); 
+        // Garante inteiro ao salvar
+        this.basesManuaisHC[colIndex] = Math.round(parseFloat(novoValor)); 
         
         if(this.dadosCalculados) {
             this.renderizar(this.dadosCalculados);
@@ -295,13 +290,12 @@ Produtividade.Consolidado = {
         }
     },
 
-    // AQUI ESTÁ A LÓGICA DO PADRÃO 17
+    // Obtém o HC: Padrão 17, ou valor manual se existir
+    // Para ID 99 (Total), ele não é chamado aqui, a lógica é feita no renderizar
     getHC: function(idx) {
-        // Se houver alteração manual, respeita o valor
         if (this.basesManuaisHC[idx] !== undefined) {
             return this.basesManuaisHC[idx];
         }
-        // Caso contrário, retorna o padrão 17
         return this.defaultHC;
     },
 
@@ -311,24 +305,29 @@ Produtividade.Consolidado = {
         
         if(!tbody || !hRow) return;
 
-        // --- CÁLCULO DA MÉDIA DE HC PARA O TOTAL ---
+        // --- CÁLCULO INICIAL DA MÉDIA DE HC PARA O TOTAL ---
         let somaHC = 0;
         let countHC = 0;
         for(let i=1; i<=numCols; i++) {
-            // Só entra na média do total se o período existir/ocorreu
+            // Conta para a média se houve atividade ou dias decorridos
             if(st[i].diasUteisDecorridos > 0 || st[i].users.size > 0) {
                 somaHC += this.getHC(i);
                 countHC++;
             }
         }
+        // Fallback: se nada começou, usa média de todos os padrões
         if(countHC === 0) { 
             for(let i=1; i<=numCols; i++) {
                 somaHC += this.getHC(i);
                 countHC++;
             }
         }
-        const mediaHCTotal = countHC > 0 ? (somaHC / countHC) : 0;
+        const calculatedAvg = countHC > 0 ? (somaHC / countHC) : 0;
         
+        // --- DEFINIÇÃO DO HC DO TOTAL ---
+        // Se o usuário digitou algo na coluna 99 (Total), usa. Senão, usa a média calculada arredondada.
+        const totalHC = this.basesManuaisHC[99] !== undefined ? this.basesManuaisHC[99] : Math.round(calculatedAvg);
+
         // --- HEADER ---
         let headerHTML = `
             <tr class="bg-slate-50 border-b border-slate-200">
@@ -336,9 +335,9 @@ Produtividade.Consolidado = {
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
                 </th>`;
         
+        // Headers dos períodos
         cols.forEach((c, index) => {
             const idx = index + 1;
-            // Usa o padrão (17) ou o valor manual
             const currentHC = this.basesManuaisHC[idx] !== undefined ? this.basesManuaisHC[idx] : this.defaultHC;
             
             headerHTML += `
@@ -353,16 +352,25 @@ Produtividade.Consolidado = {
                                value="${currentHC}" 
                                onchange="Produtividade.Consolidado.mudarBasePeriodo(${idx}, this.value)"
                                class="header-input transition focus:shadow-sm" 
-                               step="0.1">
+                               step="1">
                     </div>
                 </th>`;
         });
         
+        // Header Total (Agora com Input)
         headerHTML += `
-            <th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px] align-middle">
+            <th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px] align-top">
                 <div class="flex flex-col items-center">
-                    <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
-                    <span class="text-[9px] text-blue-400 font-medium mt-1">HC Médio: ${mediaHCTotal.toFixed(1)}</span>
+                    <span class="text-xs font-black text-blue-600 uppercase tracking-widest mb-1">TOTAL</span>
+                    <div class="flex items-center gap-1 text-[9px] text-blue-400 font-normal">
+                         <i class="fas fa-edit"></i>
+                         <span>HC Final</span>
+                    </div>
+                    <input type="number" 
+                           value="${totalHC}" 
+                           onchange="Produtividade.Consolidado.mudarBasePeriodo(99, this.value)"
+                           class="header-input transition focus:shadow-sm border-blue-200 text-blue-700 font-bold" 
+                           step="1">
                 </div>
             </th></tr>`;
 
@@ -391,25 +399,26 @@ Produtividade.Consolidado = {
                 const s = st[i];
                 if (!s) { tr += `<td class="px-4 py-3">-</td>`; return; }
 
-                // Define HC e Dias para a célula atual
+                // Definição de Variáveis para Cálculo
                 let HF, Dias;
                 
                 if (i === 99) {
-                    HF = mediaHCTotal;           
+                    HF = totalHC; // Usa o HC do Total (calculado ou manual)
                     Dias = s.diasUteisDecorridos;
                 } else {
-                    HF = this.getHC(i); // Agora usa o getHC que considera o padrão 17
+                    HF = this.getHC(i); 
                     Dias = s.diasUteisDecorridos;
                 }
+                
                 if (HF <= 0) HF = 1;
 
                 // Executa a fórmula
                 let val = isCalc ? getter(s, Dias, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
                 
+                // Formatação: Inteiros (Math.round)
                 const txt = (val !== undefined && val !== null && !isNaN(val)) ? 
-                    (val % 1 !== 0 ? val.toFixed(1).replace('.',',') : Math.round(val).toLocaleString('pt-BR')) 
-                    : '-';
+                    Math.round(val).toLocaleString('pt-BR') : '-';
                 
                 let cellClass = `px-4 py-3 text-center text-xs border-l border-slate-100 `;
                 if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`;
@@ -422,7 +431,7 @@ Produtividade.Consolidado = {
 
         // --- DADOS ---
         
-        // 1. Total Assistentes (Sistema) - Este continua REAL
+        // 1. Total Assistentes (Sistema)
         h += mkRow('Total Assistentes (Sistema)', 'fas fa-users', 'text-indigo-400', (s) => s.users.size, false, true);
         
         // 2. Dias
@@ -436,7 +445,7 @@ Produtividade.Consolidado = {
         h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // 4. Métricas de Média (Usam HC Ajustado ou Padrão 17)
+        // 4. Métricas de Média
         h += mkRow('Média Validação (Todas Assistentes)', 'fas fa-user-friends', 'text-teal-600', 
             (s, d, HF) => (HF > 0) ? s.qty / HF : 0, true);
             
@@ -460,7 +469,7 @@ Produtividade.Consolidado = {
         const { cols, st, numCols } = this.dadosCalculados;
         const wsData = [];
         
-        // Calcula Média HC para Excel
+        // Recalcula HC Total para exportação
         let somaHC = 0, countHC = 0;
         for(let i=1; i<=numCols; i++) {
             if(st[i].diasUteisDecorridos > 0 || st[i].users.size > 0) {
@@ -468,18 +477,23 @@ Produtividade.Consolidado = {
                 countHC++;
             }
         }
-        const mediaHCTotal = countHC > 0 ? (somaHC / countHC) : 0;
+        if(countHC === 0) {
+             for(let i=1; i<=numCols; i++) { somaHC += this.getHC(i); countHC++; }
+        }
+        const calculatedAvg = countHC > 0 ? (somaHC / countHC) : 0;
+        const totalHC = this.basesManuaisHC[99] !== undefined ? this.basesManuaisHC[99] : Math.round(calculatedAvg);
 
+        // Headers
         const headers = ['Indicador', ...cols, 'TOTAL'];
         wsData.push(headers);
         
+        // Linha HC
         const rowHC = ['HC Ajustado (Considerado)'];
         for(let i=1; i<=numCols; i++) {
-             // Usa padrão 17 se não houver manual
              const val = this.basesManuaisHC[i] !== undefined ? this.basesManuaisHC[i] : this.defaultHC;
-             rowHC.push(val);
+             rowHC.push(Math.round(val));
         }
-        rowHC.push(`Méd: ${mediaHCTotal.toFixed(1)}`);
+        rowHC.push(Math.round(totalHC)); // Total HC
         wsData.push(rowHC);
 
         const addRow = (label, getter, isCalc=false) => {
@@ -488,22 +502,24 @@ Produtividade.Consolidado = {
                 const s = st[i];
                 if(!s) { row.push(0); continue; }
                 
-                let HF = this.getHC(i); // Padrão 17
+                let HF = this.getHC(i); 
                 let Dias = s.diasUteisDecorridos;
                 
                 let val = isCalc ? getter(s, Dias, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
-                row.push((val !== undefined && !isNaN(val)) ? parseFloat(val.toFixed(2)) : 0);
+                // Arredondamento
+                row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
             }
             
+            // Total Column
             const sTotal = st[99];
             if(sTotal) {
-                let HF = mediaHCTotal;            
+                let HF = totalHC;            
                 let Dias = sTotal.diasUteisDecorridos; 
                 
                 let valTotal = isCalc ? getter(sTotal, Dias, HF) : getter(sTotal);
                 if (valTotal instanceof Set) valTotal = valTotal.size;
-                row.push((valTotal !== undefined && !isNaN(valTotal)) ? parseFloat(valTotal.toFixed(2)) : 0);
+                row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
             } else { row.push(0); }
             
             wsData.push(row);
