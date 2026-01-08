@@ -15,7 +15,7 @@ MinhaArea.Diario = {
         // 1. Verificação de Check-in Pessoal (Para o usuário logado)
         this.verificarAcessoHoje(uid);
 
-        // 2. Verifica se é Gestora para exibir o BOTÃO do relatório
+        // 2. Verifica se é Gestora
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
         const cargo = (MinhaArea.user.cargo || '').toUpperCase();
         const isGestora = funcao === 'GESTORA' || funcao === 'AUDITORA' || 
@@ -53,9 +53,26 @@ MinhaArea.Diario = {
                 .eq('usuario_id', uid)
                 .order('data_inicio', { ascending: false });
 
-            // --- NOVO: CÁLCULO DA META MENSAL (FULL) ---
-            // Calcula a meta total do mês (Dias Úteis * Meta Diária Vigente)
+            // 6. DADOS EXTRAS GESTORA (CLT vs PJ)
+            let statsEquipe = null;
+            if (isGestora) {
+                const { data: usersTeam } = await MinhaArea.supabase
+                   .from('usuarios')
+                   .select('contrato')
+                   .eq('funcao', 'Assistente')
+                   .eq('ativo', true)
+                   .neq('contrato', 'FINALIZADO');
+                
+                if (usersTeam) {
+                    const clt = usersTeam.filter(u => u.contrato === 'CLT').length;
+                    const pj = usersTeam.length - clt; // O restante é PJ
+                    statsEquipe = { clt, pj };
+                }
+            }
+
+            // --- CÁLCULO DA META MENSAL E DIAS ÚTEIS ---
             let metaMensal = 0;
+            let diasUteisTotal = 0; // Novo contador
             const ano = MinhaArea.dataAtual.getFullYear();
             const mes = MinhaArea.dataAtual.getMonth();
             const ultimoDia = new Date(ano, mes + 1, 0).getDate();
@@ -64,14 +81,14 @@ MinhaArea.Diario = {
                 const dataDia = new Date(ano, mes, d);
                 const diaSemana = dataDia.getDay();
 
-                // Considera apenas dias úteis (Segunda a Sexta) - Ajuste se trabalhar sábado
+                // Considera apenas dias úteis (Segunda a Sexta)
                 if (diaSemana !== 0 && diaSemana !== 6) {
+                    diasUteisTotal++; // Conta dia útil
+                    
                     const dataStr = dataDia.toISOString().split('T')[0];
                     let metaDoDia = 650; // Valor padrão
                     
-                    // Verifica qual meta estava valendo neste dia específico
                     if (metas && metas.length > 0) {
-                        // Como 'metas' está ordenado decrescente por data_inicio, o find pega a primeira data anterior ou igual
                         const m = metas.find(mt => mt.data_inicio <= dataStr);
                         if (m) metaDoDia = Number(m.valor_meta);
                     }
@@ -80,7 +97,7 @@ MinhaArea.Diario = {
             }
             // -------------------------------------------
 
-            // PROCESSAMENTO DOS DADOS DE PRODUÇÃO
+            // PROCESSAMENTO
             const dadosProcessados = producao.map(item => {
                 let metaBase = 650;
                 if (item.meta_diaria && Number(item.meta_diaria) > 0) metaBase = Number(item.meta_diaria);
@@ -116,8 +133,8 @@ MinhaArea.Diario = {
                 mediaTime = diasTime > 0 ? Math.round(totalTime / diasTime) : 0;
             }
 
-            // Passa a metaMensal calculada para a função de KPIs
-            this.atualizarKPIs(dadosProcessados, mediaTime, metaMensal);
+            // Passamos diasUteisTotal e statsEquipe para a função de atualizar a tela
+            this.atualizarKPIs(dadosProcessados, mediaTime, metaMensal, diasUteisTotal, statsEquipe);
             this.atualizarTabelaDiaria(dadosProcessados);
 
         } catch (e) {
@@ -126,11 +143,9 @@ MinhaArea.Diario = {
         }
     },
 
-    // Recebe metaMensal como argumento opcional
-    atualizarKPIs: function(dados, mediaTime, metaMensal) {
+    atualizarKPIs: function(dados, mediaTime, metaMensal, diasUteisTotal, statsEquipe) {
         const totalProd = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
         
-        // Se metaMensal for passada (>0), usa ela. Se não, usa o acumulado dos registros (fallback)
         const target = (metaMensal && metaMensal > 0) 
             ? metaMensal 
             : dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
@@ -141,11 +156,13 @@ MinhaArea.Diario = {
         const atingimento = target > 0 ? Math.round((totalProd / target) * 100) : 0;
 
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-        this.setTxt('kpi-meta-total', Math.round(target).toLocaleString('pt-BR')); // Exibe a Meta do Mês
+        this.setTxt('kpi-meta-total', Math.round(target).toLocaleString('pt-BR'));
         this.setTxt('kpi-pct', `${atingimento}%`);
         this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
         this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
-        this.setTxt('kpi-dias', diasEfetivos);
+        
+        // ATUALIZAÇÃO: Dias Produtivos / Dias Úteis
+        this.setTxt('kpi-dias', `${diasEfetivos}/${diasUteisTotal || 0}`);
         
         const bar = document.getElementById('bar-progress');
         if(bar) {
@@ -174,14 +191,30 @@ MinhaArea.Diario = {
                 iconStatus.className = "fas fa-exclamation text-amber-500";
             }
         }
+
+        // NOVO: Exibe CLT/PJ se for Gestora
+        const cardDias = document.getElementById('kpi-dias')?.closest('.card-stat');
+        if (cardDias) {
+            // Remove se já existir para não duplicar
+            const oldStats = document.getElementById('stats-equipe-gestora');
+            if (oldStats) oldStats.remove();
+
+            if (statsEquipe) {
+                const div = document.createElement('div');
+                div.id = 'stats-equipe-gestora';
+                div.className = "mt-3 pt-2 border-t border-slate-100 flex justify-between text-[10px] font-bold text-slate-400";
+                div.innerHTML = `
+                    <span>CLT: <span class="text-slate-600 font-extrabold">${statsEquipe.clt}</span></span>
+                    <span>PJ: <span class="text-slate-600 font-extrabold">${statsEquipe.pj}</span></span>
+                `;
+                cardDias.appendChild(div);
+            }
+        }
     },
 
     renderizarBotaoGestora: function() {
-        // Encontra o container do cabeçalho da tabela para inserir o botão
         const containerTabela = document.getElementById('tabela-diario');
         if (!containerTabela) return;
-
-        // Sobe na árvore DOM para achar o header (onde tem o título Detalhamento Diário)
         const header = containerTabela.closest('.bg-white').querySelector('.flex.justify-between');
         
         if (header && !document.getElementById('btn-checkin-gestora')) {
@@ -190,17 +223,13 @@ MinhaArea.Diario = {
             btn.className = "ml-auto bg-white hover:bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-2";
             btn.innerHTML = '<i class="fas fa-calendar-check"></i> Cartão Ponto Equipe';
             btn.onclick = () => this.abrirModalCheckin();
-            
             header.appendChild(btn);
         }
     },
 
     abrirModalCheckin: async function() {
-        // Verifica se o modal já existe no DOM
         let modal = document.getElementById('modal-checkin-gestora');
-        
         if (!modal) {
-            // Cria o modal se não existir
             modal = document.createElement('div');
             modal.id = 'modal-checkin-gestora';
             modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden animate-enter";
@@ -225,18 +254,13 @@ MinhaArea.Diario = {
             `;
             document.body.appendChild(modal);
         }
-
-        // Exibe o modal
         modal.classList.remove('hidden');
-        
-        // Carrega os dados
         await this.renderizarConteudoModal();
     },
 
     renderizarConteudoModal: async function() {
         const container = document.getElementById('modal-checkin-body');
         
-        // Define o intervalo: Do dia 1 do mês de referência (baseado em ONTEM) até ONTEM
         const referencia = new Date();
         referencia.setDate(referencia.getDate() - 1); // Ontem
         
@@ -248,7 +272,6 @@ MinhaArea.Diario = {
         const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
         try {
-             // 1. Busca Usuários (Assistentes Ativos)
              const { data: usuarios, error: errUser } = await MinhaArea.supabase
                 .from('usuarios')
                 .select('id, nome')
@@ -258,7 +281,6 @@ MinhaArea.Diario = {
                 .order('nome');
              if(errUser) throw errUser;
 
-             // 2. Busca Check-ins no intervalo
              const sStr = start.toISOString().split('T')[0];
              const eStr = end.toISOString().split('T')[0];
 
@@ -269,14 +291,12 @@ MinhaArea.Diario = {
                 .lte('data_referencia', eStr);
              if(errAcesso) throw errAcesso;
 
-             // Mapeia acessos
              const map = {};
              usuarios.forEach(u => map[u.id] = new Set());
              acessos.forEach(a => {
                  if(map[a.usuario_id]) map[a.usuario_id].add(a.data_referencia);
              });
 
-             // Gera array de datas
              const dates = [];
              let curr = new Date(start);
              while(curr <= end) {
@@ -301,7 +321,6 @@ MinhaArea.Diario = {
                 <table class="w-full text-xs text-left border-collapse whitespace-nowrap shadow-sm border border-slate-200 rounded-lg overflow-hidden">
              `;
              
-             // Cabeçalho
              html += '<thead class="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200"><tr>';
              html += '<th class="px-4 py-3 border-r border-slate-200 sticky left-0 bg-slate-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Colaborador</th>';
              dates.forEach(d => {
@@ -310,7 +329,6 @@ MinhaArea.Diario = {
              });
              html += '<th class="px-3 py-2 text-center text-blue-700 bg-blue-50 border-l border-blue-100">Adesão</th></tr></thead>';
 
-             // Corpo
              html += '<tbody class="divide-y divide-slate-100">';
              usuarios.forEach(u => {
                  html += '<tr class="hover:bg-blue-50/30 transition-colors">';
@@ -411,19 +429,16 @@ MinhaArea.Diario = {
     verificarAcessoHoje: async function(uidAlvo) {
         const box = document.getElementById('box-confirmacao-leitura');
         
-        // Se eu sou Admin e estou vendo outro usuário, não devo fazer Check-in por ele
-        // Se eu sou Assistente, só vejo meus dados, então uidAlvo == MinhaArea.user.id
         if (String(uidAlvo) !== String(MinhaArea.user.id)) {
             if(box) box.classList.add('hidden');
             return;
         }
 
-        // Se sou Gestora, também não preciso de check-in
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
         const cargo = (MinhaArea.user.cargo || '').toUpperCase();
         if (funcao === 'GESTORA' || funcao === 'AUDITORA' || cargo === 'GESTORA' || cargo === 'AUDITORA') return;
 
-        const d = new Date(); d.setDate(d.getDate() - 1); // Check-in é sempre de ONTEM
+        const d = new Date(); d.setDate(d.getDate() - 1); 
         if(d.getDay() === 0 || d.getDay() === 6) { if(box) box.classList.add('hidden'); return; }
         
         const { data } = await MinhaArea.supabase.from('acessos_diarios').select('id').eq('usuario_id', MinhaArea.user.id).eq('data_referencia', d.toISOString().split('T')[0]);
@@ -433,7 +448,7 @@ MinhaArea.Diario = {
     confirmarAcessoHoje: async function() {
         const btn = document.querySelector('#box-confirmacao-leitura button');
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
-        const d = new Date(); d.setDate(d.getDate() - 1); // Confirma para ONTEM
+        const d = new Date(); d.setDate(d.getDate() - 1); 
         const { error } = await MinhaArea.supabase.from('acessos_diarios').insert({ usuario_id: MinhaArea.user.id, data_referencia: d.toISOString().split('T')[0] });
         if(!error) { document.getElementById('box-confirmacao-leitura').classList.add('hidden'); alert("Check-in confirmado!"); } 
         else { alert("Erro: " + error.message); if(btn) btn.innerText = "Tentar Novamente"; }
