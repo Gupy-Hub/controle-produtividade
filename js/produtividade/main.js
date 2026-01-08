@@ -3,7 +3,7 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Main = {
     init: function() {
-        // 1. Recupera e aplica a DATA salva (ou usa hoje)
+        // 1. Recupera e aplica a DATA salva
         const lastDate = localStorage.getItem('lastGlobalDate');
         if (lastDate) {
             document.getElementById('global-date').value = lastDate;
@@ -68,7 +68,10 @@ Produtividade.Main = {
                 if(Produtividade.Consolidado) Produtividade.Consolidado.init();
                 break;
             case 'performance':
-                if(Produtividade.Performance) Produtividade.Performance.carregarRanking();
+                if(Produtividade.Performance) {
+                    // Inicializa garantindo que o seletor esteja correto
+                    Produtividade.Performance.togglePeriodo();
+                }
                 break;
             case 'matriz':
                 if(Produtividade.Matriz) Produtividade.Matriz.carregarMatriz();
