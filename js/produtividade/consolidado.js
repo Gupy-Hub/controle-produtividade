@@ -4,30 +4,70 @@ Produtividade.Consolidado = {
     basesManuaisHC: {}, // Armazena o HC por coluna: { 1: 5, 2: 6 ... }
     dadosCalculados: null, 
 
+    // --- FUNÇÕES UTILITÁRIAS INTERNAS (Para não depender de outros arquivos) ---
+    getSemanasDoMes: function(ano, mes) {
+        let semanas = [];
+        let dataAtual = new Date(ano, mes - 1, 1);
+        const ultimoDiaMes = new Date(ano, mes, 0);
+
+        while (dataAtual <= ultimoDiaMes) {
+            let inicio = new Date(dataAtual);
+            let fim = new Date(dataAtual);
+            // Avança até o próximo Domingo ou fim do mês
+            while (fim.getDay() !== 0 && fim < ultimoDiaMes) {
+                fim.setDate(fim.getDate() + 1);
+            }
+            semanas.push({
+                inicio: inicio.toISOString().split('T')[0],
+                fim: fim.toISOString().split('T')[0]
+            });
+            dataAtual = new Date(fim);
+            dataAtual.setDate(dataAtual.getDate() + 1);
+        }
+        return semanas;
+    },
+
+    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
+        let count = 0;
+        let cur = new Date(dataInicio + 'T12:00:00'); 
+        const end = new Date(dataFim + 'T12:00:00');
+        while (cur <= end) {
+            const day = cur.getDay();
+            if (day !== 0 && day !== 6) count++;
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count;
+    },
+
+    // --- LÓGICA DO MÓDULO ---
     init: async function() { 
         if(!this.initialized) { 
             this.initialized = true; 
         } 
-        this.togglePeriodo();
+        // Garante que os selects estejam corretos ao iniciar
+        setTimeout(() => this.togglePeriodo(), 100);
     },
 
     mudarBasePeriodo: function(colIndex, novoValor) {
         if(!novoValor || novoValor < 0) return;
         this.basesManuaisHC[colIndex] = parseInt(novoValor);
         
-        // Recalcula apenas a renderização visual
+        // Recalcula apenas a renderização visual se já tiver dados
         if(this.dadosCalculados) {
             this.renderizar(this.dadosCalculados);
         }
     },
 
     togglePeriodo: function() {
-        const t = document.getElementById('cons-period-type').value;
+        const typeEl = document.getElementById('cons-period-type');
+        if(!typeEl) return; // Proteção caso o HTML não esteja pronto
+
+        const t = typeEl.value;
         const selQ = document.getElementById('cons-select-quarter');
         const selS = document.getElementById('cons-select-semester');
         const dateInput = document.getElementById('global-date');
         
-        // Reseta as bases manuais ao mudar o tipo de visualização
+        // Reseta as bases manuais ao mudar o tipo de visualização para evitar confusão
         this.basesManuaisHC = {};
         
         if(selQ) selQ.classList.add('hidden');
@@ -51,32 +91,23 @@ Produtividade.Consolidado = {
         this.carregar(false); 
     },
     
-    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
-        let count = 0;
-        let cur = new Date(dataInicio + 'T12:00:00'); 
-        const end = new Date(dataFim + 'T12:00:00');
-        while (cur <= end) {
-            const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++;
-            cur.setDate(cur.getDate() + 1);
-        }
-        return count;
-    },
-    
     carregar: async function(forcar = false) {
         const tbody = document.getElementById('cons-table-body'); 
-        const t = document.getElementById('cons-period-type').value; 
+        const typeEl = document.getElementById('cons-period-type');
         const dateInput = document.getElementById('global-date');
         
-        let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+        if(!tbody || !typeEl || !dateInput) return;
+
+        const t = typeEl.value;
+        
+        let val = dateInput.value || new Date().toISOString().split('T')[0];
         let [ano, mes, dia] = val.split('-').map(Number);
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
         
         let s, e;
         
-        if (t === 'dia') { 
-            s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        } else if (t === 'mes') { 
+        // Define intervalo de datas baseado na seleção
+        if (t === 'dia' || t === 'mes') { 
             s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
         } else if (t === 'trimestre') { 
             const selQ = document.getElementById('cons-select-quarter');
@@ -89,7 +120,7 @@ Produtividade.Consolidado = {
             const sem = selS ? parseInt(selS.value) : (mes <= 6 ? 1 : 2); 
             s = sem === 1 ? `${sAno}-01-01` : `${sAno}-06-30`; 
             e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
-        } else { 
+        } else { // ano
             s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
         }
 
@@ -99,9 +130,12 @@ Produtividade.Consolidado = {
             return;
         }
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
         try {
+            if (!Produtividade.supabase) throw new Error("Conexão com banco não inicializada.");
+
+            // Busca apenas os dados necessários, sem JOINS pesados que não são usados aqui
             const { data: rawData, error } = await Produtividade.supabase
                 .from('producao')
                 .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
@@ -114,8 +148,8 @@ Produtividade.Consolidado = {
             this.processarEExibir(rawData, t, mes, ano);
             
         } catch (e) { 
-            console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`;
+            console.error("Erro Consolidado:", e);
+            tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro ao carregar: ${e.message}</td></tr>`;
         }
     },
 
@@ -124,6 +158,7 @@ Produtividade.Consolidado = {
         let cols = []; 
         let datesMap = {}; 
 
+        // Configura as colunas (Buckets)
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) {
@@ -134,7 +169,8 @@ Produtividade.Consolidado = {
                 };
             }
         } else if (t === 'mes') { 
-            const semanas = Produtividade.Geral.getSemanasDoMes ? Produtividade.Geral.getSemanasDoMes(currentYear, currentMonth) : [];
+            // Usa função interna segura
+            const semanas = this.getSemanasDoMes(currentYear, currentMonth);
             semanas.forEach((s, i) => {
                 cols.push(`Sem ${i+1}`);
                 datesMap[i+1] = { ini: s.inicio, fim: s.fim };
@@ -163,7 +199,7 @@ Produtividade.Consolidado = {
                     fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
                 };
             }
-        } else { 
+        } else { // Ano
             cols = mesesNomes; 
             for(let i=0; i<12; i++) {
                 const m = i + 1;
@@ -175,12 +211,16 @@ Produtividade.Consolidado = {
         }
 
         const numCols = cols.length;
-        let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
+        // Inicializa estrutura de estatísticas
+        let st = {}; 
+        for(let i=1; i<=numCols; i++) st[i] = this.newStats(); 
+        st[99] = this.newStats(); // 99 é o ID da coluna Total
 
+        // Popula dados
         if(rawData) {
             rawData.forEach(r => {
                 const sys = Number(r.quantidade) || 0;
-                let b = 1; 
+                let b = 0; 
 
                 if (t === 'dia') { 
                     b = parseInt(r.data_referencia.split('-')[2]); 
@@ -213,6 +253,7 @@ Produtividade.Consolidado = {
             });
         }
 
+        // Calcula Dias Úteis
         for(let i=1; i<=numCols; i++) {
             st[i].diasUteis = datesMap[i] ? this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim) : 0;
         }
@@ -223,25 +264,32 @@ Produtividade.Consolidado = {
     },
 
     processarEExibir: function(rawData, t, mes, ano) {
-        this.dadosCalculados = this.processarDados(rawData, t, mes, ano);
-        this.renderizar(this.dadosCalculados);
+        try {
+            this.dadosCalculados = this.processarDados(rawData, t, mes, ano);
+            this.renderizar(this.dadosCalculados);
+        } catch(e) {
+            console.error("Erro processamento:", e);
+        }
     },
 
     renderizar: function({ cols, st, numCols }) {
         const tbody = document.getElementById('cons-table-body');
         const hRow = document.getElementById('cons-table-header');
         
-        // Renderiza Cabeçalho com Inputs para HC
+        if(!tbody || !hRow) return;
+
+        // --- RENDERIZA CABEÇALHO COM INPUTS DE HC ---
         let headerHTML = `
             <tr class="bg-slate-50 border-b border-slate-200">
                 <th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]">
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
                 </th>`;
         
-        // Colunas Dinâmicas
         cols.forEach((c, index) => {
             const idx = index + 1;
-            const currentHC = this.basesManuaisHC[idx] !== undefined ? this.basesManuaisHC[idx] : (st[idx].users.size || 1);
+            // Se não houver HC manual, usa o count real de users do período, ou 1 para evitar divisão por zero
+            const realUsers = st[idx] && st[idx].users ? st[idx].users.size : 0;
+            const currentHC = this.basesManuaisHC[idx] !== undefined ? this.basesManuaisHC[idx] : (realUsers || 1);
             
             headerHTML += `
                 <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[100px] align-top">
@@ -266,9 +314,9 @@ Produtividade.Consolidado = {
                 <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
             </th></tr>`;
 
-        if(hRow) hRow.innerHTML = headerHTML;
+        hRow.innerHTML = headerHTML;
 
-        // Renderiza Linhas
+        // --- RENDERIZA LINHAS ---
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
 
@@ -289,14 +337,12 @@ Produtividade.Consolidado = {
             
             idxs.forEach(i => {
                 const s = st[i];
-                // Lógica de HC: Usa a base manual da coluna Específica, ou o tamanho do Set de users
+                if (!s) { tr += `<td class="px-4 py-3">-</td>`; return; }
+
+                // Lógica de HC: Prioriza manual, senão automático
                 let HF;
                 if(i === 99) {
-                     // Para o total, usamos a soma simples ou média? Geralmente total de users unicos no periodo todo.
-                     // Mas se o usuário mudou manualmente nas colunas, o total pode ficar distorcido se apenas somarmos.
-                     // O padrão aqui será manter users unicos globais para o total, a menos que queira média dos HCs manuais.
-                     // Simplificação: Total usa users.size global.
-                     HF = s.users.size || 1;
+                     HF = s.users.size || 1; // Para o total, usamos o total de usuários únicos do período
                 } else {
                      HF = (this.basesManuaisHC[i] !== undefined) ? this.basesManuaisHC[i] : (s.users.size || 1);
                 }
@@ -315,9 +361,6 @@ Produtividade.Consolidado = {
             return tr + '</tr>';
         };
 
-        // Note: Removida a linha explicita de "Base Assistentes" pois agora está no cabeçalho
-        // h += mkRow('Base Assistentes (HC)', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true); 
-        
         h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
@@ -344,35 +387,36 @@ Produtividade.Consolidado = {
         const { cols, st, numCols } = this.dadosCalculados;
         const wsData = [];
         
-        // Cabeçalho
         const headers = ['Indicador', ...cols, 'TOTAL'];
         wsData.push(headers);
         
-        // Linha de HC usado no cálculo (para referência no Excel)
         const rowHC = ['HC Considerado'];
         for(let i=1; i<=numCols; i++) {
-             rowHC.push(this.basesManuaisHC[i] !== undefined ? this.basesManuaisHC[i] : (st[i].users.size || 1));
+             rowHC.push(this.basesManuaisHC[i] !== undefined ? this.basesManuaisHC[i] : (st[i] ? (st[i].users.size || 1) : 1));
         }
-        rowHC.push(st[99].users.size || 1); // Total
+        rowHC.push(st[99] ? (st[99].users.size || 1) : 1);
         wsData.push(rowHC);
 
         const addRow = (label, getter, isCalc=false) => {
             const row = [label];
             for(let i=1; i<=numCols; i++) {
                 const s = st[i];
+                if(!s) { row.push(0); continue; }
                 const HF = (this.basesManuaisHC[i] !== undefined) ? this.basesManuaisHC[i] : (s.users.size || 1);
                 
                 let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
                 row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
             }
-            // Coluna Total
             const sTotal = st[99];
-            const HFTotal = sTotal.users.size || 1;
-            let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal);
-            if (valTotal instanceof Set) valTotal = valTotal.size;
-            row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
-
+            if(sTotal) {
+                const HFTotal = sTotal.users.size || 1;
+                let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal);
+                if (valTotal instanceof Set) valTotal = valTotal.size;
+                row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
+            } else {
+                row.push(0);
+            }
             wsData.push(row);
         };
 

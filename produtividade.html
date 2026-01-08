@@ -1,359 +1,370 @@
-Produtividade.Consolidado = {
-    initialized: false,
-    ultimoCache: { key: null, data: null },
-    baseManualHC: 0,
-    dadosCalculados: null, // Armazena dados prontos para uso (tabela ou excel)
-
-    init: async function() { 
-        if(!this.initialized) { 
-            this.initialized = true; 
-        } 
-        this.togglePeriodo();
-    },
-
-    mudarBase: function(novoValor) {
-        if(!novoValor || novoValor < 0) return;
-        this.baseManualHC = parseInt(novoValor);
-        
-        // Se já temos dados, apenas recalcula a visualização sem ir ao banco
-        if(this.ultimoCache.data) {
-            this.processarEExibir(this.ultimoCache.data, this.ultimoCache.tipo, this.ultimoCache.mes, this.ultimoCache.ano);
-        } else {
-            this.carregar(true); 
-        }
-    },
-
-    togglePeriodo: function() {
-        const t = document.getElementById('cons-period-type').value;
-        const selQ = document.getElementById('cons-select-quarter');
-        const selS = document.getElementById('cons-select-semester');
-        const dateInput = document.getElementById('global-date');
-        
-        if(selQ) selQ.classList.add('hidden');
-        if(selS) selS.classList.add('hidden');
-
-        if (t === 'trimestre' && selQ) {
-            selQ.classList.remove('hidden');
-            if(dateInput && dateInput.value) {
-                const m = parseInt(dateInput.value.split('-')[1]);
-                selQ.value = Math.ceil(m / 3);
-            }
-        } 
-        else if (t === 'semestre' && selS) {
-            selS.classList.remove('hidden');
-            if(dateInput && dateInput.value) {
-                const m = parseInt(dateInput.value.split('-')[1]);
-                selS.value = m <= 6 ? 1 : 2;
-            }
-        }
-        
-        this.carregar(false); 
-    },
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel - Performance Pro</title>
     
-    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
-        let count = 0;
-        let cur = new Date(dataInicio + 'T12:00:00'); 
-        const end = new Date(dataFim + 'T12:00:00');
-        while (cur <= end) {
-            const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++;
-            cur.setDate(cur.getDate() + 1);
-        }
-        return count;
-    },
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
-    carregar: async function(forcar = false) {
-        const tbody = document.getElementById('cons-table-body'); 
-        const t = document.getElementById('cons-period-type').value; 
-        const dateInput = document.getElementById('global-date');
+    <style> 
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
-        let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
-        let [ano, mes, dia] = val.split('-').map(Number);
-        const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
-        
-        let s, e;
-        
-        if (t === 'dia') { 
-            s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        } else if (t === 'mes') { 
-            s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        } else if (t === 'trimestre') { 
-            const selQ = document.getElementById('cons-select-quarter');
-            const trim = selQ ? parseInt(selQ.value) : Math.ceil(mes / 3); 
-            const mStart = ((trim-1)*3)+1; 
-            s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; 
-            e = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`; 
-        } else if (t === 'semestre') { 
-            const selS = document.getElementById('cons-select-semester');
-            const sem = selS ? parseInt(selS.value) : (mes <= 6 ? 1 : 2); 
-            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
-            e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
-        } else { 
-            s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
+        /* Estilos para Inputs no Cabeçalho da Tabela */
+        .header-input {
+            background: rgba(255,255,255,0.8);
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 2px 4px;
+            font-size: 11px;
+            width: 50px;
+            text-align: center;
+            color: #334155;
+            margin-top: 4px;
+            font-weight: bold;
         }
-
-        const cacheKey = `${t}_${s}_${e}`;
-        if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
-            this.processarEExibir(this.ultimoCache.data, t, mes, ano);
-            return;
+        .header-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            background: white;
         }
+    </style>
+</head>
+<body class="bg-slate-100">
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script> 
+    <script src="js/importacao.js"></script>
+    <script src="js/layout.js"></script>
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
-
-        try {
-            const { data: rawData, error } = await Produtividade.supabase
-                .from('producao')
-                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
-                .gte('data_referencia', s)
-                .lte('data_referencia', e);
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
                 
-            if(error) throw error;
-            
-            const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
-            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 1;
-            
-            const inputHC = document.getElementById('cons-input-hc');
-            if(inputHC && (inputHC.value == 0 || inputHC.value == "")) inputHC.value = this.baseManualHC;
-
-            this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
-            this.processarEExibir(rawData, t, mes, ano);
-            
-        } catch (e) { 
-            console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`;
-        }
-    },
-
-    // Separação de Responsabilidade: Processamento dos dados brutos em estrutura de relatório
-    processarDados: function(rawData, t, currentMonth, currentYear) {
-        const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-        let cols = []; 
-        let datesMap = {}; 
-
-        // 1. Definição das Colunas (Buckets)
-        if (t === 'dia') { 
-            const lastDay = new Date(currentYear, currentMonth, 0).getDate();
-            for(let d=1; d<=lastDay; d++) {
-                cols.push(String(d).padStart(2,'0'));
-                datesMap[d] = { 
-                    ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
-                    fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
-                };
-            }
-        } else if (t === 'mes') { 
-            const semanas = Produtividade.Geral.getSemanasDoMes ? Produtividade.Geral.getSemanasDoMes(currentYear, currentMonth) : [];
-            semanas.forEach((s, i) => {
-                cols.push(`Sem ${i+1}`);
-                datesMap[i+1] = { ini: s.inicio, fim: s.fim };
-            });
-        } else if (t === 'trimestre') {
-            const selQ = document.getElementById('cons-select-quarter');
-            const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
-            const idxStart = (trim - 1) * 3;
-            cols = [mesesNomes[idxStart], mesesNomes[idxStart+1], mesesNomes[idxStart+2]];
-            for(let i=0; i<3; i++) {
-                const m = idxStart + i + 1;
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
-                };
-            }
-        } else if (t === 'semestre') {
-            const selS = document.getElementById('cons-select-semester');
-            const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2);
-            const idxStart = (sem - 1) * 6;
-            cols = mesesNomes.slice(idxStart, idxStart + 6);
-            for(let i=0; i<6; i++) {
-                const m = idxStart + i + 1;
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
-                };
-            }
-        } else { 
-            cols = mesesNomes; 
-            for(let i=0; i<12; i++) {
-                const m = i + 1;
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
-                };
-            }
-        }
-
-        // 2. Agregação
-        const numCols = cols.length;
-        let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
-
-        if(rawData) {
-            rawData.forEach(r => {
-                const sys = Number(r.quantidade) || 0;
-                let b = 1; 
-
-                if (t === 'dia') { 
-                    b = parseInt(r.data_referencia.split('-')[2]); 
-                } else if (t === 'mes') { 
-                    for(let k=1; k<=numCols; k++) {
-                        if(r.data_referencia >= datesMap[k].ini && r.data_referencia <= datesMap[k].fim) { b = k; break; }
-                    }
-                } else { 
-                    const mData = parseInt(r.data_referencia.split('-')[1]);
-                    for(let k=1; k<=numCols; k++) {
-                        const mIni = parseInt(datesMap[k].ini.split('-')[1]);
-                        if(mData === mIni) { b = k; break; }
-                    }
-                }
-
-                if(b >= 1 && b <= numCols) {
-                    const populate = (k) => {
-                        const x = st[k];
-                        x.users.add(r.usuario_id); 
-                        x.dates.add(r.data_referencia);
-                        x.qty += sys; 
-                        x.fifo += (Number(r.fifo)||0); 
-                        x.gt += (Number(r.gradual_total)||0); 
-                        x.gp += (Number(r.gradual_parcial)||0); 
-                        x.fc += (Number(r.perfil_fc)||0);
-                    };
-                    populate(b);
-                    populate(99);
-                }
-            });
-        }
-
-        // 3. Dias Úteis
-        for(let i=1; i<=numCols; i++) {
-            st[i].diasUteis = datesMap[i] ? this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim) : 0;
-        }
-        st[99].diasUteis = 0;
-        for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
-
-        // Retorna tudo necessário para renderizar ou exportar
-        return { cols, st, numCols, datesMap };
-    },
-
-    processarEExibir: function(rawData, t, mes, ano) {
-        this.dadosCalculados = this.processarDados(rawData, t, mes, ano);
-        this.renderizar(this.dadosCalculados);
-    },
-
-    renderizar: function({ cols, st, numCols }) {
-        const tbody = document.getElementById('cons-table-body');
-        const hRow = document.getElementById('cons-table-header');
-        
-        if(hRow) hRow.innerHTML = `
-            <tr class="bg-slate-50 border-b border-slate-200">
-                <th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]">
-                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
-                </th>` + 
-            cols.map(c => `<th class="px-4 py-4 text-center border-l border-slate-200 min-w-[100px]"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span></th>`).join('') + 
-            `<th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px]">
-                <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
-            </th></tr>`;
-
-        let h = ''; 
-        const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
-
-        const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
-            const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
-            const iconColor = colorInfo || 'text-slate-400';
-            const textColor = isBold ? 'text-slate-800' : 'text-slate-600';
-            
-            let tr = `<tr class="${rowBg} border-b border-slate-100 last:border-0 group">
-                <td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200 group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100">
-                            <i class="${icon} ${iconColor} text-sm"></i>
+                        <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
+                            <i class="fas fa-columns text-slate-400 text-lg"></i>
+                            <h1 class="text-lg font-black text-slate-700 tracking-tight">Painel</h1>
                         </div>
-                        <span class="${textColor} ${isBold ? 'font-black' : 'font-medium'} text-xs uppercase tracking-wide">${label}</span>
+                        <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
+                            <i class="fas fa-calendar-alt text-blue-500"></i>
+                            <input type="date" id="global-date" onchange="Produtividade.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                        </div>
                     </div>
-                </td>`;
+                    
+                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
+                        <input type="file" id="input-excel" accept=".xlsx, .csv" multiple class="hidden" onchange="Produtividade.importarEmMassa(this)">
+                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar um ou múltiplos arquivos">
+                            <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar</span>
+                        </button>
+                        <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados da visualização atual">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200" id="top-bar-controls">
+                        
+                        <div id="ctrl-geral" class="flex items-center gap-2">
+                            <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                                <option value="dia">Apenas o Dia</option>
+                                <option value="mes">Mês da Data</option>
+                                <option value="semana">Semana Específica</option>
+                            </select>
+                            <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">Semana 1</option>
+                                <option value="2">Semana 2</option>
+                                <option value="3">Semana 3</option>
+                                <option value="4">Semana 4</option>
+                                <option value="5">Semana 5</option>
+                                <option value="6">Semana 6</option>
+                            </select>
+                        </div>
+
+                        <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
+                             <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                                <option value="dia">Diária (Dias do Mês)</option>
+                                <option value="mes">Mensal (Semanas)</option>
+                                <option value="trimestre">Trimestral</option>
+                                <option value="semestre">Semestral</option>
+                                <option value="ano">Anual</option>
+                            </select>
+
+                            <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">1º Trimestre</option>
+                                <option value="2">2º Trimestre</option>
+                                <option value="3">3º Trimestre</option>
+                                <option value="4">4º Trimestre</option>
+                            </select>
+        
+                            <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">1º Semestre</option>
+                                <option value="2">2º Semestre</option>
+                            </select>
+
+                            <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 h-8" title="Exportar Tabela">
+                                <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
+                            </button>
+                        </div>
+
+                        <div id="ctrl-performance" class="hidden flex items-center gap-2">
+                            <select id="perf-period-type" onchange="Produtividade.Performance.carregarRanking()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                                <option value="mes">Mensal</option>
+                                <option value="trimestre">Trimestral</option>
+                                <option value="semestre">Semestral</option>
+                                <option value="ano">Anual</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
+                    <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-check-circle"></i> Validação
+                    </button>
+                    <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-table"></i> Consolidado
+                    </button>
+                    <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-trophy"></i> Performance
+                    </button>
+                    <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-th"></i> Matriz
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             
-            idxs.forEach(i => {
-                const s = st[i]; 
-                const HF = this.baseManualHC > 0 ? this.baseManualHC : (s.users.size || 1); 
-                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
-                if (val instanceof Set) val = val.size;
-                
-                const txt = (val !== undefined && val !== null && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
-                
-                let cellClass = `px-4 py-3 text-center text-xs border-l border-slate-100 `;
-                if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`;
-                else cellClass += `text-slate-500 font-medium`;
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-24">
+                    <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition">
+                        <i class="fas fa-file-contract text-5xl text-blue-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção Total</p>
+                        <h3 class="text-2xl font-black text-slate-800 mt-0.5 tracking-tight" id="kpi-total">--</h3>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Meta Global:</span>
+                        <span class="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">--</span>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-indigo-600 to-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200 text-white relative overflow-hidden flex flex-col justify-between h-24">
+                    <div class="absolute right-[-10px] top-[-10px] opacity-20 rotate-12">
+                        <i class="fas fa-chart-pie text-6xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[9px] font-bold text-blue-100 uppercase tracking-wider mb-0.5">Atingimento da Meta</p>
+                        <h3 class="text-3xl font-black tracking-tight" id="kpi-pct">--%</h3>
+                    </div>
+                    <div class="w-full bg-black/20 h-1.5 rounded-full mt-1 overflow-hidden">
+                        <div id="kpi-pct-bar" class="h-full bg-white/90 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Composição da Equipe</p>
+                    <div class="w-full">
+                        <div class="flex justify-between items-end mb-0.5">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">CLT</span>
+                            <span class="text-[10px] font-bold text-blue-600" id="kpi-clt-val">0 (0%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="w-full">
+                        <div class="flex justify-between items-end mb-0.5">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">PJ</span>
+                            <span class="text-[10px] font-bold text-purple-600" id="kpi-pj-val">0 (0%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
+                    <div class="flex justify-between items-start">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
+                        <i class="fas fa-calendar-day text-slate-200 text-lg"></i>
+                    </div>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-2xl font-black text-slate-700" id="kpi-dias-val">--</h3>
+                        <span class="text-xs font-bold text-slate-400" id="kpi-dias-total">/ --</span>
+                    </div>
+                    <span id="kpi-dias" class="hidden"></span>
+                    <p class="text-[9px] text-slate-400 font-medium">Dias com produção registrada</p>
+                </div>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produtividade Média</p>
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">Do Time</span>
+                            <span class="text-xl font-black text-slate-800" id="kpi-media-todas">--</span>
+                        </div>
+                        <div class="h-8 w-px bg-slate-100"></div>
+                        <div class="flex flex-col items-end">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">Meta/Rep</span>
+                            <span class="text-base font-bold text-emerald-600" id="kpi-meta-individual">650</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-50 h-1 mt-0.5 rounded-full"></div>
+                </div>
+            </div>
 
-                tr += `<td class="${cellClass}">${txt}</td>`;
-            });
-            return tr + '</tr>';
-        };
+            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
+                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
+                <button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
+                    <i class="fas fa-times mr-1"></i> Limpar Filtro
+                </button>
+            </div>
 
-        h += mkRow('Base Assistentes (HC)', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
-        h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
-        h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
-        h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
-        h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
-        h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
-        h += mkRow('Total Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-        h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
-        h += mkRow('Média Validação (Todas Assistentes)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
-        h += mkRow('Média Validação Diária (Por Assist.)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
-        
-        tbody.innerHTML = h;
-    },
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wide">
+                            <tr>
+                                <th class="px-4 py-2 text-center w-28 bg-slate-100/50 border-r border-slate-200">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <span class="text-[10px] text-slate-400">Ação em Massa</span>
+                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer">
+                                            <option value="">Aplicar...</option>
+                                            <option value="1">Todos 100%</option>
+                                            <option value="0.5">Todos 50%</option>
+                                            <option value="0">Todos Abonar</option>
+                                        </select>
+                                    </div>
+                                </th>
+                                <th class="px-6 py-4">Assistente</th>
+                                <th class="px-6 py-4 text-center">Dias Calc.</th>
+                                <th class="px-6 py-4 text-center">Total</th>
+                                <th class="px-6 py-4 text-center">FIFO</th>
+                                <th class="px-6 py-4 text-center">G. Total</th>
+                                <th class="px-6 py-4 text-center">G. Parcial</th>
+                                <th class="px-6 py-4 text-center">Meta Calc.</th>
+                                <th class="px-6 py-4 text-center">% Meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-    newStats: function() { 
-        return { 
-            users: new Set(), dates: new Set(), diasUteis: 0,
-            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0
-        }; 
-    },
+        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
+            
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar pb-2">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead id="cons-table-header">
+                        </thead>
+                    <tbody id="cons-table-body">
+                        </tbody>
+                </table>
+            </div>
+            
+             <div class="text-right text-xs text-slate-400 italic">
+                * Você pode alterar o número de assistentes (HC) no cabeçalho de cada coluna para ajustar a média.
+            </div>
+        </div>
 
-    // --- NOVA FUNÇÃO DE EXPORTAÇÃO ---
-    exportarExcel: function() {
-        if (!this.dadosCalculados) return alert("Nenhum dado para exportar.");
-        
-        const { cols, st, numCols } = this.dadosCalculados;
-        const wsData = [];
-        
-        // Cabeçalho
-        const headers = ['Indicador', ...cols, 'TOTAL'];
-        wsData.push(headers);
+        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gradient-to-br from-yellow-100 to-amber-100 p-4 rounded-xl shadow-sm border border-amber-200 relative overflow-hidden">
+                    <i class="fas fa-trophy absolute right-4 top-4 text-4xl text-amber-300 opacity-50"></i>
+                    <p class="text-xs font-bold text-amber-700 uppercase">Campeão (Produção)</p>
+                    <p class="text-xl font-black text-amber-900 mt-2" id="perf-kpi-campeao">--</p>
+                    <p class="text-xs font-bold text-amber-600 mt-1" id="perf-kpi-campeao-val"></p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Produção do Time</p>
+                    <p class="text-2xl font-black text-blue-700 mt-1" id="perf-kpi-total">--</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Média por Assistente</p>
+                    <p class="text-2xl font-black text-slate-700 mt-1" id="perf-kpi-media">--</p>
+                </div>
+            </div>
 
-        // Helper para montar linha do Excel (mesma lógica do renderizar)
-        const addRow = (label, getter, isCalc=false) => {
-            const row = [label];
-            for(let i=1; i<=numCols; i++) {
-                const s = st[i];
-                const HF = this.baseManualHC > 0 ? this.baseManualHC : (s.users.size || 1);
-                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
-                if (val instanceof Set) val = val.size;
-                row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
-            }
-            // Coluna Total (99)
-            const sTotal = st[99];
-            const HFTotal = this.baseManualHC > 0 ? this.baseManualHC : (sTotal.users.size || 1);
-            let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal);
-            if (valTotal instanceof Set) valTotal = valTotal.size;
-            row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-6 py-3">#</th>
+                                <th class="px-6 py-3">Assistente</th>
+                                <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
+                                <th class="px-6 py-3 text-center">Dias</th>
+                                <th class="px-6 py-3 text-center">Média</th>
+                                <th class="px-6 py-3 text-center">Meta Total</th>
+                                <th class="px-6 py-3 text-center">% Meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-            wsData.push(row);
-        };
+        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-xs tracking-wider text-center border-b-2 border-slate-200">
+                            <tr>
+                                <th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[150px]">Assistente</th>
+                                <th class="px-3 py-4">Jan</th>
+                                <th class="px-3 py-4">Fev</th>
+                                <th class="px-3 py-4">Mar</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">1º Tri</th>
+                                <th class="px-3 py-4">Abr</th>
+                                <th class="px-3 py-4">Mai</th>
+                                <th class="px-3 py-4">Jun</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">2º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100">1º Sem</th>
+                                <th class="px-3 py-4">Jul</th>
+                                <th class="px-3 py-4">Ago</th>
+                                <th class="px-3 py-4">Set</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">3º Tri</th>
+                                <th class="px-3 py-4">Out</th>
+                                <th class="px-3 py-4">Nov</th>
+                                <th class="px-3 py-4">Dez</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">4º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100">2º Sem</th>
+                                <th class="px-4 py-4 bg-slate-100 text-slate-800">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matriz-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        // Adiciona as mesmas linhas da tabela
-        addRow('Base Assistentes (HC)', (s, d, HF) => HF, true);
-        addRow('Dias Úteis', (s) => s.diasUteis);
-        addRow('Total FIFO', s => s.fifo);
-        addRow('Total G. Parcial', s => s.gp);
-        addRow('Total G. Total', s => s.gt);
-        addRow('Total Perfil FC', s => s.fc);
-        addRow('Total Documentos Validados', s => s.qty);
-        addRow('Total Validação Diária', (s, d) => d > 0 ? s.qty / d : 0, true);
-        addRow('Média Validação (Todas Assistentes)', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
-        addRow('Média Validação Diária (Por Assist.)', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
-
-        // Gera o arquivo
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.aoa_to_sheet(wsData);
-        XLSX.utils.book_append_sheet(wb, ws, "Consolidado");
-        XLSX.writeFile(wb, "Relatorio_Consolidado.xlsx");
-    }
-};
+    <script src="js/produtividade/main.js"></script>
+    <script src="js/produtividade/geral.js"></script>
+    <script src="js/produtividade/consolidado.js"></script>
+    <script src="js/produtividade/performance.js"></script>
+    <script src="js/produtividade/matriz.js"></script>
+</body>
+</html>
