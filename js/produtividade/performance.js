@@ -2,12 +2,13 @@ Produtividade.Performance = {
     
     carregarRanking: async function() {
         const tbody = document.getElementById('perf-ranking-body');
+        const divTop5 = document.getElementById('perf-rank-content'); // Referência para o novo card
         const periodType = document.getElementById('perf-period-type').value;
         const dateInput = document.getElementById('global-date').value;
         
         if (!tbody) return;
 
-        // Define as datas com base no filtro
+        // --- Definição de Datas (Igual ao anterior) ---
         let [ano, mes, dia] = dateInput.split('-').map(Number);
         let dataInicio, dataFim;
         const sAno = String(ano);
@@ -25,7 +26,7 @@ Produtividade.Performance = {
             const sem = mes <= 6 ? 1 : 2;
             dataInicio = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`;
             dataFim = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`;
-        } else { // ano
+        } else { 
             dataInicio = `${sAno}-01-01`;
             dataFim = `${sAno}-12-31`;
         }
@@ -33,7 +34,6 @@ Produtividade.Performance = {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando ranking...</td></tr>';
 
         try {
-            // CORREÇÃO: Usa Sistema.supabase
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
@@ -45,12 +45,8 @@ Produtividade.Performance = {
 
             if (error) throw error;
 
-            // Processamento dos dados
             const stats = {};
             let totalTime = 0;
-            let totalMetaTime = 0;
-            
-            // Variáveis para Média Ajustada (Sem Auditoras/Gestoras)
             let totalProdAssistentes = 0;
             let assistentesUnicas = new Set();
 
@@ -77,26 +73,21 @@ Produtividade.Performance = {
 
                 stats[uid].producao += qtd;
                 stats[uid].dias += 1;
-                stats[uid].diasUteis += fator; // Soma dos fatores (ex: 0.5 + 1 = 1.5)
+                stats[uid].diasUteis += fator;
                 stats[uid].metaTotal += (metaDiaria * fator);
 
-                // Totais Gerais
                 totalTime += qtd;
-                totalMetaTime += (metaDiaria * fator);
 
-                // Totais para Média (Exclui Liderança)
                 if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                     totalProdAssistentes += qtd;
                     assistentesUnicas.add(uid);
                 }
             });
 
-            // Converte para array e ordena
             const ranking = Object.values(stats).sort((a, b) => b.producao - a.producao);
 
-            // Renderiza Tabela
+            // --- RENDERIZA TABELA (RANKING GERAL) ---
             tbody.innerHTML = '';
-            
             ranking.forEach((u, index) => {
                 const mediaDiaria = u.diasUteis > 0 ? u.producao / u.diasUteis : 0;
                 const atingimento = u.metaTotal > 0 ? (u.producao / u.metaTotal) * 100 : 0;
@@ -106,7 +97,6 @@ Produtividade.Performance = {
                 else if (index === 1) corBadge = 'bg-slate-200 text-slate-700';
                 else if (index === 2) corBadge = 'bg-orange-100 text-orange-800';
 
-                // Ícone de cargo se for liderança
                 let iconCargo = '';
                 if(u.cargo === 'AUDITORA') iconCargo = '<span class="ml-2 text-[9px] bg-purple-100 text-purple-700 px-1 rounded border border-purple-200">AUD</span>';
                 if(u.cargo === 'GESTORA') iconCargo = '<span class="ml-2 text-[9px] bg-indigo-100 text-indigo-700 px-1 rounded border border-indigo-200">GEST</span>';
@@ -115,13 +105,9 @@ Produtividade.Performance = {
                 tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
                 tr.innerHTML = `
                     <td class="px-6 py-3">
-                        <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold border ${corBadge}">
-                            ${index + 1}º
-                        </span>
+                        <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold border ${corBadge}">${index + 1}º</span>
                     </td>
-                    <td class="px-6 py-3 font-bold text-slate-700 flex items-center">
-                        ${u.nome} ${iconCargo}
-                    </td>
+                    <td class="px-6 py-3 font-bold text-slate-700 flex items-center">${u.nome} ${iconCargo}</td>
                     <td class="px-6 py-3 text-center font-black text-blue-700">${Math.round(u.producao).toLocaleString('pt-BR')}</td>
                     <td class="px-6 py-3 text-center text-slate-500 text-xs">${u.diasUteis}</td>
                     <td class="px-6 py-3 text-center text-slate-600 font-bold">${Math.round(mediaDiaria)}</td>
@@ -136,14 +122,11 @@ Produtividade.Performance = {
             });
 
             if (ranking.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado para este período.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>';
             }
 
-            // --- ATUALIZA CARDS SUPERIORES ---
-            
-            // 1. Campeão (Ignora Auditoras/Gestoras para o prêmio)
+            // --- CARDS SUPERIORES ---
             const campeao = ranking.find(u => u.cargo !== 'AUDITORA' && u.cargo !== 'GESTORA');
-            
             const elCampNome = document.getElementById('perf-kpi-campeao');
             const elCampVal = document.getElementById('perf-kpi-campeao-val');
             
@@ -155,13 +138,53 @@ Produtividade.Performance = {
                 elCampVal.innerText = "";
             }
 
-            // 2. Produção Total do Time (Soma Tudo)
             document.getElementById('perf-kpi-total').innerText = totalTime.toLocaleString('pt-BR');
-
-            // 3. Média por Assistente (Exclui Liderança)
             const numAssistentes = assistentesUnicas.size;
             const mediaGeral = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
             document.getElementById('perf-kpi-media').innerText = mediaGeral.toLocaleString('pt-BR');
+
+            // --- NOVO CÓDIGO: Renderiza o Top 5 (Barra de Progresso) ---
+            if (divTop5) {
+                // 1. Filtra apenas assistentes (Exclui Liderança)
+                let listaTop5 = ranking.filter(u => u.cargo !== 'AUDITORA' && u.cargo !== 'GESTORA');
+                
+                // 2. Ordena por % de Atingimento (Melhor visualização para barras)
+                listaTop5.sort((a, b) => {
+                    const pctA = a.metaTotal > 0 ? a.producao / a.metaTotal : 0;
+                    const pctB = b.metaTotal > 0 ? b.producao / b.metaTotal : 0;
+                    return pctB - pctA; // Decrescente
+                });
+
+                // 3. Pega os 5 primeiros
+                const top5 = listaTop5.slice(0, 5);
+                
+                if (top5.length === 0) {
+                    divTop5.innerHTML = '<div class="text-center text-slate-400 py-4 italic text-xs">Sem dados</div>';
+                } else {
+                    let htmlTop = '';
+                    top5.forEach((u, i) => {
+                        const pct = u.metaTotal > 0 ? Math.round((u.producao / u.metaTotal) * 100) : 0;
+                        const corBarra = pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500';
+                        
+                        // Layout exato solicitado
+                        htmlTop += `
+                        <div class="flex items-center gap-2 mb-2 last:mb-0">
+                            <div class="w-4 text-[10px] font-bold text-slate-400">#${i + 1}</div>
+                            <div class="flex-1">
+                                <div class="flex justify-between text-[9px] mb-0.5">
+                                    <span class="font-bold text-slate-700 truncate w-24">${u.nome}</span>
+                                    <span class="font-bold text-slate-500">${pct}%</span>
+                                </div>
+                                <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                    <div class="${corBarra} h-full" style="width: ${Math.min(pct, 100)}%"></div>
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                    divTop5.innerHTML = htmlTop;
+                }
+            }
+            // --- FIM DO NOVO CÓDIGO ---
 
         } catch (err) {
             console.error(err);
