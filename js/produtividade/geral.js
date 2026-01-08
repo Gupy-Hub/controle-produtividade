@@ -37,15 +37,14 @@ Produtividade.Geral = {
         return semanas;
     },
 
-    // Nova função para calcular dias úteis (Seg-Sex)
     calcularDiasUteis: function(inicio, fim) {
         let count = 0;
-        let cur = new Date(inicio + 'T12:00:00'); // Hora fixa para evitar fuso
+        let cur = new Date(inicio + 'T12:00:00'); 
         const end = new Date(fim + 'T12:00:00');
         
         while(cur <= end) {
             const day = cur.getDay();
-            if(day !== 0 && day !== 6) { // 0=Domingo, 6=Sábado
+            if(day !== 0 && day !== 6) { 
                 count++;
             }
             cur.setDate(cur.getDate() + 1);
@@ -104,14 +103,13 @@ Produtividade.Geral = {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
                 if(!dadosAgrupados[uid]) {
-                    // Garante a leitura da meta do banco
                     const metaBanco = item.usuario ? Number(item.usuario.meta_diaria) : 0;
                     
                     dadosAgrupados[uid] = {
                         usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente', meta_diaria: 650 },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
-                        meta_real: metaBanco > 0 ? metaBanco : 650 // Usa a meta do banco ou 650 se for zero/null
+                        meta_real: metaBanco > 0 ? metaBanco : 650
                     };
                 }
                 dadosAgrupados[uid].registros.push(item);
@@ -129,8 +127,6 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             this.renderizarTabela();
-            
-            // Passamos as datas para o cálculo correto dos dias úteis
             this.atualizarKPIs(data, dataInicio, dataFim);
 
         } catch (error) {
@@ -396,15 +392,22 @@ Produtividade.Geral = {
         this.renderizarTabela();
     },
 
-    // ATUALIZADO: Recebe datas para calcular dias úteis do calendário
     atualizarKPIs: function(data, dataInicio, dataFim) {
         let totalProd = 0;
         let metaTotal = 0;
         let diasComProd = new Set();
         let usersCLT = new Set();
         let usersPJ = new Set();
+        let countUsers = 0; // Contador específico para média
         
         data.forEach(r => {
+            // VERIFICA SE É AUDITORA/GESTORA
+            const cargo = r.usuario && r.usuario.cargo ? String(r.usuario.cargo).toUpperCase() : 'ASSISTENTE';
+            
+            // SE FOR AUDITORA/GESTORA, NÃO SOMA NOS KPIS GERAIS
+            if (cargo === 'AUDITORA' || cargo === 'GESTORA') return;
+
+            // Lógica normal para Assistentes
             totalProd += (Number(r.quantidade) || 0);
             
             const metaUser = Number(r.usuario.meta_diaria) > 0 ? Number(r.usuario.meta_diaria) : 650;
@@ -421,6 +424,9 @@ Produtividade.Geral = {
                 usersPJ.add(r.usuario.id);
             }
         });
+
+        // Contagem de usuários considerados para a média
+        countUsers = usersCLT.size + usersPJ.size;
 
         const pct = metaTotal > 0 ? (totalProd / metaTotal) * 100 : 0;
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString('pt-BR');
@@ -451,17 +457,16 @@ Produtividade.Geral = {
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = (totalUsers > 0 ? (pj/totalUsers)*100 : 0) + '%';
 
-        // --- CORREÇÃO DO CARD DIAS ÚTEIS ---
-        // Calcula dias úteis do calendário (Semana ou Mês selecionado)
         const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
         
         const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) elDias.innerText = diasUteisTotais; // Mostra total de dias úteis possíveis
+        if(elDias) elDias.innerText = diasUteisTotais;
         
         const elDiasTotal = document.getElementById('kpi-dias-total');
-        if(elDiasTotal) elDiasTotal.innerText = `/ ${diasComProd.size} (Trab)`; // Mostra dias trabalhados
+        if(elDiasTotal) elDiasTotal.innerText = `/ ${diasComProd.size} (Trab)`;
         
-        const media = totalUsers > 0 ? Math.round(totalProd / totalUsers) : 0;
+        // Média baseada apenas em Assistentes (countUsers já está filtrado)
+        const media = countUsers > 0 ? Math.round(totalProd / countUsers) : 0;
         const elMedia = document.getElementById('kpi-media-todas');
         if(elMedia) elMedia.innerText = media;
     }
