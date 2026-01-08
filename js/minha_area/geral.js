@@ -200,7 +200,7 @@ MinhaArea.Diario = {
         if(txtStatus && iconStatus) {
             let statusHtml = "";
             let iconClass = "";
-            let tooltipText = ""; // Texto do Tooltip
+            let tooltipText = "";
 
             if(pctEficiencia >= 100) {
                 statusHtml = "<span class='text-emerald-600'>Excelente!</span>";
@@ -217,11 +217,12 @@ MinhaArea.Diario = {
             }
 
             iconStatus.className = iconClass;
-            // Adiciona o Tooltip nativo (title) ao container do ícone
+            
+            // Adiciona o Tooltip nativo (title)
             const iconContainer = document.getElementById('icon-status-container');
             if(iconContainer) {
                 iconContainer.title = tooltipText;
-                iconContainer.style.cursor = "help"; // Cursor de ajuda para indicar interatividade
+                iconContainer.style.cursor = "help";
             }
 
             let bestDayHtml = "";
@@ -289,7 +290,6 @@ MinhaArea.Diario = {
             if (item.observacao_gestora) obsHtml += `<div class="mt-1 text-[10px] bg-blue-50 text-blue-700 p-1 rounded border border-blue-100"><i class="fas fa-comment mr-1"></i>Gestão: ${item.observacao_gestora}</div>`;
             if (!obsHtml) obsHtml = '<span class="text-slate-300">-</span>';
 
-            // Data clicável para filtro
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
                 <td class="px-6 py-4 font-bold text-slate-600 text-xs cursor-pointer hover:text-blue-600 hover:underline" 
