@@ -1,89 +1,200 @@
-window.MinhaArea = window.MinhaArea || {
-    user: null,
-    dataAtual: new Date(),
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Área - Performance Pro</title>
     
-    // Helper para garantir acesso ao Supabase global
-    get supabase() {
-        return window.Sistema ? window.Sistema.supabase : (window._supabase || null);
-    }
-};
-
-MinhaArea.init = async function() {
-    // 1. Verifica Sessão
-    const storedUser = localStorage.getItem('usuario_logado');
-    if (!storedUser && !window.location.pathname.includes('index.html')) {
-        return; // Aguarda login
-    }
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
-    if (storedUser) {
-        MinhaArea.user = JSON.parse(storedUser);
-        const elRole = document.getElementById('user-role-label');
-        // Exibe Nome e Cargo no topo
-        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.cargo || MinhaArea.user.funcao}`;
-    }
+    <style> 
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
+        
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        
+        .animate-enter { animation: enter 0.4s ease-out; }
+        @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .custom-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-    // 2. Inicializa Sistema (Supabase) se necessário
-    if (window.Sistema && !window.Sistema.supabase) {
-        await window.Sistema.inicializar(false);
-    }
+        .card-stat { transition: transform 0.2s; }
+        .card-stat:hover { transform: translateY(-3px); }
+    </style>
+</head>
+<body class="bg-slate-100">
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
+    <script src="js/layout.js"></script>
 
-    // 3. Define Data Inicial no Input (Hoje)
-    const dateInput = document.getElementById('ma-global-date');
-    if (dateInput) {
-        // Ajusta fuso horário para exibir a data correta no input
-        const hoje = new Date();
-        const yyyy = hoje.getFullYear();
-        const mm = String(hoje.getMonth() + 1).padStart(2, '0');
-        const dd = String(hoje.getDate()).padStart(2, '0');
-        dateInput.value = `${yyyy}-${mm}-${dd}`;
-        MinhaArea.dataAtual = hoje;
-    }
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
+                
+                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
+                            <i class="fas fa-user-astronaut text-slate-400 text-lg"></i>
+                            <h1 class="text-lg font-black text-slate-700 tracking-tight">Minha Área</h1>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
+                            <i class="fas fa-calendar-alt text-blue-500"></i>
+                            <input type="date" id="ma-global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200 hidden md:flex">
+                        <span id="user-role-label" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded border border-slate-100">Carregando...</span>
+                    </div>
+                </div>
 
-    // 4. Carrega Aba Padrão
-    MinhaArea.mudarAba('diario');
-};
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
+                    <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-calendar-check"></i> Diário
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-chart-line"></i> Evolução
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-users"></i> Comparativo
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-bullseye"></i> Qualidade
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-comments"></i> Feedback
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-MinhaArea.atualizarDataGlobal = function(val) {
-    if (!val) return;
-    const [ano, mes, dia] = val.split('-').map(Number);
-    // Cria data preservando o dia selecionado (evita volta de dia por fuso)
-    MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        <div id="ma-tab-diario" class="ma-view animate-enter space-y-6">
+            
+            <div id="box-confirmacao-leitura" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-enter shadow-sm ring-1 ring-yellow-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-2xl animate-pulse">
+                        <i class="fas fa-bell"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-yellow-800 text-lg">Ação Necessária: Check-in Diário</h4>
+                        <p class="text-sm text-yellow-700">Confirme que você visualizou suas metas e resultados do dia anterior.</p>
+                    </div>
+                </div>
+                <button onclick="MinhaArea.Diario.confirmarAcessoHoje()" class="w-full md:w-auto bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform active:scale-95">
+                    Confirmar Leitura
+                </button>
+            </div>
 
-    // Recarrega a aba ativa
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) {
-        const abaAtiva = activeBtn.id.replace('btn-ma-', '');
-        MinhaArea.mudarAba(abaAtiva);
-    }
-};
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 card-stat relative overflow-hidden group">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Meu Atingimento</p>
+                    <div class="flex items-end justify-between relative z-10">
+                        <div>
+                            <h3 class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-total">--</h3>
+                            <span class="text-xs font-bold text-slate-400">Prod. Acumulada</span>
+                        </div>
+                        <div class="text-right">
+                             <h3 class="text-xl font-bold text-blue-600" id="kpi-pct">--%</h3>
+                             <span class="text-xs font-bold text-slate-400">da Meta (<span id="kpi-meta-total">--</span>)</span>
+                        </div>
+                    </div>
+                    <div class="mt-3 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div id="bar-progress" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
 
-MinhaArea.mudarAba = function(aba) {
-    // Gestão de UI das abas
-    document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    
-    const view = document.getElementById(`ma-tab-${aba}`);
-    const btn = document.getElementById(`btn-ma-${aba}`);
-    
-    if(view) view.classList.remove('hidden');
-    if(btn) btn.classList.add('active');
+                <div class="bg-gradient-to-br from-white to-slate-50 p-5 rounded-2xl shadow-sm border border-slate-200 card-stat">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between">
+                        <span>Minha Média vs Time</span>
+                        <i class="fas fa-users text-slate-300"></i>
+                    </p>
+                    <div class="flex items-end justify-between gap-4">
+                        <div class="flex flex-col items-center w-1/2">
+                            <span class="text-2xl font-black text-slate-700" id="kpi-media-real">--</span>
+                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-1">Minha Média</span>
+                        </div>
+                        <div class="h-10 w-px bg-slate-200"></div>
+                        <div class="flex flex-col items-center w-1/2 opacity-75">
+                            <span class="text-xl font-bold text-slate-500" id="kpi-media-time">--</span>
+                            <span class="text-[10px] font-bold text-slate-400 mt-1">Média Equipe</span>
+                        </div>
+                    </div>
+                    <div id="kpi-comparativo-msg" class="text-center mt-3 text-[10px] font-bold text-slate-400">
+                        Calculando posição...
+                    </div>
+                </div>
 
-    // Carregamento dos Módulos
-    if (aba === 'diario' && MinhaArea.Diario) MinhaArea.Diario.carregar();
-    else if (aba === 'evolucao' && MinhaArea.Evolucao) MinhaArea.Evolucao.carregar();
-    else if (aba === 'comparativo' && MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
-    else if (aba === 'assertividade' && MinhaArea.Assertividade) MinhaArea.Assertividade.carregar();
-    else if (aba === 'feedback' && MinhaArea.Feedback) MinhaArea.Feedback.carregar();
-};
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 card-stat flex flex-col justify-between">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Produtivos</p>
+                            <h3 class="text-2xl font-black text-slate-700 mt-1" id="kpi-dias">--</h3>
+                        </div>
+                        <div id="icon-status-container" class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
+                            <i id="icon-status" class="fas fa-minus text-slate-300"></i>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                         <p class="text-xs font-bold text-slate-500" id="kpi-status-text">--</p>
+                    </div>
+                </div>
+            </div>
 
-MinhaArea.getPeriodo = function() {
-    // Retorna o primeiro e último dia do mês da data selecionada
-    const y = MinhaArea.dataAtual.getFullYear();
-    const m = MinhaArea.dataAtual.getMonth();
-    return {
-        inicio: new Date(y, m, 1).toISOString().split('T')[0],
-        fim: new Date(y, m + 1, 0).toISOString().split('T')[0]
-    };
-};
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <i class="fas fa-list-ul text-blue-500"></i> Detalhamento Diário
+                    </h3>
+                </div>
+                <div class="overflow-x-auto max-h-[500px] custom-scroll">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th class="px-6 py-3">Data</th>
+                                <th class="px-6 py-3 text-center">Produção</th>
+                                <th class="px-6 py-3 text-center">Meta/Fator</th>
+                                <th class="px-6 py-3 text-center">Status</th>
+                                <th class="px-6 py-3">Observações / Feedback</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-diario" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-document.addEventListener('DOMContentLoaded', MinhaArea.init);
+        <div id="ma-tab-evolucao" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h3 class="font-bold text-slate-700 mb-6 flex items-center gap-2">
+                    <i class="fas fa-chart-area text-blue-500"></i> Evolução
+                </h3>
+                <div class="h-[400px] w-full"><canvas id="chart-evolucao"></canvas></div>
+            </div>
+        </div>
+        <div id="ma-tab-comparativo" class="ma-view hidden animate-enter"></div>
+        <div id="ma-tab-assertividade" class="ma-view hidden animate-enter"></div>
+        <div id="ma-tab-feedback" class="ma-view hidden animate-enter"></div>
+
+    </div>
+
+    <script src="js/minha_area/main.js"></script>
+    <script src="js/minha_area/geral.js"></script>
+    <script src="js/minha_area/evolucao.js"></script>
+    <script src="js/minha_area/comparativo.js"></script>
+    <script src="js/minha_area/assertividade.js"></script>
+    <script src="js/minha_area/feedback.js"></script>
+</body>
+</html>

@@ -1,16 +1,13 @@
 window.MinhaArea = window.MinhaArea || {
     user: null,
     dataAtual: new Date(),
-    // Garante acesso ao Supabase global
     get supabase() {
         return window.Sistema ? window.Sistema.supabase : (window._supabase || null);
     }
 };
 
 MinhaArea.init = async function() {
-    // 1. Verifica Sessão
     const storedUser = localStorage.getItem('usuario_logado');
-    // Se não estiver logado e não for tela de login, para a execução
     if (!storedUser && !window.location.pathname.includes('index.html')) {
         console.warn("MinhaArea: Usuário não logado.");
         return; 
@@ -18,21 +15,14 @@ MinhaArea.init = async function() {
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
-        
-        // Atualiza interface do topo (se existir)
         const elRole = document.getElementById('user-role-label');
-        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.cargo || MinhaArea.user.funcao || 'Colaborador'}`;
-        
-        const elName = document.getElementById('user-name-display');
-        if(elName) elName.innerText = MinhaArea.user.nome.split(' ')[0];
+        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.cargo || MinhaArea.user.funcao}`;
     }
 
-    // 2. Inicializa Sistema (Supabase) se necessário
     if (window.Sistema && !window.Sistema.supabase) {
         await window.Sistema.inicializar(false);
     }
 
-    // 3. Define Data Inicial no Input (Hoje)
     const dateInput = document.getElementById('ma-global-date');
     if (dateInput) {
         const hoje = new Date();
@@ -43,17 +33,14 @@ MinhaArea.init = async function() {
         MinhaArea.dataAtual = hoje;
     }
 
-    // 4. Carrega Aba Padrão (Diário)
     MinhaArea.mudarAba('diario');
 };
 
 MinhaArea.atualizarDataGlobal = function(val) {
     if (!val) return;
     const [ano, mes, dia] = val.split('-').map(Number);
-    // Cria data preservando o dia (fixando 12h para evitar fuso)
     MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
 
-    // Recarrega a aba que estiver ativa no momento
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) {
         const abaAtiva = activeBtn.id.replace('btn-ma-', '');
@@ -62,21 +49,18 @@ MinhaArea.atualizarDataGlobal = function(val) {
 };
 
 MinhaArea.mudarAba = function(aba) {
-    // Gestão visual (Esconde todas views, remove active dos botões)
     document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
-    // Ativa visualmente a aba selecionada
     const view = document.getElementById(`ma-tab-${aba}`);
     const btn = document.getElementById(`btn-ma-${aba}`);
     
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
-    // Carregamento Logico dos Módulos
     if (aba === 'diario') {
-        if (MinhaArea.Diario) MinhaArea.Diario.carregar();
-        else console.error("Módulo MinhaArea.Diario não encontrado. Verifique se geral.js foi carregado.");
+        if(MinhaArea.Diario) MinhaArea.Diario.carregar();
+        else console.error("Módulo Diário não carregado.");
     }
     else if (aba === 'evolucao' && MinhaArea.Evolucao) MinhaArea.Evolucao.carregar();
     else if (aba === 'comparativo' && MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
@@ -85,7 +69,6 @@ MinhaArea.mudarAba = function(aba) {
 };
 
 MinhaArea.getPeriodo = function() {
-    // Retorna o primeiro e último dia do mês da data selecionada
     const y = MinhaArea.dataAtual.getFullYear();
     const m = MinhaArea.dataAtual.getMonth();
     return {

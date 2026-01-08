@@ -1,25 +1,17 @@
-// Define como MinhaArea.Diario para corresponder à aba 'diario' definida no main.js
 MinhaArea.Diario = {
-    
     carregar: async function() {
-        if (!MinhaArea.user) return;
-        if (!MinhaArea.supabase) {
-            console.error("Supabase não inicializado.");
-            return;
-        }
+        if (!MinhaArea.user || !MinhaArea.supabase) return;
 
         const periodo = MinhaArea.getPeriodo();
         const uid = MinhaArea.user.id;
         const tbody = document.getElementById('tabela-diario');
 
-        // Feedback de carregamento
-        if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando seu diário...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
-        // Verifica Check-in de presença
         this.verificarAcessoHoje();
 
         try {
-            // 1. BUSCA DADOS DE PRODUÇÃO (Do Usuário)
+            // 1. DADOS PESSOAIS
             const { data: producao, error } = await MinhaArea.supabase
                 .from('producao')
                 .select('*')
@@ -30,8 +22,7 @@ MinhaArea.Diario = {
 
             if (error) throw error;
 
-            // 2. BUSCA DADOS DO TIME (Para Comparativo - Apenas Assistentes)
-            // Isso permite calcular a média da equipe no mesmo período
+            // 2. DADOS DO TIME
             const { data: producaoTime } = await MinhaArea.supabase
                 .from('producao')
                 .select('quantidade, fator, usuarios!inner(perfil)')
@@ -39,28 +30,22 @@ MinhaArea.Diario = {
                 .gte('data_referencia', periodo.inicio)
                 .lte('data_referencia', periodo.fim);
 
-            // 3. BUSCA METAS VIGENTES
+            // 3. METAS
             const { data: metas } = await MinhaArea.supabase
                 .from('metas')
                 .select('*')
                 .eq('usuario_id', uid)
                 .order('data_inicio', { ascending: false });
 
-            // --- PROCESSAMENTO ---
-
-            // A) Processa Dados Pessoais
+            // PROCESSAMENTO
             const dadosProcessados = producao.map(item => {
-                let metaBase = 650; // Valor padrão
-                
-                // Prioridade: Meta gravada no registro > Meta vigente na data
-                if (item.meta_diaria && Number(item.meta_diaria) > 0) {
-                    metaBase = Number(item.meta_diaria);
-                } else if (metas && metas.length > 0) {
+                let metaBase = 650;
+                if (item.meta_diaria && Number(item.meta_diaria) > 0) metaBase = Number(item.meta_diaria);
+                else if (metas && metas.length > 0) {
                     const m = metas.find(meta => meta.data_inicio <= item.data_referencia);
                     if (m) metaBase = Number(m.valor_meta);
                 }
 
-                // Normaliza fator (aceita nomes variados de coluna por segurança)
                 let fator = 1;
                 if (item.fator !== null && item.fator !== undefined) fator = Number(item.fator);
                 else if (item.fator_multiplicador !== null && item.fator_multiplicador !== undefined) fator = Number(item.fator_multiplicador);
@@ -78,11 +63,9 @@ MinhaArea.Diario = {
                 };
             });
 
-            // B) Processa Média do Time
             let mediaTime = 0;
             if (producaoTime && producaoTime.length > 0) {
                 const totalTime = producaoTime.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
-                // Calcula dias efetivos do time (soma de dias onde fator > 0)
                 const diasTime = producaoTime.reduce((acc, curr) => {
                     const f = curr.fator !== null ? Number(curr.fator) : 1;
                     return acc + (f > 0 ? 1 : 0);
@@ -90,42 +73,36 @@ MinhaArea.Diario = {
                 mediaTime = diasTime > 0 ? Math.round(totalTime / diasTime) : 0;
             }
 
-            // Atualiza Interface
             this.atualizarKPIs(dadosProcessados, mediaTime);
             this.atualizarTabelaDiaria(dadosProcessados);
 
         } catch (e) {
-            console.error("Erro no Diário:", e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Erro ao carregar dados: ${e.message}</td></tr>`;
+            console.error(e);
+            if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
     atualizarKPIs: function(dados, mediaTime) {
         const totalProd = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
-        // Meta acumulada considera apenas dias trabalhados (fator > 0)
         const totalMeta = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
         const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
         
         const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
         const atingimento = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
 
-        // Card 1: Atingimento
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-meta-total', Math.round(totalMeta).toLocaleString('pt-BR'));
         this.setTxt('kpi-pct', `${atingimento}%`);
+        this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
+        this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
+        this.setTxt('kpi-dias', diasEfetivos);
         
         const bar = document.getElementById('bar-progress');
         if(bar) {
             bar.style.width = `${Math.min(atingimento, 100)}%`;
-            if(atingimento >= 100) bar.className = "h-full bg-emerald-500 rounded-full transition-all duration-500";
-            else if(atingimento >= 90) bar.className = "h-full bg-blue-500 rounded-full transition-all duration-500";
-            else bar.className = "h-full bg-amber-500 rounded-full transition-all duration-500";
+            bar.className = atingimento >= 100 ? "h-full bg-emerald-500 rounded-full" : (atingimento >= 90 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
         }
 
-        // Card 2: Comparativo com o Time
-        this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
-        this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
-        
         const compMsg = document.getElementById('kpi-comparativo-msg');
         if(compMsg) {
             if(minhaMedia > mediaTime) compMsg.innerHTML = '<span class="text-emerald-600 font-bold"><i class="fas fa-arrow-up mr-1"></i>Acima da média!</span>';
@@ -133,11 +110,8 @@ MinhaArea.Diario = {
             else compMsg.innerHTML = '<span class="text-blue-600 font-bold">Na média do time.</span>';
         }
 
-        // Card 3: Status
-        this.setTxt('kpi-dias', diasEfetivos);
         const txtStatus = document.getElementById('kpi-status-text');
         const iconStatus = document.getElementById('icon-status');
-
         if(txtStatus && iconStatus) {
             if(atingimento >= 100) {
                 txtStatus.innerHTML = "<span class='text-emerald-600'>Excelente! Meta batida.</span>";
@@ -157,7 +131,7 @@ MinhaArea.Diario = {
         if (!tbody) return;
         
         if (!dados.length) { 
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registro encontrado neste período.</td></tr>'; 
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registro encontrado.</td></tr>'; 
             return; 
         }
         
@@ -166,33 +140,22 @@ MinhaArea.Diario = {
             const fator = item.fator;
             const pct = item.meta_ajustada > 0 ? Math.round((item.quantidade / item.meta_ajustada) * 100) : 0;
             
-            // Badge de Status
-            let statusBadge = '';
-            if (fator === 0) {
-                statusBadge = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200">Abonado</span>';
-            } else {
-                let cor = 'bg-amber-50 text-amber-700 border-amber-200';
-                if(pct >= 100) cor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
-                else if(pct >= 80) cor = 'bg-blue-50 text-blue-700 border-blue-200';
-                statusBadge = `<span class="${cor} px-2 py-1 rounded text-[10px] font-bold border">${pct}%</span>`;
-            }
+            let statusBadge = fator === 0 
+                ? '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200">Abonado</span>'
+                : `<span class="${pct >= 100 ? 'bg-emerald-100 text-emerald-700' : (pct >= 80 ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700')} px-2 py-1 rounded text-[10px] font-bold border">${pct}%</span>`;
 
-            // Observações
             let obsHtml = '';
             if (item.observacao) obsHtml += `<div class="mb-1 text-slate-700">${item.observacao}</div>`;
             if (item.justificativa) obsHtml += `<div class="text-xs text-slate-500 italic"><i class="fas fa-info-circle mr-1"></i>Just.: ${item.justificativa}</div>`;
             if (item.observacao_gestora) obsHtml += `<div class="mt-1 text-[10px] bg-blue-50 text-blue-700 p-1 rounded border border-blue-100"><i class="fas fa-comment mr-1"></i>Gestão: ${item.observacao_gestora}</div>`;
             if (!obsHtml) obsHtml = '<span class="text-slate-300">-</span>';
 
-            const dFmt = item.data_referencia.split('-').reverse().join('/');
-
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
-                <td class="px-6 py-4 font-bold text-slate-600 text-xs">${dFmt}</td>
+                <td class="px-6 py-4 font-bold text-slate-600 text-xs">${item.data_referencia.split('-').reverse().join('/')}</td>
                 <td class="px-6 py-4 text-center font-black text-slate-700 text-base">${item.quantidade}</td>
                 <td class="px-6 py-4 text-center text-xs text-slate-500">
-                    ${item.meta_original}
-                    ${fator < 1 ? `<span class="ml-1 text-[9px] bg-amber-100 text-amber-800 px-1 rounded font-bold">x${fator}</span>` : ''}
+                    ${item.meta_original} ${fator < 1 ? `<span class="ml-1 text-[9px] bg-amber-100 text-amber-800 px-1 rounded font-bold">x${fator}</span>` : ''}
                 </td>
                 <td class="px-6 py-4 text-center">${statusBadge}</td>
                 <td class="px-6 py-4 text-xs text-slate-600 max-w-sm break-words leading-relaxed">${obsHtml}</td>
@@ -206,55 +169,21 @@ MinhaArea.Diario = {
         if(el) el.innerText = txt;
     },
 
-    // --- CHECK-IN DIÁRIO ---
     verificarAcessoHoje: async function() {
         if (MinhaArea.user && (MinhaArea.user.cargo === 'GESTORA' || MinhaArea.user.cargo === 'AUDITORA')) return;
-
         const box = document.getElementById('box-confirmacao-leitura');
-        const dataOntem = new Date();
-        dataOntem.setDate(dataOntem.getDate() - 1);
-        
-        // Se ontem foi fim de semana, ignora
-        if(dataOntem.getDay() === 0 || dataOntem.getDay() === 6) {
-            if(box) box.classList.add('hidden');
-            return;
-        }
-
-        const dataRef = dataOntem.toISOString().split('T')[0];
-        
-        const { data: reg } = await MinhaArea.supabase
-            .from('acessos_diarios')
-            .select('id')
-            .eq('usuario_id', MinhaArea.user.id)
-            .eq('data_referencia', dataRef);
-            
-        if (reg && reg.length > 0) {
-            if(box) box.classList.add('hidden');
-        } else {
-            if(box) box.classList.remove('hidden');
-        }
+        const d = new Date(); d.setDate(d.getDate() - 1);
+        if(d.getDay() === 0 || d.getDay() === 6) { if(box) box.classList.add('hidden'); return; }
+        const { data } = await MinhaArea.supabase.from('acessos_diarios').select('id').eq('usuario_id', MinhaArea.user.id).eq('data_referencia', d.toISOString().split('T')[0]);
+        if (data && data.length > 0) { if(box) box.classList.add('hidden'); } else { if(box) box.classList.remove('hidden'); }
     },
 
     confirmarAcessoHoje: async function() {
         const btn = document.querySelector('#box-confirmacao-leitura button');
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
-        
-        const dataOntem = new Date();
-        dataOntem.setDate(dataOntem.getDate() - 1);
-        const dataRef = dataOntem.toISOString().split('T')[0];
-        
-        const { error } = await MinhaArea.supabase.from('acessos_diarios').insert({
-            usuario_id: MinhaArea.user.id,
-            data_referencia: dataRef 
-        });
-        
-        if(!error) {
-            const box = document.getElementById('box-confirmacao-leitura');
-            box.classList.add('hidden');
-            alert("Check-in confirmado!");
-        } else {
-            alert("Erro ao confirmar: " + error.message);
-            if(btn) btn.innerText = "Tentar Novamente";
-        }
+        const d = new Date(); d.setDate(d.getDate() - 1);
+        const { error } = await MinhaArea.supabase.from('acessos_diarios').insert({ usuario_id: MinhaArea.user.id, data_referencia: d.toISOString().split('T')[0] });
+        if(!error) { document.getElementById('box-confirmacao-leitura').classList.add('hidden'); alert("Check-in confirmado!"); } 
+        else { alert("Erro: " + error.message); if(btn) btn.innerText = "Tentar Novamente"; }
     }
 };
