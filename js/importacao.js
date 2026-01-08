@@ -1,8 +1,17 @@
-// 1. GARANTE QUE O OBJETO GLOBAL EXISTA (Corrige o erro "Produtividade is not defined")
+// 1. GARANTE QUE O OBJETO GLOBAL EXISTA
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Importacao = {
     
+    // --- FUNÇÃO QUE FALTAVA (CORREÇÃO DO ERRO) ---
+    normalizar: function(texto) {
+        if (!texto) return "";
+        return String(texto)
+            .trim()
+            .toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, ""); // Remove acentos também para garantir melhor match
+    },
+
     processarArquivo: async function(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -48,7 +57,10 @@ Produtividade.Importacao = {
 
             const mapaUsuarios = {};
             usersData.forEach(u => {
-                if (u.nome) mapaUsuarios[u.nome.trim().toLowerCase()] = u.id;
+                if (u.nome) {
+                    // Usa a função normalizar aqui também para consistência
+                    mapaUsuarios[this.normalizar(u.nome)] = u.id;
+                }
             });
 
             // 2. Processa arquivos
@@ -71,7 +83,8 @@ Produtividade.Importacao = {
 
                     if (!nomeExcel || !dataExcel) continue;
 
-                    const nomeBusca = String(nomeExcel).trim().toLowerCase();
+                    // Usa a função normalizar para buscar
+                    const nomeBusca = this.normalizar(nomeExcel);
                     const usuarioId = mapaUsuarios[nomeBusca];
 
                     if (usuarioId) {
@@ -110,8 +123,9 @@ Produtividade.Importacao = {
 
             alert(`Importação concluída!\nRegistros processados: ${totalImportado}\nErros de arquivo: ${erros}`);
             
-            if(Produtividade && Produtividade.Geral && typeof Produtividade.Geral.carregarTela === 'function') {
-                Produtividade.Geral.carregarTela();
+            // Tenta recarregar a tela usando o módulo Geral
+            if(window.Produtividade && window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
+                window.Produtividade.Geral.carregarTela();
             } else {
                 location.reload();
             }
@@ -129,7 +143,7 @@ Produtividade.Importacao = {
     }
 };
 
-// 2. CORREÇÃO GLOBAL (Corrige o erro "Importacao is not defined" no main.js antigo)
+// 2. CORREÇÃO GLOBAL: Disponibiliza 'Importacao' globalmente para o main.js usar
 window.Importacao = Produtividade.Importacao;
 
 // 3. Atalho para o HTML chamar direto
