@@ -69,7 +69,6 @@ Produtividade.Main = {
                 break;
             case 'performance':
                 if(Produtividade.Performance) {
-                    // Inicializa garantindo que o seletor esteja correto
                     Produtividade.Performance.togglePeriodo();
                 }
                 break;
