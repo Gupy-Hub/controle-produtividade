@@ -53,7 +53,34 @@ MinhaArea.Diario = {
                 .eq('usuario_id', uid)
                 .order('data_inicio', { ascending: false });
 
-            // PROCESSAMENTO
+            // --- NOVO: CÁLCULO DA META MENSAL (FULL) ---
+            // Calcula a meta total do mês (Dias Úteis * Meta Diária Vigente)
+            let metaMensal = 0;
+            const ano = MinhaArea.dataAtual.getFullYear();
+            const mes = MinhaArea.dataAtual.getMonth();
+            const ultimoDia = new Date(ano, mes + 1, 0).getDate();
+
+            for (let d = 1; d <= ultimoDia; d++) {
+                const dataDia = new Date(ano, mes, d);
+                const diaSemana = dataDia.getDay();
+
+                // Considera apenas dias úteis (Segunda a Sexta) - Ajuste se trabalhar sábado
+                if (diaSemana !== 0 && diaSemana !== 6) {
+                    const dataStr = dataDia.toISOString().split('T')[0];
+                    let metaDoDia = 650; // Valor padrão
+                    
+                    // Verifica qual meta estava valendo neste dia específico
+                    if (metas && metas.length > 0) {
+                        // Como 'metas' está ordenado decrescente por data_inicio, o find pega a primeira data anterior ou igual
+                        const m = metas.find(mt => mt.data_inicio <= dataStr);
+                        if (m) metaDoDia = Number(m.valor_meta);
+                    }
+                    metaMensal += metaDoDia;
+                }
+            }
+            // -------------------------------------------
+
+            // PROCESSAMENTO DOS DADOS DE PRODUÇÃO
             const dadosProcessados = producao.map(item => {
                 let metaBase = 650;
                 if (item.meta_diaria && Number(item.meta_diaria) > 0) metaBase = Number(item.meta_diaria);
@@ -89,7 +116,8 @@ MinhaArea.Diario = {
                 mediaTime = diasTime > 0 ? Math.round(totalTime / diasTime) : 0;
             }
 
-            this.atualizarKPIs(dadosProcessados, mediaTime);
+            // Passa a metaMensal calculada para a função de KPIs
+            this.atualizarKPIs(dadosProcessados, mediaTime, metaMensal);
             this.atualizarTabelaDiaria(dadosProcessados);
 
         } catch (e) {
@@ -98,7 +126,55 @@ MinhaArea.Diario = {
         }
     },
 
-    // --- LÓGICA DO BOTÃO E MODAL DA GESTORA ---
+    // Recebe metaMensal como argumento opcional
+    atualizarKPIs: function(dados, mediaTime, metaMensal) {
+        const totalProd = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
+        
+        // Se metaMensal for passada (>0), usa ela. Se não, usa o acumulado dos registros (fallback)
+        const target = (metaMensal && metaMensal > 0) 
+            ? metaMensal 
+            : dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
+            
+        const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
+        
+        const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
+        const atingimento = target > 0 ? Math.round((totalProd / target) * 100) : 0;
+
+        this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
+        this.setTxt('kpi-meta-total', Math.round(target).toLocaleString('pt-BR')); // Exibe a Meta do Mês
+        this.setTxt('kpi-pct', `${atingimento}%`);
+        this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
+        this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
+        this.setTxt('kpi-dias', diasEfetivos);
+        
+        const bar = document.getElementById('bar-progress');
+        if(bar) {
+            bar.style.width = `${Math.min(atingimento, 100)}%`;
+            bar.className = atingimento >= 100 ? "h-full bg-emerald-500 rounded-full" : (atingimento >= 90 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
+        }
+
+        const compMsg = document.getElementById('kpi-comparativo-msg');
+        if(compMsg) {
+            if(minhaMedia > mediaTime) compMsg.innerHTML = '<span class="text-emerald-600 font-bold"><i class="fas fa-arrow-up mr-1"></i>Acima da média!</span>';
+            else if(minhaMedia < mediaTime) compMsg.innerHTML = '<span class="text-amber-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>Abaixo da média.</span>';
+            else compMsg.innerHTML = '<span class="text-blue-600 font-bold">Na média do time.</span>';
+        }
+
+        const txtStatus = document.getElementById('kpi-status-text');
+        const iconStatus = document.getElementById('icon-status');
+        if(txtStatus && iconStatus) {
+            if(atingimento >= 100) {
+                txtStatus.innerHTML = "<span class='text-emerald-600'>Excelente! Meta batida.</span>";
+                iconStatus.className = "fas fa-star text-emerald-500";
+            } else if(atingimento >= 85) {
+                txtStatus.innerHTML = "<span class='text-blue-600'>Bom desempenho.</span>";
+                iconStatus.className = "fas fa-thumbs-up text-blue-500";
+            } else {
+                txtStatus.innerHTML = "<span class='text-amber-600'>Precisa melhorar.</span>";
+                iconStatus.className = "fas fa-exclamation text-amber-500";
+            }
+        }
+    },
 
     renderizarBotaoGestora: function() {
         // Encontra o container do cabeçalho da tabela para inserir o botão
@@ -286,50 +362,6 @@ MinhaArea.Diario = {
                 <i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><br>
                 Erro ao carregar mapa: ${e.message}
             </div>`;
-        }
-    },
-
-    atualizarKPIs: function(dados, mediaTime) {
-        const totalProd = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
-        const totalMeta = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
-        const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
-        
-        const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
-        const atingimento = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
-
-        this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-        this.setTxt('kpi-meta-total', Math.round(totalMeta).toLocaleString('pt-BR'));
-        this.setTxt('kpi-pct', `${atingimento}%`);
-        this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
-        this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
-        this.setTxt('kpi-dias', diasEfetivos);
-        
-        const bar = document.getElementById('bar-progress');
-        if(bar) {
-            bar.style.width = `${Math.min(atingimento, 100)}%`;
-            bar.className = atingimento >= 100 ? "h-full bg-emerald-500 rounded-full" : (atingimento >= 90 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
-        }
-
-        const compMsg = document.getElementById('kpi-comparativo-msg');
-        if(compMsg) {
-            if(minhaMedia > mediaTime) compMsg.innerHTML = '<span class="text-emerald-600 font-bold"><i class="fas fa-arrow-up mr-1"></i>Acima da média!</span>';
-            else if(minhaMedia < mediaTime) compMsg.innerHTML = '<span class="text-amber-600 font-bold"><i class="fas fa-arrow-down mr-1"></i>Abaixo da média.</span>';
-            else compMsg.innerHTML = '<span class="text-blue-600 font-bold">Na média do time.</span>';
-        }
-
-        const txtStatus = document.getElementById('kpi-status-text');
-        const iconStatus = document.getElementById('icon-status');
-        if(txtStatus && iconStatus) {
-            if(atingimento >= 100) {
-                txtStatus.innerHTML = "<span class='text-emerald-600'>Excelente! Meta batida.</span>";
-                iconStatus.className = "fas fa-star text-emerald-500";
-            } else if(atingimento >= 85) {
-                txtStatus.innerHTML = "<span class='text-blue-600'>Bom desempenho.</span>";
-                iconStatus.className = "fas fa-thumbs-up text-blue-500";
-            } else {
-                txtStatus.innerHTML = "<span class='text-amber-600'>Precisa melhorar.</span>";
-                iconStatus.className = "fas fa-exclamation text-amber-500";
-            }
         }
     },
 
