@@ -1,7 +1,7 @@
 window.MinhaArea = window.MinhaArea || {
     user: null,
     dataAtual: new Date(),
-    usuarioAlvo: null, // ID do usuário que está sendo visualizado (pode ser diferente do user logado)
+    usuarioAlvo: null, 
     
     get supabase() {
         return window.Sistema ? window.Sistema.supabase : (window._supabase || null);
@@ -22,13 +22,16 @@ MinhaArea.init = async function() {
         MinhaArea.usuarioAlvo = MinhaArea.user.id;
         
         const elRole = document.getElementById('user-role-label');
-        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.cargo || MinhaArea.user.funcao || 'User'}`;
+        // Exibe Funcao (ex: Assistente/Gestora) no topo
+        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.funcao || MinhaArea.user.cargo || 'User'}`;
     }
 
+    // Inicializa Supabase
     if (window.Sistema && !window.Sistema.supabase) {
         await window.Sistema.inicializar(false);
     }
 
+    // Define Data Hoje
     const dateInput = document.getElementById('ma-global-date');
     if (dateInput) {
         const hoje = new Date();
@@ -40,15 +43,22 @@ MinhaArea.init = async function() {
     }
     
     // --- LÓGICA DE ADMIN / GESTOR ---
-    // Se for Admin/Gestora, mostra seletor de usuários
+    // Verifica se é Gestora, Auditora ou ID 1000 (Admin)
+    const funcao = MinhaArea.user.funcao ? MinhaArea.user.funcao.toUpperCase() : '';
     const cargo = MinhaArea.user.cargo ? MinhaArea.user.cargo.toUpperCase() : '';
-    const isAdmin = cargo === 'GESTORA' || cargo === 'AUDITORA' || cargo === 'ADMINISTRADOR' || MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
+    
+    // Permite acesso ao seletor se for Gestora, Auditora ou Admin
+    const isAdmin = funcao === 'GESTORA' || funcao === 'AUDITORA' || 
+                    cargo === 'GESTORA' || cargo === 'AUDITORA' || 
+                    MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
 
     if (isAdmin) {
         const controls = document.getElementById('admin-controls');
         const select = document.getElementById('admin-user-select');
+        
         if(controls && select) {
             controls.classList.remove('hidden');
+            // Chama a função corrigida para buscar usuarios
             await MinhaArea.carregarListaUsuarios(select);
         }
     }
@@ -58,33 +68,45 @@ MinhaArea.init = async function() {
 
 MinhaArea.carregarListaUsuarios = async function(selectElement) {
     try {
-        // Busca todos os assistentes ativos
+        if (!MinhaArea.supabase) {
+            console.error("Supabase não disponível para carregar usuários.");
+            return;
+        }
+
+        // --- CORREÇÃO AQUI ---
+        // Busca na coluna 'funcao' em vez de 'perfil', pois é onde o Gestao.Equipe salva "Assistente"
         const { data, error } = await MinhaArea.supabase
             .from('usuarios')
             .select('id, nome')
-            .eq('perfil', 'assistente')
+            .eq('funcao', 'Assistente') // Corrigido de 'perfil' para 'funcao'
             .eq('ativo', true)
             .order('nome');
 
         if(error) throw error;
 
-        selectElement.innerHTML = '<option value="">Selecione um usuário...</option>';
-        data.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.id;
-            opt.innerText = u.nome;
-            selectElement.appendChild(opt);
-        });
+        selectElement.innerHTML = '<option value="">Selecione um assistente...</option>';
         
-        // Se eu sou admin, não quero me ver (não tenho dados). Seleciona o primeiro da lista.
-        if (data.length > 0) {
-            // Se o usuarioAlvo atual for eu mesmo (Admin), muda para o primeiro assistente
+        if (data && data.length > 0) {
+            data.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.id;
+                opt.innerText = u.nome;
+                selectElement.appendChild(opt);
+            });
+
+            // Se eu sou o Admin (ID 1000 ou sem dados proprios), seleciono o primeiro da lista automaticamente
             if (String(MinhaArea.usuarioAlvo) === String(MinhaArea.user.id)) {
-                MinhaArea.usuarioAlvo = data[0].id;
-                selectElement.value = data[0].id;
+                // Se eu não sou um assistente (sou gestor), mudo o alvo para o primeiro assistente da lista
+                if (MinhaArea.user.funcao !== 'Assistente') {
+                    MinhaArea.usuarioAlvo = data[0].id;
+                    selectElement.value = data[0].id;
+                }
             } else {
+                // Mantém o selecionado
                 selectElement.value = MinhaArea.usuarioAlvo;
             }
+        } else {
+            selectElement.innerHTML = '<option value="">Nenhum assistente ativo</option>';
         }
 
     } catch (err) {
@@ -97,7 +119,7 @@ MinhaArea.mudarUsuarioAlvo = function(id) {
     if (!id) return;
     MinhaArea.usuarioAlvo = id;
     
-    // Recarrega a aba ativa para refletir os dados do novo usuário
+    // Recarrega a aba ativa para buscar os dados do novo ID
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) {
         const abaAtiva = activeBtn.id.replace('btn-ma-', '');
@@ -127,6 +149,7 @@ MinhaArea.mudarAba = function(aba) {
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
+    // Módulos
     if (aba === 'diario') {
         if(MinhaArea.Diario) MinhaArea.Diario.carregar();
     }
