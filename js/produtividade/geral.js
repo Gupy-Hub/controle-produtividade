@@ -37,6 +37,22 @@ Produtividade.Geral = {
         return semanas;
     },
 
+    // Nova função para calcular dias úteis (Seg-Sex)
+    calcularDiasUteis: function(inicio, fim) {
+        let count = 0;
+        let cur = new Date(inicio + 'T12:00:00'); // Hora fixa para evitar fuso
+        const end = new Date(fim + 'T12:00:00');
+        
+        while(cur <= end) {
+            const day = cur.getDay();
+            if(day !== 0 && day !== 6) { // 0=Domingo, 6=Sábado
+                count++;
+            }
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count;
+    },
+
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         const dateInput = document.getElementById('global-date');
@@ -88,10 +104,14 @@ Produtividade.Geral = {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
                 if(!dadosAgrupados[uid]) {
+                    // Garante a leitura da meta do banco
+                    const metaBanco = item.usuario ? Number(item.usuario.meta_diaria) : 0;
+                    
                     dadosAgrupados[uid] = {
                         usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente', meta_diaria: 650 },
                         registros: [],
-                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 }
+                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
+                        meta_real: metaBanco > 0 ? metaBanco : 650 // Usa a meta do banco ou 650 se for zero/null
                     };
                 }
                 dadosAgrupados[uid].registros.push(item);
@@ -109,7 +129,9 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             this.renderizarTabela();
-            this.atualizarKPIs(data);
+            
+            // Passamos as datas para o cálculo correto dos dias úteis
+            this.atualizarKPIs(data, dataInicio, dataFim);
 
         } catch (error) {
             console.error("Erro ao carregar:", error);
@@ -132,14 +154,15 @@ Produtividade.Geral = {
             
             const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
             
-            // TRATAMENTO VISUAL PARA "USER" -> "PJ"
-            let perfilExibicao = (d.usuario.perfil || 'PJ').toUpperCase();
-            if(perfilExibicao === 'USER') perfilExibicao = 'PJ'; 
+            let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
+            if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
+            const perfilExibicao = perfilRaw;
+
+            const metaBase = d.meta_real;
 
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
-                const meta = d.usuario.meta_diaria || 650;
-                const metaCalc = meta * r.fator;
+                const metaCalc = metaBase * r.fator;
                 const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
                 
                 let corFator = 'bg-green-50 text-green-700 border-green-200';
@@ -197,8 +220,7 @@ Produtividade.Geral = {
                 `;
                 tbody.appendChild(tr);
             } else {
-                const meta = d.usuario.meta_diaria || 650;
-                const metaTotal = meta * d.totais.diasUteis;
+                const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
                 const tr = document.createElement('tr');
@@ -374,7 +396,8 @@ Produtividade.Geral = {
         this.renderizarTabela();
     },
 
-    atualizarKPIs: function(data) {
+    // ATUALIZADO: Recebe datas para calcular dias úteis do calendário
+    atualizarKPIs: function(data, dataInicio, dataFim) {
         let totalProd = 0;
         let metaTotal = 0;
         let diasComProd = new Set();
@@ -383,12 +406,14 @@ Produtividade.Geral = {
         
         data.forEach(r => {
             totalProd += (Number(r.quantidade) || 0);
-            metaTotal += ((r.usuario.meta_diaria || 650) * r.fator);
+            
+            const metaUser = Number(r.usuario.meta_diaria) > 0 ? Number(r.usuario.meta_diaria) : 650;
+            metaTotal += (metaUser * r.fator);
+            
             diasComProd.add(r.data_referencia);
             
-            // Lógica de contagem corrigida
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
-            if(perfil === 'USER') perfil = 'PJ'; // Considera USER como PJ
+            if(perfil === 'USER') perfil = 'PJ'; 
 
             if(perfil === 'CLT') {
                 usersCLT.add(r.usuario.id);
@@ -426,8 +451,15 @@ Produtividade.Geral = {
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = (totalUsers > 0 ? (pj/totalUsers)*100 : 0) + '%';
 
+        // --- CORREÇÃO DO CARD DIAS ÚTEIS ---
+        // Calcula dias úteis do calendário (Semana ou Mês selecionado)
+        const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
+        
         const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) elDias.innerText = diasComProd.size;
+        if(elDias) elDias.innerText = diasUteisTotais; // Mostra total de dias úteis possíveis
+        
+        const elDiasTotal = document.getElementById('kpi-dias-total');
+        if(elDiasTotal) elDiasTotal.innerText = `/ ${diasComProd.size} (Trab)`; // Mostra dias trabalhados
         
         const media = totalUsers > 0 ? Math.round(totalProd / totalUsers) : 0;
         const elMedia = document.getElementById('kpi-media-todas');
