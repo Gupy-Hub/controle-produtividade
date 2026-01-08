@@ -1,7 +1,7 @@
+// Define como MinhaArea.Diario para corresponder à aba 'diario' definida no main.js
 MinhaArea.Diario = {
     
     carregar: async function() {
-        // Verifica se usuário e conexão existem
         if (!MinhaArea.user) return;
         if (!MinhaArea.supabase) {
             console.error("Supabase não inicializado.");
@@ -31,6 +31,7 @@ MinhaArea.Diario = {
             if (error) throw error;
 
             // 2. BUSCA DADOS DO TIME (Para Comparativo - Apenas Assistentes)
+            // Isso permite calcular a média da equipe no mesmo período
             const { data: producaoTime } = await MinhaArea.supabase
                 .from('producao')
                 .select('quantidade, fator, usuarios!inner(perfil)')
@@ -59,7 +60,7 @@ MinhaArea.Diario = {
                     if (m) metaBase = Number(m.valor_meta);
                 }
 
-                // Normaliza fator
+                // Normaliza fator (aceita nomes variados de coluna por segurança)
                 let fator = 1;
                 if (item.fator !== null && item.fator !== undefined) fator = Number(item.fator);
                 else if (item.fator_multiplicador !== null && item.fator_multiplicador !== undefined) fator = Number(item.fator_multiplicador);
@@ -81,6 +82,7 @@ MinhaArea.Diario = {
             let mediaTime = 0;
             if (producaoTime && producaoTime.length > 0) {
                 const totalTime = producaoTime.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
+                // Calcula dias efetivos do time (soma de dias onde fator > 0)
                 const diasTime = producaoTime.reduce((acc, curr) => {
                     const f = curr.fator !== null ? Number(curr.fator) : 1;
                     return acc + (f > 0 ? 1 : 0);
@@ -100,6 +102,7 @@ MinhaArea.Diario = {
 
     atualizarKPIs: function(dados, mediaTime) {
         const totalProd = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
+        // Meta acumulada considera apenas dias trabalhados (fator > 0)
         const totalMeta = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
         const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
         
@@ -119,7 +122,7 @@ MinhaArea.Diario = {
             else bar.className = "h-full bg-amber-500 rounded-full transition-all duration-500";
         }
 
-        // Card 2: Comparativo Time
+        // Card 2: Comparativo com o Time
         this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
         this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
         
@@ -211,7 +214,7 @@ MinhaArea.Diario = {
         const dataOntem = new Date();
         dataOntem.setDate(dataOntem.getDate() - 1);
         
-        // Se ontem foi fim de semana, esconde box
+        // Se ontem foi fim de semana, ignora
         if(dataOntem.getDay() === 0 || dataOntem.getDay() === 6) {
             if(box) box.classList.add('hidden');
             return;
@@ -219,7 +222,6 @@ MinhaArea.Diario = {
 
         const dataRef = dataOntem.toISOString().split('T')[0];
         
-        // Verifica se já confirmou
         const { data: reg } = await MinhaArea.supabase
             .from('acessos_diarios')
             .select('id')

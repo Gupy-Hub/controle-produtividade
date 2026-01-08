@@ -10,17 +10,20 @@ window.MinhaArea = window.MinhaArea || {
 MinhaArea.init = async function() {
     // 1. Verifica Sessão
     const storedUser = localStorage.getItem('usuario_logado');
+    // Se não estiver logado e não for tela de login, para a execução
     if (!storedUser && !window.location.pathname.includes('index.html')) {
-        console.warn("Usuário não logado.");
+        console.warn("MinhaArea: Usuário não logado.");
         return; 
     }
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
-        const elRole = document.getElementById('user-role-label');
-        const elName = document.getElementById('user-name-display');
         
+        // Atualiza interface do topo (se existir)
+        const elRole = document.getElementById('user-role-label');
         if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.cargo || MinhaArea.user.funcao || 'Colaborador'}`;
+        
+        const elName = document.getElementById('user-name-display');
         if(elName) elName.innerText = MinhaArea.user.nome.split(' ')[0];
     }
 
@@ -50,6 +53,7 @@ MinhaArea.atualizarDataGlobal = function(val) {
     // Cria data preservando o dia (fixando 12h para evitar fuso)
     MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
 
+    // Recarrega a aba que estiver ativa no momento
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) {
         const abaAtiva = activeBtn.id.replace('btn-ma-', '');
@@ -58,19 +62,21 @@ MinhaArea.atualizarDataGlobal = function(val) {
 };
 
 MinhaArea.mudarAba = function(aba) {
+    // Gestão visual (Esconde todas views, remove active dos botões)
     document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
+    // Ativa visualmente a aba selecionada
     const view = document.getElementById(`ma-tab-${aba}`);
     const btn = document.getElementById(`btn-ma-${aba}`);
     
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
-    // Carregamento dos Módulos com Verificação de Segurança
+    // Carregamento Logico dos Módulos
     if (aba === 'diario') {
-        if(MinhaArea.Diario) MinhaArea.Diario.carregar();
-        else console.error("Módulo MinhaArea.Diario não carregado (verifique js/minha_area/geral.js)");
+        if (MinhaArea.Diario) MinhaArea.Diario.carregar();
+        else console.error("Módulo MinhaArea.Diario não encontrado. Verifique se geral.js foi carregado.");
     }
     else if (aba === 'evolucao' && MinhaArea.Evolucao) MinhaArea.Evolucao.carregar();
     else if (aba === 'comparativo' && MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
@@ -79,6 +85,7 @@ MinhaArea.mudarAba = function(aba) {
 };
 
 MinhaArea.getPeriodo = function() {
+    // Retorna o primeiro e último dia do mês da data selecionada
     const y = MinhaArea.dataAtual.getFullYear();
     const m = MinhaArea.dataAtual.getMonth();
     return {
