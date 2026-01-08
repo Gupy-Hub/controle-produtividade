@@ -4,7 +4,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        // Recupera o último modo de visualização (Dia/Mês/Semana)
+        // Recupera preferências salvas
         const lastViewMode = localStorage.getItem('lastViewMode');
         if (lastViewMode) {
             document.getElementById('view-mode').value = lastViewMode;
@@ -17,9 +17,7 @@ Produtividade.Geral = {
     
     toggleSemana: function() {
         const mode = document.getElementById('view-mode').value;
-        
-        // Salva a preferência do usuário
-        localStorage.setItem('lastViewMode', mode);
+        localStorage.setItem('lastViewMode', mode); // Salva preferência
 
         const sem = document.getElementById('select-semana');
         if(mode === 'semana') sem.classList.remove('hidden'); else sem.classList.add('hidden');
@@ -131,7 +129,10 @@ Produtividade.Geral = {
                 d.gt += (Number(item.gradual_total) || 0);
                 d.gp += (Number(item.gradual_parcial) || 0);
                 d.fc += (Number(item.perfil_fc) || 0);
+                
+                // Contagem de dias (frequência)
                 d.dias += 1; 
+                // Soma de dias úteis (para cálculo de meta)
                 d.diasUteis += f; 
             });
 
@@ -157,15 +158,16 @@ Produtividade.Geral = {
 
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
-            const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
             
-            // Corrige visualmente se vier 'user'
+            // Dados de Cargo e Perfil
+            const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
             let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
             if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
             const perfilExibicao = perfilRaw;
 
             const metaBase = d.meta_real;
 
+            // --- VISUALIZAÇÃO DETALHADA (DIA ÚNICO) ---
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
                 const metaCalc = metaBase * r.fator;
@@ -225,7 +227,11 @@ Produtividade.Geral = {
                     </td>
                 `;
                 tbody.appendChild(tr);
-            } else {
+            } 
+            
+            // --- VISUALIZAÇÃO AGRUPADA (SEMANA/MÊS) ---
+            else {
+                // Cálculo da Meta Total = Meta Diária * Dias Úteis Efetivos (Soma dos Fatores)
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
@@ -248,7 +254,9 @@ Produtividade.Geral = {
                             </div>
                         </div>
                     </td>
-                    <td class="px-6 py-3 text-center font-bold text-slate-500 text-xs">${d.totais.diasUteis} / ${d.totais.dias}</td>
+                    <td class="px-6 py-3 text-center font-bold text-slate-600 text-xs">
+                        ${d.totais.diasUteis}
+                    </td>
                     <td class="px-6 py-3 text-center font-bold text-blue-700">${d.totais.qty}</td>
                     <td class="px-6 py-3 text-center text-slate-500">${d.totais.fifo}</td>
                     <td class="px-6 py-3 text-center text-slate-500">${d.totais.gt}</td>
@@ -269,6 +277,7 @@ Produtividade.Geral = {
         }
     },
     
+    // Funções de atualização (Fator, Exclusão, KPIs)
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
@@ -407,7 +416,6 @@ Produtividade.Geral = {
         let metaTotalGeral = 0;
         let diasComProd = new Set();
         
-        // Média só Assistentes
         let totalProdAssistentes = 0;
         let countAssistentes = new Set(); 
 
@@ -419,7 +427,7 @@ Produtividade.Geral = {
             const metaUser = Number(r.usuario.meta_diaria) > 0 ? Number(r.usuario.meta_diaria) : 650;
             const metaCalc = metaUser * r.fator;
             
-            // 1. SOMA TUDO NO GERAL (Assistentes + Auditoras)
+            // Geral (Inclui Auditoras)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
@@ -428,7 +436,7 @@ Produtividade.Geral = {
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
             if(perfil === 'USER') perfil = 'PJ';
 
-            // 2. SEPARA PARA MÉDIA (Apenas Assistentes)
+            // Média (Exclui Auditoras)
             if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
@@ -457,30 +465,25 @@ Produtividade.Geral = {
         
         const elClt = document.getElementById('kpi-clt-val');
         if(elClt) elClt.innerText = `${clt} (${totalUsers > 0 ? Math.round(clt/totalUsers*100) : 0}%)`;
-        
         const elPj = document.getElementById('kpi-pj-val');
         if(elPj) elPj.innerText = `${pj} (${totalUsers > 0 ? Math.round(pj/totalUsers*100) : 0}%)`;
         
         const barClt = document.getElementById('kpi-clt-bar');
         if(barClt) barClt.style.width = (totalUsers > 0 ? (clt/totalUsers)*100 : 0) + '%';
-        
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = (totalUsers > 0 ? (pj/totalUsers)*100 : 0) + '%';
 
-        // --- CORREÇÃO FINAL DIAS ÚTEIS ---
+        // DIAS ÚTEIS
         const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
-        
         const elDias = document.getElementById('kpi-dias-val');
         if(elDias) {
-            // Formato X / Y (X = Trabalhados / Y = Úteis Totais)
             elDias.innerText = `${diasComProd.size} / ${diasUteisTotais}`;
             elDias.style.fontSize = "1.5rem"; 
         }
-        
         const elDiasTotal = document.getElementById('kpi-dias-total');
-        if(elDiasTotal) elDiasTotal.innerText = ""; // Limpa porque a info já está no número grande
+        if(elDiasTotal) elDiasTotal.innerText = ""; 
 
-        // MÉDIA (Só assistentes)
+        // MÉDIA (Assistentes)
         const numAssistentes = countAssistentes.size;
         const media = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
         const elMedia = document.getElementById('kpi-media-todas');
