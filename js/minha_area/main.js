@@ -14,10 +14,8 @@ MinhaArea.init = async function() {
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
-        const elName = document.getElementById('user-name-display');
         const elRole = document.getElementById('user-role-label');
-        if(elName) elName.innerText = MinhaArea.user.nome.split(' ')[0];
-        if(elRole) elRole.innerText = `${MinhaArea.user.funcao} • ${MinhaArea.user.contrato || 'PJ'}`;
+        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.funcao}`;
     }
 
     if (window._supabase) {
@@ -27,23 +25,21 @@ MinhaArea.init = async function() {
         window._supabase = MinhaArea.supabase;
     }
 
-    // Inicializa o input de data com a data atual (YYYY-MM-DD)
+    // Inicializa Data
     const dateInput = document.getElementById('ma-global-date');
     if (dateInput) {
         dateInput.value = MinhaArea.dataAtual.toISOString().split('T')[0];
     }
 
-    MinhaArea.mudarAba('geral');
+    // Carrega aba padrão: Diário
+    MinhaArea.mudarAba('diario');
 };
 
-// Nova função para atualizar data quando o input mudar (estilo Produtividade)
 MinhaArea.atualizarDataGlobal = function(val) {
     if (!val) return;
     const [ano, mes, dia] = val.split('-').map(Number);
-    // Cria data preservando fuso local ou definindo meio-dia para evitar problemas de UTC
     MinhaArea.dataAtual = new Date(ano, mes - 1, dia);
 
-    // Recarrega a aba ativa
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) {
         const abaAtiva = activeBtn.id.replace('btn-ma-', '');
@@ -61,8 +57,9 @@ MinhaArea.mudarAba = function(aba) {
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
-    // Só carrega se o módulo existir
-    if (aba === 'geral' && MinhaArea.Geral) MinhaArea.Geral.carregar();
+    // Mapeamento de carregamento
+    // Nota: A lógica de 'geral.js' agora alimenta a aba 'diario'
+    if (aba === 'diario' && MinhaArea.Diario) MinhaArea.Diario.carregar();
     else if (aba === 'evolucao' && MinhaArea.Evolucao) MinhaArea.Evolucao.carregar();
     else if (aba === 'comparativo' && MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
     else if (aba === 'assertividade' && MinhaArea.Assertividade) MinhaArea.Assertividade.carregar();
