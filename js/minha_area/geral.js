@@ -15,7 +15,7 @@ MinhaArea.Diario = {
         // 1. Verificação de Check-in Pessoal (Para o usuário logado)
         this.verificarAcessoHoje(uid);
 
-        // 2. Verifica se é Gestora
+        // 2. Verifica se é Gestora para exibir o BOTÃO do relatório
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
         const cargo = (MinhaArea.user.cargo || '').toUpperCase();
         const isGestora = funcao === 'GESTORA' || funcao === 'AUDITORA' || 
@@ -155,13 +155,28 @@ MinhaArea.Diario = {
         const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
         const atingimento = target > 0 ? Math.round((totalProd / target) * 100) : 0;
 
+        // --- CÁLCULO DO MELHOR DIA ---
+        let melhorDia = null;
+        let maiorPct = -1;
+
+        dados.forEach(d => {
+            if (d.meta_ajustada > 0 && d.fator > 0) {
+                const pct = d.quantidade / d.meta_ajustada;
+                if (pct > maiorPct) {
+                    maiorPct = pct;
+                    melhorDia = d;
+                }
+            }
+        });
+        // -----------------------------
+
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-meta-total', Math.round(target).toLocaleString('pt-BR'));
         this.setTxt('kpi-pct', `${atingimento}%`);
         this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
         this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
         
-        // ATUALIZAÇÃO: Dias Produtivos / Dias Úteis
+        // Atualização: Dias Produtivos / Dias Úteis
         this.setTxt('kpi-dias', `${diasEfetivos}/${diasUteisTotal || 0}`);
         
         const bar = document.getElementById('bar-progress');
@@ -177,32 +192,56 @@ MinhaArea.Diario = {
             else compMsg.innerHTML = '<span class="text-blue-600 font-bold">Na média do time.</span>';
         }
 
+        // --- LÓGICA DO STATUS + MELHOR DIA (COMPACTO) ---
         const txtStatus = document.getElementById('kpi-status-text');
         const iconStatus = document.getElementById('icon-status');
+        
         if(txtStatus && iconStatus) {
-            if(atingimento >= 100) {
-                txtStatus.innerHTML = "<span class='text-emerald-600'>Excelente! Meta batida.</span>";
-                iconStatus.className = "fas fa-star text-emerald-500";
-            } else if(atingimento >= 85) {
-                txtStatus.innerHTML = "<span class='text-blue-600'>Bom desempenho.</span>";
-                iconStatus.className = "fas fa-thumbs-up text-blue-500";
-            } else {
-                txtStatus.innerHTML = "<span class='text-amber-600'>Precisa melhorar.</span>";
-                iconStatus.className = "fas fa-exclamation text-amber-500";
-            }
-        }
+            let statusHtml = "";
+            let iconClass = "";
 
-        // NOVO: Exibe CLT/PJ se for Gestora
+            if(atingimento >= 100) {
+                statusHtml = "<span class='text-emerald-600'>Excelente!</span>";
+                iconClass = "fas fa-star text-emerald-500";
+            } else if(atingimento >= 85) {
+                statusHtml = "<span class='text-blue-600'>Bom desempenho.</span>";
+                iconClass = "fas fa-thumbs-up text-blue-500";
+            } else {
+                statusHtml = "<span class='text-amber-600'>Precisa melhorar.</span>";
+                iconClass = "fas fa-exclamation text-amber-500";
+            }
+
+            iconStatus.className = iconClass;
+
+            // Formata o melhor dia se existir
+            let bestDayHtml = "";
+            if (melhorDia) {
+                const dia = melhorDia.data_referencia.split('-').reverse().slice(0, 2).join('/'); // DD/MM
+                const pctBest = Math.round(maiorPct * 100);
+                bestDayHtml = `<div class="text-right"><span class="text-[10px] text-slate-400 uppercase tracking-tighter">Melhor Dia</span><div class="text-xs font-black text-slate-600">${dia} <span class="text-blue-600">(${pctBest}%)</span></div></div>`;
+            }
+
+            // Substitui o conteúdo do container do texto de status para criar o layout Flex
+            // O pai de txtStatus é a div mt-2. Vamos manipulá-la.
+            const containerStatus = txtStatus.parentElement;
+            containerStatus.className = "mt-2 flex justify-between items-end"; // Flex para alinhar lados
+            containerStatus.innerHTML = `
+                <div class="text-xs font-bold">${statusHtml}</div>
+                ${bestDayHtml}
+            `;
+        }
+        // ------------------------------------------------
+
+        // Exibe CLT/PJ se for Gestora (Rodapé super compacto)
         const cardDias = document.getElementById('kpi-dias')?.closest('.card-stat');
         if (cardDias) {
-            // Remove se já existir para não duplicar
             const oldStats = document.getElementById('stats-equipe-gestora');
             if (oldStats) oldStats.remove();
 
             if (statsEquipe) {
                 const div = document.createElement('div');
                 div.id = 'stats-equipe-gestora';
-                div.className = "mt-3 pt-2 border-t border-slate-100 flex justify-between text-[10px] font-bold text-slate-400";
+                div.className = "mt-2 pt-2 border-t border-slate-100 flex justify-between text-[9px] font-bold text-slate-400"; // Mais compacto ainda
                 div.innerHTML = `
                     <span>CLT: <span class="text-slate-600 font-extrabold">${statsEquipe.clt}</span></span>
                     <span>PJ: <span class="text-slate-600 font-extrabold">${statsEquipe.pj}</span></span>
