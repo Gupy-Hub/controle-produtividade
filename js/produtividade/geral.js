@@ -71,12 +71,13 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // Importante: Agora buscamos também a coluna 'justificativa'
+            // CORREÇÃO: Removido 'meta_diaria' do select para evitar erro se a coluna não existir
+            // Mantido 'justificativa' pois é necessário para o recurso de abono
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
-                    usuario:usuarios ( id, nome, perfil, meta_diaria )
+                    usuario:usuarios ( id, nome, perfil )
                 `)
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
@@ -103,8 +104,8 @@ Produtividade.Geral = {
                 d.gt += (Number(item.gradual_total) || 0);
                 d.gp += (Number(item.gradual_parcial) || 0);
                 d.fc += (Number(item.perfil_fc) || 0);
-                d.dias += 1; // Dias com registro
-                d.diasUteis += f; // Dias efetivos (Considerando fator)
+                d.dias += 1; 
+                d.diasUteis += f; 
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -125,16 +126,14 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         
-        // Ordenação por nome
         lista.sort((a, b) => a.usuario.nome.localeCompare(b.usuario.nome));
 
         lista.forEach(d => {
-            // Se for visualização "dia" e tiver apenas 1 registro, mostra controles de edição
-            // Se for agrupado (mês/semana), mostra os totais
             const isDia = document.getElementById('view-mode').value === 'dia';
             
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
+                // Fallback para 650 se meta_diaria não vier do banco
                 const meta = d.usuario.meta_diaria || 650;
                 const metaCalc = meta * r.fator;
                 const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -143,7 +142,7 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
-                // --- LÓGICA DO ÍCONE DE JUSTIFICATIVA ---
+                // Ícone de Justificativa
                 let iconJustificativa = '';
                 if(r.fator == 0 && r.justificativa) {
                     iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110" title="${r.justificativa}"></i>`;
@@ -188,7 +187,6 @@ Produtividade.Geral = {
                 `;
                 tbody.appendChild(tr);
             } else {
-                // Visualização Agrupada (Mês/Semana ou totais)
                 const meta = d.usuario.meta_diaria || 650;
                 const metaTotal = meta * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
@@ -228,26 +226,21 @@ Produtividade.Geral = {
         }
     },
     
-    // ATUALIZADO: Captura justificativa no abono
     mudarFator: async function(id, novoFator) {
         let justificativa = null;
 
-        // Se for Abonar (0), pergunta o motivo
         if (novoFator === '0') {
             justificativa = prompt("Informe a justificativa para o abono (obrigatório):");
-            
-            // Se o usuário cancelar ou deixar em branco, reverte a ação
             if (justificativa === null) {
-                this.renderizarTabela(); // Reverte visualmente
+                this.renderizarTabela(); 
                 return;
             }
             if (justificativa.trim() === "") {
                 alert("A justificativa é obrigatória para abonar o dia.");
-                this.renderizarTabela(); // Reverte visualmente
+                this.renderizarTabela(); 
                 return;
             }
         } 
-        // Se mudar de abonado para outro, limpamos a justificativa (opcional, aqui vou limpar)
         else {
             justificativa = null;
         }
@@ -260,7 +253,6 @@ Produtividade.Geral = {
 
             if (error) throw error;
             
-            // Atualiza localmente sem recarregar tudo
             this.dadosOriginais.forEach(group => {
                 group.registros.forEach(r => {
                     if(r.id == id) {
@@ -268,13 +260,11 @@ Produtividade.Geral = {
                         r.justificativa = justificativa;
                     }
                 });
-                // Recalcula totais do grupo (se necessário)
                 let d = group.totais; d.diasUteis = 0;
                 group.registros.forEach(r => d.diasUteis += Number(r.fator));
             });
             
             this.renderizarTabela();
-            // Recarrega KPIs globais pois o fator muda metas
             this.carregarTela(); 
 
         } catch (error) {
@@ -333,8 +323,7 @@ Produtividade.Geral = {
                 .eq('id', id);
 
             if (error) throw error;
-            // Opcional: atualizar localmente se for só valor
-            this.carregarTela(); // Recarrega para garantir cálculos de KPIs
+            this.carregarTela(); 
         } catch (error) {
             console.error(error);
             alert("Erro ao salvar valor.");
@@ -387,9 +376,7 @@ Produtividade.Geral = {
         let diasComProd = new Set();
         let usersCLT = new Set();
         let usersPJ = new Set();
-        let somaMetaIndividual = 0;
-        let countMeta = 0;
-
+        
         data.forEach(r => {
             totalProd += (Number(r.quantidade) || 0);
             metaTotal += ((r.usuario.meta_diaria || 650) * r.fator);
@@ -397,21 +384,19 @@ Produtividade.Geral = {
             
             if(r.usuario.perfil === 'CLT') usersCLT.add(r.usuario.id);
             else usersPJ.add(r.usuario.id);
-            
-            somaMetaIndividual += (r.usuario.meta_diaria || 650);
-            countMeta++;
         });
 
-        // Atualiza Cards
         const pct = metaTotal > 0 ? (totalProd / metaTotal) * 100 : 0;
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotal).toLocaleString('pt-BR');
         document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
-        document.getElementById('kpi-pct-bar').style.width = Math.min(pct, 100) + '%';
-        if(pct >= 100) document.getElementById('kpi-pct-bar').className = "h-full bg-emerald-400 rounded-full transition-all duration-500";
-        else document.getElementById('kpi-pct-bar').className = "h-full bg-white/90 rounded-full transition-all duration-500";
+        
+        const bar = document.getElementById('kpi-pct-bar');
+        bar.style.width = Math.min(pct, 100) + '%';
+        bar.className = pct >= 100 
+            ? "h-full bg-emerald-400 rounded-full transition-all duration-500" 
+            : "h-full bg-white/90 rounded-full transition-all duration-500";
 
-        // Equipe
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalUsers = clt + pj;
@@ -420,18 +405,7 @@ Produtividade.Geral = {
         document.getElementById('kpi-clt-bar').style.width = (totalUsers > 0 ? (clt/totalUsers)*100 : 0) + '%';
         document.getElementById('kpi-pj-bar').style.width = (totalUsers > 0 ? (pj/totalUsers)*100 : 0) + '%';
 
-        // Dias
-        const viewMode = document.getElementById('view-mode').value;
-        const dateInput = document.getElementById('global-date');
-        let diasUteis = 0;
-        if(viewMode === 'dia') diasUteis = 1; // Simplificação
-        else {
-             // Conta simples baseada no range
-             diasUteis = diasComProd.size; // Isso é dias COM REGISTRO, não dias úteis calendario. Ajuste conforme necessidade.
-        }
         document.getElementById('kpi-dias-val').innerText = diasComProd.size;
-        
-        // Média Time
         const media = totalUsers > 0 ? Math.round(totalProd / totalUsers) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
     }
