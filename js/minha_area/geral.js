@@ -4,20 +4,24 @@ MinhaArea.Diario = {
 
         const periodo = MinhaArea.getPeriodo();
         
-        // --- MUDANÇA CRUCIAL: Usa o Alvo Selecionado (ou o próprio user se não tiver alvo) ---
+        // --- Usa o Alvo Selecionado (ou o próprio user se não tiver alvo) ---
         const uid = MinhaArea.usuarioAlvo || MinhaArea.user.id;
-        // ------------------------------------------------------------------------------------
 
         console.log("Diario: Carregando dados para ID:", uid);
 
         const tbody = document.getElementById('tabela-diario');
         if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
-        // O Check-in só aparece se eu estiver vendo MEUS PRÓPRIOS dados e não for admin
+        // 1. Verificação de Check-in Pessoal (Para o usuário logado)
         this.verificarAcessoHoje(uid);
 
+        // 2. NOVO: Se for Gestora, carrega o painel de status do time
+        if (MinhaArea.user.cargo === 'GESTORA' || MinhaArea.user.cargo === 'AUDITORA') {
+            await this.renderizarStatusCheckinGestora();
+        }
+
         try {
-            // 1. DADOS PESSOAIS (Do Alvo)
+            // 3. DADOS PESSOAIS (Do Alvo)
             const { data: producao, error } = await MinhaArea.supabase
                 .from('producao')
                 .select('*')
@@ -28,8 +32,8 @@ MinhaArea.Diario = {
 
             if (error) throw error;
 
-            // 2. DADOS DO TIME (Sempre todos os assistentes, para média)
-            // CORREÇÃO: Alterado de 'perfil' para 'funcao' e valor para 'Assistente' (Maiúsculo)
+            // 4. DADOS DO TIME (Sempre todos os assistentes, para média)
+            // CORREÇÃO: Utilizando 'funcao' e 'Assistente' (Maiúsculo)
             const { data: producaoTime } = await MinhaArea.supabase
                 .from('producao')
                 .select('quantidade, fator, usuarios!inner(funcao)')
@@ -37,7 +41,7 @@ MinhaArea.Diario = {
                 .gte('data_referencia', periodo.inicio)
                 .lte('data_referencia', periodo.fim);
 
-            // 3. METAS (Do Alvo)
+            // 5. METAS (Do Alvo)
             const { data: metas } = await MinhaArea.supabase
                 .from('metas')
                 .select('*')
@@ -86,6 +90,109 @@ MinhaArea.Diario = {
         } catch (e) {
             console.error(e);
             if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`;
+        }
+    },
+
+    // --- NOVA FUNÇÃO: Painel de Monitoramento da Gestora ---
+    renderizarStatusCheckinGestora: async function() {
+        const d = new Date();
+        d.setDate(d.getDate() - 1); // Sempre referente ao dia anterior (Ontem)
+        const diaSemana = d.getDay();
+
+        // Se ontem foi Sábado(6) ou Domingo(0), geralmente não há check-in obrigatório, 
+        // mas se quiser exibir mesmo assim, remova o return abaixo.
+        // O padrão atual do sistema ignora fds.
+        if (diaSemana === 0 || diaSemana === 6) return;
+
+        const dataRef = d.toISOString().split('T')[0];
+        
+        // Localiza onde inserir o painel (antes da tabela)
+        const tabela = document.getElementById('tabela-diario');
+        if (!tabela) return;
+        
+        // Remove painel anterior se houver (para não duplicar ao recarregar)
+        const oldPanel = document.getElementById('panel-checkin-gestora');
+        if (oldPanel) oldPanel.remove();
+
+        // Cria o container do painel
+        const panel = document.createElement('div');
+        panel.id = 'panel-checkin-gestora';
+        panel.className = "mb-6 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden";
+        panel.innerHTML = `
+            <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                    <i class="fas fa-clipboard-check text-blue-600"></i> 
+                    Check-in da Equipe <span class="text-slate-400 font-normal ml-1">(Referente a: ${dataRef.split('-').reverse().join('/')})</span>
+                </h3>
+                <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded uppercase">Visão Gestora</span>
+            </div>
+            <div id="checkin-content" class="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-64 overflow-y-auto">
+                <div class="col-span-full text-center text-slate-400 py-4"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando status...</div>
+            </div>
+            <div id="checkin-footer" class="bg-slate-50 px-4 py-2 border-t border-slate-200 flex gap-4 text-xs font-bold text-slate-600"></div>
+        `;
+
+        // Insere o painel antes do container da tabela
+        const containerTabela = tabela.closest('.overflow-x-auto') || tabela.parentElement;
+        containerTabela.before(panel);
+
+        try {
+            // 1. Busca todos os assistentes ativos
+            const { data: usuarios, error: errUser } = await MinhaArea.supabase
+                .from('usuarios')
+                .select('id, nome')
+                .eq('funcao', 'Assistente')
+                .eq('ativo', true)
+                .neq('contrato', 'FINALIZADO')
+                .order('nome');
+            
+            if (errUser) throw errUser;
+
+            // 2. Busca quem fez check-in na data de referência
+            const { data: acessos, error: errAcesso } = await MinhaArea.supabase
+                .from('acessos_diarios')
+                .select('usuario_id')
+                .eq('data_referencia', dataRef);
+
+            if (errAcesso) throw errAcesso;
+
+            const mapCheckin = new Set(acessos.map(a => a.usuario_id));
+
+            // Renderiza os cards
+            const contentDiv = panel.querySelector('#checkin-content');
+            if (usuarios.length === 0) {
+                contentDiv.innerHTML = '<div class="col-span-full text-center text-slate-400">Nenhum assistente ativo encontrado.</div>';
+                return;
+            }
+
+            let realizadoCount = 0;
+            const cardsHtml = usuarios.map(u => {
+                const feito = mapCheckin.has(u.id);
+                if (feito) realizadoCount++;
+                return `
+                    <div class="flex items-center justify-between p-2 rounded border ${feito ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}">
+                        <span class="truncate text-xs font-bold ${feito ? 'text-emerald-700' : 'text-rose-700'}" title="${u.nome}">${u.nome.split(' ')[0]} ${u.nome.split(' ')[1] || ''}</span>
+                        <i class="fas ${feito ? 'fa-check-circle text-emerald-500' : 'fa-times-circle text-rose-400'}"></i>
+                    </div>
+                `;
+            }).join('');
+
+            contentDiv.innerHTML = cardsHtml;
+
+            // Atualiza rodapé com totais
+            const pendentes = usuarios.length - realizadoCount;
+            const pct = Math.round((realizadoCount / usuarios.length) * 100);
+            
+            panel.querySelector('#checkin-footer').innerHTML = `
+                <span>Total: ${usuarios.length}</span>
+                <span class="text-emerald-600">Realizado: ${realizadoCount}</span>
+                <span class="text-rose-600">Pendente: ${pendentes}</span>
+                <span class="ml-auto text-blue-600">Adesão: ${pct}%</span>
+            `;
+
+        } catch (err) {
+            console.error("Erro checkin gestora:", err);
+            panel.querySelector('#checkin-content').innerHTML = `<div class="col-span-full text-center text-rose-500">Erro ao carregar dados: ${err.message}</div>`;
         }
     },
 
@@ -189,8 +296,9 @@ MinhaArea.Diario = {
         // Se sou Gestora, também não preciso de check-in
         if (MinhaArea.user.cargo === 'GESTORA' || MinhaArea.user.cargo === 'AUDITORA') return;
 
-        const d = new Date(); d.setDate(d.getDate() - 1);
+        const d = new Date(); d.setDate(d.getDate() - 1); // Check-in é sempre de ONTEM
         if(d.getDay() === 0 || d.getDay() === 6) { if(box) box.classList.add('hidden'); return; }
+        
         const { data } = await MinhaArea.supabase.from('acessos_diarios').select('id').eq('usuario_id', MinhaArea.user.id).eq('data_referencia', d.toISOString().split('T')[0]);
         if (data && data.length > 0) { if(box) box.classList.add('hidden'); } else { if(box) box.classList.remove('hidden'); }
     },
@@ -199,7 +307,7 @@ MinhaArea.Diario = {
         // ... (Mesma função anterior)
         const btn = document.querySelector('#box-confirmacao-leitura button');
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
-        const d = new Date(); d.setDate(d.getDate() - 1);
+        const d = new Date(); d.setDate(d.getDate() - 1); // Confirma para ONTEM
         const { error } = await MinhaArea.supabase.from('acessos_diarios').insert({ usuario_id: MinhaArea.user.id, data_referencia: d.toISOString().split('T')[0] });
         if(!error) { document.getElementById('box-confirmacao-leitura').classList.add('hidden'); alert("Check-in confirmado!"); } 
         else { alert("Erro: " + error.message); if(btn) btn.innerText = "Tentar Novamente"; }
