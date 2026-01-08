@@ -1,5 +1,5 @@
 Produtividade.Consolidado = {
-    dadosCache: null, // Armazena os dados brutos para recalculo rápido
+    dadosCache: null, 
     diasUteis: 0,
     diasTrabalhados: 0,
 
@@ -18,7 +18,7 @@ Produtividade.Consolidado = {
             const tipoPeriodo = periodTypeEl ? periodTypeEl.value : 'mes';
             const [ano, mes, dia] = dataRef.split('-').map(Number);
 
-            // 1. Definição do Intervalo (Mesma lógica do Geral para consistência)
+            // 1. Definição do Intervalo
             let dataInicio, dataFim;
             
             if (tipoPeriodo === 'mes') { 
@@ -40,7 +40,7 @@ Produtividade.Consolidado = {
                 dataFim = `${ano}-${String(mes).padStart(2,'0')}-${ultimoDia}`;
             }
 
-            // 2. Busca Dados no Banco
+            // 2. Busca Dados
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select('quantidade, fifo, gradual_parcial, gradual_total, perfil_fc, data_referencia, usuario_id')
@@ -49,7 +49,7 @@ Produtividade.Consolidado = {
                 
             if (error) throw error;
 
-            // 3. Processamento dos Totais
+            // 3. Processamento
             const totais = {
                 geral: 0,
                 fifo: 0,
@@ -70,12 +70,11 @@ Produtividade.Consolidado = {
                 totais.diasComProducao.add(d.data_referencia);
             });
 
-            // 4. Salva no Cache e Calcula Dias
             this.dadosCache = totais;
             this.diasUteis = this.calcularDiasUteis(dataInicio, dataFim);
             this.diasTrabalhados = totais.diasComProducao.size;
 
-            // 5. Renderiza a Tela
+            // 4. Renderiza
             this.renderizarLista();
 
         } catch (e) {
@@ -89,91 +88,94 @@ Produtividade.Consolidado = {
         if (!container || !this.dadosCache) return;
 
         const totais = this.dadosCache;
+        const totalSistema = totais.assistentesUnicos.size;
         
-        // Controle de Assistentes (Input Manual vs Sistema)
+        // Controle de Assistentes (Input Manual)
         const inputAssist = document.getElementById('cons-input-assistentes');
-        let qtdAssistentes = totais.assistentesUnicos.size; // Padrão do sistema
+        const hintAssist = document.getElementById('cons-found-hint');
         
+        if (hintAssist) hintAssist.innerText = `(Encontrados: ${totalSistema})`;
+
+        let qtdAssistentes = totalSistema;
         if (inputAssist) {
             const valManual = parseInt(inputAssist.value);
-            // Se o input tiver valor válido e diferente de 0, usamos ele. 
-            // Se for 0 (inicial) ou vazio, setamos o do sistema.
+            // Se o input tem valor válido > 0, usa ele. Se for 0 (inicial), usa sistema.
             if (!isNaN(valManual) && valManual > 0) {
                 qtdAssistentes = valManual;
             } else {
-                inputAssist.value = qtdAssistentes;
+                // Se estiver zerado, preenche visualmente com o do sistema para o usuário saber
+                if (inputAssist.value == 0 || inputAssist.value == "") inputAssist.value = totalSistema;
+                qtdAssistentes = totalSistema > 0 ? totalSistema : 1; // Evita divisão por zero
             }
         }
 
-        // Cálculos das Médias
-        // 1. Total validação diária (Dias uteis) -> Média da Equipe por Dia
-        const mediaEquipeDiaUtil = this.diasUteis > 0 ? Math.round(totais.geral / this.diasUteis) : 0;
+        // --- CÁLCULOS DAS MÉDIAS (Conforme Solicitado) ---
+        
+        // 1. Total validação diária (Dias uteis)
+        // Fórmula: Total Produção / Dias Úteis
+        const mediaDiaUteis = this.diasUteis > 0 ? Math.round(totais.geral / this.diasUteis) : 0;
 
-        // 2. Média validação diária (Todas assistentes) -> Total / Qtd Assistentes (Produção Per Capita no Período)
+        // 2. Média validação diária (Todas assistentes)
+        // Fórmula: Total Produção / Total Assistentes
         const mediaPorAssistenteTotal = qtdAssistentes > 0 ? Math.round(totais.geral / qtdAssistentes) : 0;
 
-        // 3. Média validação diária (Por Assistentes) -> (Total / Qtd Assistentes) / Dias Uteis (Produção Per Capita por Dia)
+        // 3. Média validação diária (Por Assistentes)
+        // Fórmula: (Total Produção / Total Assistentes) / Dias Úteis
+        // Isso representa quanto UMA assistente produz, em média, por dia útil.
         const mediaPorAssistenteDia = this.diasUteis > 0 ? Math.round(mediaPorAssistenteTotal / this.diasUteis) : 0;
 
-        // HTML da Lista
-        container.innerHTML = `
-            <div class="space-y-4">
-                <div class="flex justify-between items-center py-2 border-b border-slate-100">
-                    <span class="text-sm font-bold text-slate-600">Total de dias úteis / trabalhado</span>
-                    <span class="text-lg font-black text-slate-800">${this.diasUteis} <span class="text-slate-400 text-xs font-normal">/ ${this.diasTrabalhados}</span></span>
-                </div>
 
-                <div class="space-y-2 pb-2 border-b border-slate-100">
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="text-slate-500">Total de documentos Fifo</span>
-                        <span class="font-bold text-slate-700">${totais.fifo.toLocaleString('pt-BR')}</span>
-                    </div>
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="text-slate-500">Total de documentos Gradual Parcial</span>
-                        <span class="font-bold text-slate-700">${totais.gParcial.toLocaleString('pt-BR')}</span>
-                    </div>
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="text-slate-500">Total de documentos Gradual Total</span>
-                        <span class="font-bold text-slate-700">${totais.gTotal.toLocaleString('pt-BR')}</span>
-                    </div>
-                    <div class="flex justify-between items-center text-xs">
-                        <span class="text-slate-500">Total de documentos Perfil Fc</span>
-                        <span class="font-bold text-slate-700">${totais.perfil.toLocaleString('pt-BR')}</span>
-                    </div>
-                </div>
+        // --- ATUALIZAÇÃO DOS 5 CARDS DO TOPO ---
+        // Card 1: Total
+        if(document.getElementById('cons-card-total')) document.getElementById('cons-card-total').innerText = totais.geral.toLocaleString('pt-BR');
+        // Card 2: Dias
+        if(document.getElementById('cons-card-dias')) document.getElementById('cons-card-dias').innerText = `${this.diasUteis} / ${this.diasTrabalhados}`;
+        // Card 3: Assistentes (Reflete o manual ou sistema)
+        if(document.getElementById('cons-card-assistentes')) document.getElementById('cons-card-assistentes').innerText = qtdAssistentes;
+        // Card 4: Média Diária Equipe (Total / Dias Uteis)
+        if(document.getElementById('cons-card-media-equipe')) document.getElementById('cons-card-media-equipe').innerText = mediaDiaUteis.toLocaleString('pt-BR');
+        // Card 5: Média / Assistente (Total / Assistentes)
+        // Nota: O card pede "Média / Assistente", geralmente se refere ao total do período.
+        if(document.getElementById('cons-card-media-assist')) document.getElementById('cons-card-media-assist').innerText = mediaPorAssistenteTotal.toLocaleString('pt-BR'); 
 
-                <div class="flex justify-between items-center py-2 bg-blue-50/50 px-3 -mx-3 rounded-lg border border-blue-50">
-                    <span class="text-sm font-bold text-blue-800 uppercase">Total de documentos validados</span>
-                    <span class="text-2xl font-black text-blue-700">${totais.geral.toLocaleString('pt-BR')}</span>
-                </div>
 
-                <div class="space-y-3 pt-2">
-                    <div class="flex justify-between items-center">
-                        <span class="text-sm font-bold text-slate-600">Total validação diária (Dias úteis)</span>
-                        <span class="text-lg font-black text-slate-700">${mediaEquipeDiaUtil.toLocaleString('pt-BR')}</span>
+        // --- GERAÇÃO DA LISTA (LINHAS ZEBRADAS) ---
+        const rows = [
+            { label: 'Total de dias úteis / trabalhado', val: `${this.diasUteis} / ${this.diasTrabalhados}` },
+            { label: 'Total de documentos Fifo', val: totais.fifo.toLocaleString('pt-BR') },
+            { label: 'Total de documentos Gradual Parcial', val: totais.gParcial.toLocaleString('pt-BR') },
+            { label: 'Total de documentos Gradual Total', val: totais.gTotal.toLocaleString('pt-BR') },
+            { label: 'Total de documentos Perfil Fc', val: totais.perfil.toLocaleString('pt-BR') },
+            { label: 'Total de documentos validados', val: totais.geral.toLocaleString('pt-BR'), bold: true },
+            { label: 'Total validação diária (Dias uteis)', val: mediaDiaUteis.toLocaleString('pt-BR') },
+            { label: 'Média validação diária (Todas assistentes)', val: mediaPorAssistenteTotal.toLocaleString('pt-BR'), sub: 'Soma / Total Assistentes' },
+            { label: 'Média validação diária (Por Assistentes)', val: mediaPorAssistenteDia.toLocaleString('pt-BR'), sub: 'Média por Dia Útil' }
+        ];
+
+        let html = '<ul class="divide-y divide-slate-100">';
+        rows.forEach((r, idx) => {
+            const bgClass = idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'; // Zebrado
+            const valClass = r.bold ? 'text-blue-700 font-black text-lg' : 'text-slate-700 font-bold';
+            
+            html += `
+                <li class="flex justify-between items-center px-6 py-3 ${bgClass} hover:bg-blue-50/50 transition">
+                    <div class="flex flex-col">
+                        <span class="text-sm font-semibold text-slate-600">${r.label}</span>
+                        ${r.sub ? `<span class="text-[10px] text-slate-400 italic">${r.sub}</span>` : ''}
                     </div>
-                    <div class="flex justify-between items-center">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-slate-600">Média validação diária (Todas assistentes)</span>
-                            <span class="text-[10px] text-slate-400 italic">Total / Nº Assistentes</span>
-                        </div>
-                        <span class="text-lg font-black text-indigo-600">${mediaPorAssistenteTotal.toLocaleString('pt-BR')}</span>
-                    </div>
-                    <div class="flex justify-between items-center">
-                        <div class="flex flex-col">
-                            <span class="text-sm font-bold text-slate-600">Média validação diária (Por Assistentes)</span>
-                            <span class="text-[10px] text-slate-400 italic">Média Total / Dias Úteis</span>
-                        </div>
-                        <span class="text-lg font-black text-emerald-600">${mediaPorAssistenteDia.toLocaleString('pt-BR')}</span>
-                    </div>
-                </div>
-            </div>
-        `;
+                    <span class="${valClass}">${r.val}</span>
+                </li>
+            `;
+        });
+        html += '</ul>';
+
+        container.innerHTML = html;
     },
 
     recalcularMedias: function() {
-        // Função chamada pelo onchange do input no HTML
-        this.renderizarLista();
+        if (this.dadosCarregados) {
+            this.renderizarLista();
+        }
     },
 
     calcularDiasUteis: function(inicio, fim) {
