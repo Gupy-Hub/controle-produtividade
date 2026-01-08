@@ -44,12 +44,12 @@ Produtividade.Consolidado = {
     // Calcula dias úteis APENAS até hoje (para médias reais)
     calcularDiasUteisDecorridos: function(dataInicio, dataFim) {
         const hoje = new Date();
-        hoje.setHours(12,0,0,0); // Normaliza hora
+        hoje.setHours(12,0,0,0); 
         
         let inicio = new Date(dataInicio + 'T12:00:00');
         let fim = new Date(dataFim + 'T12:00:00');
         
-        // Se o período começa no futuro, dias trabalhados é 0
+        // Se o período começa no futuro
         if (inicio > hoje) return 0;
 
         // Se o fim do período é no futuro, corta no dia de hoje
@@ -59,7 +59,7 @@ Produtividade.Consolidado = {
         while (inicio <= fim) {
             const day = inicio.getDay();
             if (day !== 0 && day !== 6) count++;
-            inicio.setDate(inicio.setDate(inicio.getDate() + 1));
+            inicio.setDate(inicio.getDate() + 1);
         }
         return count;
     },
@@ -74,7 +74,7 @@ Produtividade.Consolidado = {
 
     mudarBasePeriodo: function(colIndex, novoValor) {
         if(!novoValor || novoValor < 0) return;
-        this.basesManuaisHC[colIndex] = parseFloat(novoValor); // Aceita decimais se necessário
+        this.basesManuaisHC[colIndex] = parseFloat(novoValor); 
         
         if(this.dadosCalculados) {
             this.renderizar(this.dadosCalculados);
@@ -90,7 +90,7 @@ Produtividade.Consolidado = {
         const selS = document.getElementById('cons-select-semester');
         const dateInput = document.getElementById('global-date');
         
-        this.basesManuaisHC = {}; // Reseta ajustes ao mudar visão
+        this.basesManuaisHC = {}; 
         
         if(selQ) selQ.classList.add('hidden');
         if(selS) selS.classList.add('hidden');
@@ -177,7 +177,6 @@ Produtividade.Consolidado = {
         let cols = []; 
         let datesMap = {}; 
 
-        // Definição das colunas
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) {
@@ -238,7 +237,6 @@ Produtividade.Consolidado = {
                 const sys = Number(r.quantidade) || 0;
                 let b = 0; 
 
-                // Lógica de Bucket (igual anterior)
                 if (t === 'dia') { 
                     b = parseInt(r.data_referencia.split('-')[2]); 
                 } else if (t === 'mes') { 
@@ -270,7 +268,6 @@ Produtividade.Consolidado = {
             });
         }
 
-        // Calcula Dias Úteis (Calendário vs Decorridos/Trabalhados)
         for(let i=1; i<=numCols; i++) {
             if(datesMap[i]) {
                 st[i].diasUteisTotal = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
@@ -278,7 +275,6 @@ Produtividade.Consolidado = {
             }
         }
         
-        // Totais de Dias
         st[99].diasUteisTotal = 0;
         st[99].diasUteisDecorridos = 0;
         for(let i=1; i<=numCols; i++) {
@@ -298,7 +294,7 @@ Produtividade.Consolidado = {
         }
     },
 
-    // Retorna o HC Efetivo para o cálculo (Input Manual ou Sistema)
+    // Retorna o HC para o cálculo (Input Manual ou Sistema)
     getHC: function(idx, st) {
         if (this.basesManuaisHC[idx] !== undefined) {
             return this.basesManuaisHC[idx];
@@ -312,25 +308,21 @@ Produtividade.Consolidado = {
         
         if(!tbody || !hRow) return;
 
-        // --- CÁLCULO DA MÉDIA DE HC PARA O TOTAL ---
-        // O Total HC deve ser a média dos HCs das colunas (ponderando que cada coluna é um período igual)
+        // --- CÁLCULO DA MÉDIA DE HC PARA O TOTAL (Calculo das Médias) ---
         let somaHC = 0;
         let countHC = 0;
         for(let i=1; i<=numCols; i++) {
-            // Só considera no cálculo da média se o período tiver dias úteis decorridos ou dados
             if(st[i].diasUteisDecorridos > 0 || st[i].users.size > 0) {
                 somaHC += this.getHC(i, st);
                 countHC++;
             }
         }
-        // Se não tiver nenhum período decorrido, pega a média de tudo
-        if(countHC === 0) {
+        if(countHC === 0) { // Fallback se nenhum dia decorrido
             for(let i=1; i<=numCols; i++) {
                 somaHC += this.getHC(i, st);
                 countHC++;
             }
         }
-        
         const mediaHCTotal = countHC > 0 ? (somaHC / countHC) : 0;
         
         // --- RENDERIZA CABEÇALHO ---
@@ -350,7 +342,7 @@ Produtividade.Consolidado = {
                     <div class="flex flex-col items-center">
                         <span class="text-xs font-bold text-slate-600 uppercase mb-1">${c}</span>
                         <div class="flex items-center gap-1 text-[9px] text-slate-400 font-normal">
-                            <i class="fas fa-users"></i>
+                            <i class="fas fa-edit"></i>
                             <span>HC Ajustado</span>
                         </div>
                         <input type="number" 
@@ -358,15 +350,11 @@ Produtividade.Consolidado = {
                                onchange="Produtividade.Consolidado.mudarBasePeriodo(${idx}, this.value)"
                                class="header-input transition focus:shadow-sm" 
                                step="0.1">
-                        
-                        <span class="text-[9px] text-slate-400 mt-1" title="Contagem Real do Sistema">
-                            (Sist: <b>${realUsers}</b>)
-                        </span>
                     </div>
                 </th>`;
         });
         
-        // Coluna Total
+        // Coluna Total Cabeçalho
         headerHTML += `
             <th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px] align-middle">
                 <div class="flex flex-col items-center">
@@ -400,20 +388,19 @@ Produtividade.Consolidado = {
                 const s = st[i];
                 if (!s) { tr += `<td class="px-4 py-3">-</td>`; return; }
 
-                // Define HC e Dias para a célula atual
+                // Define HC e Dias para a célula atual (Cálculo)
                 let HF, Dias;
                 
                 if (i === 99) {
-                    HF = mediaHCTotal; // Total usa a média ponderada
-                    Dias = s.diasUteisDecorridos; // Total soma dias decorridos
+                    HF = mediaHCTotal; 
+                    Dias = s.diasUteisDecorridos;
                 } else {
                     HF = this.getHC(i, st);
                     Dias = s.diasUteisDecorridos;
                 }
-
-                // Evita divisão por zero
                 if (HF <= 0) HF = 1;
 
+                // Executa Getter
                 let val = isCalc ? getter(s, Dias, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
                 
@@ -431,26 +418,26 @@ Produtividade.Consolidado = {
             return tr + '</tr>';
         };
 
-        // --- LINHAS DA TABELA ---
+        // --- DADOS ---
         
-        // Informativos de Dias
+        // Linha Informativa de Sistema (Real) - Nova
+        h += mkRow('Total Assistentes (Sistema)', 'fas fa-users', 'text-indigo-400', (s) => s.users.size, false, true);
+        
+        // Linhas de Dias
         h += mkRow('Dias Úteis (Calendário)', 'fas fa-calendar', 'text-slate-300', (s) => s.diasUteisTotal);
-        h += mkRow('Dias Trabalhados (Decorridos)', 'fas fa-calendar-check', 'text-cyan-500', (s, d) => d); // Usa o parametro Dias passado pelo render
+        h += mkRow('Dias Trabalhados (Decorridos)', 'fas fa-calendar-check', 'text-cyan-500', (s, d) => d, true); // Usa d (Dias passados)
 
-        // Métricas de Volume (Somas)
+        // Métricas de Volume
         h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
         
-        // Métricas de Média (Calculadas com HC e Dias Decorridos)
-        
-        // Média Validação (Todas Assistentes) = Qty / HC
+        // Métricas de Média (Calculadas)
         h += mkRow('Média Validação (Todas Assistentes)', 'fas fa-user-friends', 'text-teal-600', 
             (s, d, HF) => (HF > 0) ? s.qty / HF : 0, true);
             
-        // Média Validação Diária (Por Assist.) = Qty / DiasDecorridos / HC
         h += mkRow('Média Validação Diária (Por Assist.)', 'fas fa-user-tag', 'text-amber-600', 
             (s, d, HF) => (d > 0 && HF > 0) ? (s.qty / d) / HF : 0, true);
         
@@ -471,7 +458,7 @@ Produtividade.Consolidado = {
         const { cols, st, numCols } = this.dadosCalculados;
         const wsData = [];
         
-        // Recalcula média HC para header Excel
+        // Média HC Total para Excel
         let somaHC = 0, countHC = 0;
         for(let i=1; i<=numCols; i++) {
             if(st[i].diasUteisDecorridos > 0 || st[i].users.size > 0) {
@@ -485,13 +472,12 @@ Produtividade.Consolidado = {
         const headers = ['Indicador', ...cols, 'TOTAL'];
         wsData.push(headers);
         
-        // Linha auxiliar de HC
-        const rowHC = ['HC Considerado (Sist)'];
+        // Linha auxiliar de Input Manual no Excel para referência
+        const rowHC = ['HC Ajustado (Manual)'];
         for(let i=1; i<=numCols; i++) {
              const manual = this.basesManuaisHC[i];
              const sist = st[i].users.size;
-             const val = manual !== undefined ? manual : (sist || 1);
-             rowHC.push(`${val} (Sist: ${sist})`);
+             rowHC.push(manual !== undefined ? manual : sist);
         }
         rowHC.push(`Méd: ${mediaHCTotal.toFixed(1)}`);
         wsData.push(rowHC);
@@ -510,7 +496,7 @@ Produtividade.Consolidado = {
                 row.push((val !== undefined && !isNaN(val)) ? parseFloat(val.toFixed(2)) : 0);
             }
             
-            // Coluna Total
+            // Total Column
             const sTotal = st[99];
             if(sTotal) {
                 let HF = mediaHCTotal;
@@ -523,15 +509,15 @@ Produtividade.Consolidado = {
             wsData.push(row);
         };
 
+        // Dados
+        addRow('Total Assistentes (Sistema)', (s) => s.users.size);
         addRow('Dias Úteis (Calendário)', (s) => s.diasUteisTotal);
-        addRow('Dias Trabalhados (Decorridos)', (s, d) => d, true); // Passa d direto
+        addRow('Dias Trabalhados (Decorridos)', (s, d) => d, true);
         addRow('Total FIFO', s => s.fifo);
         addRow('Total G. Parcial', s => s.gp);
         addRow('Total G. Total', s => s.gt);
         addRow('Total Perfil FC', s => s.fc);
         addRow('Total Documentos Validados', s => s.qty);
-        
-        // Fórmulas Excel iguais ao Render
         addRow('Média Validação (Todas Assistentes)', (s, d, HF) => (HF > 0) ? s.qty / HF : 0, true);
         addRow('Média Validação Diária (Por Assist.)', (s, d, HF) => (d > 0 && HF > 0) ? (s.qty / d) / HF : 0, true);
 
