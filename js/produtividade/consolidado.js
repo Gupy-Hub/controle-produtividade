@@ -1,8 +1,8 @@
 Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
-    baseManualHC: 0,
-    dadosCalculados: null, // Armazena dados prontos para uso (tabela ou excel)
+    basesManuaisHC: {}, // Armazena o HC por coluna: { 1: 5, 2: 6 ... }
+    dadosCalculados: null, 
 
     init: async function() { 
         if(!this.initialized) { 
@@ -11,15 +11,13 @@ Produtividade.Consolidado = {
         this.togglePeriodo();
     },
 
-    mudarBase: function(novoValor) {
+    mudarBasePeriodo: function(colIndex, novoValor) {
         if(!novoValor || novoValor < 0) return;
-        this.baseManualHC = parseInt(novoValor);
+        this.basesManuaisHC[colIndex] = parseInt(novoValor);
         
-        // Se já temos dados, apenas recalcula a visualização sem ir ao banco
-        if(this.ultimoCache.data) {
-            this.processarEExibir(this.ultimoCache.data, this.ultimoCache.tipo, this.ultimoCache.mes, this.ultimoCache.ano);
-        } else {
-            this.carregar(true); 
+        // Recalcula apenas a renderização visual
+        if(this.dadosCalculados) {
+            this.renderizar(this.dadosCalculados);
         }
     },
 
@@ -28,6 +26,9 @@ Produtividade.Consolidado = {
         const selQ = document.getElementById('cons-select-quarter');
         const selS = document.getElementById('cons-select-semester');
         const dateInput = document.getElementById('global-date');
+        
+        // Reseta as bases manuais ao mudar o tipo de visualização
+        this.basesManuaisHC = {};
         
         if(selQ) selQ.classList.add('hidden');
         if(selS) selS.classList.add('hidden');
@@ -86,7 +87,7 @@ Produtividade.Consolidado = {
         } else if (t === 'semestre') { 
             const selS = document.getElementById('cons-select-semester');
             const sem = selS ? parseInt(selS.value) : (mes <= 6 ? 1 : 2); 
-            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
+            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-06-30`; 
             e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
         } else { 
             s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
@@ -109,12 +110,6 @@ Produtividade.Consolidado = {
                 
             if(error) throw error;
             
-            const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
-            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 1;
-            
-            const inputHC = document.getElementById('cons-input-hc');
-            if(inputHC && (inputHC.value == 0 || inputHC.value == "")) inputHC.value = this.baseManualHC;
-
             this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
             this.processarEExibir(rawData, t, mes, ano);
             
@@ -124,13 +119,11 @@ Produtividade.Consolidado = {
         }
     },
 
-    // Separação de Responsabilidade: Processamento dos dados brutos em estrutura de relatório
     processarDados: function(rawData, t, currentMonth, currentYear) {
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
         let datesMap = {}; 
 
-        // 1. Definição das Colunas (Buckets)
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) {
@@ -181,7 +174,6 @@ Produtividade.Consolidado = {
             }
         }
 
-        // 2. Agregação
         const numCols = cols.length;
         let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
 
@@ -221,14 +213,12 @@ Produtividade.Consolidado = {
             });
         }
 
-        // 3. Dias Úteis
         for(let i=1; i<=numCols; i++) {
             st[i].diasUteis = datesMap[i] ? this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim) : 0;
         }
         st[99].diasUteis = 0;
         for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
 
-        // Retorna tudo necessário para renderizar ou exportar
         return { cols, st, numCols, datesMap };
     },
 
@@ -241,16 +231,44 @@ Produtividade.Consolidado = {
         const tbody = document.getElementById('cons-table-body');
         const hRow = document.getElementById('cons-table-header');
         
-        if(hRow) hRow.innerHTML = `
+        // Renderiza Cabeçalho com Inputs para HC
+        let headerHTML = `
             <tr class="bg-slate-50 border-b border-slate-200">
                 <th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]">
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
-                </th>` + 
-            cols.map(c => `<th class="px-4 py-4 text-center border-l border-slate-200 min-w-[100px]"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span></th>`).join('') + 
-            `<th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px]">
+                </th>`;
+        
+        // Colunas Dinâmicas
+        cols.forEach((c, index) => {
+            const idx = index + 1;
+            const currentHC = this.basesManuaisHC[idx] !== undefined ? this.basesManuaisHC[idx] : (st[idx].users.size || 1);
+            
+            headerHTML += `
+                <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[100px] align-top">
+                    <div class="flex flex-col items-center">
+                        <span class="text-xs font-bold text-slate-600 uppercase mb-1">${c}</span>
+                        <div class="flex items-center gap-1 text-[9px] text-slate-400 font-normal">
+                            <i class="fas fa-users"></i>
+                            <span>HC</span>
+                        </div>
+                        <input type="number" 
+                               value="${currentHC}" 
+                               onchange="Produtividade.Consolidado.mudarBasePeriodo(${idx}, this.value)"
+                               class="header-input transition focus:shadow-sm" 
+                               title="Ajustar Base de Assistentes para ${c}">
+                    </div>
+                </th>`;
+        });
+        
+        // Coluna Total
+        headerHTML += `
+            <th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px] align-middle">
                 <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
             </th></tr>`;
 
+        if(hRow) hRow.innerHTML = headerHTML;
+
+        // Renderiza Linhas
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
 
@@ -270,8 +288,19 @@ Produtividade.Consolidado = {
                 </td>`;
             
             idxs.forEach(i => {
-                const s = st[i]; 
-                const HF = this.baseManualHC > 0 ? this.baseManualHC : (s.users.size || 1); 
+                const s = st[i];
+                // Lógica de HC: Usa a base manual da coluna Específica, ou o tamanho do Set de users
+                let HF;
+                if(i === 99) {
+                     // Para o total, usamos a soma simples ou média? Geralmente total de users unicos no periodo todo.
+                     // Mas se o usuário mudou manualmente nas colunas, o total pode ficar distorcido se apenas somarmos.
+                     // O padrão aqui será manter users unicos globais para o total, a menos que queira média dos HCs manuais.
+                     // Simplificação: Total usa users.size global.
+                     HF = s.users.size || 1;
+                } else {
+                     HF = (this.basesManuaisHC[i] !== undefined) ? this.basesManuaisHC[i] : (s.users.size || 1);
+                }
+
                 let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
                 
@@ -286,14 +315,16 @@ Produtividade.Consolidado = {
             return tr + '</tr>';
         };
 
-        h += mkRow('Base Assistentes (HC)', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
+        // Note: Removida a linha explicita de "Base Assistentes" pois agora está no cabeçalho
+        // h += mkRow('Base Assistentes (HC)', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true); 
+        
         h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-        h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
+        h += mkRow('Total Validação Diária', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         h += mkRow('Média Validação (Todas Assistentes)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
         h += mkRow('Média Validação Diária (Por Assist.)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
         
@@ -307,7 +338,6 @@ Produtividade.Consolidado = {
         }; 
     },
 
-    // --- NOVA FUNÇÃO DE EXPORTAÇÃO ---
     exportarExcel: function() {
         if (!this.dadosCalculados) return alert("Nenhum dado para exportar.");
         
@@ -317,20 +347,28 @@ Produtividade.Consolidado = {
         // Cabeçalho
         const headers = ['Indicador', ...cols, 'TOTAL'];
         wsData.push(headers);
+        
+        // Linha de HC usado no cálculo (para referência no Excel)
+        const rowHC = ['HC Considerado'];
+        for(let i=1; i<=numCols; i++) {
+             rowHC.push(this.basesManuaisHC[i] !== undefined ? this.basesManuaisHC[i] : (st[i].users.size || 1));
+        }
+        rowHC.push(st[99].users.size || 1); // Total
+        wsData.push(rowHC);
 
-        // Helper para montar linha do Excel (mesma lógica do renderizar)
         const addRow = (label, getter, isCalc=false) => {
             const row = [label];
             for(let i=1; i<=numCols; i++) {
                 const s = st[i];
-                const HF = this.baseManualHC > 0 ? this.baseManualHC : (s.users.size || 1);
+                const HF = (this.basesManuaisHC[i] !== undefined) ? this.basesManuaisHC[i] : (s.users.size || 1);
+                
                 let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
                 row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
             }
-            // Coluna Total (99)
+            // Coluna Total
             const sTotal = st[99];
-            const HFTotal = this.baseManualHC > 0 ? this.baseManualHC : (sTotal.users.size || 1);
+            const HFTotal = sTotal.users.size || 1;
             let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal);
             if (valTotal instanceof Set) valTotal = valTotal.size;
             row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
@@ -338,8 +376,6 @@ Produtividade.Consolidado = {
             wsData.push(row);
         };
 
-        // Adiciona as mesmas linhas da tabela
-        addRow('Base Assistentes (HC)', (s, d, HF) => HF, true);
         addRow('Dias Úteis', (s) => s.diasUteis);
         addRow('Total FIFO', s => s.fifo);
         addRow('Total G. Parcial', s => s.gp);
@@ -350,7 +386,6 @@ Produtividade.Consolidado = {
         addRow('Média Validação (Todas Assistentes)', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
         addRow('Média Validação Diária (Por Assist.)', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
 
-        // Gera o arquivo
         const wb = XLSX.utils.book_new();
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         XLSX.utils.book_append_sheet(wb, ws, "Consolidado");
