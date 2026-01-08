@@ -5,13 +5,15 @@ Produtividade.Main = {
     init: function() {
         this.setupTabs();
         
-        // --- RECUPERA A ÚLTIMA ABA SALVA OU ABRE A PADRÃO ---
+        // --- LÓGICA DE PERSISTÊNCIA ---
+        // 1. Verifica se existe uma aba salva no navegador
         const lastTab = localStorage.getItem('lastActiveTab');
+        
         if (lastTab) {
-            // Pequeno delay para garantir que o DOM esteja pronto
+            // Se existir, abre ela (com um pequeno delay para garantir que o HTML carregou)
             setTimeout(() => this.mudarAba(lastTab), 50);
         } else {
-            // Se não tiver histórico, abre a padrão (Geral)
+            // Se não tiver histórico, abre a aba padrão 'geral'
             if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
                 Produtividade.Geral.init();
             }
@@ -22,24 +24,29 @@ Produtividade.Main = {
         const btns = document.querySelectorAll('.tab-btn');
         btns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                // 1. Gerencia estilo dos botões
+                // Remove classe ativa de todos
                 btns.forEach(b => b.classList.remove('active'));
+                // Adiciona classe ativa no clicado
                 btn.classList.add('active');
 
-                // 2. Gerencia visibilidade das seções
+                // Esconde todas as seções
                 document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
+                
+                // Mostra a seção correspondente
                 const targetId = btn.id.replace('btn-', 'tab-');
                 const targetEl = document.getElementById(targetId);
                 if(targetEl) targetEl.classList.remove('hidden');
 
-                // 3. Gerencia barra de ferramentas superior
+                // Pega o nome da aba (ex: 'geral', 'consolidado')
                 const sectionName = btn.id.replace('btn-', '');
+                
+                // Gerencia os botões do topo (filtros específicos)
                 this.toggleTopBarControls(sectionName);
 
-                // --- SALVA A ABA ATUAL NO NAVEGADOR ---
+                // --- SALVA A ESCOLHA NO NAVEGADOR ---
                 localStorage.setItem('lastActiveTab', sectionName);
 
-                // 4. Carrega os dados do módulo
+                // Carrega o módulo específico
                 this.loadModule(sectionName);
             });
         });
@@ -74,22 +81,23 @@ Produtividade.Main = {
         }
     },
 
-    // Função auxiliar para simular o clique e mudar a aba
+    // Função auxiliar pública para trocar de aba
     mudarAba: function(aba) {
         const btn = document.getElementById(`btn-${aba}`);
         if(btn) btn.click();
     }
 };
 
-// Inicializa
+// Inicializa quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
     Produtividade.Main.init();
 });
 
-// Expondo globalmente para chamadas HTML e outros scripts
+// Atalhos globais
 Produtividade.mudarAba = (aba) => Produtividade.Main.mudarAba(aba);
 
 Produtividade.atualizarDataGlobal = function(valor) {
+    // Recarrega o módulo atual quando muda a data
     const activeBtn = document.querySelector('.tab-btn.active');
     if(activeBtn) {
         const section = activeBtn.id.replace('btn-', '');
