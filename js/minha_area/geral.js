@@ -143,20 +143,25 @@ MinhaArea.Diario = {
             return;
         }
         const filtrados = this.dadosAtuais.filter(d => d.data_referencia === dataStr);
-        this.atualizarTabelaDiaria(filtrados, true); // true indica que está filtrado
+        this.atualizarTabelaDiaria(filtrados, true);
     },
 
     atualizarKPIs: function(dados, mediaTime, metaMensal, diasUteisTotal, statsEquipe) {
         const totalProd = dados.reduce((acc, curr) => acc + curr.quantidade, 0);
         
-        const target = (metaMensal && metaMensal > 0) 
-            ? metaMensal 
-            : dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
+        // Meta para os dias trabalhados (para cálculo de eficiência/status)
+        const metaTrabalhada = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
+
+        // Meta Mensal (para barra de progresso e % geral, conforme pedido anterior)
+        const metaAlvo = (metaMensal && metaMensal > 0) ? metaMensal : metaTrabalhada;
             
         const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
         
         const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
-        const atingimento = target > 0 ? Math.round((totalProd / target) * 100) : 0;
+        
+        // Duas porcentagens distintas:
+        const pctMensal = metaAlvo > 0 ? Math.round((totalProd / metaAlvo) * 100) : 0; // Sobre o mês
+        const pctEficiencia = metaTrabalhada > 0 ? Math.round((totalProd / metaTrabalhada) * 100) : 0; // Sobre o trabalhado
 
         // Melhor Dia
         let melhorDia = null;
@@ -169,16 +174,17 @@ MinhaArea.Diario = {
         });
 
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-        this.setTxt('kpi-meta-total', Math.round(target).toLocaleString('pt-BR'));
-        this.setTxt('kpi-pct', `${atingimento}%`);
+        this.setTxt('kpi-meta-total', Math.round(metaAlvo).toLocaleString('pt-BR'));
+        this.setTxt('kpi-pct', `${pctMensal}%`); // Exibe % Mensal no card principal
         this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
         this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
         this.setTxt('kpi-dias', `${diasEfetivos}/${diasUteisTotal || 0}`);
         
         const bar = document.getElementById('bar-progress');
         if(bar) {
-            bar.style.width = `${Math.min(atingimento, 100)}%`;
-            bar.className = atingimento >= 100 ? "h-full bg-emerald-500 rounded-full" : (atingimento >= 90 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
+            // A barra enche com base no MÊS, mas a cor indica a EFICIÊNCIA ATUAL
+            bar.style.width = `${Math.min(pctMensal, 100)}%`;
+            bar.className = pctEficiencia >= 100 ? "h-full bg-emerald-500 rounded-full" : (pctEficiencia >= 85 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
         }
 
         const compMsg = document.getElementById('kpi-comparativo-msg');
@@ -188,7 +194,7 @@ MinhaArea.Diario = {
             else compMsg.innerHTML = '<span class="text-blue-600 font-bold">Na média do time.</span>';
         }
 
-        // Status + Melhor Dia
+        // --- STATUS DINÂMICO (Baseado apenas no trabalhado) ---
         const txtStatus = document.getElementById('kpi-status-text');
         const iconStatus = document.getElementById('icon-status');
         
@@ -196,15 +202,16 @@ MinhaArea.Diario = {
             let statusHtml = "";
             let iconClass = "";
 
-            if(atingimento >= 100) {
+            if(pctEficiencia >= 100) {
                 statusHtml = "<span class='text-emerald-600'>Excelente!</span>";
                 iconClass = "fas fa-star text-emerald-500";
-            } else if(atingimento >= 85) {
+            } else if(pctEficiencia >= 85) {
                 statusHtml = "<span class='text-blue-600'>Bom desempenho.</span>";
                 iconClass = "fas fa-thumbs-up text-blue-500";
             } else {
-                statusHtml = "<span class='text-amber-600'>Precisa melhorar.</span>";
-                iconClass = "fas fa-exclamation text-amber-500"; // Aqui está o ícone de exclamação
+                // Abaixo de 85% do trabalhado
+                statusHtml = "<span class='text-rose-600'>Abaixo da Meta.</span>";
+                iconClass = "fas fa-thumbs-down text-rose-500"; // Ícone novo: Thumb Down Vermelho
             }
 
             iconStatus.className = iconClass;
@@ -213,7 +220,6 @@ MinhaArea.Diario = {
             if (melhorDia) {
                 const dia = melhorDia.data_referencia.split('-').reverse().slice(0, 2).join('/');
                 const pctBest = Math.round(maiorPct * 100);
-                // Adiciona cursor-pointer e onclick
                 bestDayHtml = `
                 <div class="text-right cursor-pointer hover:bg-slate-50 rounded px-1 transition" onclick="MinhaArea.Diario.filtrarTabelaPorDia('${melhorDia.data_referencia}')" title="Clique para ver detalhes deste dia">
                     <span class="text-[10px] text-slate-400 uppercase tracking-tighter">Melhor Dia</span>
@@ -246,7 +252,6 @@ MinhaArea.Diario = {
         const tbody = document.getElementById('tabela-diario');
         if (!tbody) return;
         
-        // Se estiver filtrado, adiciona botão para limpar
         let headerRow = '';
         if (isFiltered) {
             headerRow = `<tr><td colspan="5" class="bg-blue-50 text-center py-2 text-xs font-bold text-blue-700">
@@ -316,7 +321,6 @@ MinhaArea.Diario = {
         else { alert("Erro: " + error.message); if(btn) btn.innerText = "Tentar Novamente"; }
     },
 
-    // --- FUNÇÕES GESTORA ---
     renderizarBotaoGestora: function() {
         const containerTabela = document.getElementById('tabela-diario');
         if (!containerTabela) return;
@@ -390,7 +394,6 @@ MinhaArea.Diario = {
              dates.forEach(d => {
                  const isWk = (d.getDay()===0||d.getDay()===6);
                  const dateStr = d.toISOString().split('T')[0];
-                 // CABEÇALHO CLICÁVEL
                  html += `<th class="px-2 py-2 text-center min-w-[35px] border-r border-slate-200 ${isWk ? 'bg-slate-200/50 text-slate-400' : 'cursor-pointer hover:bg-blue-200 hover:text-blue-800 transition'}" 
                     ${!isWk ? `onclick="MinhaArea.Diario.detalharDiaTime('${dateStr}')" title="Ver Produção da Equipe neste dia"` : ''}>
                     ${d.getDate()}
@@ -418,9 +421,7 @@ MinhaArea.Diario = {
         } catch (e) { container.innerHTML = `<div class="p-10 text-center text-rose-500">Erro: ${e.message}</div>`; }
     },
 
-    // --- NOVO: Detalhe do Dia para Gestora ---
     detalharDiaTime: async function(dateStr) {
-        // Cria modal secundário se não existir
         let modal = document.getElementById('modal-dia-detalhe');
         if(!modal) {
             modal = document.createElement('div');
@@ -443,32 +444,11 @@ MinhaArea.Diario = {
         content.innerHTML = '<div class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando produção da equipe...</div>';
 
         try {
-            // Busca produção de todos neste dia
-            const { data: producoes } = await MinhaArea.supabase
-                .from('producao')
-                .select('quantidade, observacao, observacao_gestora, usuarios!inner(id, nome, funcao)')
-                .eq('usuarios.funcao', 'Assistente')
-                .eq('data_referencia', dateStr)
-                .order('quantidade', { ascending: false });
-
-            // Busca quem fez check-in
-            const { data: checkins } = await MinhaArea.supabase
-                .from('acessos_diarios')
-                .select('usuario_id')
-                .eq('data_referencia', dateStr);
-            
+            const { data: producoes } = await MinhaArea.supabase.from('producao').select('quantidade, observacao, observacao_gestora, usuarios!inner(id, nome, funcao)').eq('usuarios.funcao', 'Assistente').eq('data_referencia', dateStr).order('quantidade', { ascending: false });
+            const { data: checkins } = await MinhaArea.supabase.from('acessos_diarios').select('usuario_id').eq('data_referencia', dateStr);
             const checkinSet = new Set(checkins?.map(c => c.usuario_id));
-            
-            // Busca lista completa de assistentes para mostrar quem ZEROU também
-            const { data: todosUsers } = await MinhaArea.supabase
-                .from('usuarios')
-                .select('id, nome')
-                .eq('funcao', 'Assistente')
-                .eq('ativo', true)
-                .neq('contrato', 'FINALIZADO')
-                .order('nome');
+            const { data: todosUsers } = await MinhaArea.supabase.from('usuarios').select('id, nome').eq('funcao', 'Assistente').eq('ativo', true).neq('contrato', 'FINALIZADO').order('nome');
 
-            // Cruza dados
             let html = '<table class="w-full text-sm text-left border-collapse">';
             html += '<thead class="bg-slate-50 text-slate-500 uppercase text-xs font-bold"><tr><th class="px-4 py-2">Colaborador</th><th class="px-4 py-2 text-center">Check-in</th><th class="px-4 py-2 text-center">Produção</th><th class="px-4 py-2">Obs</th></tr></thead><tbody class="divide-y divide-slate-100">';
 
@@ -487,8 +467,6 @@ MinhaArea.Diario = {
             html += '</tbody></table>';
             content.innerHTML = html;
 
-        } catch(e) {
-            content.innerHTML = `<div class="text-center text-rose-500">Erro: ${e.message}</div>`;
-        }
+        } catch(e) { content.innerHTML = `<div class="text-center text-rose-500">Erro: ${e.message}</div>`; }
     }
 };
