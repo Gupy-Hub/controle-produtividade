@@ -3,7 +3,7 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Importacao = {
     
-    // Remove acentos e normaliza para minúsculas
+    // Remove acentos, espaços extras e normaliza para minúsculas
     normalizar: function(texto) {
         if (!texto) return "";
         return String(texto)
@@ -12,29 +12,35 @@ Produtividade.Importacao = {
             .normalize('NFD').replace(/[\u0300-\u036f]/g, ""); 
     },
 
-    // Nova função inteligente para tratar datas (Excel número ou Texto CSV)
+    // Trata datas vindas do Excel (número) ou CSV (texto)
     tratarData: function(valor) {
         if (!valor) return null;
 
-        // Caso 1: Data do Excel (Número serial, ex: 45321)
+        // 1. Data Excel (Número serial)
         if (typeof valor === 'number') {
             const dateObj = XLSX.SSF.parse_date_code(valor);
+            // Verifica se a conversão resultou em algo válido
+            if (!dateObj || !dateObj.y) return null;
             return `${dateObj.y}-${String(dateObj.m).padStart(2,'0')}-${String(dateObj.d).padStart(2,'0')}`;
         }
 
-        // Caso 2: Data Texto (CSV, ex: "25/12/2023" ou "2023-12-25")
+        // 2. Data Texto (CSV)
         if (typeof valor === 'string') {
-            const v = valor.trim();
+            let v = valor.trim();
             
+            // Remove aspas se houver
+            v = v.replace(/^"|"$/g, '');
+
             // Formato PT-BR: DD/MM/YYYY
             if (v.includes('/')) {
                 const partes = v.split('/');
                 if (partes.length === 3) {
-                    // Assume dia/mes/ano
                     const dia = partes[0].padStart(2, '0');
                     const mes = partes[1].padStart(2, '0');
-                    const ano = partes[2];
-                    // Retorna YYYY-MM-DD
+                    // Corrige ano de 2 dígitos (ex: 23 -> 2023)
+                    let ano = partes[2];
+                    if (ano.length === 2) ano = "20" + ano;
+                    
                     return `${ano}-${mes}-${dia}`; 
                 }
             }
@@ -45,7 +51,7 @@ Produtividade.Importacao = {
             }
         }
         
-        return null; // Data inválida
+        return null;
     },
 
     processarArquivo: async function(file) {
@@ -54,10 +60,10 @@ Produtividade.Importacao = {
             reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
-                    // Lê o arquivo. 'codepage' ajuda com acentos em CSVs antigos se necessário
-                    const workbook = XLSX.read(data, { type: 'array', codepage: 65001 }); 
+                    // Lê o arquivo sem forçar codepage para deixar a lib detectar
+                    const workbook = XLSX.read(data, { type: 'array' }); 
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    // 'raw: false' força a leitura como texto exibido, ajuda em alguns CSVs
+                    // Lê com header: 1 para pegar array de arrays
                     const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false });
                     resolve(jsonData);
                 } catch (err) {
@@ -68,7 +74,7 @@ Produtividade.Importacao = {
         });
     },
 
-    // Compatibilidade
+    // Compatibilidade com main.js antigo
     lerArquivo: function(file) {
         return this.processarArquivo(file);
     },
@@ -109,10 +115,16 @@ Produtividade.Importacao = {
                 const linhas = await this.processarArquivo(file);
                 const payload = [];
                 
-                // Começa do índice 1 para pular cabeçalho
+                // Pula cabeçalho (começa do 1)
                 for (let i = 1; i < linhas.length; i++) {
-                    const row = linhas[i];
+                    let row = linhas[i];
                     if (!row || row.length === 0) continue;
+
+                    // --- CORREÇÃO PARA CSV BRASILEIRO (Ponto e Vírgula) ---
+                    // Se a linha tem só 1 coluna e contém ';', separamos manualmente
+                    if (row.length === 1 && typeof row[0] === 'string' && row[0].includes(';')) {
+                        row = row[0].split(';').map(c => c.trim().replace(/^"|"$/g, ''));
+                    }
 
                     const nomeExcel = row[0]; 
                     const dataBruta = row[1]; 
@@ -120,7 +132,7 @@ Produtividade.Importacao = {
                     
                     if (!nomeExcel || !dataBruta) continue;
 
-                    // Normaliza nome para busca
+                    // Busca ID
                     const nomeBusca = this.normalizar(nomeExcel);
                     const usuarioId = mapaUsuarios[nomeBusca];
 
@@ -128,10 +140,13 @@ Produtividade.Importacao = {
                         const dataFormatada = this.tratarData(dataBruta);
                         
                         if (dataFormatada) {
-                            // Prepara colunas opcionais (trocando vírgula por ponto se vier do CSV PT-BR)
+                            // Limpeza de números (virgula para ponto, remove espaços)
                             const limparNumero = (val) => {
-                                if (typeof val === 'string') return Number(val.replace(',', '.')) || 0;
-                                return Number(val) || 0;
+                                if (val === undefined || val === null || val === '') return 0;
+                                if (typeof val === 'number') return val;
+                                // Troca vírgula por ponto e remove qualquer char não numérico exceto . -
+                                let v = String(val).replace(',', '.').replace(/[^0-9.-]/g, '');
+                                return parseFloat(v) || 0;
                             };
 
                             payload.push({
@@ -142,13 +157,14 @@ Produtividade.Importacao = {
                                 gradual_total: limparNumero(row[4]),
                                 gradual_parcial: limparNumero(row[5]),
                                 perfil_fc: limparNumero(row[6]),
-                                fator: 1
+                                fator: 1 // Padrão 100%
                             });
                         } else {
-                            console.warn(`Data inválida na linha ${i+1}: ${dataBruta}`);
+                            console.warn(`Data inválida na linha ${i+1}:`, dataBruta);
                         }
                     } else {
-                        nomesNaoEncontrados.add(nomeExcel);
+                        // Guarda o nome original para mostrar no alerta
+                        if(nomeExcel.trim().length > 0) nomesNaoEncontrados.add(nomeExcel);
                     }
                 }
 
@@ -166,14 +182,22 @@ Produtividade.Importacao = {
                 }
             }
 
-            let msg = `Importação concluída!\nRegistros salvos: ${totalImportado}`;
-            if (erros > 0) msg += `\nArquivos com erro de gravação: ${erros}`;
-            if (nomesNaoEncontrados.size > 0) {
-                msg += `\n\nAlguns nomes do arquivo não foram encontrados no sistema (ex: ${Array.from(nomesNaoEncontrados).slice(0,3).join(', ')}...).`;
+            // Mensagem Final
+            let msg = `Importação concluída!\nRegistros processados e salvos: ${totalImportado}`;
+            
+            if (erros > 0) {
+                msg += `\n\nATENÇÃO: ${erros} pacotes de dados falharam ao salvar no banco.`;
             }
+            
+            if (nomesNaoEncontrados.size > 0) {
+                const listaNomes = Array.from(nomesNaoEncontrados).slice(0, 5).join(', ');
+                const restante = nomesNaoEncontrados.size > 5 ? `... e mais ${nomesNaoEncontrados.size - 5}` : '';
+                msg += `\n\nALERTA: ${nomesNaoEncontrados.size} nomes do arquivo NÃO foram encontrados no sistema:\n(${listaNomes}${restante})\n\nVerifique se os nomes no Excel são idênticos ao cadastro.`;
+            }
+            
             alert(msg);
             
-            // Recarrega tela
+            // Recarrega
             if(window.Produtividade && window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
                 window.Produtividade.Geral.carregarTela();
             } else {
@@ -182,7 +206,7 @@ Produtividade.Importacao = {
 
         } catch (e) {
             console.error(e);
-            alert("Erro na importação: " + e.message);
+            alert("Erro fatal na importação: " + e.message);
         } finally {
             if(btn) {
                 btn.innerHTML = originalText;
