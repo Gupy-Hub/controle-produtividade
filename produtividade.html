@@ -24,6 +24,10 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Estilos para Tabela Matriz */
+        .scroll-top-wrapper { transform: rotateX(180deg); }
+        .scroll-top-wrapper table { transform: rotateX(180deg); }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -72,16 +76,6 @@
                                 <option value="4">Semana 4</option>
                                 <option value="5">Semana 5</option>
                                 <option value="6">Semana 6</option>
-                            </select>
-                        </div>
-
-                        <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
-                            <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
-                                <option value="mes">Mensal (Semanas)</option>
-                                <option value="trimestre">Trimestral (Meses)</option>
-                                <option value="semestre">Semestral (Meses)</option>
-                                <option value="ano_mes">Anual (Meses)</option>
-                                <option value="dia">Diário</option>
                             </select>
                         </div>
 
@@ -235,77 +229,53 @@
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
-                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-24">
-                    <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition">
-                        <i class="fas fa-check-circle text-5xl text-blue-600"></i>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center gap-4 justify-between">
+                
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+                        <i class="fas fa-calendar-alt text-slate-400"></i>
+                        <span class="text-xs font-bold text-slate-500 uppercase">Visão:</span>
+                        
+                        <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer">
+                            <option value="dia">Diária (Dias do Mês)</option>
+                            <option value="mes">Mensal (Semanas)</option>
+                            <option value="trimestre">Trimestral (Meses)</option>
+                            <option value="semestre">Semestral (Meses)</option>
+                            <option value="ano">Anual (Meses)</option>
+                        </select>
                     </div>
-                    <div>
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Validados</p>
-                        <h3 class="text-2xl font-black text-slate-800 mt-0.5 tracking-tight" id="cons-card-total">--</h3>
-                    </div>
-                    <div class="flex items-center gap-1.5 mt-1">
-                        <span class="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100">Consolidado</span>
-                    </div>
+
+                    <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden bg-white border border-slate-200 text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg outline-none cursor-pointer hover:border-blue-300">
+                        <option value="1">1º Trimestre</option>
+                        <option value="2">2º Trimestre</option>
+                        <option value="3">3º Trimestre</option>
+                        <option value="4">4º Trimestre</option>
+                    </select>
+
+                    <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden bg-white border border-slate-200 text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg outline-none cursor-pointer hover:border-blue-300">
+                        <option value="1">1º Semestre</option>
+                        <option value="2">2º Semestre</option>
+                    </select>
                 </div>
 
-                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
-                    <div class="flex justify-between items-start">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
-                        <i class="fas fa-calendar-day text-slate-200 text-lg"></i>
+                <div class="flex items-center gap-3 bg-indigo-50 px-4 py-1.5 rounded-lg border border-indigo-100">
+                    <div class="flex flex-col items-end leading-none">
+                        <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Base Assistentes</span>
+                        <span class="text-[9px] text-indigo-300">(Para cálculo de médias)</span>
                     </div>
-                    <div class="flex items-baseline gap-1">
-                        <h3 class="text-2xl font-black text-slate-700" id="cons-card-dias">--</h3>
-                    </div>
-                    <p class="text-[9px] text-slate-400 font-medium">Úteis / Trabalhados</p>
-                </div>
-
-                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
-                    <div class="flex justify-between items-start">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Assistentes</p>
-                        <i class="fas fa-users text-slate-200 text-lg"></i>
-                    </div>
-                    <h3 class="text-2xl font-black text-blue-600" id="cons-card-assistentes">--</h3>
-                    <p class="text-[9px] text-slate-400 font-medium">Equipe considerada</p>
-                </div>
-
-                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Média Diária (Equipe)</p>
-                    <div class="flex items-baseline gap-1">
-                        <h3 class="text-2xl font-black text-slate-700" id="cons-card-media-equipe">--</h3>
-                        <span class="text-[9px] text-slate-400">docs</span>
-                    </div>
-                    <div class="w-full bg-slate-50 h-1 mt-0.5 rounded-full"></div>
-                </div>
-
-                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Média / Assistente</p>
-                    <div class="flex items-baseline gap-1">
-                        <h3 class="text-2xl font-black text-indigo-600" id="cons-card-media-assist">--</h3>
-                        <span class="text-[9px] text-slate-400">docs</span>
-                    </div>
-                    <p class="text-[9px] text-slate-400 font-medium">No período</p>
+                    <input type="number" id="cons-input-hc" onchange="Produtividade.Consolidado.mudarBase(this.value)" 
+                           class="font-black text-xl w-14 text-center outline-none text-indigo-700 bg-transparent border-b border-indigo-200 focus:border-indigo-500 transition" value="0">
+                    <i class="fas fa-users-cog text-indigo-300"></i>
                 </div>
             </div>
 
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                
-                <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                    <div class="flex items-center gap-3">
-                        <div class="bg-white p-2 rounded-lg border border-slate-200 text-blue-600"><i class="fas fa-list-ul"></i></div>
-                        <h3 class="font-bold text-slate-700">Resumo de Produção</h3>
-                    </div>
-                    
-                    <div class="flex items-center gap-3 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
-                        <span class="text-xs font-bold uppercase tracking-wider text-slate-500">Considerar Assistentes:</span>
-                        <input type="number" id="cons-input-assistentes" onchange="Produtividade.Consolidado.recalcularMedias()" 
-                               class="font-black text-lg w-16 text-center outline-none text-blue-700 border-b-2 border-transparent focus:border-blue-500 transition" value="0">
-                        <span class="text-[10px] text-slate-400" id="cons-found-hint">(Sistema: 0)</span>
-                    </div>
-                </div>
-
-                <div class="p-0" id="lista-consolidada">
-                    </div>
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar pb-2">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead id="cons-table-header">
+                        </thead>
+                    <tbody id="cons-table-body">
+                        </tbody>
+                </table>
             </div>
         </div>
 
