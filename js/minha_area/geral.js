@@ -15,9 +15,9 @@ MinhaArea.Diario = {
         // 1. Verificação de Check-in Pessoal (Para o usuário logado)
         this.verificarAcessoHoje(uid);
 
-        // 2. NOVO: Se for Gestora, carrega o painel de status do time
+        // 2. NOVO: Se for Gestora, carrega o MAPA DE CHECK-IN (Cartão Ponto)
         if (MinhaArea.user.cargo === 'GESTORA' || MinhaArea.user.cargo === 'AUDITORA') {
-            await this.renderizarStatusCheckinGestora();
+            await this.renderizarMapaCheckinGestora();
         }
 
         try {
@@ -33,7 +33,6 @@ MinhaArea.Diario = {
             if (error) throw error;
 
             // 4. DADOS DO TIME (Sempre todos os assistentes, para média)
-            // CORREÇÃO: Utilizando 'funcao' e 'Assistente' (Maiúsculo)
             const { data: producaoTime } = await MinhaArea.supabase
                 .from('producao')
                 .select('quantidade, fator, usuarios!inner(funcao)')
@@ -93,106 +92,157 @@ MinhaArea.Diario = {
         }
     },
 
-    // --- NOVA FUNÇÃO: Painel de Monitoramento da Gestora ---
-    renderizarStatusCheckinGestora: async function() {
-        const d = new Date();
-        d.setDate(d.getDate() - 1); // Sempre referente ao dia anterior (Ontem)
-        const diaSemana = d.getDay();
-
-        // Se ontem foi Sábado(6) ou Domingo(0), geralmente não há check-in obrigatório, 
-        // mas se quiser exibir mesmo assim, remova o return abaixo.
-        // O padrão atual do sistema ignora fds.
-        if (diaSemana === 0 || diaSemana === 6) return;
-
-        const dataRef = d.toISOString().split('T')[0];
+    // --- NOVA FUNÇÃO: Mapa de Check-in Mensal (Estilo Cartão Ponto) ---
+    renderizarMapaCheckinGestora: async function() {
+        // Define o intervalo: Do dia 1 do mês da referência até ONTEM
+        const referencia = new Date();
+        referencia.setDate(referencia.getDate() - 1); // Ontem
         
-        // Localiza onde inserir o painel (antes da tabela)
+        const y = referencia.getFullYear();
+        const m = referencia.getMonth();
+        
+        const start = new Date(y, m, 1);
+        const end = referencia;
+
+        // Se o mês virou hoje (dia 1), ontem era mês passado. Ajusta para mostrar mês passado se necessário,
+        // mas por padrão mostra o mês da data de referência (Ontem).
+
+        // Localiza onde inserir o painel
         const tabela = document.getElementById('tabela-diario');
         if (!tabela) return;
         
-        // Remove painel anterior se houver (para não duplicar ao recarregar)
+        // Remove painel anterior para evitar duplicidade
         const oldPanel = document.getElementById('panel-checkin-gestora');
         if (oldPanel) oldPanel.remove();
 
-        // Cria o container do painel
+        // Cria estrutura do painel
         const panel = document.createElement('div');
         panel.id = 'panel-checkin-gestora';
         panel.className = "mb-6 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden";
+        
+        const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        
         panel.innerHTML = `
             <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
                 <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-                    <i class="fas fa-clipboard-check text-blue-600"></i> 
-                    Check-in da Equipe <span class="text-slate-400 font-normal ml-1">(Referente a: ${dataRef.split('-').reverse().join('/')})</span>
+                    <i class="fas fa-calendar-alt text-blue-600"></i> 
+                    Controle de Check-in: ${meses[m]}
                 </h3>
                 <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded uppercase">Visão Gestora</span>
             </div>
-            <div id="checkin-content" class="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-64 overflow-y-auto">
-                <div class="col-span-full text-center text-slate-400 py-4"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando status...</div>
+            <div id="checkin-content" class="overflow-x-auto">
+                <div class="p-6 text-center text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Gerando mapa de presença...</div>
             </div>
-            <div id="checkin-footer" class="bg-slate-50 px-4 py-2 border-t border-slate-200 flex gap-4 text-xs font-bold text-slate-600"></div>
         `;
-
-        // Insere o painel antes do container da tabela
+        
         const containerTabela = tabela.closest('.overflow-x-auto') || tabela.parentElement;
         containerTabela.before(panel);
 
         try {
-            // 1. Busca todos os assistentes ativos
-            const { data: usuarios, error: errUser } = await MinhaArea.supabase
+             // 1. Busca Usuários (Assistentes Ativos)
+             const { data: usuarios, error: errUser } = await MinhaArea.supabase
                 .from('usuarios')
                 .select('id, nome')
                 .eq('funcao', 'Assistente')
                 .eq('ativo', true)
                 .neq('contrato', 'FINALIZADO')
                 .order('nome');
-            
-            if (errUser) throw errUser;
+             if(errUser) throw errUser;
 
-            // 2. Busca quem fez check-in na data de referência
-            const { data: acessos, error: errAcesso } = await MinhaArea.supabase
+             // 2. Busca Check-ins no intervalo
+             const sStr = start.toISOString().split('T')[0];
+             const eStr = end.toISOString().split('T')[0];
+
+             const { data: acessos, error: errAcesso } = await MinhaArea.supabase
                 .from('acessos_diarios')
-                .select('usuario_id')
-                .eq('data_referencia', dataRef);
+                .select('usuario_id, data_referencia')
+                .gte('data_referencia', sStr)
+                .lte('data_referencia', eStr);
+             if(errAcesso) throw errAcesso;
 
-            if (errAcesso) throw errAcesso;
+             // Mapeia acessos para consulta rápida: map[userId] = Set(dates)
+             const map = {};
+             usuarios.forEach(u => map[u.id] = new Set());
+             acessos.forEach(a => {
+                 if(map[a.usuario_id]) map[a.usuario_id].add(a.data_referencia);
+             });
 
-            const mapCheckin = new Set(acessos.map(a => a.usuario_id));
+             // Gera array de datas (colunas)
+             const dates = [];
+             let curr = new Date(start);
+             while(curr <= end) {
+                 dates.push(new Date(curr));
+                 curr.setDate(curr.getDate() + 1);
+             }
+             
+             // Renderiza Tabela
+             if (dates.length === 0) {
+                 panel.querySelector('#checkin-content').innerHTML = '<div class="p-6 text-center text-slate-400">Nenhum dia contabilizado neste mês ainda.</div>';
+                 return;
+             }
 
-            // Renderiza os cards
-            const contentDiv = panel.querySelector('#checkin-content');
-            if (usuarios.length === 0) {
-                contentDiv.innerHTML = '<div class="col-span-full text-center text-slate-400">Nenhum assistente ativo encontrado.</div>';
-                return;
-            }
+             let html = '<table class="w-full text-xs text-left border-collapse whitespace-nowrap">';
+             
+             // Cabeçalho (Datas)
+             html += '<thead class="bg-slate-50 text-slate-500 font-bold uppercase border-b border-slate-200"><tr>';
+             html += '<th class="px-4 py-3 border-r border-slate-100 sticky left-0 bg-slate-50 z-10 shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]">Colaborador</th>';
+             dates.forEach(d => {
+                 const isWk = (d.getDay() === 0 || d.getDay() === 6);
+                 html += `<th class="px-2 py-2 text-center min-w-[35px] border-r border-slate-100 ${isWk ? 'bg-slate-100/50 text-slate-400' : ''}">${d.getDate()}</th>`;
+             });
+             html += '<th class="px-3 py-2 text-center text-blue-600 bg-blue-50/20">Adesão</th></tr></thead>';
 
-            let realizadoCount = 0;
-            const cardsHtml = usuarios.map(u => {
-                const feito = mapCheckin.has(u.id);
-                if (feito) realizadoCount++;
-                return `
-                    <div class="flex items-center justify-between p-2 rounded border ${feito ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}">
-                        <span class="truncate text-xs font-bold ${feito ? 'text-emerald-700' : 'text-rose-700'}" title="${u.nome}">${u.nome.split(' ')[0]} ${u.nome.split(' ')[1] || ''}</span>
-                        <i class="fas ${feito ? 'fa-check-circle text-emerald-500' : 'fa-times-circle text-rose-400'}"></i>
-                    </div>
-                `;
-            }).join('');
+             // Corpo (Linhas de Usuários)
+             html += '<tbody class="divide-y divide-slate-100">';
+             usuarios.forEach(u => {
+                 html += '<tr class="hover:bg-slate-50 transition-colors">';
+                 // Nome Fixo
+                 html += `<td class="px-4 py-2 font-bold text-slate-600 border-r border-slate-100 sticky left-0 bg-white z-10 shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)] truncate max-w-[180px]" title="${u.nome}">
+                    ${u.nome.split(' ')[0]} <span class="text-slate-400 font-normal">${u.nome.split(' ').slice(1).join(' ')}</span>
+                 </td>`;
+                 
+                 let hits = 0;
+                 let workDays = 0;
 
-            contentDiv.innerHTML = cardsHtml;
+                 dates.forEach(d => {
+                     const dateStr = d.toISOString().split('T')[0];
+                     const isWeekend = (d.getDay() === 0 || d.getDay() === 6);
+                     const checked = map[u.id].has(dateStr);
+                     
+                     if (!isWeekend) workDays++;
+                     if (checked) hits++;
 
-            // Atualiza rodapé com totais
-            const pendentes = usuarios.length - realizadoCount;
-            const pct = Math.round((realizadoCount / usuarios.length) * 100);
-            
-            panel.querySelector('#checkin-footer').innerHTML = `
-                <span>Total: ${usuarios.length}</span>
-                <span class="text-emerald-600">Realizado: ${realizadoCount}</span>
-                <span class="text-rose-600">Pendente: ${pendentes}</span>
-                <span class="ml-auto text-blue-600">Adesão: ${pct}%</span>
-            `;
+                     let cellContent = '';
+                     let cellClass = '';
 
-        } catch (err) {
-            console.error("Erro checkin gestora:", err);
-            panel.querySelector('#checkin-content').innerHTML = `<div class="col-span-full text-center text-rose-500">Erro ao carregar dados: ${err.message}</div>`;
+                     if (checked) {
+                         cellContent = '<i class="fas fa-check"></i>';
+                         cellClass = 'text-emerald-500 bg-emerald-50/50';
+                     } else if (isWeekend) {
+                         cellContent = '<span class="text-[9px]">-</span>';
+                         cellClass = 'text-slate-300 bg-slate-50';
+                     } else {
+                         cellContent = '<i class="fas fa-times"></i>'; // Falta
+                         cellClass = 'text-rose-300 bg-rose-50/50';
+                     }
+
+                     html += `<td class="px-1 py-2 text-center border-r border-slate-100 ${cellClass}">${cellContent}</td>`;
+                 });
+
+                 // Coluna de % de Adesão
+                 const pct = workDays > 0 ? Math.round((hits / workDays) * 100) : 0;
+                 let color = pct >= 95 ? 'text-emerald-600 bg-emerald-50' : (pct >= 80 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50');
+                 html += `<td class="px-3 py-2 text-center font-bold ${color}">${pct}%</td>`;
+
+                 html += '</tr>';
+             });
+             html += '</tbody></table>';
+
+             panel.querySelector('#checkin-content').innerHTML = html;
+
+        } catch (e) {
+            console.error(e);
+            panel.querySelector('#checkin-content').innerHTML = `<div class="p-6 text-center text-red-500">Erro ao carregar mapa: ${e.message}</div>`;
         }
     },
 
