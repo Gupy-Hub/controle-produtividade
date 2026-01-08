@@ -71,7 +71,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // ATUALIZADO: Agora busca 'cargo' na tabela de usuarios
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select(`
@@ -131,8 +130,9 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
-            // Define o cargo para exibição (Fallback para Assistente)
+            // Definição do Cargo e Perfil para exibição
             const cargoExibicao = d.usuario.cargo || 'Assistente';
+            const perfilExibicao = d.usuario.perfil || 'PJ';
 
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
@@ -171,7 +171,9 @@ Produtividade.Geral = {
                             </div>
                             <div class="flex flex-col">
                                 <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">${cargoExibicao}</span>
+                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">
+                                    ${cargoExibicao} • ${perfilExibicao}
+                                </span>
                             </div>
                         </div>
                     </td>
@@ -209,7 +211,9 @@ Produtividade.Geral = {
                             </div>
                              <div class="flex flex-col">
                                 <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">${cargoExibicao}</span>
+                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">
+                                    ${cargoExibicao} • ${perfilExibicao}
+                                </span>
                             </div>
                         </div>
                     </td>
