@@ -15,8 +15,14 @@ MinhaArea.Diario = {
         // 1. Verificação de Check-in Pessoal (Para o usuário logado)
         this.verificarAcessoHoje(uid);
 
-        // 2. NOVO: Se for Gestora, carrega o MAPA DE CHECK-IN (Cartão Ponto)
-        if (MinhaArea.user.cargo === 'GESTORA' || MinhaArea.user.cargo === 'AUDITORA') {
+        // 2. CORREÇÃO: Verificação robusta de permissão (Função ou Cargo)
+        const funcao = (MinhaArea.user.funcao || '').toUpperCase();
+        const cargo = (MinhaArea.user.cargo || '').toUpperCase();
+        const isGestora = funcao === 'GESTORA' || funcao === 'AUDITORA' || 
+                          cargo === 'GESTORA' || cargo === 'AUDITORA' || 
+                          MinhaArea.user.id == 1000 || MinhaArea.user.perfil === 'admin';
+
+        if (isGestora) {
             await this.renderizarMapaCheckinGestora();
         }
 
@@ -92,26 +98,23 @@ MinhaArea.Diario = {
         }
     },
 
-    // --- NOVA FUNÇÃO: Mapa de Check-in Mensal (Estilo Cartão Ponto) ---
+    // --- MAPA DE CHECK-IN MENSAL (VISÃO GESTORA) ---
     renderizarMapaCheckinGestora: async function() {
-        // Define o intervalo: Do dia 1 do mês da referência até ONTEM
+        // Define o intervalo: Do dia 1 do mês de referência (baseado em ONTEM) até ONTEM
         const referencia = new Date();
         referencia.setDate(referencia.getDate() - 1); // Ontem
         
         const y = referencia.getFullYear();
         const m = referencia.getMonth();
         
-        const start = new Date(y, m, 1);
-        const end = referencia;
-
-        // Se o mês virou hoje (dia 1), ontem era mês passado. Ajusta para mostrar mês passado se necessário,
-        // mas por padrão mostra o mês da data de referência (Ontem).
+        const start = new Date(y, m, 1); // Dia 1 do mês de 'Ontem'
+        const end = referencia; // Até 'Ontem'
 
         // Localiza onde inserir o painel
         const tabela = document.getElementById('tabela-diario');
         if (!tabela) return;
         
-        // Remove painel anterior para evitar duplicidade
+        // Remove painel anterior
         const oldPanel = document.getElementById('panel-checkin-gestora');
         if (oldPanel) oldPanel.remove();
 
@@ -127,6 +130,7 @@ MinhaArea.Diario = {
                 <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
                     <i class="fas fa-calendar-alt text-blue-600"></i> 
                     Controle de Check-in: ${meses[m]}
+                    <span class="text-xs font-normal text-slate-400 ml-2">(Referência: ${referencia.getDate()}/${m+1}/${y})</span>
                 </h3>
                 <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded uppercase">Visão Gestora</span>
             </div>
@@ -160,7 +164,7 @@ MinhaArea.Diario = {
                 .lte('data_referencia', eStr);
              if(errAcesso) throw errAcesso;
 
-             // Mapeia acessos para consulta rápida: map[userId] = Set(dates)
+             // Mapeia acessos
              const map = {};
              usuarios.forEach(u => map[u.id] = new Set());
              acessos.forEach(a => {
@@ -177,7 +181,7 @@ MinhaArea.Diario = {
              
              // Renderiza Tabela
              if (dates.length === 0) {
-                 panel.querySelector('#checkin-content').innerHTML = '<div class="p-6 text-center text-slate-400">Nenhum dia contabilizado neste mês ainda.</div>';
+                 panel.querySelector('#checkin-content').innerHTML = '<div class="p-6 text-center text-slate-400">Nenhum dia contabilizado neste mês ainda (Mês virou hoje).</div>';
                  return;
              }
 
@@ -344,7 +348,9 @@ MinhaArea.Diario = {
         }
 
         // Se sou Gestora, também não preciso de check-in
-        if (MinhaArea.user.cargo === 'GESTORA' || MinhaArea.user.cargo === 'AUDITORA') return;
+        const funcao = (MinhaArea.user.funcao || '').toUpperCase();
+        const cargo = (MinhaArea.user.cargo || '').toUpperCase();
+        if (funcao === 'GESTORA' || funcao === 'AUDITORA' || cargo === 'GESTORA' || cargo === 'AUDITORA') return;
 
         const d = new Date(); d.setDate(d.getDate() - 1); // Check-in é sempre de ONTEM
         if(d.getDay() === 0 || d.getDay() === 6) { if(box) box.classList.add('hidden'); return; }
@@ -354,7 +360,6 @@ MinhaArea.Diario = {
     },
 
     confirmarAcessoHoje: async function() {
-        // ... (Mesma função anterior)
         const btn = document.querySelector('#box-confirmacao-leitura button');
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
         const d = new Date(); d.setDate(d.getDate() - 1); // Confirma para ONTEM
