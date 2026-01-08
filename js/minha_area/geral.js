@@ -1,11 +1,31 @@
 MinhaArea.Geral = {
+    // Objeto simulado para compatibilidade com o código original fornecido
+    MA_Main_Mock: {
+        get isMgr() {
+            const c = MinhaArea.user.cargo ? MinhaArea.user.cargo.toUpperCase() : '';
+            return c === 'GESTORA' || c === 'AUDITORA';
+        },
+        get sessao() { return MinhaArea.user; },
+        getDateFromInput: function() {
+             // Retorna data de hoje ou filtro se houver (simulado)
+             return new Date(); 
+        },
+        atualizarDashboard: function() {
+            MinhaArea.Geral.carregar();
+        }
+    },
+
     carregar: async function() {
         const periodo = MinhaArea.getPeriodo();
         const uid = MinhaArea.user.id;
 
+        // Verifica check-in de presença
+        this.verificarAcessoHoje();
+        // Se for gestor, carrega relatório
+        this.carregarRelatorioAcessos();
+
         try {
-            // 1. Busca Produção do Mês
-            const { data: producao, error } = await MinhaArea.supabase
+            const { data: producao, error } = await Sistema.supabase
                 .from('producao')
                 .select('*')
                 .eq('usuario_id', uid)
@@ -15,117 +35,274 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca Metas Vigentes
-            const { data: metas } = await MinhaArea.supabase
+            // Busca metas para calcular meta_ajustada se necessário
+            const { data: metas } = await Sistema.supabase
                 .from('metas')
                 .select('*')
                 .eq('usuario_id', uid)
                 .order('data_inicio', { ascending: false });
 
-            // Processa Dados
-            let totalProd = 0;
-            let totalMeta = 0;
-            let diasTrab = 0;
-
-            const listaDiaria = producao.map(p => {
-                // Acha a meta válida para a data de referência
-                const metaDia = metas.find(m => m.data_inicio <= p.data_referencia) || { valor_meta: 0 };
-                const metaVal = metaDia.valor_meta;
-                const fator = p.fator_multiplicador !== null ? p.fator_multiplicador : 1;
-                
-                const metaCalc = Math.round(metaVal * fator);
-                const qtd = p.quantidade || 0;
-                
-                totalProd += qtd;
-                totalMeta += metaCalc;
-                diasTrab += (fator > 0 ? 1 : 0); // Conta dias que não foram abono total
+            // Prepara os dados no formato que o código espera
+            const dadosProcessados = producao.map(item => {
+                // Lógica de meta ajustada (igual ao original geral.js mas adaptado)
+                const metaRef = metas.find(m => m.data_inicio <= item.data_referencia) || { valor_meta: 650 };
+                const fator = item.fator_multiplicador !== null ? item.fator_multiplicador : 1;
+                const metaFinal = item.meta_diaria || Math.round(metaRef.valor_meta * fator);
 
                 return {
-                    data: p.data_referencia,
-                    qtd: qtd,
-                    meta: metaCalc,
-                    pct: metaCalc > 0 ? (qtd / metaCalc) * 100 : 0
+                    id: item.id,
+                    data_referencia: item.data_referencia,
+                    quantidade: item.quantidade || 0,
+                    meta_ajustada: metaFinal,
+                    meta_diaria: item.meta_diaria || metaRef.valor_meta, // valor base
+                    fator: fator,
+                    observacao: item.observacao,
+                    observacao_gestora: item.observacao_gestora
                 };
             });
 
-            // Atualiza UI
-            this.atualizarKPIs(totalProd, totalMeta, diasTrab);
-            this.renderizarTabela(listaDiaria);
+            this.atualizarKPIs(dadosProcessados);
+            this.atualizarTabelaDiaria(dadosProcessados);
 
         } catch (e) {
             console.error("Erro Geral:", e);
         }
     },
 
-    atualizarKPIs: function(prod, meta, dias) {
-        // KPI Total
-        document.getElementById('ma-kpi-total').innerText = prod.toLocaleString('pt-BR');
-        document.getElementById('ma-kpi-meta').innerText = meta.toLocaleString('pt-BR');
-        
-        // Porcentagem e Barra
-        const pct = meta > 0 ? Math.round((prod / meta) * 100) : 0;
-        document.getElementById('ma-kpi-pct').innerText = `${pct}%`;
-        document.getElementById('ma-bar-total').style.width = `${Math.min(pct, 100)}%`;
-        
-        // Cor da Barra
-        const bar = document.getElementById('ma-bar-total');
-        if(pct >= 100) bar.className = "h-full bg-emerald-500 rounded-full";
-        else if(pct >= 80) bar.className = "h-full bg-blue-500 rounded-full";
-        else bar.className = "h-full bg-red-500 rounded-full";
+    // --- CÓDIGO FORNECIDO (ADAPTADO) ---
 
-        // KPI Média
-        const media = dias > 0 ? Math.round(prod / dias) : 0;
-        document.getElementById('ma-kpi-media').innerText = media;
-        document.getElementById('ma-kpi-dias').innerText = dias;
+    atualizarKPIs: function(dados) {
+        const total = dados.reduce((acc, curr) => acc + (curr.quantidade || 0), 0);
+        // Ajuste: considera dias onde fator > 0 como dias efetivos
+        const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
+        const metaTotal = dados.reduce((acc, curr) => acc + (curr.meta_ajustada !== undefined ? curr.meta_ajustada : 650), 0);
 
-        // KPI Status Badge
-        const badge = document.getElementById('ma-kpi-badge');
-        const txt = document.getElementById('ma-kpi-status-text');
+        const media = diasEfetivos > 0 ? Math.round(total / diasEfetivos) : 0;
+        const atingimento = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
+
+        this.setTxt('kpi-total', total.toLocaleString());
+        this.setTxt('kpi-meta-total', metaTotal.toLocaleString());
+        this.setTxt('kpi-porcentagem', atingimento + '%');
+        this.setTxt('kpi-media-real', media.toLocaleString());
         
-        if (pct >= 100) {
-            badge.innerText = "🚀";
-            txt.innerText = "Excelente!";
-        } else if (pct >= 90) {
-            badge.innerText = "👍";
-            txt.innerText = "Bom Trabalho";
-        } else if (pct >= 80) {
-            badge.innerText = "⚠️";
-            txt.innerText = "Atenção";
-        } else {
-            badge.innerText = "📉";
-            txt.innerText = "Abaixo da Meta";
+        const bar = document.getElementById('bar-progress');
+        const icon = document.getElementById('icon-status');
+        
+        if(bar) bar.style.width = Math.min(atingimento, 100) + '%';
+        
+        if(icon && bar) {
+            if(atingimento>=100) { 
+                bar.className="bg-emerald-500 h-full rounded-full"; 
+                icon.className="fas fa-check-circle text-emerald-500 text-2xl"; 
+            } else if(atingimento>=80) { 
+                bar.className="bg-amber-400 h-full rounded-full"; 
+                icon.className="fas fa-exclamation-circle text-amber-500 text-2xl"; 
+            } else { 
+                bar.className="bg-rose-500 h-full rounded-full"; 
+                icon.className="fas fa-times-circle text-rose-500 text-2xl"; 
+            }
         }
     },
 
-    renderizarTabela: function(lista) {
-        const tbody = document.getElementById('ma-table-body');
-        if(lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">Sem dados neste mês.</td></tr>';
+    atualizarTabelaDiaria: function(dados, viewingTime) {
+        const tbody = document.getElementById('tabela-diario');
+        if (!tbody) return;
+        
+        if (!dados.length) { tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum registro encontrado neste período.</td></tr>'; return; }
+        
+        let html = '';
+        dados.sort((a,b) => new Date(b.data_referencia) - new Date(a.data_referencia));
+
+        dados.forEach(item => {
+            const metaReal = item.meta_ajustada !== undefined ? item.meta_ajustada : 650;
+            const fator = item.fator !== undefined ? item.fator : 1;
+            
+            let pct = 0;
+            let statusHtml = '';
+            
+            if (fator === 0) {
+                statusHtml = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border border-slate-200">Abonado</span>';
+            } else {
+                pct = metaReal > 0 ? Math.round((item.quantidade / metaReal) * 100) : 0;
+                let colorClass = '';
+                if(pct >= 100) colorClass = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+                else if(pct >= 80) colorClass = 'bg-amber-100 text-amber-700 border-amber-200';
+                else colorClass = 'bg-rose-100 text-rose-700 border-rose-200';
+                
+                statusHtml = `<span class="${colorClass} px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide border">${pct}%</span>`;
+            }
+
+            const dFmt = item.data_referencia.split('-').reverse().join('/');
+            
+            let displayMeta = metaReal;
+            let infoFator = '';
+            if (fator < 1 && fator > 0) {
+                infoFator = `<span class="ml-1 text-[9px] text-amber-600 bg-amber-50 px-1 rounded" title="Fator/Média aplicada">Fat ${fator.toFixed(2)}</span>`;
+            }
+
+            let inputMeta = `<div class="flex flex-col items-center"><span class="font-bold text-slate-600">${displayMeta}</span>${infoFator}</div>`;
+            
+            // Permite edição apenas se for Gestor (mockando MA_Main.isMgr)
+            if(this.MA_Main_Mock.isMgr && !viewingTime && item.id) {
+                inputMeta = `<div class="flex flex-col items-center gap-1">
+                                <input type="number" value="${item.meta_diaria}" onchange="MinhaArea.Geral.atualizarMeta(${item.id}, this.value, ${item.meta_diaria})" class="w-16 text-center border border-slate-200 rounded px-1 py-0.5 text-xs font-bold bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-blue-200">
+                                ${infoFator}
+                             </div>`;
+            }
+            
+            let obs = item.observacao || '<span class="text-slate-300">-</span>';
+            if (obs.includes('Abonos:')) {
+                const parts = obs.split('Abonos:');
+                obs = `${parts[0]}<br><span class="text-[10px] text-amber-600 font-bold bg-amber-50 px-1 rounded mt-1 inline-block border border-amber-100">Abonos:${parts[1]}</span>`;
+            }
+
+            if(item.observacao_gestora) obs += `<div class="mt-1 text-[10px] text-blue-600 bg-blue-50 p-1.5 rounded border border-blue-100"><i class="fas fa-user-shield mr-1"></i>${item.observacao_gestora}</div>`;
+            
+            html += `<tr class="hover:bg-slate-50 border-b border-slate-50 transition">
+                        <td class="px-6 py-4 font-bold text-slate-600">${dFmt}</td>
+                        <td class="px-6 py-4 text-center font-black text-blue-600 text-lg">${item.quantidade}</td>
+                        <td class="px-6 py-4 text-center">${inputMeta}</td>
+                        <td class="px-6 py-4 text-center">${statusHtml}</td>
+                        <td class="px-6 py-4 text-xs text-slate-500 max-w-xs break-words">${obs}</td>
+                    </tr>`;
+        });
+        tbody.innerHTML = html;
+    },
+
+    atualizarMeta: async function(id, nv, av) { 
+        if(nv==av) return; 
+        const m = prompt("Motivo da alteração de meta:"); 
+        if(!m){ this.MA_Main_Mock.atualizarDashboard(); return;} 
+        const obs = `${new Date().toLocaleDateString()} - Alterado ${av}->${nv}: ${m}`; 
+        await Sistema.supabase.from('producao').update({meta_diaria:nv, observacao_gestora:obs}).eq('id',id); 
+        this.MA_Main_Mock.atualizarDashboard(); 
+    },
+
+    // --- FUNCIONALIDADE: PRESENÇA (ONTEM) --- //
+
+    verificarAcessoHoje: async function() {
+        // Só exibe para assistentes (não gestores)
+        if(this.MA_Main_Mock.isMgr) return;
+        
+        const box = document.getElementById('box-confirmacao-leitura');
+        
+        // CALCULA A DATA DE ONTEM
+        const data = new Date();
+        data.setDate(data.getDate() - 1); 
+        const dataRef = data.toISOString().split('T')[0];
+        
+        // Verifica se ONTEM foi fim de semana (Sábado=6, Domingo=0)
+        const diaSemana = data.getDay();
+        if(diaSemana === 0 || diaSemana === 6) {
+            if(box) box.classList.add('hidden');
             return;
         }
 
-        let html = '';
-        // Ordena data descrescente
-        lista.sort((a, b) => new Date(b.data) - new Date(a.data));
-
-        lista.forEach(item => {
-            const dataFmt = item.data.split('-').reverse().join('/');
-            const pct = item.pct.toFixed(1);
+        const { data: reg } = await Sistema.supabase
+            .from('acessos_diarios')
+            .select('id')
+            .eq('usuario_id', MinhaArea.user.id)
+            .eq('data_referencia', dataRef); // Busca pela data de ontem
             
-            let status = '';
-            if(item.pct >= 100) status = '<span class="px-2 py-1 bg-emerald-100 text-emerald-700 rounded text-xs font-bold">Meta Batida</span>';
-            else if(item.pct >= 80) status = '<span class="px-2 py-1 bg-blue-50 text-blue-700 rounded text-xs font-bold">Na Média</span>';
-            else status = '<span class="px-2 py-1 bg-red-50 text-red-600 rounded text-xs font-bold">Baixo</span>';
+        if (reg && reg.length > 0) {
+            if(box) box.classList.add('hidden');
+        } else {
+            if(box) {
+                box.classList.remove('hidden');
+            }
+        }
+    },
 
-            html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-50">
-                <td class="px-6 py-3 font-bold">${dataFmt}</td>
-                <td class="px-6 py-3 text-center text-blue-700 font-bold">${item.qtd}</td>
-                <td class="px-6 py-3 text-center text-slate-500">${item.meta}</td>
-                <td class="px-6 py-3 text-center font-bold ${item.pct >= 100 ? 'text-emerald-600' : 'text-slate-600'}">${pct}%</td>
-                <td class="px-6 py-3 text-center">${status}</td>
-            </tr>`;
+    confirmarAcessoHoje: async function() {
+        const data = new Date();
+        data.setDate(data.getDate() - 1);
+        const dataRef = data.toISOString().split('T')[0];
+        
+        const btn = document.querySelector('#box-confirmacao-leitura button');
+        
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+        
+        const { error } = await Sistema.supabase.from('acessos_diarios').insert({
+            usuario_id: MinhaArea.user.id,
+            data_referencia: dataRef 
         });
-        tbody.innerHTML = html;
+        
+        if(error) {
+            alert("Erro ao confirmar: " + error.message);
+            if(btn) btn.innerHTML = 'Tentar Novamente';
+        } else {
+            document.getElementById('box-confirmacao-leitura').classList.add('hidden');
+            alert("Presença do dia anterior confirmada!");
+        }
+    },
+
+    carregarRelatorioAcessos: async function() {
+        // Só exibe para Gestoras/Auditoras
+        if(!this.MA_Main_Mock.isMgr) return;
+
+        const box = document.getElementById('box-relatorio-acessos');
+        const lista = document.getElementById('lista-presenca-time');
+        const lblData = document.getElementById('lbl-data-acesso');
+        
+        if(!box || !lista) return;
+
+        box.classList.remove('hidden');
+        
+        const dt = new Date(); // Assume hoje para o relatório simples
+        const dataStr = dt.toISOString().split('T')[0];
+        const dataFmt = dataStr.split('-').reverse().join('/');
+        
+        lblData.innerText = dataFmt;
+        lista.innerHTML = '<span class="col-span-full text-center text-slate-400 py-4"><i class="fas fa-spinner fa-spin"></i> Carregando presenças...</span>';
+
+        // 1. Busca todos os usuários ativos que são Assistentes
+        const { data: users } = await Sistema.supabase
+            .from('usuarios')
+            .select('id, nome')
+            .eq('perfil', 'assistente') // Adaptado de 'funcao' para 'perfil' que é comum
+            .eq('ativo', true)
+            .order('nome');
+
+        // 2. Busca os acessos da data selecionada
+        const { data: acessos } = await Sistema.supabase
+            .from('acessos_diarios')
+            .select('usuario_id, created_at')
+            .eq('data_referencia', dataStr);
+            
+        const acessosMap = {};
+        if(acessos) {
+            acessos.forEach(a => acessosMap[a.usuario_id] = a.created_at);
+        }
+
+        let html = '';
+        if(users) {
+            users.forEach(u => {
+                const confirmou = acessosMap[u.id];
+                let statusIcon = '<i class="fas fa-times-circle text-rose-300"></i>';
+                let statusClass = 'border-rose-100 bg-rose-50 opacity-70';
+                let hora = '';
+
+                if(confirmou) {
+                    statusIcon = '<i class="fas fa-check-circle text-emerald-500"></i>';
+                    statusClass = 'border-emerald-100 bg-emerald-50';
+                    const h = new Date(confirmou);
+                    hora = `<span class="text-[9px] font-bold text-emerald-600 block mt-0.5">${h.getHours()}:${String(h.getMinutes()).padStart(2,'0')}</span>`;
+                }
+
+                html += `<div class="flex items-center gap-2 p-2 rounded-lg border ${statusClass}">
+                            <div class="text-lg">${statusIcon}</div>
+                            <div class="leading-tight">
+                                <span class="text-xs font-bold text-slate-700 block">${u.nome.split(' ')[0]}</span>
+                                ${hora}
+                            </div>
+                         </div>`;
+            });
+        }
+        lista.innerHTML = html;
+    },
+
+    setTxt: function(id, txt) {
+        const el = document.getElementById(id);
+        if(el) el.innerText = txt;
     }
 };

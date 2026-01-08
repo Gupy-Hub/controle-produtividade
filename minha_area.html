@@ -83,42 +83,64 @@
         </div>
 
         <div id="ma-tab-geral" class="ma-view animate-enter space-y-6">
+            
+            <div id="box-confirmacao-leitura" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-enter shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 text-xl">
+                        <i class="fas fa-clipboard-check"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-amber-800">Check-in Diário</h4>
+                        <p class="text-xs text-amber-700">Confirme que verificou suas metas e resultados do dia anterior.</p>
+                    </div>
+                </div>
+                <button onclick="MinhaArea.Geral.confirmarAcessoHoje()" class="w-full md:w-auto bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-6 rounded-lg shadow-sm transition text-sm">
+                    Confirmar Ciência
+                </button>
+            </div>
+
+            <div id="box-relatorio-acessos" class="hidden bg-white border border-slate-200 rounded-xl p-4 shadow-sm animate-enter">
+                <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
+                    <h4 class="font-bold text-slate-700"><i class="fas fa-users-viewfinder text-blue-500 mr-2"></i> Presença do Time</h4>
+                    <span id="lbl-data-acesso" class="text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-500">Hoje</span>
+                </div>
+                <div id="lista-presenca-time" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2"></div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-stat relative overflow-hidden group">
                     <div class="absolute right-0 top-0 w-24 h-24 bg-blue-50 rounded-bl-full -mr-4 -mt-4 transition group-hover:scale-110"></div>
                     <p class="text-xs font-bold text-slate-400 uppercase mb-2 relative z-10">Produção Total</p>
                     <div class="flex items-end justify-between relative z-10">
-                        <h3 class="text-4xl font-black text-slate-800 tracking-tighter" id="ma-kpi-total">0</h3>
+                        <h3 class="text-4xl font-black text-slate-800 tracking-tighter" id="kpi-total">0</h3>
                         <i class="fas fa-layer-group text-3xl text-blue-200"></i>
                     </div>
                     <div class="mt-4 flex items-center gap-2 text-xs font-bold text-slate-500 relative z-10">
-                        <span>Meta: <span id="ma-kpi-meta">0</span></span>
+                        <span>Meta: <span id="kpi-meta-total">0</span></span>
                         <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div id="ma-bar-total" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div>
+                            <div id="bar-progress" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div>
                         </div>
-                        <span id="ma-kpi-pct" class="text-blue-600">0%</span>
+                        <span id="kpi-porcentagem" class="text-blue-600">0%</span>
                     </div>
                 </div>
 
                 <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 card-stat">
-                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Média Diária</p>
+                    <p class="text-xs font-bold text-slate-400 uppercase mb-2">Média Diária (Real)</p>
                     <div class="flex items-end justify-between">
-                        <h3 class="text-4xl font-black text-slate-800 tracking-tighter" id="ma-kpi-media">0</h3>
+                        <h3 class="text-4xl font-black text-slate-800 tracking-tighter" id="kpi-media-real">0</h3>
                         <i class="fas fa-chart-bar text-3xl text-emerald-200"></i>
                     </div>
-                    <p class="mt-4 text-xs font-bold text-emerald-600 bg-emerald-50 w-fit px-2 py-1 rounded">
-                        <i class="fas fa-calendar-day mr-1"></i> <span id="ma-kpi-dias">0</span> dias trabalhados
-                    </p>
+                     <p class="mt-4 text-xs text-slate-400">Calculada sobre dias efetivos</p>
                 </div>
 
                 <div class="bg-gradient-to-br from-indigo-600 to-purple-700 p-6 rounded-2xl shadow-lg shadow-indigo-200 text-white card-stat">
                     <p class="text-xs font-bold text-white/60 uppercase mb-2">Status do Mês</p>
                     <div class="flex items-center gap-4">
-                        <div class="w-16 h-16 rounded-full border-4 border-white/20 flex items-center justify-center text-xl font-bold bg-white/10 backdrop-blur-sm" id="ma-kpi-badge">
-                            --
+                        <div class="w-16 h-16 rounded-full border-4 border-white/20 flex items-center justify-center text-xl font-bold bg-white/10 backdrop-blur-sm">
+                            <i id="icon-status" class="fas fa-minus"></i>
                         </div>
                         <div>
-                            <p class="text-lg font-bold leading-tight" id="ma-kpi-status-text">Calculando...</p>
+                            <p class="text-lg font-bold leading-tight">Desempenho</p>
                             <p class="text-xs text-white/60 mt-1">Baseado no atingimento</p>
                         </div>
                     </div>
@@ -128,7 +150,7 @@
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <h3 class="font-bold text-slate-700">Histórico Diário</h3>
-                    <span class="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded border border-slate-200">Este Mês</span>
+                    <span class="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded border border-slate-200">Detalhado</span>
                 </div>
                 <div class="overflow-x-auto max-h-[400px] custom-scroll">
                     <table class="w-full text-sm text-left">
@@ -136,12 +158,12 @@
                             <tr>
                                 <th class="px-6 py-3">Data</th>
                                 <th class="px-6 py-3 text-center">Produção</th>
-                                <th class="px-6 py-3 text-center">Meta do Dia</th>
-                                <th class="px-6 py-3 text-center">Atingimento</th>
+                                <th class="px-6 py-3 text-center">Meta/Fator</th>
                                 <th class="px-6 py-3 text-center">Status</th>
+                                <th class="px-6 py-3">Observações</th>
                             </tr>
                         </thead>
-                        <tbody id="ma-table-body" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                        <tbody id="tabela-diario" class="divide-y divide-slate-100 text-slate-600"></tbody>
                     </table>
                 </div>
             </div>
