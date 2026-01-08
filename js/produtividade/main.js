@@ -3,17 +3,22 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Main = {
     init: function() {
+        // 1. Recupera e aplica a DATA salva (ou usa hoje)
+        const lastDate = localStorage.getItem('lastGlobalDate');
+        if (lastDate) {
+            document.getElementById('global-date').value = lastDate;
+        } else {
+            document.getElementById('global-date').value = new Date().toISOString().split('T')[0];
+        }
+
         this.setupTabs();
         
-        // --- LÓGICA DE PERSISTÊNCIA ---
-        // 1. Verifica se existe uma aba salva no navegador
+        // 2. Recupera a última ABA salva
         const lastTab = localStorage.getItem('lastActiveTab');
-        
         if (lastTab) {
-            // Se existir, abre ela (com um pequeno delay para garantir que o HTML carregou)
             setTimeout(() => this.mudarAba(lastTab), 50);
         } else {
-            // Se não tiver histórico, abre a aba padrão 'geral'
+            // Padrão: Geral
             if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
                 Produtividade.Geral.init();
             }
@@ -24,29 +29,20 @@ Produtividade.Main = {
         const btns = document.querySelectorAll('.tab-btn');
         btns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                // Remove classe ativa de todos
                 btns.forEach(b => b.classList.remove('active'));
-                // Adiciona classe ativa no clicado
                 btn.classList.add('active');
 
-                // Esconde todas as seções
                 document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
-                
-                // Mostra a seção correspondente
                 const targetId = btn.id.replace('btn-', 'tab-');
                 const targetEl = document.getElementById(targetId);
                 if(targetEl) targetEl.classList.remove('hidden');
 
-                // Pega o nome da aba (ex: 'geral', 'consolidado')
                 const sectionName = btn.id.replace('btn-', '');
-                
-                // Gerencia os botões do topo (filtros específicos)
                 this.toggleTopBarControls(sectionName);
 
-                // --- SALVA A ESCOLHA NO NAVEGADOR ---
+                // Salva a aba
                 localStorage.setItem('lastActiveTab', sectionName);
 
-                // Carrega o módulo específico
                 this.loadModule(sectionName);
             });
         });
@@ -54,7 +50,6 @@ Produtividade.Main = {
 
     toggleTopBarControls: function(section) {
         const controls = ['geral', 'consolidado', 'performance', 'matriz'];
-        
         controls.forEach(c => {
             const el = document.getElementById(`ctrl-${c}`);
             if(el) {
@@ -81,23 +76,23 @@ Produtividade.Main = {
         }
     },
 
-    // Função auxiliar pública para trocar de aba
     mudarAba: function(aba) {
         const btn = document.getElementById(`btn-${aba}`);
         if(btn) btn.click();
     }
 };
 
-// Inicializa quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
     Produtividade.Main.init();
 });
 
-// Atalhos globais
+// Atalhos Globais
 Produtividade.mudarAba = (aba) => Produtividade.Main.mudarAba(aba);
 
 Produtividade.atualizarDataGlobal = function(valor) {
-    // Recarrega o módulo atual quando muda a data
+    // SALVA A DATA NO NAVEGADOR
+    localStorage.setItem('lastGlobalDate', valor);
+
     const activeBtn = document.querySelector('.tab-btn.active');
     if(activeBtn) {
         const section = activeBtn.id.replace('btn-', '');

@@ -4,6 +4,12 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
+        // Recupera o último modo de visualização (Dia/Mês/Semana)
+        const lastViewMode = localStorage.getItem('lastViewMode');
+        if (lastViewMode) {
+            document.getElementById('view-mode').value = lastViewMode;
+        }
+
         this.toggleSemana(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -11,6 +17,10 @@ Produtividade.Geral = {
     
     toggleSemana: function() {
         const mode = document.getElementById('view-mode').value;
+        
+        // Salva a preferência do usuário
+        localStorage.setItem('lastViewMode', mode);
+
         const sem = document.getElementById('select-semana');
         if(mode === 'semana') sem.classList.remove('hidden'); else sem.classList.add('hidden');
         if(this.initialized) this.carregarTela();
@@ -37,15 +47,14 @@ Produtividade.Geral = {
         return semanas;
     },
 
-    // Função para contar dias úteis (Seg-Sex) no calendário
     calcularDiasUteis: function(inicio, fim) {
         let count = 0;
-        let cur = new Date(inicio + 'T12:00:00');
+        let cur = new Date(inicio + 'T12:00:00'); 
         const end = new Date(fim + 'T12:00:00');
         
         while(cur <= end) {
             const day = cur.getDay();
-            if(day !== 0 && day !== 6) { // Ignora Dom e Sáb
+            if(day !== 0 && day !== 6) { 
                 count++;
             }
             cur.setDate(cur.getDate() + 1);
@@ -128,8 +137,6 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             this.renderizarTabela();
-            
-            // Passa as datas para calcular corretamente o calendário
             this.atualizarKPIs(data, dataInicio, dataFim);
 
         } catch (error) {
@@ -152,6 +159,7 @@ Produtividade.Geral = {
             const isDia = document.getElementById('view-mode').value === 'dia';
             const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
             
+            // Corrige visualmente se vier 'user'
             let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
             if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
             const perfilExibicao = perfilRaw;
@@ -399,7 +407,7 @@ Produtividade.Geral = {
         let metaTotalGeral = 0;
         let diasComProd = new Set();
         
-        // Variáveis para cálculo de Média (Apenas Assistentes)
+        // Média só Assistentes
         let totalProdAssistentes = 0;
         let countAssistentes = new Set(); 
 
@@ -420,25 +428,21 @@ Produtividade.Geral = {
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
             if(perfil === 'USER') perfil = 'PJ';
 
-            // 2. SEPARA PARA MÉDIA (Apenas Assistentes, exclui Auditoras)
+            // 2. SEPARA PARA MÉDIA (Apenas Assistentes)
             if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
                 
-                // Contagem de Perfil (Só considera Assistentes na pizza)
                 if(perfil === 'CLT') usersCLT.add(r.usuario.id);
                 else usersPJ.add(r.usuario.id);
             }
         });
 
-        // --- ATUALIZA TELA ---
-
-        // KPI TOTAL (Soma de todos)
+        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
-        
-        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
+        
         const bar = document.getElementById('kpi-pct-bar');
         if(bar) {
             bar.style.width = Math.min(pct, 100) + '%';
@@ -447,24 +451,6 @@ Produtividade.Geral = {
                 : "h-full bg-white/90 rounded-full transition-all duration-500";
         }
 
-        // KPI DIAS ÚTEIS (Formato 1/22)
-        const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
-        const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) {
-            // Dias Trabalhados / Dias Úteis do Calendário
-            elDias.innerText = `${diasComProd.size}/${diasUteisTotais}`;
-            elDias.style.fontSize = "1.5rem"; 
-        }
-        const elDiasTotal = document.getElementById('kpi-dias-total');
-        if(elDiasTotal) elDiasTotal.innerText = ""; 
-
-        // KPI MÉDIA (Apenas Assistentes)
-        const numAssistentes = countAssistentes.size;
-        const media = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
-        const elMedia = document.getElementById('kpi-media-todas');
-        if(elMedia) elMedia.innerText = media;
-
-        // KPI COMPOSIÇÃO
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalUsers = clt + pj;
@@ -480,5 +466,24 @@ Produtividade.Geral = {
         
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = (totalUsers > 0 ? (pj/totalUsers)*100 : 0) + '%';
+
+        // --- CORREÇÃO FINAL DIAS ÚTEIS ---
+        const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
+        
+        const elDias = document.getElementById('kpi-dias-val');
+        if(elDias) {
+            // Formato X / Y (X = Trabalhados / Y = Úteis Totais)
+            elDias.innerText = `${diasComProd.size} / ${diasUteisTotais}`;
+            elDias.style.fontSize = "1.5rem"; 
+        }
+        
+        const elDiasTotal = document.getElementById('kpi-dias-total');
+        if(elDiasTotal) elDiasTotal.innerText = ""; // Limpa porque a info já está no número grande
+
+        // MÉDIA (Só assistentes)
+        const numAssistentes = countAssistentes.size;
+        const media = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
+        const elMedia = document.getElementById('kpi-media-todas');
+        if(elMedia) elMedia.innerText = media;
     }
 };
