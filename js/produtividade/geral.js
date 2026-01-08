@@ -130,7 +130,6 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
-            // Definição do Cargo e Perfil para exibição
             const cargoExibicao = d.usuario.cargo || 'Assistente';
             const perfilExibicao = d.usuario.perfil || 'PJ';
 
@@ -144,9 +143,11 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
+                // CORREÇÃO: Limpeza de aspas para não quebrar o HTML do tooltip
                 let iconJustificativa = '';
                 if(r.justificativa) {
-                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110" title="${r.justificativa}"></i>`;
+                    const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
+                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110" title="${textoSeguro}"></i>`;
                 }
 
                 const tr = document.createElement('tr');
