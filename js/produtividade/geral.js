@@ -37,15 +37,15 @@ Produtividade.Geral = {
         return semanas;
     },
 
-    // Calcula dias úteis (Segunda a Sexta) entre duas datas
+    // Função para contar dias úteis (Seg-Sex) no calendário
     calcularDiasUteis: function(inicio, fim) {
         let count = 0;
-        let cur = new Date(inicio + 'T12:00:00'); 
+        let cur = new Date(inicio + 'T12:00:00');
         const end = new Date(fim + 'T12:00:00');
         
         while(cur <= end) {
             const day = cur.getDay();
-            if(day !== 0 && day !== 6) { // Ignora Domingo (0) e Sábado (6)
+            if(day !== 0 && day !== 6) { // Ignora Dom e Sáb
                 count++;
             }
             cur.setDate(cur.getDate() + 1);
@@ -79,7 +79,7 @@ Produtividade.Geral = {
                 dataInicio = semanas[semanaSel].inicio;
                 dataFim = semanas[semanaSel].fim;
             } else {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-slate-400">Semana inválida para este mês.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-slate-400">Semana inválida.</td></tr>';
                 return;
             }
         }
@@ -128,6 +128,8 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             this.renderizarTabela();
+            
+            // Passa as datas para calcular corretamente o calendário
             this.atualizarKPIs(data, dataInicio, dataFim);
 
         } catch (error) {
@@ -393,16 +395,14 @@ Produtividade.Geral = {
     },
 
     atualizarKPIs: function(data, dataInicio, dataFim) {
-        // Variáveis Totais (Considera todos: Assistentes + Auditoras)
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
         
-        // Variáveis para Média (Apenas Assistentes)
+        // Variáveis para cálculo de Média (Apenas Assistentes)
         let totalProdAssistentes = 0;
         let countAssistentes = new Set(); 
 
-        // Variáveis de Perfil (Apenas para exibir no gráfico de pizza de composição)
         let usersCLT = new Set();
         let usersPJ = new Set();
         
@@ -411,36 +411,32 @@ Produtividade.Geral = {
             const metaUser = Number(r.usuario.meta_diaria) > 0 ? Number(r.usuario.meta_diaria) : 650;
             const metaCalc = metaUser * r.fator;
             
-            // 1. SOMA TUDO NO GERAL (Inclusive Auditoras)
+            // 1. SOMA TUDO NO GERAL (Assistentes + Auditoras)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
-            // Verifica Cargo e Perfil
             const cargo = r.usuario && r.usuario.cargo ? String(r.usuario.cargo).toUpperCase() : 'ASSISTENTE';
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
             if(perfil === 'USER') perfil = 'PJ';
 
-            // 2. SEPARA DADOS PARA MÉDIA (Apenas Assistentes)
+            // 2. SEPARA PARA MÉDIA (Apenas Assistentes, exclui Auditoras)
             if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
                 
-                // Contagem de CLT/PJ (Só consideramos assistentes no gráfico de composição?)
-                // O usuário não especificou, mas geralmente composição de time refere-se à operação.
-                // Vou manter a contagem de CLT/PJ restrita a quem não é Auditora/Gestora para bater com a média.
+                // Contagem de Perfil (Só considera Assistentes na pizza)
                 if(perfil === 'CLT') usersCLT.add(r.usuario.id);
                 else usersPJ.add(r.usuario.id);
             }
         });
 
-        // --- ATUALIZAÇÃO DA TELA ---
+        // --- ATUALIZA TELA ---
 
         // KPI TOTAL (Soma de todos)
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
         
-        // % de Atingimento (Baseado no total geral)
         const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
         const bar = document.getElementById('kpi-pct-bar');
@@ -455,12 +451,12 @@ Produtividade.Geral = {
         const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
         const elDias = document.getElementById('kpi-dias-val');
         if(elDias) {
-            // Formato: Dias Trabalhados / Dias Úteis Totais
+            // Dias Trabalhados / Dias Úteis do Calendário
             elDias.innerText = `${diasComProd.size}/${diasUteisTotais}`;
-            elDias.style.fontSize = "1.5rem"; // Ajuste leve de tamanho se necessário
+            elDias.style.fontSize = "1.5rem"; 
         }
         const elDiasTotal = document.getElementById('kpi-dias-total');
-        if(elDiasTotal) elDiasTotal.innerText = ""; // Limpa o texto antigo que ficava ao lado
+        if(elDiasTotal) elDiasTotal.innerText = ""; 
 
         // KPI MÉDIA (Apenas Assistentes)
         const numAssistentes = countAssistentes.size;
@@ -468,7 +464,7 @@ Produtividade.Geral = {
         const elMedia = document.getElementById('kpi-media-todas');
         if(elMedia) elMedia.innerText = media;
 
-        // KPI COMPOSIÇÃO (Baseado nos Assistentes considerados)
+        // KPI COMPOSIÇÃO
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalUsers = clt + pj;
