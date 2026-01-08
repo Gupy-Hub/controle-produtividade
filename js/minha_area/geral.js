@@ -1,13 +1,10 @@
-// Define como MinhaArea.Diario para corresponder à aba 'diario'
 MinhaArea.Diario = {
     
     carregar: async function() {
-        if (!MinhaArea.user) {
-            console.error("Usuário não identificado.");
-            return;
-        }
+        // Verifica se usuário e conexão existem
+        if (!MinhaArea.user) return;
         if (!MinhaArea.supabase) {
-            console.error("Supabase desconectado.");
+            console.error("Supabase não inicializado.");
             return;
         }
 
@@ -15,12 +12,14 @@ MinhaArea.Diario = {
         const uid = MinhaArea.user.id;
         const tbody = document.getElementById('tabela-diario');
 
-        if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando dados...</td></tr>';
+        // Feedback de carregamento
+        if(tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando seu diário...</td></tr>';
 
-        this.verificarAcessoHoje(); // Check-in
+        // Verifica Check-in de presença
+        this.verificarAcessoHoje();
 
         try {
-            // 1. Busca Dados Pessoais
+            // 1. BUSCA DADOS DE PRODUÇÃO (Do Usuário)
             const { data: producao, error } = await MinhaArea.supabase
                 .from('producao')
                 .select('*')
@@ -31,16 +30,15 @@ MinhaArea.Diario = {
 
             if (error) throw error;
 
-            // 2. Busca Dados do Time (para Comparativo)
-            // Filtra apenas 'assistente' para não distorcer a média com gestores
-            const { data: timeData } = await MinhaArea.supabase
+            // 2. BUSCA DADOS DO TIME (Para Comparativo - Apenas Assistentes)
+            const { data: producaoTime } = await MinhaArea.supabase
                 .from('producao')
-                .select('quantidade, fator, usuario:usuarios!inner(perfil)')
-                .eq('usuario.perfil', 'assistente') 
+                .select('quantidade, fator, usuarios!inner(perfil)')
+                .eq('usuarios.perfil', 'assistente') 
                 .gte('data_referencia', periodo.inicio)
                 .lte('data_referencia', periodo.fim);
 
-            // 3. Busca Metas
+            // 3. BUSCA METAS VIGENTES
             const { data: metas } = await MinhaArea.supabase
                 .from('metas')
                 .select('*')
@@ -51,9 +49,9 @@ MinhaArea.Diario = {
 
             // A) Processa Dados Pessoais
             const dadosProcessados = producao.map(item => {
-                let metaBase = 650; // Padrão
+                let metaBase = 650; // Valor padrão
                 
-                // Tenta pegar a meta salva no registro, senão busca na tabela de metas
+                // Prioridade: Meta gravada no registro > Meta vigente na data
                 if (item.meta_diaria && Number(item.meta_diaria) > 0) {
                     metaBase = Number(item.meta_diaria);
                 } else if (metas && metas.length > 0) {
@@ -61,6 +59,7 @@ MinhaArea.Diario = {
                     if (m) metaBase = Number(m.valor_meta);
                 }
 
+                // Normaliza fator
                 let fator = 1;
                 if (item.fator !== null && item.fator !== undefined) fator = Number(item.fator);
                 else if (item.fator_multiplicador !== null && item.fator_multiplicador !== undefined) fator = Number(item.fator_multiplicador);
@@ -80,21 +79,22 @@ MinhaArea.Diario = {
 
             // B) Processa Média do Time
             let mediaTime = 0;
-            if (timeData && timeData.length > 0) {
-                const totalTime = timeData.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
-                const diasTime = timeData.reduce((acc, curr) => {
+            if (producaoTime && producaoTime.length > 0) {
+                const totalTime = producaoTime.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
+                const diasTime = producaoTime.reduce((acc, curr) => {
                     const f = curr.fator !== null ? Number(curr.fator) : 1;
                     return acc + (f > 0 ? 1 : 0);
                 }, 0);
                 mediaTime = diasTime > 0 ? Math.round(totalTime / diasTime) : 0;
             }
 
+            // Atualiza Interface
             this.atualizarKPIs(dadosProcessados, mediaTime);
             this.atualizarTabelaDiaria(dadosProcessados);
 
         } catch (e) {
-            console.error("Erro no Módulo Diário:", e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Erro ao carregar: ${e.message}</td></tr>`;
+            console.error("Erro no Diário:", e);
+            if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Erro ao carregar dados: ${e.message}</td></tr>`;
         }
     },
 
@@ -106,7 +106,7 @@ MinhaArea.Diario = {
         const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
         const atingimento = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
 
-        // Card 1: Meta
+        // Card 1: Atingimento
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-meta-total', Math.round(totalMeta).toLocaleString('pt-BR'));
         this.setTxt('kpi-pct', `${atingimento}%`);
@@ -114,12 +114,12 @@ MinhaArea.Diario = {
         const bar = document.getElementById('bar-progress');
         if(bar) {
             bar.style.width = `${Math.min(atingimento, 100)}%`;
-            if (atingimento >= 100) bar.className = "h-full bg-emerald-500 rounded-full transition-all duration-500";
-            else if (atingimento >= 90) bar.className = "h-full bg-blue-500 rounded-full transition-all duration-500";
+            if(atingimento >= 100) bar.className = "h-full bg-emerald-500 rounded-full transition-all duration-500";
+            else if(atingimento >= 90) bar.className = "h-full bg-blue-500 rounded-full transition-all duration-500";
             else bar.className = "h-full bg-amber-500 rounded-full transition-all duration-500";
         }
 
-        // Card 2: Comparativo
+        // Card 2: Comparativo Time
         this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
         this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
         
@@ -134,7 +134,7 @@ MinhaArea.Diario = {
         this.setTxt('kpi-dias', diasEfetivos);
         const txtStatus = document.getElementById('kpi-status-text');
         const iconStatus = document.getElementById('icon-status');
-        
+
         if(txtStatus && iconStatus) {
             if(atingimento >= 100) {
                 txtStatus.innerHTML = "<span class='text-emerald-600'>Excelente! Meta batida.</span>";
@@ -163,6 +163,7 @@ MinhaArea.Diario = {
             const fator = item.fator;
             const pct = item.meta_ajustada > 0 ? Math.round((item.quantidade / item.meta_ajustada) * 100) : 0;
             
+            // Badge de Status
             let statusBadge = '';
             if (fator === 0) {
                 statusBadge = '<span class="bg-slate-100 text-slate-500 px-2 py-1 rounded text-[10px] font-bold uppercase border border-slate-200">Abonado</span>';
@@ -176,7 +177,7 @@ MinhaArea.Diario = {
             // Observações
             let obsHtml = '';
             if (item.observacao) obsHtml += `<div class="mb-1 text-slate-700">${item.observacao}</div>`;
-            if (item.justificativa) obsHtml += `<div class="text-xs text-slate-500 italic"><i class="fas fa-info-circle mr-1"></i>Justificativa: ${item.justificativa}</div>`;
+            if (item.justificativa) obsHtml += `<div class="text-xs text-slate-500 italic"><i class="fas fa-info-circle mr-1"></i>Just.: ${item.justificativa}</div>`;
             if (item.observacao_gestora) obsHtml += `<div class="mt-1 text-[10px] bg-blue-50 text-blue-700 p-1 rounded border border-blue-100"><i class="fas fa-comment mr-1"></i>Gestão: ${item.observacao_gestora}</div>`;
             if (!obsHtml) obsHtml = '<span class="text-slate-300">-</span>';
 
@@ -210,16 +211,26 @@ MinhaArea.Diario = {
         const dataOntem = new Date();
         dataOntem.setDate(dataOntem.getDate() - 1);
         
+        // Se ontem foi fim de semana, esconde box
         if(dataOntem.getDay() === 0 || dataOntem.getDay() === 6) {
             if(box) box.classList.add('hidden');
             return;
         }
 
         const dataRef = dataOntem.toISOString().split('T')[0];
-        const { data: reg } = await MinhaArea.supabase.from('acessos_diarios').select('id').eq('usuario_id', MinhaArea.user.id).eq('data_referencia', dataRef);
+        
+        // Verifica se já confirmou
+        const { data: reg } = await MinhaArea.supabase
+            .from('acessos_diarios')
+            .select('id')
+            .eq('usuario_id', MinhaArea.user.id)
+            .eq('data_referencia', dataRef);
             
-        if (reg && reg.length > 0 && box) box.classList.add('hidden');
-        else if (box) box.classList.remove('hidden');
+        if (reg && reg.length > 0) {
+            if(box) box.classList.add('hidden');
+        } else {
+            if(box) box.classList.remove('hidden');
+        }
     },
 
     confirmarAcessoHoje: async function() {
@@ -230,14 +241,17 @@ MinhaArea.Diario = {
         dataOntem.setDate(dataOntem.getDate() - 1);
         const dataRef = dataOntem.toISOString().split('T')[0];
         
-        const { error } = await MinhaArea.supabase.from('acessos_diarios').insert({ usuario_id: MinhaArea.user.id, data_referencia: dataRef });
+        const { error } = await MinhaArea.supabase.from('acessos_diarios').insert({
+            usuario_id: MinhaArea.user.id,
+            data_referencia: dataRef 
+        });
         
         if(!error) {
             const box = document.getElementById('box-confirmacao-leitura');
             box.classList.add('hidden');
             alert("Check-in confirmado!");
         } else {
-            alert("Erro: " + error.message);
+            alert("Erro ao confirmar: " + error.message);
             if(btn) btn.innerText = "Tentar Novamente";
         }
     }
