@@ -1,7 +1,7 @@
 Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
-    basesManuaisHC: {}, 
+    ajustesSalvos: {}, // Cache dos ajustes vindos do banco
     dadosCalculados: null,
     defaultHC: 17, 
 
@@ -64,12 +64,43 @@ Produtividade.Consolidado = {
         setTimeout(() => this.togglePeriodo(), 100);
     },
 
-    mudarBasePeriodo: function(colIndex, novoValor) {
+    // --- NOVA FUNÇÃO DE SALVAMENTO NO BANCO ---
+    mudarBasePeriodo: async function(chaveTempo, novoValor) {
         if(!novoValor || novoValor < 0) return;
-        this.basesManuaisHC[colIndex] = Math.round(parseFloat(novoValor)); 
         
-        if(this.dadosCalculados) {
+        const tipoVisao = document.getElementById('cons-period-type').value;
+        const valorInt = Math.round(parseFloat(novoValor));
+
+        // Solicita Justificativa
+        await new Promise(r => setTimeout(r, 10)); // Delay UI
+        const justificativa = prompt("Informe o motivo da alteração do HC (obrigatório):");
+
+        if (justificativa === null || justificativa.trim() === "") {
+            alert("Alteração cancelada: Justificativa obrigatória.");
+            this.renderizar(this.dadosCalculados); // Reverte visualmente
+            return;
+        }
+
+        try {
+            // Salva no Supabase
+            const { error } = await Sistema.supabase
+                .from('consolidado_ajustes')
+                .upsert({
+                    chave_tempo: chaveTempo,
+                    tipo_visao: tipoVisao,
+                    hc_manual: valorInt,
+                    justificativa: justificativa
+                }, { onConflict: 'chave_tempo, tipo_visao' });
+
+            if (error) throw error;
+
+            // Atualiza cache local e re-renderiza
+            this.ajustesSalvos[chaveTempo] = { hc: valorInt, just: justificativa };
             this.renderizar(this.dadosCalculados);
+
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao salvar ajuste: " + e.message);
         }
     },
 
@@ -82,7 +113,8 @@ Produtividade.Consolidado = {
         const selS = document.getElementById('cons-select-semester');
         const dateInput = document.getElementById('global-date');
         
-        this.basesManuaisHC = {}; 
+        // Limpa cache visual ao trocar período
+        // this.ajustesSalvos = {}; // Não limpamos aqui para permitir persistência real
         
         if(selQ) selQ.classList.add('hidden');
         if(selS) selS.classList.add('hidden');
@@ -102,7 +134,7 @@ Produtividade.Consolidado = {
             }
         }
         
-        this.carregar(false); 
+        this.carregar(true); 
     },
     
     carregar: async function(forcar = false) {
@@ -136,27 +168,33 @@ Produtividade.Consolidado = {
             s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
         }
 
-        const cacheKey = `${t}_${s}_${e}`;
-        if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
-            this.processarEExibir(this.ultimoCache.data, t, mes, ano);
-            return;
-        }
-
         tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
         try {
             if (!Sistema.supabase) throw new Error("Banco de dados não conectado.");
 
-            // CORREÇÃO: Sistema.supabase
+            // 1. Busca Ajustes Manuais Salvos
+            const { data: ajustesData, error: errAjustes } = await Sistema.supabase
+                .from('consolidado_ajustes')
+                .select('*')
+                .eq('tipo_visao', t);
+            
+            if (!errAjustes && ajustesData) {
+                this.ajustesSalvos = {};
+                ajustesData.forEach(aj => {
+                    this.ajustesSalvos[aj.chave_tempo] = { hc: aj.hc_manual, just: aj.justificativa };
+                });
+            }
+
+            // 2. Busca Dados de Produção
             const { data: rawData, error } = await Sistema.supabase
                 .from('producao')
-                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
+                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, usuario:usuarios(cargo, perfil)')
                 .gte('data_referencia', s)
                 .lte('data_referencia', e);
                 
             if(error) throw error;
             
-            this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
             this.processarEExibir(rawData, t, mes, ano);
             
         } catch (e) { 
@@ -170,63 +208,74 @@ Produtividade.Consolidado = {
         let cols = []; 
         let datesMap = {}; 
 
+        // Definição das colunas e chaves de tempo (para salvar no banco)
         if (t === 'dia') { 
             const lastDay = new Date(currentYear, currentMonth, 0).getDate();
             for(let d=1; d<=lastDay; d++) {
                 cols.push(String(d).padStart(2,'0'));
+                const diaStr = String(d).padStart(2,'0');
+                const mesStr = String(currentMonth).padStart(2,'0');
+                const chave = `${currentYear}-${mesStr}-${diaStr}`; // Chave única dia
+                
                 datesMap[d] = { 
-                    ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
-                    fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+                    ini: chave,
+                    fim: chave,
+                    key: chave // Chave para o banco
                 };
             }
         } else if (t === 'mes') { 
             const semanas = this.getSemanasDoMes(currentYear, currentMonth);
             semanas.forEach((s, i) => {
                 cols.push(`Sem ${i+1}`);
-                datesMap[i+1] = { ini: s.inicio, fim: s.fim };
+                const mesStr = String(currentMonth).padStart(2,'0');
+                // Chave única para semana: Ano-Mes-W[Num]
+                const chave = `${currentYear}-${mesStr}-W${i+1}`; 
+                datesMap[i+1] = { ini: s.inicio, fim: s.fim, key: chave };
             });
-        } else if (t === 'trimestre') {
-            const selQ = document.getElementById('cons-select-quarter');
-            const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
-            const idxStart = (trim - 1) * 3;
-            cols = [mesesNomes[idxStart], mesesNomes[idxStart+1], mesesNomes[idxStart+2]];
-            for(let i=0; i<3; i++) {
-                const m = idxStart + i + 1;
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
-                };
-            }
-        } else if (t === 'semestre') {
-            const selS = document.getElementById('cons-select-semester');
-            const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2);
-            const idxStart = (sem - 1) * 6;
-            cols = mesesNomes.slice(idxStart, idxStart + 6);
-            for(let i=0; i<6; i++) {
-                const m = idxStart + i + 1;
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
-                };
-            }
         } else { 
-            cols = mesesNomes; 
-            for(let i=0; i<12; i++) {
-                const m = i + 1;
-                datesMap[i+1] = {
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
+            // Trimestre, Semestre, Ano (Baseado em meses)
+            let startM = 1, endM = 12;
+            let labelFunc = (m) => mesesNomes[m-1];
+
+            if (t === 'trimestre') {
+                const selQ = document.getElementById('cons-select-quarter');
+                const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
+                startM = (trim - 1) * 3 + 1;
+                endM = startM + 2;
+            } else if (t === 'semestre') {
+                const selS = document.getElementById('cons-select-semester');
+                const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2);
+                startM = sem === 1 ? 1 : 7;
+                endM = sem === 1 ? 6 : 12;
+            }
+
+            cols = [];
+            let idx = 1;
+            for(let m = startM; m <= endM; m++) {
+                cols.push(labelFunc(m));
+                const mesStr = String(m).padStart(2,'0');
+                const chave = `${currentYear}-${mesStr}`; // Chave única mês
+                
+                datesMap[idx] = {
+                    ini: `${currentYear}-${mesStr}-01`,
+                    fim: `${currentYear}-${mesStr}-${new Date(currentYear, m, 0).getDate()}`,
+                    key: chave
                 };
+                idx++;
             }
         }
 
         const numCols = cols.length;
         let st = {}; 
         for(let i=1; i<=numCols; i++) st[i] = this.newStats(); 
-        st[99] = this.newStats(); 
+        st[99] = this.newStats(); // Totalizador
 
         if(rawData) {
             rawData.forEach(r => {
+                // FILTRO: Exclui Auditoras/Gestoras dos cálculos de média e HC
+                const cargo = r.usuario && r.usuario.cargo ? String(r.usuario.cargo).toUpperCase() : 'ASSISTENTE';
+                if (cargo === 'AUDITORA' || cargo === 'GESTORA') return;
+
                 const sys = Number(r.quantidade) || 0;
                 let b = 0; 
 
@@ -238,6 +287,7 @@ Produtividade.Consolidado = {
                     }
                 } else { 
                     const mData = parseInt(r.data_referencia.split('-')[1]);
+                    // Mapeia o mês da data para o índice da coluna
                     for(let k=1; k<=numCols; k++) {
                         const mIni = parseInt(datesMap[k].ini.split('-')[1]);
                         if(mData === mIni) { b = k; break; }
@@ -287,36 +337,43 @@ Produtividade.Consolidado = {
         }
     },
 
-    getHC: function(idx) {
-        if (this.basesManuaisHC[idx] !== undefined) {
-            return this.basesManuaisHC[idx];
+    getHC: function(chave) {
+        if (this.ajustesSalvos[chave]) {
+            return this.ajustesSalvos[chave].hc;
         }
         return this.defaultHC;
     },
+    
+    getJustificativa: function(chave) {
+        if (this.ajustesSalvos[chave]) {
+            return this.ajustesSalvos[chave].just;
+        }
+        return null;
+    },
 
-    renderizar: function({ cols, st, numCols }) {
+    renderizar: function({ cols, st, numCols, datesMap }) {
         const tbody = document.getElementById('cons-table-body');
         const hRow = document.getElementById('cons-table-header');
         
         if(!tbody || !hRow) return;
 
+        // Calcula Média Geral do HC (apenas para exibição inicial do Total se não houver override)
         let somaHC = 0;
         let countHC = 0;
         for(let i=1; i<=numCols; i++) {
             if(st[i].diasUteisDecorridos > 0 || st[i].users.size > 0) {
-                somaHC += this.getHC(i);
+                const key = datesMap[i].key;
+                somaHC += this.getHC(key);
                 countHC++;
             }
         }
-        if(countHC === 0) { 
-            for(let i=1; i<=numCols; i++) {
-                somaHC += this.getHC(i);
-                countHC++;
-            }
-        }
-        const calculatedAvg = countHC > 0 ? (somaHC / countHC) : 0;
+        if(countHC === 0) countHC = 1;
+        const calculatedAvg = Math.round(somaHC / countHC);
         
-        const totalHC = this.basesManuaisHC[99] !== undefined ? this.basesManuaisHC[99] : Math.round(calculatedAvg);
+        // HC Total (Chave especial 'TOTAL')
+        const keyTotal = 'TOTAL_' + document.getElementById('cons-period-type').value; 
+        const totalHC = this.getHC(keyTotal) !== this.defaultHC ? this.getHC(keyTotal) : calculatedAvg;
+        const justTotal = this.getJustificativa(keyTotal);
 
         let headerHTML = `
             <tr class="bg-slate-50 border-b border-slate-200">
@@ -326,7 +383,16 @@ Produtividade.Consolidado = {
         
         cols.forEach((c, index) => {
             const idx = index + 1;
-            const currentHC = this.basesManuaisHC[idx] !== undefined ? this.basesManuaisHC[idx] : this.defaultHC;
+            const key = datesMap[idx].key;
+            const currentHC = this.getHC(key);
+            const just = this.getJustificativa(key);
+            
+            // Ícone de justificativa
+            let iconHtml = '';
+            if (just) {
+                const safeJust = just.replace(/"/g, '&quot;');
+                iconHtml = `<i class="fas fa-question-circle text-blue-500 ml-1 custom-tooltip cursor-help" data-tooltip="${safeJust}"></i>`;
+            }
             
             headerHTML += `
                 <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[100px] align-top">
@@ -335,16 +401,24 @@ Produtividade.Consolidado = {
                         <div class="flex items-center gap-1 text-[9px] text-slate-400 font-normal">
                             <i class="fas fa-edit"></i>
                             <span>HC Ajustado</span>
+                            ${iconHtml}
                         </div>
                         <input type="number" 
                                value="${currentHC}" 
-                               onchange="Produtividade.Consolidado.mudarBasePeriodo(${idx}, this.value)"
+                               onchange="Produtividade.Consolidado.mudarBasePeriodo('${key}', this.value)"
                                class="header-input transition focus:shadow-sm" 
                                step="1">
                     </div>
                 </th>`;
         });
         
+        // Coluna Total Header
+        let iconTotalHtml = '';
+        if (justTotal) {
+            const safeJustTotal = justTotal.replace(/"/g, '&quot;');
+            iconTotalHtml = `<i class="fas fa-question-circle text-blue-500 ml-1 custom-tooltip cursor-help" data-tooltip="${safeJustTotal}"></i>`;
+        }
+
         headerHTML += `
             <th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px] align-top">
                 <div class="flex flex-col items-center">
@@ -352,10 +426,11 @@ Produtividade.Consolidado = {
                     <div class="flex items-center gap-1 text-[9px] text-blue-400 font-normal">
                          <i class="fas fa-edit"></i>
                          <span>HC Final</span>
+                         ${iconTotalHtml}
                     </div>
                     <input type="number" 
                            value="${totalHC}" 
-                           onchange="Produtividade.Consolidado.mudarBasePeriodo(99, this.value)"
+                           onchange="Produtividade.Consolidado.mudarBasePeriodo('${keyTotal}', this.value)"
                            class="header-input transition focus:shadow-sm border-blue-200 text-blue-700 font-bold" 
                            step="1">
                 </div>
@@ -391,7 +466,8 @@ Produtividade.Consolidado = {
                     HF = totalHC; 
                     Dias = s.diasUteisDecorridos;
                 } else {
-                    HF = this.getHC(i); 
+                    const key = datesMap[i].key;
+                    HF = this.getHC(key); 
                     Dias = s.diasUteisDecorridos;
                 }
                 
@@ -439,40 +515,38 @@ Produtividade.Consolidado = {
     exportarExcel: function() {
         if (!this.dadosCalculados) return alert("Nenhum dado para exportar.");
         
-        const { cols, st, numCols } = this.dadosCalculados;
+        const { cols, st, numCols, datesMap } = this.dadosCalculados;
         const wsData = [];
         
-        let somaHC = 0, countHC = 0;
-        for(let i=1; i<=numCols; i++) {
-            if(st[i].diasUteisDecorridos > 0 || st[i].users.size > 0) {
-                somaHC += this.getHC(i);
-                countHC++;
-            }
-        }
-        if(countHC === 0) {
-             for(let i=1; i<=numCols; i++) { somaHC += this.getHC(i); countHC++; }
-        }
-        const calculatedAvg = countHC > 0 ? (somaHC / countHC) : 0;
-        const totalHC = this.basesManuaisHC[99] !== undefined ? this.basesManuaisHC[99] : Math.round(calculatedAvg);
-
+        // Headers
         const headers = ['Indicador', ...cols, 'TOTAL'];
         wsData.push(headers);
         
+        // Linha HC Ajustado
         const rowHC = ['HC Ajustado (Considerado)'];
+        let somaHC = 0, countHC = 0;
         for(let i=1; i<=numCols; i++) {
-             const val = this.basesManuaisHC[i] !== undefined ? this.basesManuaisHC[i] : this.defaultHC;
+             const key = datesMap[i].key;
+             const val = this.getHC(key);
              rowHC.push(Math.round(val));
+             somaHC += val; countHC++;
         }
+        
+        const keyTotal = 'TOTAL_' + document.getElementById('cons-period-type').value;
+        const totalHC = this.getHC(keyTotal) !== this.defaultHC ? this.getHC(keyTotal) : Math.round(somaHC / countHC);
+        
         rowHC.push(Math.round(totalHC)); 
         wsData.push(rowHC);
 
+        // Rows
         const addRow = (label, getter, isCalc=false) => {
             const row = [label];
             for(let i=1; i<=numCols; i++) {
                 const s = st[i];
                 if(!s) { row.push(0); continue; }
                 
-                let HF = this.getHC(i); 
+                const key = datesMap[i].key;
+                let HF = this.getHC(key);
                 let Dias = s.diasUteisDecorridos;
                 
                 let val = isCalc ? getter(s, Dias, HF) : getter(s);
