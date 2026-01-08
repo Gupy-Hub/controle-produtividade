@@ -71,7 +71,8 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            const { data, error } = await Produtividade.supabase
+            // CORREÇÃO AQUI: Sistema.supabase em vez de Produtividade.supabase
+            const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
@@ -143,12 +144,9 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
-                // --- TOOLTIP PERSONALIZADO ---
                 let iconJustificativa = '';
                 if(r.justificativa && r.justificativa.trim() !== "") {
-                    // Limpeza simples para atributo HTML
                     const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
-                    // Usa a classe custom-tooltip e o atributo data-tooltip definidos no HTML
                     iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 custom-tooltip" data-tooltip="${textoSeguro}"></i>`;
                 }
 
@@ -260,7 +258,8 @@ Produtividade.Geral = {
         }
 
         try {
-            const { error } = await Produtividade.supabase
+            // CORREÇÃO: Sistema.supabase
+            const { error } = await Sistema.supabase
                 .from('producao')
                 .update({ fator: novoFator, justificativa: justificativa })
                 .eq('id', id);
@@ -319,7 +318,8 @@ Produtividade.Geral = {
         if(ids.length === 0) return;
 
         try {
-            const { error } = await Produtividade.supabase
+            // CORREÇÃO: Sistema.supabase
+            const { error } = await Sistema.supabase
                 .from('producao')
                 .update({ fator: novoFator, justificativa: justificativa })
                 .in('id', ids);
@@ -348,7 +348,8 @@ Produtividade.Geral = {
         else return alert("Modo de exclusão não suportado (use dia ou mês).");
 
         try {
-            const { error } = await Produtividade.supabase
+            // CORREÇÃO: Sistema.supabase
+            const { error } = await Sistema.supabase
                 .from('producao')
                 .delete()
                 .gte('data_referencia', s)
