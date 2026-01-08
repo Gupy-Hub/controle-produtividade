@@ -71,11 +71,12 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
+            // Busca dados incluindo o Cargo e Perfil da tabela de usuários
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
-                    usuario:usuarios ( id, nome, perfil, cargo )
+                    usuario:usuarios ( id, nome, perfil, cargo, meta_diaria )
                 `)
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
@@ -87,9 +88,10 @@ Produtividade.Geral = {
             data.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
+                // Se o usuário não existir no join (caso raro de integridade), cria fallback
                 if(!dadosAgrupados[uid]) {
                     dadosAgrupados[uid] = {
-                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente' },
+                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente', meta_diaria: 650 },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 }
                     };
@@ -130,8 +132,9 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
-            const cargoExibicao = d.usuario.cargo || 'Assistente';
-            const perfilExibicao = d.usuario.perfil || 'PJ';
+            // Dados para exibição (Fallback seguro)
+            const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
+            const perfilExibicao = (d.usuario.perfil || 'PJ').toUpperCase();
 
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
@@ -143,7 +146,6 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
-                // CORREÇÃO: Limpeza de aspas para não quebrar o HTML do tooltip
                 let iconJustificativa = '';
                 if(r.justificativa) {
                     const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
@@ -172,8 +174,8 @@ Produtividade.Geral = {
                             </div>
                             <div class="flex flex-col">
                                 <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">
-                                    ${cargoExibicao} • ${perfilExibicao}
+                                <span class="text-[9px] text-slate-400 font-bold text-blue-600 uppercase tracking-wider">
+                                    ${cargoExibicao} <span class="text-slate-300 mx-1">•</span> ${perfilExibicao}
                                 </span>
                             </div>
                         </div>
@@ -212,8 +214,8 @@ Produtividade.Geral = {
                             </div>
                              <div class="flex flex-col">
                                 <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">
-                                    ${cargoExibicao} • ${perfilExibicao}
+                                <span class="text-[9px] text-slate-400 font-bold text-blue-600 uppercase tracking-wider">
+                                    ${cargoExibicao} <span class="text-slate-300 mx-1">•</span> ${perfilExibicao}
                                 </span>
                             </div>
                         </div>
