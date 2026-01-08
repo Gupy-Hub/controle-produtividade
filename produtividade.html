@@ -79,6 +79,9 @@
                             </select>
                         </div>
 
+                        <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
+                             </div>
+
                         <div id="ctrl-performance" class="hidden flex items-center gap-2">
                             <select id="perf-period-type" onchange="Produtividade.Performance.carregarRanking()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
                                 <option value="mes">Mensal</option>
@@ -258,14 +261,20 @@
                     </select>
                 </div>
 
-                <div class="flex items-center gap-3 bg-indigo-50 px-4 py-1.5 rounded-lg border border-indigo-100">
-                    <div class="flex flex-col items-end leading-none">
-                        <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Base Assistentes</span>
-                        <span class="text-[9px] text-indigo-300">(Para cálculo de médias)</span>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-3 bg-indigo-50 px-4 py-1.5 rounded-lg border border-indigo-100">
+                        <div class="flex flex-col items-end leading-none">
+                            <span class="text-[10px] font-bold text-indigo-400 uppercase tracking-wider">Base Assistentes</span>
+                            <span class="text-[9px] text-indigo-300">(Para cálculo de médias)</span>
+                        </div>
+                        <input type="number" id="cons-input-hc" onchange="Produtividade.Consolidado.mudarBase(this.value)" 
+                               class="font-black text-xl w-14 text-center outline-none text-indigo-700 bg-transparent border-b border-indigo-200 focus:border-indigo-500 transition" value="0">
+                        <i class="fas fa-users-cog text-indigo-300"></i>
                     </div>
-                    <input type="number" id="cons-input-hc" onchange="Produtividade.Consolidado.mudarBase(this.value)" 
-                           class="font-black text-xl w-14 text-center outline-none text-indigo-700 bg-transparent border-b border-indigo-200 focus:border-indigo-500 transition" value="0">
-                    <i class="fas fa-users-cog text-indigo-300"></i>
+                    
+                    <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-md shadow-emerald-200 flex items-center gap-2">
+                        <i class="fas fa-file-excel"></i> Exportar
+                    </button>
                 </div>
             </div>
 
