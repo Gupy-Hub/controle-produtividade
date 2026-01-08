@@ -29,10 +29,11 @@ MinhaArea.Diario = {
             if (error) throw error;
 
             // 2. DADOS DO TIME (Sempre todos os assistentes, para média)
+            // CORREÇÃO: Alterado de 'perfil' para 'funcao' e valor para 'Assistente' (Maiúsculo)
             const { data: producaoTime } = await MinhaArea.supabase
                 .from('producao')
-                .select('quantidade, fator, usuarios!inner(perfil)')
-                .eq('usuarios.perfil', 'assistente') 
+                .select('quantidade, fator, usuarios!inner(funcao)')
+                .eq('usuarios.funcao', 'Assistente') 
                 .gte('data_referencia', periodo.inicio)
                 .lte('data_referencia', periodo.fim);
 
