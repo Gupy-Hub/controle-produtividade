@@ -71,7 +71,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // Busca dados incluindo o Cargo e Perfil da tabela de usuários
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select(`
@@ -88,7 +87,6 @@ Produtividade.Geral = {
             data.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
-                // Se o usuário não existir no join (caso raro de integridade), cria fallback
                 if(!dadosAgrupados[uid]) {
                     dadosAgrupados[uid] = {
                         usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente', meta_diaria: 650 },
@@ -132,7 +130,6 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
-            // Dados para exibição (Fallback seguro)
             const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
             const perfilExibicao = (d.usuario.perfil || 'PJ').toUpperCase();
 
@@ -146,10 +143,19 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
+                // CORREÇÃO TOOLTIP: Sanitização e Z-Index
                 let iconJustificativa = '';
-                if(r.justificativa) {
-                    const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
-                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110" title="${textoSeguro}"></i>`;
+                if(r.justificativa && r.justificativa.trim() !== "") {
+                    // Escapa caracteres perigosos para HTML attribute
+                    const textoSeguro = r.justificativa
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+                    
+                    // Adicionei 'z-10 relative' para garantir que fique acima de outros elementos
+                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110 z-10 relative" title="${textoSeguro}"></i>`;
                 }
 
                 const tr = document.createElement('tr');
