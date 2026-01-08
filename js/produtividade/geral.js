@@ -71,11 +71,12 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
+            // ATUALIZADO: Agora busca 'cargo' na tabela de usuarios
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
-                    usuario:usuarios ( id, nome, perfil )
+                    usuario:usuarios ( id, nome, perfil, cargo )
                 `)
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
@@ -89,7 +90,7 @@ Produtividade.Geral = {
                 
                 if(!dadosAgrupados[uid]) {
                     dadosAgrupados[uid] = {
-                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ' },
+                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente' },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 }
                     };
@@ -130,6 +131,9 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
+            // Define o cargo para exibição (Fallback para Assistente)
+            const cargoExibicao = d.usuario.cargo || 'Assistente';
+
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
                 const meta = d.usuario.meta_diaria || 650;
@@ -140,7 +144,6 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
-                // LÓGICA DO ÍCONE (MOSTRA SE TIVER JUSTIFICATIVA, INDEPENDENTE DO FATOR)
                 let iconJustificativa = '';
                 if(r.justificativa) {
                     iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110" title="${r.justificativa}"></i>`;
@@ -149,7 +152,6 @@ Produtividade.Geral = {
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
                 
-                // INPUTS AGORA SÃO DISABLED (BLOQUEADOS PARA EDIÇÃO MANUAL)
                 tr.innerHTML = `
                     <td class="px-4 py-3 text-center border-r border-slate-100 w-28">
                         <div class="flex items-center justify-center relative">
@@ -169,7 +171,7 @@ Produtividade.Geral = {
                             </div>
                             <div class="flex flex-col">
                                 <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.perfil || 'PJ'}</span>
+                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">${cargoExibicao}</span>
                             </div>
                         </div>
                     </td>
@@ -207,7 +209,7 @@ Produtividade.Geral = {
                             </div>
                              <div class="flex flex-col">
                                 <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.perfil || 'PJ'}</span>
+                                <span class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">${cargoExibicao}</span>
                             </div>
                         </div>
                     </td>
@@ -232,35 +234,25 @@ Produtividade.Geral = {
         }
     },
     
-    // Função principal de mudança de Fator
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
 
-        // Verifica se é Abono TOTAL (0) ou PARCIAL (0.5)
         if (novoFator === '0' || novoFator === '0.5') {
-            
-            // Pequeno delay para garantir UI
             await new Promise(r => setTimeout(r, 10));
-            
-            // Texto do prompt muda conforme o caso
             const tipoAbono = novoFator === '0' ? "ABONO TOTAL" : "MEIO PERÍODO";
-            
             justificativa = prompt(`Informe a justificativa para ${tipoAbono} (obrigatório):`);
             
-            // Se cancelar ou vazio, reverte
             if (justificativa === null || justificativa.trim() === "") {
                 alert("Ação cancelada: A justificativa é obrigatória.");
-                this.renderizarTabela(); // Reverte visualmente
+                this.renderizarTabela(); 
                 return;
             }
         } else {
-            // Se voltou para 100%, limpa
             justificativa = null;
         }
 
         try {
-            // Atualiza no banco
             const { error } = await Produtividade.supabase
                 .from('producao')
                 .update({ fator: novoFator, justificativa: justificativa })
@@ -268,7 +260,6 @@ Produtividade.Geral = {
 
             if (error) throw error;
             
-            // Atualiza localmente
             let usuarioIdAfetado = null;
             this.dadosOriginais.forEach(group => {
                 group.registros.forEach(r => {
@@ -302,7 +293,6 @@ Produtividade.Geral = {
         }
 
         let justificativa = null;
-        // Aplica regra de justificativa em massa também para 0 e 0.5
         if (String(novoFator) === '0' || String(novoFator) === '0.5') {
             justificativa = prompt("Informe a justificativa para a ação em massa:");
             if (justificativa === null || justificativa.trim() === "") {
@@ -389,7 +379,6 @@ Produtividade.Geral = {
             metaTotal += ((r.usuario.meta_diaria || 650) * r.fator);
             diasComProd.add(r.data_referencia);
             
-            // CORREÇÃO DA CONTAGEM CLT: Normalização de string para evitar erros de case/espaço
             if(r.usuario && r.usuario.perfil) {
                 const perfil = String(r.usuario.perfil).trim().toUpperCase();
                 if(perfil === 'CLT') {
@@ -398,12 +387,10 @@ Produtividade.Geral = {
                     usersPJ.add(r.usuario.id);
                 }
             } else {
-                // Se não tiver perfil, assume PJ
                 if(r.usuario) usersPJ.add(r.usuario.id);
             }
         });
 
-        // Atualização da UI
         const pct = metaTotal > 0 ? (totalProd / metaTotal) * 100 : 0;
         document.getElementById('kpi-total').innerText = totalProd.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotal).toLocaleString('pt-BR');
