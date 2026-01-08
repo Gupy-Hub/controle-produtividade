@@ -71,7 +71,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // CORREÇÃO AQUI: Sistema.supabase em vez de Produtividade.supabase
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
@@ -132,7 +131,10 @@ Produtividade.Geral = {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
             const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
-            const perfilExibicao = (d.usuario.perfil || 'PJ').toUpperCase();
+            
+            // TRATAMENTO VISUAL PARA "USER" -> "PJ"
+            let perfilExibicao = (d.usuario.perfil || 'PJ').toUpperCase();
+            if(perfilExibicao === 'USER') perfilExibicao = 'PJ'; 
 
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
@@ -258,7 +260,6 @@ Produtividade.Geral = {
         }
 
         try {
-            // CORREÇÃO: Sistema.supabase
             const { error } = await Sistema.supabase
                 .from('producao')
                 .update({ fator: novoFator, justificativa: justificativa })
@@ -318,7 +319,6 @@ Produtividade.Geral = {
         if(ids.length === 0) return;
 
         try {
-            // CORREÇÃO: Sistema.supabase
             const { error } = await Sistema.supabase
                 .from('producao')
                 .update({ fator: novoFator, justificativa: justificativa })
@@ -348,7 +348,6 @@ Produtividade.Geral = {
         else return alert("Modo de exclusão não suportado (use dia ou mês).");
 
         try {
-            // CORREÇÃO: Sistema.supabase
             const { error } = await Sistema.supabase
                 .from('producao')
                 .delete()
@@ -387,15 +386,14 @@ Produtividade.Geral = {
             metaTotal += ((r.usuario.meta_diaria || 650) * r.fator);
             diasComProd.add(r.data_referencia);
             
-            if(r.usuario && r.usuario.perfil) {
-                const perfil = String(r.usuario.perfil).trim().toUpperCase();
-                if(perfil === 'CLT') {
-                    usersCLT.add(r.usuario.id);
-                } else {
-                    usersPJ.add(r.usuario.id);
-                }
+            // Lógica de contagem corrigida
+            let perfil = String(r.usuario.perfil).trim().toUpperCase();
+            if(perfil === 'USER') perfil = 'PJ'; // Considera USER como PJ
+
+            if(perfil === 'CLT') {
+                usersCLT.add(r.usuario.id);
             } else {
-                if(r.usuario) usersPJ.add(r.usuario.id);
+                usersPJ.add(r.usuario.id);
             }
         });
 

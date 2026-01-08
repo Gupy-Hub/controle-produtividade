@@ -5,9 +5,15 @@ Produtividade.Main = {
     init: function() {
         this.setupTabs();
         
-        // Define o comportamento inicial (Carrega a aba Geral/Validação)
-        if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
-            Produtividade.Geral.init();
+        // --- NOVO: RECUPERA A ÚLTIMA ABA SALVA ---
+        const lastTab = localStorage.getItem('lastActiveTab');
+        if (lastTab) {
+            this.mudarAba(lastTab);
+        } else {
+            // Se não tiver histórico, abre a padrão (Geral)
+            if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
+                Produtividade.Geral.init();
+            }
         }
     },
 
@@ -15,28 +21,30 @@ Produtividade.Main = {
         const btns = document.querySelectorAll('.tab-btn');
         btns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                // 1. Gerencia estilo dos botões (Active/Inactive)
+                // 1. Gerencia estilo dos botões
                 btns.forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
 
-                // 2. Gerencia visibilidade das seções (Conteúdo)
+                // 2. Gerencia visibilidade das seções
                 document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
                 const targetId = btn.id.replace('btn-', 'tab-');
                 const targetEl = document.getElementById(targetId);
                 if(targetEl) targetEl.classList.remove('hidden');
 
-                // 3. Gerencia barra de ferramentas superior (Controles específicos)
+                // 3. Gerencia barra de ferramentas superior
                 const sectionName = btn.id.replace('btn-', '');
                 this.toggleTopBarControls(sectionName);
 
-                // 4. Carrega os dados do módulo selecionado
+                // --- NOVO: SALVA A ABA ATUAL ---
+                localStorage.setItem('lastActiveTab', sectionName);
+
+                // 4. Carrega os dados do módulo
                 this.loadModule(sectionName);
             });
         });
     },
 
     toggleTopBarControls: function(section) {
-        // Lista de IDs de controles na barra superior
         const controls = ['geral', 'consolidado', 'performance'];
         
         controls.forEach(c => {
@@ -49,7 +57,6 @@ Produtividade.Main = {
     },
 
     loadModule: function(section) {
-        // Chama a função de inicialização específica de cada módulo
         switch(section) {
             case 'geral':
                 if(Produtividade.Geral) Produtividade.Geral.init();
@@ -64,23 +71,23 @@ Produtividade.Main = {
                 if(Produtividade.Matriz) Produtividade.Matriz.carregarMatriz();
                 break;
         }
+    },
+
+    // Função auxiliar para mudar aba via código
+    mudarAba: function(aba) {
+        const btn = document.getElementById(`btn-${aba}`);
+        if(btn) btn.click();
     }
 };
 
-// Inicializa o sistema quando o navegador terminar de carregar o HTML
+// Inicializa
 document.addEventListener('DOMContentLoaded', () => {
     Produtividade.Main.init();
 });
 
-// --- FUNÇÕES GLOBAIS DE APOIO (Chamadas pelo HTML) ---
+// Expondo globalmente para chamadas HTML
+Produtividade.mudarAba = (aba) => Produtividade.Main.mudarAba(aba);
 
-// Permite trocar de aba via código (ex: botões de link)
-Produtividade.mudarAba = function(aba) {
-    const btn = document.getElementById(`btn-${aba}`);
-    if(btn) btn.click();
-};
-
-// Quando o usuário muda a data no topo, recarrega o módulo que está aberto
 Produtividade.atualizarDataGlobal = function(valor) {
     const activeBtn = document.querySelector('.tab-btn.active');
     if(activeBtn) {
