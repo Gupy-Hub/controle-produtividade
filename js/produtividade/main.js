@@ -1,8 +1,12 @@
+// Garante que o objeto global exista
+window.Produtividade = window.Produtividade || {};
+
 Produtividade.Main = {
     init: function() {
         this.setupTabs();
-        // Inicia na aba padrão (Geral/Validação)
-        if(Produtividade.Geral && Produtividade.Geral.init) {
+        
+        // Define o comportamento inicial (Carrega a aba Geral/Validação)
+        if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
             Produtividade.Geral.init();
         }
     },
@@ -11,29 +15,30 @@ Produtividade.Main = {
         const btns = document.querySelectorAll('.tab-btn');
         btns.forEach(btn => {
             btn.addEventListener('click', (e) => {
-                // Remove active de todos
+                // 1. Gerencia estilo dos botões (Active/Inactive)
                 btns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // 2. Gerencia visibilidade das seções (Conteúdo)
                 document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
-                
-                // Ativa o clicado
                 const targetId = btn.id.replace('btn-', 'tab-');
                 const targetEl = document.getElementById(targetId);
-                const sectionName = btn.id.replace('btn-', '');
-
-                btn.classList.add('active');
                 if(targetEl) targetEl.classList.remove('hidden');
 
-                // Gerencia a barra de ferramentas superior
+                // 3. Gerencia barra de ferramentas superior (Controles específicos)
+                const sectionName = btn.id.replace('btn-', '');
                 this.toggleTopBarControls(sectionName);
 
-                // Inicializa o módulo correspondente se necessário
+                // 4. Carrega os dados do módulo selecionado
                 this.loadModule(sectionName);
             });
         });
     },
 
     toggleTopBarControls: function(section) {
+        // Lista de IDs de controles na barra superior
         const controls = ['geral', 'consolidado', 'performance'];
+        
         controls.forEach(c => {
             const el = document.getElementById(`ctrl-${c}`);
             if(el) {
@@ -44,6 +49,7 @@ Produtividade.Main = {
     },
 
     loadModule: function(section) {
+        // Chama a função de inicialização específica de cada módulo
         switch(section) {
             case 'geral':
                 if(Produtividade.Geral) Produtividade.Geral.init();
@@ -61,19 +67,21 @@ Produtividade.Main = {
     }
 };
 
-// Inicializa o Main quando o DOM estiver pronto
+// Inicializa o sistema quando o navegador terminar de carregar o HTML
 document.addEventListener('DOMContentLoaded', () => {
     Produtividade.Main.init();
 });
 
-// Funções globais de apoio (Atalhos)
+// --- FUNÇÕES GLOBAIS DE APOIO (Chamadas pelo HTML) ---
+
+// Permite trocar de aba via código (ex: botões de link)
 Produtividade.mudarAba = function(aba) {
     const btn = document.getElementById(`btn-${aba}`);
     if(btn) btn.click();
 };
 
+// Quando o usuário muda a data no topo, recarrega o módulo que está aberto
 Produtividade.atualizarDataGlobal = function(valor) {
-    // Recarrega o módulo ativo
     const activeBtn = document.querySelector('.tab-btn.active');
     if(activeBtn) {
         const section = activeBtn.id.replace('btn-', '');
