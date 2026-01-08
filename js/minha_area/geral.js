@@ -15,7 +15,7 @@ MinhaArea.Diario = {
         // 1. Verificação de Check-in Pessoal (Para o usuário logado)
         this.verificarAcessoHoje(uid);
 
-        // 2. CORREÇÃO: Verificação robusta de permissão (Função ou Cargo)
+        // 2. Verifica se é Gestora para exibir o BOTÃO do relatório
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
         const cargo = (MinhaArea.user.cargo || '').toUpperCase();
         const isGestora = funcao === 'GESTORA' || funcao === 'AUDITORA' || 
@@ -23,7 +23,7 @@ MinhaArea.Diario = {
                           MinhaArea.user.id == 1000 || MinhaArea.user.perfil === 'admin';
 
         if (isGestora) {
-            await this.renderizarMapaCheckinGestora();
+            this.renderizarBotaoGestora();
         }
 
         try {
@@ -98,49 +98,78 @@ MinhaArea.Diario = {
         }
     },
 
-    // --- MAPA DE CHECK-IN MENSAL (VISÃO GESTORA) ---
-    renderizarMapaCheckinGestora: async function() {
+    // --- LÓGICA DO BOTÃO E MODAL DA GESTORA ---
+
+    renderizarBotaoGestora: function() {
+        // Encontra o container do cabeçalho da tabela para inserir o botão
+        const containerTabela = document.getElementById('tabela-diario');
+        if (!containerTabela) return;
+
+        // Sobe na árvore DOM para achar o header (onde tem o título Detalhamento Diário)
+        const header = containerTabela.closest('.bg-white').querySelector('.flex.justify-between');
+        
+        if (header && !document.getElementById('btn-checkin-gestora')) {
+            const btn = document.createElement('button');
+            btn.id = 'btn-checkin-gestora';
+            btn.className = "ml-auto bg-white hover:bg-blue-50 text-blue-600 border border-blue-200 text-xs font-bold px-3 py-1.5 rounded-lg transition shadow-sm flex items-center gap-2";
+            btn.innerHTML = '<i class="fas fa-calendar-check"></i> Cartão Ponto Equipe';
+            btn.onclick = () => this.abrirModalCheckin();
+            
+            header.appendChild(btn);
+        }
+    },
+
+    abrirModalCheckin: async function() {
+        // Verifica se o modal já existe no DOM
+        let modal = document.getElementById('modal-checkin-gestora');
+        
+        if (!modal) {
+            // Cria o modal se não existir
+            modal = document.createElement('div');
+            modal.id = 'modal-checkin-gestora';
+            modal.className = "fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm hidden animate-enter";
+            modal.innerHTML = `
+                <div class="bg-white rounded-xl shadow-2xl w-[95%] max-w-6xl max-h-[90vh] flex flex-col overflow-hidden">
+                    <div class="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50">
+                        <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2">
+                            <i class="fas fa-calendar-alt text-blue-600"></i> Cartão Ponto da Equipe
+                        </h3>
+                        <button onclick="document.getElementById('modal-checkin-gestora').classList.add('hidden')" class="text-slate-400 hover:text-red-500 transition px-2">
+                            <i class="fas fa-times text-xl"></i>
+                        </button>
+                    </div>
+                    <div id="modal-checkin-body" class="p-6 overflow-auto flex-1 custom-scroll bg-white">
+                        <div class="text-center text-slate-400 py-10"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</div>
+                    </div>
+                    <div class="p-4 border-t border-slate-200 bg-slate-50 text-right">
+                        <span class="text-xs text-slate-400 mr-2">Dados referentes até o dia anterior.</span>
+                        <button onclick="document.getElementById('modal-checkin-gestora').classList.add('hidden')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1.5 px-4 rounded text-sm transition">Fechar</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        // Exibe o modal
+        modal.classList.remove('hidden');
+        
+        // Carrega os dados
+        await this.renderizarConteudoModal();
+    },
+
+    renderizarConteudoModal: async function() {
+        const container = document.getElementById('modal-checkin-body');
+        
         // Define o intervalo: Do dia 1 do mês de referência (baseado em ONTEM) até ONTEM
         const referencia = new Date();
         referencia.setDate(referencia.getDate() - 1); // Ontem
         
         const y = referencia.getFullYear();
         const m = referencia.getMonth();
-        
-        const start = new Date(y, m, 1); // Dia 1 do mês de 'Ontem'
-        const end = referencia; // Até 'Ontem'
+        const start = new Date(y, m, 1);
+        const end = referencia;
 
-        // Localiza onde inserir o painel
-        const tabela = document.getElementById('tabela-diario');
-        if (!tabela) return;
-        
-        // Remove painel anterior
-        const oldPanel = document.getElementById('panel-checkin-gestora');
-        if (oldPanel) oldPanel.remove();
-
-        // Cria estrutura do painel
-        const panel = document.createElement('div');
-        panel.id = 'panel-checkin-gestora';
-        panel.className = "mb-6 bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden";
-        
         const meses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-        
-        panel.innerHTML = `
-            <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
-                <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-                    <i class="fas fa-calendar-alt text-blue-600"></i> 
-                    Controle de Check-in: ${meses[m]}
-                    <span class="text-xs font-normal text-slate-400 ml-2">(Referência: ${referencia.getDate()}/${m+1}/${y})</span>
-                </h3>
-                <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-1 rounded uppercase">Visão Gestora</span>
-            </div>
-            <div id="checkin-content" class="overflow-x-auto">
-                <div class="p-6 text-center text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Gerando mapa de presença...</div>
-            </div>
-        `;
-        
-        const containerTabela = tabela.closest('.overflow-x-auto') || tabela.parentElement;
-        containerTabela.before(panel);
 
         try {
              // 1. Busca Usuários (Assistentes Ativos)
@@ -171,7 +200,7 @@ MinhaArea.Diario = {
                  if(map[a.usuario_id]) map[a.usuario_id].add(a.data_referencia);
              });
 
-             // Gera array de datas (colunas)
+             // Gera array de datas
              const dates = [];
              let curr = new Date(start);
              while(curr <= end) {
@@ -179,29 +208,37 @@ MinhaArea.Diario = {
                  curr.setDate(curr.getDate() + 1);
              }
              
-             // Renderiza Tabela
              if (dates.length === 0) {
-                 panel.querySelector('#checkin-content').innerHTML = '<div class="p-6 text-center text-slate-400">Nenhum dia contabilizado neste mês ainda (Mês virou hoje).</div>';
+                 container.innerHTML = `<div class="p-10 text-center text-slate-400 flex flex-col items-center">
+                    <i class="fas fa-calendar-times text-4xl mb-3 text-slate-200"></i>
+                    <span>Nenhum dia contabilizado em ${meses[m]} ainda.</span>
+                    <span class="text-xs mt-1">O mês virou hoje? O relatório começa a contar a partir de amanhã (referente a hoje).</span>
+                 </div>`;
                  return;
              }
 
-             let html = '<table class="w-full text-xs text-left border-collapse whitespace-nowrap">';
+             let html = `
+                <div class="mb-4 flex items-center gap-2">
+                    <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold uppercase">${meses[m]} ${y}</span>
+                    <span class="text-xs text-slate-400">Total dias úteis até ontem: ${dates.filter(d => d.getDay()!==0 && d.getDay()!==6).length}</span>
+                </div>
+                <table class="w-full text-xs text-left border-collapse whitespace-nowrap shadow-sm border border-slate-200 rounded-lg overflow-hidden">
+             `;
              
-             // Cabeçalho (Datas)
-             html += '<thead class="bg-slate-50 text-slate-500 font-bold uppercase border-b border-slate-200"><tr>';
-             html += '<th class="px-4 py-3 border-r border-slate-100 sticky left-0 bg-slate-50 z-10 shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)]">Colaborador</th>';
+             // Cabeçalho
+             html += '<thead class="bg-slate-100 text-slate-600 font-bold uppercase border-b border-slate-200"><tr>';
+             html += '<th class="px-4 py-3 border-r border-slate-200 sticky left-0 bg-slate-100 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Colaborador</th>';
              dates.forEach(d => {
                  const isWk = (d.getDay() === 0 || d.getDay() === 6);
-                 html += `<th class="px-2 py-2 text-center min-w-[35px] border-r border-slate-100 ${isWk ? 'bg-slate-100/50 text-slate-400' : ''}">${d.getDate()}</th>`;
+                 html += `<th class="px-2 py-2 text-center min-w-[35px] border-r border-slate-200 ${isWk ? 'bg-slate-200/50 text-slate-400' : ''}">${d.getDate()}</th>`;
              });
-             html += '<th class="px-3 py-2 text-center text-blue-600 bg-blue-50/20">Adesão</th></tr></thead>';
+             html += '<th class="px-3 py-2 text-center text-blue-700 bg-blue-50 border-l border-blue-100">Adesão</th></tr></thead>';
 
-             // Corpo (Linhas de Usuários)
+             // Corpo
              html += '<tbody class="divide-y divide-slate-100">';
              usuarios.forEach(u => {
-                 html += '<tr class="hover:bg-slate-50 transition-colors">';
-                 // Nome Fixo
-                 html += `<td class="px-4 py-2 font-bold text-slate-600 border-r border-slate-100 sticky left-0 bg-white z-10 shadow-[1px_0_5px_-2px_rgba(0,0,0,0.1)] truncate max-w-[180px]" title="${u.nome}">
+                 html += '<tr class="hover:bg-blue-50/30 transition-colors">';
+                 html += `<td class="px-4 py-2 font-bold text-slate-700 border-r border-slate-200 sticky left-0 bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] truncate max-w-[200px]" title="${u.nome}">
                     ${u.nome.split(' ')[0]} <span class="text-slate-400 font-normal">${u.nome.split(' ').slice(1).join(' ')}</span>
                  </td>`;
                  
@@ -221,32 +258,34 @@ MinhaArea.Diario = {
 
                      if (checked) {
                          cellContent = '<i class="fas fa-check"></i>';
-                         cellClass = 'text-emerald-500 bg-emerald-50/50';
+                         cellClass = 'text-emerald-500 bg-emerald-50/50 font-bold';
                      } else if (isWeekend) {
                          cellContent = '<span class="text-[9px]">-</span>';
                          cellClass = 'text-slate-300 bg-slate-50';
                      } else {
-                         cellContent = '<i class="fas fa-times"></i>'; // Falta
+                         cellContent = '<i class="fas fa-times"></i>';
                          cellClass = 'text-rose-300 bg-rose-50/50';
                      }
 
                      html += `<td class="px-1 py-2 text-center border-r border-slate-100 ${cellClass}">${cellContent}</td>`;
                  });
 
-                 // Coluna de % de Adesão
                  const pct = workDays > 0 ? Math.round((hits / workDays) * 100) : 0;
                  let color = pct >= 95 ? 'text-emerald-600 bg-emerald-50' : (pct >= 80 ? 'text-blue-600 bg-blue-50' : 'text-rose-600 bg-rose-50');
-                 html += `<td class="px-3 py-2 text-center font-bold ${color}">${pct}%</td>`;
+                 html += `<td class="px-3 py-2 text-center font-bold border-l border-slate-200 ${color}">${pct}%</td>`;
 
                  html += '</tr>';
              });
              html += '</tbody></table>';
 
-             panel.querySelector('#checkin-content').innerHTML = html;
+             container.innerHTML = html;
 
         } catch (e) {
             console.error(e);
-            panel.querySelector('#checkin-content').innerHTML = `<div class="p-6 text-center text-red-500">Erro ao carregar mapa: ${e.message}</div>`;
+            container.innerHTML = `<div class="p-10 text-center text-rose-500 bg-rose-50 rounded border border-rose-100">
+                <i class="fas fa-exclamation-triangle mb-2 text-2xl"></i><br>
+                Erro ao carregar mapa: ${e.message}
+            </div>`;
         }
     },
 
