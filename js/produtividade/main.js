@@ -5,10 +5,11 @@ Produtividade.Main = {
     init: function() {
         this.setupTabs();
         
-        // --- NOVO: RECUPERA A ÚLTIMA ABA SALVA ---
+        // --- RECUPERA A ÚLTIMA ABA SALVA OU ABRE A PADRÃO ---
         const lastTab = localStorage.getItem('lastActiveTab');
         if (lastTab) {
-            this.mudarAba(lastTab);
+            // Pequeno delay para garantir que o DOM esteja pronto
+            setTimeout(() => this.mudarAba(lastTab), 50);
         } else {
             // Se não tiver histórico, abre a padrão (Geral)
             if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
@@ -35,7 +36,7 @@ Produtividade.Main = {
                 const sectionName = btn.id.replace('btn-', '');
                 this.toggleTopBarControls(sectionName);
 
-                // --- NOVO: SALVA A ABA ATUAL ---
+                // --- SALVA A ABA ATUAL NO NAVEGADOR ---
                 localStorage.setItem('lastActiveTab', sectionName);
 
                 // 4. Carrega os dados do módulo
@@ -45,7 +46,7 @@ Produtividade.Main = {
     },
 
     toggleTopBarControls: function(section) {
-        const controls = ['geral', 'consolidado', 'performance'];
+        const controls = ['geral', 'consolidado', 'performance', 'matriz'];
         
         controls.forEach(c => {
             const el = document.getElementById(`ctrl-${c}`);
@@ -73,7 +74,7 @@ Produtividade.Main = {
         }
     },
 
-    // Função auxiliar para mudar aba via código
+    // Função auxiliar para simular o clique e mudar a aba
     mudarAba: function(aba) {
         const btn = document.getElementById(`btn-${aba}`);
         if(btn) btn.click();
@@ -85,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
     Produtividade.Main.init();
 });
 
-// Expondo globalmente para chamadas HTML
+// Expondo globalmente para chamadas HTML e outros scripts
 Produtividade.mudarAba = (aba) => Produtividade.Main.mudarAba(aba);
 
 Produtividade.atualizarDataGlobal = function(valor) {
