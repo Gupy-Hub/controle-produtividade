@@ -152,16 +152,16 @@ MinhaArea.Diario = {
         // Meta para os dias trabalhados (para cálculo de eficiência/status)
         const metaTrabalhada = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? (curr.meta_original * curr.fator) : 0), 0);
 
-        // Meta Mensal (para barra de progresso e % geral, conforme pedido anterior)
+        // Meta Mensal
         const metaAlvo = (metaMensal && metaMensal > 0) ? metaMensal : metaTrabalhada;
             
         const diasEfetivos = dados.reduce((acc, curr) => acc + (curr.fator > 0 ? 1 : 0), 0);
         
         const minhaMedia = diasEfetivos > 0 ? Math.round(totalProd / diasEfetivos) : 0;
         
-        // Duas porcentagens distintas:
-        const pctMensal = metaAlvo > 0 ? Math.round((totalProd / metaAlvo) * 100) : 0; // Sobre o mês
-        const pctEficiencia = metaTrabalhada > 0 ? Math.round((totalProd / metaTrabalhada) * 100) : 0; // Sobre o trabalhado
+        // Porcentagens
+        const pctMensal = metaAlvo > 0 ? Math.round((totalProd / metaAlvo) * 100) : 0; 
+        const pctEficiencia = metaTrabalhada > 0 ? Math.round((totalProd / metaTrabalhada) * 100) : 0; 
 
         // Melhor Dia
         let melhorDia = null;
@@ -175,14 +175,13 @@ MinhaArea.Diario = {
 
         this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-meta-total', Math.round(metaAlvo).toLocaleString('pt-BR'));
-        this.setTxt('kpi-pct', `${pctMensal}%`); // Exibe % Mensal no card principal
+        this.setTxt('kpi-pct', `${pctMensal}%`);
         this.setTxt('kpi-media-real', minhaMedia.toLocaleString('pt-BR'));
         this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
         this.setTxt('kpi-dias', `${diasEfetivos}/${diasUteisTotal || 0}`);
         
         const bar = document.getElementById('bar-progress');
         if(bar) {
-            // A barra enche com base no MÊS, mas a cor indica a EFICIÊNCIA ATUAL
             bar.style.width = `${Math.min(pctMensal, 100)}%`;
             bar.className = pctEficiencia >= 100 ? "h-full bg-emerald-500 rounded-full" : (pctEficiencia >= 85 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
         }
@@ -194,34 +193,43 @@ MinhaArea.Diario = {
             else compMsg.innerHTML = '<span class="text-blue-600 font-bold">Na média do time.</span>';
         }
 
-        // --- STATUS DINÂMICO (Baseado apenas no trabalhado) ---
+        // --- STATUS DINÂMICO COM TOOLTIP ---
         const txtStatus = document.getElementById('kpi-status-text');
         const iconStatus = document.getElementById('icon-status');
         
         if(txtStatus && iconStatus) {
             let statusHtml = "";
             let iconClass = "";
+            let tooltipText = ""; // Texto do Tooltip
 
             if(pctEficiencia >= 100) {
                 statusHtml = "<span class='text-emerald-600'>Excelente!</span>";
                 iconClass = "fas fa-star text-emerald-500";
+                tooltipText = "Excelente: Eficiência acima de 100%!";
             } else if(pctEficiencia >= 85) {
                 statusHtml = "<span class='text-blue-600'>Bom desempenho.</span>";
                 iconClass = "fas fa-thumbs-up text-blue-500";
+                tooltipText = "Bom desempenho: Eficiência entre 85% e 99%.";
             } else {
-                // Abaixo de 85% do trabalhado
                 statusHtml = "<span class='text-rose-600'>Abaixo da Meta.</span>";
-                iconClass = "fas fa-thumbs-down text-rose-500"; // Ícone novo: Thumb Down Vermelho
+                iconClass = "fas fa-thumbs-down text-rose-500";
+                tooltipText = "Atenção: Eficiência abaixo de 85%.";
             }
 
             iconStatus.className = iconClass;
+            // Adiciona o Tooltip nativo (title) ao container do ícone
+            const iconContainer = document.getElementById('icon-status-container');
+            if(iconContainer) {
+                iconContainer.title = tooltipText;
+                iconContainer.style.cursor = "help"; // Cursor de ajuda para indicar interatividade
+            }
 
             let bestDayHtml = "";
             if (melhorDia) {
                 const dia = melhorDia.data_referencia.split('-').reverse().slice(0, 2).join('/');
                 const pctBest = Math.round(maiorPct * 100);
                 bestDayHtml = `
-                <div class="text-right cursor-pointer hover:bg-slate-50 rounded px-1 transition" onclick="MinhaArea.Diario.filtrarTabelaPorDia('${melhorDia.data_referencia}')" title="Clique para ver detalhes deste dia">
+                <div class="text-right cursor-pointer hover:bg-slate-50 rounded px-1 transition" onclick="MinhaArea.Diario.filtrarTabelaPorDia('${melhorDia.data_referencia}')" title="Clique para focar neste dia">
                     <span class="text-[10px] text-slate-400 uppercase tracking-tighter">Melhor Dia</span>
                     <div class="text-xs font-black text-slate-600">${dia} <span class="text-blue-600">(${pctBest}%)</span></div>
                 </div>`;
@@ -229,7 +237,7 @@ MinhaArea.Diario = {
 
             const containerStatus = txtStatus.parentElement;
             containerStatus.className = "mt-2 flex justify-between items-end";
-            containerStatus.innerHTML = `<div class="text-xs font-bold">${statusHtml}</div>${bestDayHtml}`;
+            containerStatus.innerHTML = `<div class="text-xs font-bold" title="${tooltipText}">${statusHtml}</div>${bestDayHtml}`;
         }
 
         // CLT/PJ Rodapé
@@ -281,9 +289,15 @@ MinhaArea.Diario = {
             if (item.observacao_gestora) obsHtml += `<div class="mt-1 text-[10px] bg-blue-50 text-blue-700 p-1 rounded border border-blue-100"><i class="fas fa-comment mr-1"></i>Gestão: ${item.observacao_gestora}</div>`;
             if (!obsHtml) obsHtml = '<span class="text-slate-300">-</span>';
 
+            // Data clicável para filtro
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
-                <td class="px-6 py-4 font-bold text-slate-600 text-xs">${item.data_referencia.split('-').reverse().join('/')}</td>
+                <td class="px-6 py-4 font-bold text-slate-600 text-xs cursor-pointer hover:text-blue-600 hover:underline" 
+                    title="Clique para filtrar apenas este dia" 
+                    onclick="MinhaArea.Diario.filtrarTabelaPorDia('${item.data_referencia}')">
+                    <i class="fas fa-filter text-[10px] mr-1 opacity-50"></i>
+                    ${item.data_referencia.split('-').reverse().join('/')}
+                </td>
                 <td class="px-6 py-4 text-center font-black text-slate-700 text-base">${item.quantidade}</td>
                 <td class="px-6 py-4 text-center text-xs text-slate-500">
                     ${item.meta_original} ${fator < 1 ? `<span class="ml-1 text-[9px] bg-amber-100 text-amber-800 px-1 rounded font-bold">x${fator}</span>` : ''}
@@ -394,8 +408,9 @@ MinhaArea.Diario = {
              dates.forEach(d => {
                  const isWk = (d.getDay()===0||d.getDay()===6);
                  const dateStr = d.toISOString().split('T')[0];
-                 html += `<th class="px-2 py-2 text-center min-w-[35px] border-r border-slate-200 ${isWk ? 'bg-slate-200/50 text-slate-400' : 'cursor-pointer hover:bg-blue-200 hover:text-blue-800 transition'}" 
-                    ${!isWk ? `onclick="MinhaArea.Diario.detalharDiaTime('${dateStr}')" title="Ver Produção da Equipe neste dia"` : ''}>
+                 // CABEÇALHO CLICÁVEL (AGORA PARA TODOS OS DIAS)
+                 html += `<th class="px-2 py-2 text-center min-w-[35px] border-r border-slate-200 ${isWk ? 'bg-slate-200/50 text-slate-500 hover:bg-slate-300 cursor-pointer' : 'cursor-pointer hover:bg-blue-200 hover:text-blue-800'} transition" 
+                    onclick="MinhaArea.Diario.detalharDiaTime('${dateStr}')" title="Ver Produção da Equipe em ${d.getDate()}/${m+1}">
                     ${d.getDate()}
                  </th>`;
              });
