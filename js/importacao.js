@@ -3,7 +3,7 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Importacao = {
     
-    // Função auxiliar para normalizar texto (remove acentos e espaços)
+    // Remove acentos e normaliza para minúsculas
     normalizar: function(texto) {
         if (!texto) return "";
         return String(texto)
@@ -12,16 +12,53 @@ Produtividade.Importacao = {
             .normalize('NFD').replace(/[\u0300-\u036f]/g, ""); 
     },
 
-    // Processa o arquivo Excel e retorna JSON
+    // Nova função inteligente para tratar datas (Excel número ou Texto CSV)
+    tratarData: function(valor) {
+        if (!valor) return null;
+
+        // Caso 1: Data do Excel (Número serial, ex: 45321)
+        if (typeof valor === 'number') {
+            const dateObj = XLSX.SSF.parse_date_code(valor);
+            return `${dateObj.y}-${String(dateObj.m).padStart(2,'0')}-${String(dateObj.d).padStart(2,'0')}`;
+        }
+
+        // Caso 2: Data Texto (CSV, ex: "25/12/2023" ou "2023-12-25")
+        if (typeof valor === 'string') {
+            const v = valor.trim();
+            
+            // Formato PT-BR: DD/MM/YYYY
+            if (v.includes('/')) {
+                const partes = v.split('/');
+                if (partes.length === 3) {
+                    // Assume dia/mes/ano
+                    const dia = partes[0].padStart(2, '0');
+                    const mes = partes[1].padStart(2, '0');
+                    const ano = partes[2];
+                    // Retorna YYYY-MM-DD
+                    return `${ano}-${mes}-${dia}`; 
+                }
+            }
+            
+            // Formato ISO: YYYY-MM-DD
+            if (v.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return v;
+            }
+        }
+        
+        return null; // Data inválida
+    },
+
     processarArquivo: async function(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 try {
                     const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
+                    // Lê o arquivo. 'codepage' ajuda com acentos em CSVs antigos se necessário
+                    const workbook = XLSX.read(data, { type: 'array', codepage: 65001 }); 
                     const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    // 'raw: false' força a leitura como texto exibido, ajuda em alguns CSVs
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1, raw: false });
                     resolve(jsonData);
                 } catch (err) {
                     reject(err);
@@ -31,7 +68,7 @@ Produtividade.Importacao = {
         });
     },
 
-    // Mantém compatibilidade caso o main.js antigo tente chamar lerArquivo
+    // Compatibilidade
     lerArquivo: function(file) {
         return this.processarArquivo(file);
     },
@@ -40,22 +77,22 @@ Produtividade.Importacao = {
         if (!input.files || input.files.length === 0) return;
 
         const files = Array.from(input.files);
-        // Tenta pegar o botão que chamou ou o próximo elemento
         const btn = document.querySelector('button[onclick*="importarEmMassa"]') || 
                     (input.nextElementSibling && input.nextElementSibling.tagName === 'BUTTON' ? input.nextElementSibling : null);
         
         let originalText = '';
         if(btn) {
             originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
             btn.disabled = true;
         }
 
         let totalImportado = 0;
         let erros = 0;
+        let nomesNaoEncontrados = new Set();
 
         try {
-            // 1. Busca usuários para mapear ID
+            // 1. Busca usuários
             const { data: usersData, error: userError } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome');
@@ -72,44 +109,46 @@ Produtividade.Importacao = {
                 const linhas = await this.processarArquivo(file);
                 const payload = [];
                 
-                // Pula cabeçalho (i=1)
+                // Começa do índice 1 para pular cabeçalho
                 for (let i = 1; i < linhas.length; i++) {
                     const row = linhas[i];
                     if (!row || row.length === 0) continue;
 
-                    // Mapeamento de colunas (Ajuste conforme seu Excel)
                     const nomeExcel = row[0]; 
-                    const dataExcel = row[1]; 
+                    const dataBruta = row[1]; 
                     const qtd = row[2];       
                     
-                    const fifo = row[3] || 0;
-                    const gTotal = row[4] || 0;
-                    const gParcial = row[5] || 0;
-                    const perfilFc = row[6] || 0;
+                    if (!nomeExcel || !dataBruta) continue;
 
-                    if (!nomeExcel || !dataExcel) continue;
-
+                    // Normaliza nome para busca
                     const nomeBusca = this.normalizar(nomeExcel);
                     const usuarioId = mapaUsuarios[nomeBusca];
 
                     if (usuarioId) {
-                        let dataFormatada = dataExcel;
-                        // Tratamento para datas do Excel (número serial)
-                        if (typeof dataExcel === 'number') {
-                            const dateObj = XLSX.SSF.parse_date_code(dataExcel);
-                            dataFormatada = `${dateObj.y}-${String(dateObj.m).padStart(2,'0')}-${String(dateObj.d).padStart(2,'0')}`;
-                        }
+                        const dataFormatada = this.tratarData(dataBruta);
+                        
+                        if (dataFormatada) {
+                            // Prepara colunas opcionais (trocando vírgula por ponto se vier do CSV PT-BR)
+                            const limparNumero = (val) => {
+                                if (typeof val === 'string') return Number(val.replace(',', '.')) || 0;
+                                return Number(val) || 0;
+                            };
 
-                        payload.push({
-                            usuario_id: usuarioId,
-                            data_referencia: dataFormatada,
-                            quantidade: Number(qtd) || 0,
-                            fifo: Number(fifo) || 0,
-                            gradual_total: Number(gTotal) || 0,
-                            gradual_parcial: Number(gParcial) || 0,
-                            perfil_fc: Number(perfilFc) || 0,
-                            fator: 1
-                        });
+                            payload.push({
+                                usuario_id: usuarioId,
+                                data_referencia: dataFormatada,
+                                quantidade: limparNumero(qtd),
+                                fifo: limparNumero(row[3]),
+                                gradual_total: limparNumero(row[4]),
+                                gradual_parcial: limparNumero(row[5]),
+                                perfil_fc: limparNumero(row[6]),
+                                fator: 1
+                            });
+                        } else {
+                            console.warn(`Data inválida na linha ${i+1}: ${dataBruta}`);
+                        }
+                    } else {
+                        nomesNaoEncontrados.add(nomeExcel);
                     }
                 }
 
@@ -127,9 +166,14 @@ Produtividade.Importacao = {
                 }
             }
 
-            alert(`Importação concluída!\nRegistros processados: ${totalImportado}\nErros de arquivo: ${erros}`);
+            let msg = `Importação concluída!\nRegistros salvos: ${totalImportado}`;
+            if (erros > 0) msg += `\nArquivos com erro de gravação: ${erros}`;
+            if (nomesNaoEncontrados.size > 0) {
+                msg += `\n\nAlguns nomes do arquivo não foram encontrados no sistema (ex: ${Array.from(nomesNaoEncontrados).slice(0,3).join(', ')}...).`;
+            }
+            alert(msg);
             
-            // Recarrega a tela atual se possível
+            // Recarrega tela
             if(window.Produtividade && window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
                 window.Produtividade.Geral.carregarTela();
             } else {
@@ -149,6 +193,6 @@ Produtividade.Importacao = {
     }
 };
 
-// Expondo globalmente para evitar erros de referência
+// Expondo globalmente
 window.Importacao = Produtividade.Importacao;
 window.Produtividade.importarEmMassa = (el) => Produtividade.Importacao.importarEmMassa(el);
