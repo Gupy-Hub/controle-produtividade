@@ -1,109 +1,171 @@
 Produtividade.Performance = {
-    init: function() {
-        this.carregarRanking();
-    },
-
+    
     carregarRanking: async function() {
         const tbody = document.getElementById('perf-ranking-body');
-        if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Calculando...</td></tr>';
+        const periodType = document.getElementById('perf-period-type').value;
+        const dateInput = document.getElementById('global-date').value;
+        
+        if (!tbody) return;
+
+        // Define as datas com base no filtro
+        let [ano, mes, dia] = dateInput.split('-').map(Number);
+        let dataInicio, dataFim;
+        const sAno = String(ano);
+        const sMes = String(mes).padStart(2, '0');
+
+        if (periodType === 'mes') {
+            dataInicio = `${sAno}-${sMes}-01`;
+            dataFim = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`;
+        } else if (periodType === 'trimestre') {
+            const trim = Math.ceil(mes / 3);
+            const mStart = ((trim - 1) * 3) + 1;
+            dataInicio = `${sAno}-${String(mStart).padStart(2,'0')}-01`;
+            dataFim = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`;
+        } else if (periodType === 'semestre') {
+            const sem = mes <= 6 ? 1 : 2;
+            dataInicio = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`;
+            dataFim = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`;
+        } else { // ano
+            dataInicio = `${sAno}-01-01`;
+            dataFim = `${sAno}-12-31`;
+        }
+
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando ranking...</td></tr>';
 
         try {
-            const { data, error } = await Produtividade.supabase
+            // CORREÇÃO: Usa Sistema.supabase
+            const { data, error } = await Sistema.supabase
                 .from('producao')
-                .select('*, usuarios(nome)');
+                .select(`
+                    id, quantidade, fator, data_referencia,
+                    usuario:usuarios ( id, nome, perfil, cargo, meta_diaria )
+                `)
+                .gte('data_referencia', dataInicio)
+                .lte('data_referencia', dataFim);
 
             if (error) throw error;
 
-            if (!data || data.length === 0) {
-                this.zerarCards();
-                if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">Sem dados para ranking.</td></tr>';
-                return;
-            }
-
-            // Agrupa e Soma
-            const ranking = {};
+            // Processamento dos dados
+            const stats = {};
             let totalTime = 0;
+            let totalMetaTime = 0;
+            
+            // Variáveis para Média Ajustada (Sem Auditoras/Gestoras)
+            let totalProdAssistentes = 0;
+            let assistentesUnicas = new Set();
 
-            data.forEach(d => {
-                const uid = d.usuario_id;
-                const nomeUser = d.usuarios && d.usuarios.nome ? d.usuarios.nome : `(ID: ${uid})`;
-
-                if(!ranking[uid]) ranking[uid] = { nome: nomeUser, total: 0, dias: 0 };
+            data.forEach(r => {
+                const uid = r.usuario.id;
+                const nome = r.usuario.nome || 'Desconhecido';
+                const cargo = r.usuario.cargo ? r.usuario.cargo.toUpperCase() : 'ASSISTENTE';
+                const metaDiaria = Number(r.usuario.meta_diaria) || 650;
                 
-                const qtd = Number(d.quantidade) || 0;
-                // Fator null vira 1, fator numérico respeita o valor
-                const diaContabil = d.fator_multiplicador === null ? 1 : (Number(d.fator_multiplicador) || 0);
+                if (!stats[uid]) {
+                    stats[uid] = {
+                        id: uid,
+                        nome: nome,
+                        cargo: cargo,
+                        producao: 0,
+                        dias: 0,
+                        diasUteis: 0,
+                        metaTotal: 0
+                    };
+                }
 
-                ranking[uid].total += qtd;
-                ranking[uid].dias += diaContabil;
-                
+                const qtd = Number(r.quantidade) || 0;
+                const fator = Number(r.fator) || 0;
+
+                stats[uid].producao += qtd;
+                stats[uid].dias += 1;
+                stats[uid].diasUteis += fator; // Soma dos fatores (ex: 0.5 + 1 = 1.5)
+                stats[uid].metaTotal += (metaDiaria * fator);
+
+                // Totais Gerais
                 totalTime += qtd;
+                totalMetaTime += (metaDiaria * fator);
+
+                // Totais para Média (Exclui Liderança)
+                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                    totalProdAssistentes += qtd;
+                    assistentesUnicas.add(uid);
+                }
             });
 
-            const arrayRank = Object.values(ranking).sort((a, b) => b.total - a.total);
-            const qtdAssistentes = arrayRank.length;
+            // Converte para array e ordena
+            const ranking = Object.values(stats).sort((a, b) => b.producao - a.producao);
 
-            // --- CÁLCULO DOS CARDS (KPIs) ---
-            const elCampeao = document.getElementById('perf-kpi-campeao');
-            const elCampeaoVal = document.getElementById('perf-kpi-campeao-val');
-            const elTotal = document.getElementById('perf-kpi-total');
-            const elMedia = document.getElementById('perf-kpi-media');
+            // Renderiza Tabela
+            tbody.innerHTML = '';
+            
+            ranking.forEach((u, index) => {
+                const mediaDiaria = u.diasUteis > 0 ? u.producao / u.diasUteis : 0;
+                const atingimento = u.metaTotal > 0 ? (u.producao / u.metaTotal) * 100 : 0;
+                
+                let corBadge = 'bg-slate-100 text-slate-600';
+                if (index === 0) corBadge = 'bg-yellow-100 text-yellow-700 border-yellow-200';
+                else if (index === 1) corBadge = 'bg-slate-200 text-slate-700';
+                else if (index === 2) corBadge = 'bg-orange-100 text-orange-800';
 
-            // 1. Campeão
-            if (arrayRank.length > 0) {
-                const campeao = arrayRank[0];
-                if(elCampeao) elCampeao.innerText = campeao.nome;
-                if(elCampeaoVal) elCampeaoVal.innerText = `${campeao.total.toLocaleString('pt-BR')} docs`;
-            } else {
-                if(elCampeao) elCampeao.innerText = "-";
-                if(elCampeaoVal) elCampeaoVal.innerText = "";
+                // Ícone de cargo se for liderança
+                let iconCargo = '';
+                if(u.cargo === 'AUDITORA') iconCargo = '<span class="ml-2 text-[9px] bg-purple-100 text-purple-700 px-1 rounded border border-purple-200">AUD</span>';
+                if(u.cargo === 'GESTORA') iconCargo = '<span class="ml-2 text-[9px] bg-indigo-100 text-indigo-700 px-1 rounded border border-indigo-200">GEST</span>';
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
+                tr.innerHTML = `
+                    <td class="px-6 py-3">
+                        <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold border ${corBadge}">
+                            ${index + 1}º
+                        </span>
+                    </td>
+                    <td class="px-6 py-3 font-bold text-slate-700 flex items-center">
+                        ${u.nome} ${iconCargo}
+                    </td>
+                    <td class="px-6 py-3 text-center font-black text-blue-700">${Math.round(u.producao).toLocaleString('pt-BR')}</td>
+                    <td class="px-6 py-3 text-center text-slate-500 text-xs">${u.diasUteis}</td>
+                    <td class="px-6 py-3 text-center text-slate-600 font-bold">${Math.round(mediaDiaria)}</td>
+                    <td class="px-6 py-3 text-center text-slate-400 text-xs">${Math.round(u.metaTotal).toLocaleString('pt-BR')}</td>
+                    <td class="px-6 py-3 text-center">
+                        <span class="${atingimento >= 100 ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'} px-2 py-1 rounded text-xs font-black border border-opacity-50 ${atingimento >= 100 ? 'border-emerald-200' : 'border-amber-200'}">
+                            ${Math.round(atingimento)}%
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            if (ranking.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado para este período.</td></tr>';
             }
 
-            // 2. Total Time
-            if(elTotal) elTotal.innerText = totalTime.toLocaleString('pt-BR');
-
-            // 3. Média por Assistente (Total / N Pessoas)
-            const mediaGeral = qtdAssistentes > 0 ? Math.round(totalTime / qtdAssistentes) : 0;
-            if(elMedia) elMedia.innerText = mediaGeral.toLocaleString('pt-BR');
-
-
-            // --- RENDERIZA TABELA ---
-            let html = '';
-            arrayRank.forEach((u, index) => {
-                const dias = u.dias || 1;
-                const media = Math.round(u.total / dias);
-                
-                let medalha = '';
-                if(index === 0) medalha = '🥇';
-                if(index === 1) medalha = '🥈';
-                if(index === 2) medalha = '🥉';
-
-                html += `<tr class="border-b border-slate-50 hover:bg-slate-50">
-                    <td class="px-6 py-3 font-bold text-slate-500">${index + 1} ${medalha}</td>
-                    <td class="px-6 py-3 font-bold text-slate-700">${u.nome}</td>
-                    <td class="px-6 py-3 text-center font-black text-blue-700">${u.total.toLocaleString('pt-BR')}</td>
-                    <td class="px-6 py-3 text-center">${u.dias.toFixed(1)}</td>
-                    <td class="px-6 py-3 text-center text-emerald-600 font-bold">${media.toLocaleString('pt-BR')}</td>
-                    <td class="px-6 py-3 text-center text-slate-400">-</td>
-                    <td class="px-6 py-3 text-center text-slate-400">-</td>
-                </tr>`;
-            });
+            // --- ATUALIZA CARDS SUPERIORES ---
             
-            if(tbody) tbody.innerHTML = html || '<tr><td colspan="7" class="text-center py-4">Sem dados.</td></tr>';
+            // 1. Campeão (Ignora Auditoras/Gestoras para o prêmio)
+            const campeao = ranking.find(u => u.cargo !== 'AUDITORA' && u.cargo !== 'GESTORA');
+            
+            const elCampNome = document.getElementById('perf-kpi-campeao');
+            const elCampVal = document.getElementById('perf-kpi-campeao-val');
+            
+            if (campeao) {
+                elCampNome.innerText = campeao.nome;
+                elCampVal.innerText = `${Math.round(campeao.producao).toLocaleString()} Docs`;
+            } else {
+                elCampNome.innerText = "--";
+                elCampVal.innerText = "";
+            }
 
-        } catch (e) {
-            console.error("Erro Performance:", e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-red-500">Erro: ${e.message}</td></tr>`;
+            // 2. Produção Total do Time (Soma Tudo)
+            document.getElementById('perf-kpi-total').innerText = totalTime.toLocaleString('pt-BR');
+
+            // 3. Média por Assistente (Exclui Liderança)
+            const numAssistentes = assistentesUnicas.size;
+            const mediaGeral = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
+            document.getElementById('perf-kpi-media').innerText = mediaGeral.toLocaleString('pt-BR');
+
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
         }
-    },
-
-    zerarCards: function() {
-        const ids = ['perf-kpi-campeao', 'perf-kpi-total', 'perf-kpi-media'];
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.innerText = '--';
-        });
-        const elVal = document.getElementById('perf-kpi-campeao-val');
-        if(elVal) elVal.innerText = '';
     }
 };
