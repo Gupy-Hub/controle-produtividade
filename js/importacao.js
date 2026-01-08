@@ -1,150 +1,403 @@
-// 1. GARANTE QUE O OBJETO GLOBAL EXISTA
-window.Produtividade = window.Produtividade || {};
-
-Produtividade.Importacao = {
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel - Performance Pro</title>
     
-    // --- FUNÇÃO QUE FALTAVA (CORREÇÃO DO ERRO) ---
-    normalizar: function(texto) {
-        if (!texto) return "";
-        return String(texto)
-            .trim()
-            .toLowerCase()
-            .normalize('NFD').replace(/[\u0300-\u036f]/g, ""); // Remove acentos também para garantir melhor match
-    },
-
-    processarArquivo: async function(file) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-                    resolve(jsonData);
-                } catch (err) {
-                    reject(err);
-                }
-            };
-            reader.readAsArrayBuffer(file);
-        });
-    },
-
-    importarEmMassa: async function(input) {
-        if (!input.files || input.files.length === 0) return;
-
-        const files = Array.from(input.files);
-        // Tenta encontrar o botão pelo onclick ou pega o primeiro botão na barra (fallback)
-        const btn = document.querySelector('button[onclick*="importarEmMassa"]') || input.nextElementSibling;
-        let originalText = '';
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
+    <style> 
+        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .tab-btn:not(.active) { color: #64748b; }
+        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
-        if(btn) {
-            originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando...';
-            btn.disabled = true;
+        .header-input {
+            background: rgba(255,255,255,0.8);
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            padding: 2px 4px;
+            font-size: 11px;
+            width: 50px;
+            text-align: center;
+            color: #334155;
+            margin-top: 4px;
+            font-weight: bold;
         }
+        .header-input:focus { outline: none; border-color: #3b82f6; background: white; }
+        .cursor-not-allowed { cursor: not-allowed; }
 
-        let totalImportado = 0;
-        let erros = 0;
+        /* --- NOVO CSS PARA TOOLTIP PERSONALIZADO --- */
+        .custom-tooltip {
+            position: relative;
+            display: inline-block;
+            cursor: help;
+        }
+        .custom-tooltip:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #1e293b;
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 11px;
+            white-space: nowrap;
+            z-index: 50;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            margin-bottom: 8px;
+            font-weight: normal;
+            pointer-events: none;
+        }
+        .custom-tooltip:hover::before {
+            content: '';
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px;
+            border-style: solid;
+            border-color: #1e293b transparent transparent transparent;
+            margin-bottom: -2px;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="bg-slate-100">
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script> 
+    <script src="js/importacao.js"></script>
+    <script src="js/layout.js"></script>
 
-        try {
-            // 1. Busca usuários
-            const { data: usersData, error: userError } = await Sistema.supabase
-                .from('usuarios')
-                .select('id, nome');
-
-            if (userError) throw new Error("Erro ao buscar usuários: " + userError.message);
-
-            const mapaUsuarios = {};
-            usersData.forEach(u => {
-                if (u.nome) {
-                    // Usa a função normalizar aqui também para consistência
-                    mapaUsuarios[this.normalizar(u.nome)] = u.id;
-                }
-            });
-
-            // 2. Processa arquivos
-            for (const file of files) {
-                const linhas = await this.processarArquivo(file);
-                const payload = [];
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
+        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
                 
-                for (let i = 1; i < linhas.length; i++) {
-                    const row = linhas[i];
-                    if (!row || row.length === 0) continue;
-
-                    const nomeExcel = row[0]; 
-                    const dataExcel = row[1]; 
-                    const qtd = row[2];       
+                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
+                    <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
+                            <i class="fas fa-columns text-slate-400 text-lg"></i>
+                            <h1 class="text-lg font-black text-slate-700 tracking-tight">Painel</h1>
+                        </div>
+                        <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
+                            <i class="fas fa-calendar-alt text-blue-500"></i>
+                            <input type="date" id="global-date" onchange="Produtividade.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                        </div>
+                    </div>
                     
-                    const fifo = row[3] || 0;
-                    const gTotal = row[4] || 0;
-                    const gParcial = row[5] || 0;
-                    const perfilFc = row[6] || 0;
+                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200">
+                        <input type="file" id="input-excel" accept=".xlsx, .csv" multiple class="hidden" onchange="Produtividade.importarEmMassa(this)">
+                        <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2" title="Importar um ou múltiplos arquivos">
+                            <i class="fas fa-file-excel"></i> <span class="hidden sm:inline">Importar</span>
+                        </button>
+                        <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200" title="Excluir dados da visualização atual">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
 
-                    if (!nomeExcel || !dataExcel) continue;
+                    <div class="flex items-center gap-2 pl-2 border-l border-slate-200" id="top-bar-controls">
+                        
+                        <div id="ctrl-geral" class="flex items-center gap-2">
+                            <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                                <option value="dia">Apenas o Dia</option>
+                                <option value="mes">Mês da Data</option>
+                                <option value="semana">Semana Específica</option>
+                            </select>
+                            <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">Semana 1</option>
+                                <option value="2">Semana 2</option>
+                                <option value="3">Semana 3</option>
+                                <option value="4">Semana 4</option>
+                                <option value="5">Semana 5</option>
+                                <option value="6">Semana 6</option>
+                            </select>
+                        </div>
 
-                    // Usa a função normalizar para buscar
-                    const nomeBusca = this.normalizar(nomeExcel);
-                    const usuarioId = mapaUsuarios[nomeBusca];
+                        <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
+                             <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                                <option value="dia">Diária (Dias do Mês)</option>
+                                <option value="mes">Mensal (Semanas)</option>
+                                <option value="trimestre">Trimestral</option>
+                                <option value="semestre">Semestral</option>
+                                <option value="ano">Anual</option>
+                            </select>
 
-                    if (usuarioId) {
-                        let dataFormatada = dataExcel;
-                        if (typeof dataExcel === 'number') {
-                            const dateObj = XLSX.SSF.parse_date_code(dataExcel);
-                            dataFormatada = `${dateObj.y}-${String(dateObj.m).padStart(2,'0')}-${String(dateObj.d).padStart(2,'0')}`;
-                        }
+                            <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">1º Trimestre</option>
+                                <option value="2">2º Trimestre</option>
+                                <option value="3">3º Trimestre</option>
+                                <option value="4">4º Trimestre</option>
+                            </select>
+        
+                            <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1 px-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-md text-xs font-bold outline-none cursor-pointer h-8">
+                                <option value="1">1º Semestre</option>
+                                <option value="2">2º Semestre</option>
+                            </select>
 
-                        payload.push({
-                            usuario_id: usuarioId,
-                            data_referencia: dataFormatada,
-                            quantidade: Number(qtd) || 0,
-                            fifo: Number(fifo) || 0,
-                            gradual_total: Number(gTotal) || 0,
-                            gradual_parcial: Number(gParcial) || 0,
-                            perfil_fc: Number(perfilFc) || 0,
-                            fator: 1
-                        });
-                    }
-                }
+                            <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-bold shadow-sm transition flex items-center gap-2 h-8" title="Exportar Tabela">
+                                <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
+                            </button>
+                        </div>
 
-                if (payload.length > 0) {
-                    const { error } = await Sistema.supabase
-                        .from('producao')
-                        .upsert(payload, { onConflict: 'usuario_id, data_referencia' });
+                        <div id="ctrl-performance" class="hidden flex items-center gap-2">
+                            <select id="perf-period-type" onchange="Produtividade.Performance.carregarRanking()" class="py-1 px-2 border border-slate-200 rounded-md text-xs font-bold text-slate-600 outline-none bg-slate-50 focus:border-blue-500 cursor-pointer h-8">
+                                <option value="mes">Mensal</option>
+                                <option value="trimestre">Trimestral</option>
+                                <option value="semestre">Semestral</option>
+                                <option value="ano">Anual</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
 
-                    if (error) {
-                        console.error("Erro SQL:", error);
-                        erros++;
-                    } else {
-                        totalImportado += payload.length;
-                    }
-                }
-            }
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
+                    <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-check-circle"></i> Validação
+                    </button>
+                    <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-table"></i> Consolidado
+                    </button>
+                    <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-trophy"></i> Performance
+                    </button>
+                    <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-th"></i> Matriz
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-            alert(`Importação concluída!\nRegistros processados: ${totalImportado}\nErros de arquivo: ${erros}`);
+    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        
+        <div id="tab-geral" class="view-section animate-fade-in space-y-6">
             
-            // Tenta recarregar a tela usando o módulo Geral
-            if(window.Produtividade && window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
-                window.Produtividade.Geral.carregarTela();
-            } else {
-                location.reload();
-            }
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition flex flex-col justify-between h-24">
+                    <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition">
+                        <i class="fas fa-file-contract text-5xl text-blue-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção Total</p>
+                        <h3 class="text-2xl font-black text-slate-800 mt-0.5 tracking-tight" id="kpi-total">--</h3>
+                    </div>
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Meta Global:</span>
+                        <span class="text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">--</span>
+                    </div>
+                </div>
+                <div class="bg-gradient-to-br from-indigo-600 to-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-200 text-white relative overflow-hidden flex flex-col justify-between h-24">
+                    <div class="absolute right-[-10px] top-[-10px] opacity-20 rotate-12">
+                        <i class="fas fa-chart-pie text-6xl"></i>
+                    </div>
+                    <div>
+                        <p class="text-[9px] font-bold text-blue-100 uppercase tracking-wider mb-0.5">Atingimento da Meta</p>
+                        <h3 class="text-3xl font-black tracking-tight" id="kpi-pct">--%</h3>
+                    </div>
+                    <div class="w-full bg-black/20 h-1.5 rounded-full mt-1 overflow-hidden">
+                        <div id="kpi-pct-bar" class="h-full bg-white/90 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Composição da Equipe</p>
+                    <div class="w-full">
+                        <div class="flex justify-between items-end mb-0.5">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">CLT</span>
+                            <span class="text-[10px] font-bold text-blue-600" id="kpi-clt-val">0 (0%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="w-full">
+                        <div class="flex justify-between items-end mb-0.5">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">PJ</span>
+                            <span class="text-[10px] font-bold text-purple-600" id="kpi-pj-val">0 (0%)</span>
+                        </div>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                            <div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
+                    <div class="flex justify-between items-start">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
+                        <i class="fas fa-calendar-day text-slate-200 text-lg"></i>
+                    </div>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-2xl font-black text-slate-700" id="kpi-dias-val">--</h3>
+                        <span class="text-xs font-bold text-slate-400" id="kpi-dias-total">/ --</span>
+                    </div>
+                    <span id="kpi-dias" class="hidden"></span>
+                    <p class="text-[9px] text-slate-400 font-medium">Dias com produção registrada</p>
+                </div>
+                <div class="bg-white p-3 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md transition flex flex-col justify-between h-24">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produtividade Média</p>
+                    <div class="flex items-center justify-between">
+                        <div class="flex flex-col">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">Do Time</span>
+                            <span class="text-xl font-black text-slate-800" id="kpi-media-todas">--</span>
+                        </div>
+                        <div class="h-8 w-px bg-slate-100"></div>
+                        <div class="flex flex-col items-end">
+                            <span class="text-[9px] font-bold text-slate-500 uppercase">Meta/Rep</span>
+                            <span class="text-base font-bold text-emerald-600" id="kpi-meta-individual">650</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-50 h-1 mt-0.5 rounded-full"></div>
+                </div>
+            </div>
 
-        } catch (e) {
-            console.error(e);
-            alert("Erro na importação: " + e.message);
-        } finally {
-            if(btn) {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
-            input.value = ""; 
-        }
-    }
-};
+            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
+                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Exibindo dados de: <span id="selected-name" class="underline text-blue-900"></span></span>
+                <button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">
+                    <i class="fas fa-times mr-1"></i> Limpar Filtro
+                </button>
+            </div>
 
-// 2. CORREÇÃO GLOBAL: Disponibiliza 'Importacao' globalmente para o main.js usar
-window.Importacao = Produtividade.Importacao;
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs tracking-wide">
+                            <tr>
+                                <th class="px-4 py-2 text-center w-28 bg-slate-100/50 border-r border-slate-200">
+                                    <div class="flex flex-col items-center gap-1">
+                                        <span class="text-[10px] text-slate-400">Trabalhou</span>
+                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[10px] bg-white border border-slate-300 rounded p-1 font-bold text-slate-700 outline-none cursor-pointer">
+                                            <option value="">Aplicar...</option>
+                                            <option value="1">Todos 100%</option>
+                                            <option value="0.5">Todos 50%</option>
+                                            <option value="0">Todos Abonar</option>
+                                        </select>
+                                    </div>
+                                </th>
+                                <th class="px-6 py-4">Assistente</th>
+                                <th class="px-6 py-4 text-center">Dias Calc.</th>
+                                <th class="px-6 py-4 text-center">Total</th>
+                                <th class="px-6 py-4 text-center">FIFO</th>
+                                <th class="px-6 py-4 text-center">G. Total</th>
+                                <th class="px-6 py-4 text-center">G. Parcial</th>
+                                <th class="px-6 py-4 text-center">Meta Calc.</th>
+                                <th class="px-6 py-4 text-center">% Meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-// 3. Atalho para o HTML chamar direto
-window.Produtividade.importarEmMassa = (el) => Produtividade.Importacao.importarEmMassa(el);
+        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
+            
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar pb-2">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead id="cons-table-header">
+                        </thead>
+                    <tbody id="cons-table-body">
+                        </tbody>
+                </table>
+            </div>
+            
+             <div class="text-right text-xs text-slate-400 italic">
+                * Você pode alterar o número de assistentes (HC) no cabeçalho de cada coluna para ajustar a média.
+            </div>
+        </div>
+
+        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gradient-to-br from-yellow-100 to-amber-100 p-4 rounded-xl shadow-sm border border-amber-200 relative overflow-hidden">
+                    <i class="fas fa-trophy absolute right-4 top-4 text-4xl text-amber-300 opacity-50"></i>
+                    <p class="text-xs font-bold text-amber-700 uppercase">Campeão (Produção)</p>
+                    <p class="text-xl font-black text-amber-900 mt-2" id="perf-kpi-campeao">--</p>
+                    <p class="text-xs font-bold text-amber-600 mt-1" id="perf-kpi-campeao-val"></p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Produção do Time</p>
+                    <p class="text-2xl font-black text-blue-700 mt-1" id="perf-kpi-total">--</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-xs font-bold text-slate-400 uppercase">Média por Assistente</p>
+                    <p class="text-2xl font-black text-slate-700 mt-1" id="perf-kpi-media">--</p>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mt-6">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-6 py-3">#</th>
+                                <th class="px-6 py-3">Assistente</th>
+                                <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
+                                <th class="px-6 py-3 text-center">Dias</th>
+                                <th class="px-6 py-3 text-center">Média</th>
+                                <th class="px-6 py-3 text-center">Meta Total</th>
+                                <th class="px-6 py-3 text-center">% Meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-xs tracking-wider text-center border-b-2 border-slate-200">
+                            <tr>
+                                <th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[150px]">Assistente</th>
+                                <th class="px-3 py-4">Jan</th>
+                                <th class="px-3 py-4">Fev</th>
+                                <th class="px-3 py-4">Mar</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">1º Tri</th>
+                                <th class="px-3 py-4">Abr</th>
+                                <th class="px-3 py-4">Mai</th>
+                                <th class="px-3 py-4">Jun</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">2º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100">1º Sem</th>
+                                <th class="px-3 py-4">Jul</th>
+                                <th class="px-3 py-4">Ago</th>
+                                <th class="px-3 py-4">Set</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">3º Tri</th>
+                                <th class="px-3 py-4">Out</th>
+                                <th class="px-3 py-4">Nov</th>
+                                <th class="px-3 py-4">Dez</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">4º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100">2º Sem</th>
+                                <th class="px-4 py-4 bg-slate-100 text-slate-800">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matriz-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/produtividade/main.js"></script>
+    <script src="js/produtividade/geral.js"></script>
+    <script src="js/produtividade/consolidado.js"></script>
+    <script src="js/produtividade/performance.js"></script>
+    <script src="js/produtividade/matriz.js"></script>
+</body>
+</html>

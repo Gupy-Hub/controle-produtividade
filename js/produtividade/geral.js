@@ -143,19 +143,13 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
-                // CORREÇÃO TOOLTIP: Sanitização e Z-Index
+                // --- TOOLTIP PERSONALIZADO ---
                 let iconJustificativa = '';
                 if(r.justificativa && r.justificativa.trim() !== "") {
-                    // Escapa caracteres perigosos para HTML attribute
-                    const textoSeguro = r.justificativa
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;")
-                        .replace(/"/g, "&quot;")
-                        .replace(/'/g, "&#039;");
-                    
-                    // Adicionei 'z-10 relative' para garantir que fique acima de outros elementos
-                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110 z-10 relative" title="${textoSeguro}"></i>`;
+                    // Limpeza simples para atributo HTML
+                    const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
+                    // Usa a classe custom-tooltip e o atributo data-tooltip definidos no HTML
+                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 custom-tooltip" data-tooltip="${textoSeguro}"></i>`;
                 }
 
                 const tr = document.createElement('tr');
