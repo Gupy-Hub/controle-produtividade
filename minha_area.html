@@ -48,11 +48,23 @@
                             <i class="fas fa-user-astronaut text-slate-400 text-lg"></i>
                             <h1 class="text-lg font-black text-slate-700 tracking-tight">Minha Área</h1>
                         </div>
+                        
                         <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
                             <i class="fas fa-calendar-alt text-blue-500"></i>
                             <input type="date" id="ma-global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
                         </div>
+
+                        <div id="admin-controls" class="hidden flex items-center gap-2 pl-2 border-l border-slate-200 animate-enter">
+                            <div class="flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200">
+                                <i class="fas fa-search text-blue-600"></i>
+                                <select id="admin-user-select" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-transparent text-sm font-bold text-blue-800 outline-none cursor-pointer w-[150px] truncate">
+                                    <option value="">Carregando...</option>
+                                </select>
+                            </div>
+                        </div>
+
                     </div>
+                    
                     <div class="flex items-center gap-2 pl-2 border-l border-slate-200 hidden md:flex">
                         <span id="user-role-label" class="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-1 rounded border border-slate-100">Carregando...</span>
                     </div>
@@ -100,7 +112,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 card-stat relative overflow-hidden group">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Meu Atingimento</p>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Atingimento do Usuário</p>
                     <div class="flex items-end justify-between relative z-10">
                         <div>
                             <h3 class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-total">--</h3>
@@ -118,13 +130,13 @@
 
                 <div class="bg-gradient-to-br from-white to-slate-50 p-5 rounded-2xl shadow-sm border border-slate-200 card-stat">
                     <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between">
-                        <span>Minha Média vs Time</span>
+                        <span>Usuário vs Média Time</span>
                         <i class="fas fa-users text-slate-300"></i>
                     </p>
                     <div class="flex items-end justify-between gap-4">
                         <div class="flex flex-col items-center w-1/2">
                             <span class="text-2xl font-black text-slate-700" id="kpi-media-real">--</span>
-                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-1">Minha Média</span>
+                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-1">Média Usuário</span>
                         </div>
                         <div class="h-10 w-px bg-slate-200"></div>
                         <div class="flex flex-col items-center w-1/2 opacity-75">
