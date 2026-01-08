@@ -71,7 +71,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // SELECT corrigido: busca 'justificativa' e 'perfil'
             const { data, error } = await Produtividade.supabase
                 .from('producao')
                 .select(`
@@ -84,10 +83,8 @@ Produtividade.Geral = {
 
             if (error) throw error;
             
-            // Agrupamento
             let dadosAgrupados = {};
             data.forEach(item => {
-                // Garante que usuario.id exista
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
                 if(!dadosAgrupados[uid]) {
@@ -133,10 +130,9 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             
-            // VISUALIZAÇÃO DETALHADA (DIA ÚNICO)
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
-                const meta = d.usuario.meta_diaria || 650; // Fallback se não existir no banco
+                const meta = d.usuario.meta_diaria || 650;
                 const metaCalc = meta * r.fator;
                 const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
                 
@@ -144,17 +140,16 @@ Produtividade.Geral = {
                 if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
                 if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
 
-                // Lógica do Ícone de Justificativa (Azul)
+                // LÓGICA DO ÍCONE (MOSTRA SE TIVER JUSTIFICATIVA, INDEPENDENTE DO FATOR)
                 let iconJustificativa = '';
-                // Verifica se fator é 0 E se tem justificativa preenchida
-                if(String(r.fator) === '0' && r.justificativa) {
+                if(r.justificativa) {
                     iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 cursor-help text-base transition hover:scale-110" title="${r.justificativa}"></i>`;
                 }
 
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
                 
-                // Monta o HTML
+                // INPUTS AGORA SÃO DISABLED (BLOQUEADOS PARA EDIÇÃO MANUAL)
                 tr.innerHTML = `
                     <td class="px-4 py-3 text-center border-r border-slate-100 w-28">
                         <div class="flex items-center justify-center relative">
@@ -180,8 +175,8 @@ Produtividade.Geral = {
                     </td>
                     <td class="px-6 py-3 text-center font-bold text-slate-500 text-xs">${r.fator}</td>
                     <td class="px-6 py-3 text-center">
-                         <input type="number" value="${r.quantidade}" onblur="Produtividade.Geral.atualizarValor('${r.id}', 'quantidade', this.value)"
-                            class="w-16 text-center bg-slate-50 border border-slate-200 rounded px-1 py-0.5 text-slate-700 font-bold outline-none focus:border-blue-400 focus:bg-white transition">
+                         <input type="number" value="${r.quantidade}" disabled
+                            class="w-16 text-center bg-slate-100 cursor-not-allowed border border-slate-200 rounded px-1 py-0.5 text-slate-500 font-bold outline-none">
                     </td>
                     <td class="px-6 py-3 text-center text-slate-500">${r.fifo || 0}</td>
                     <td class="px-6 py-3 text-center text-slate-500">${r.gradual_total || 0}</td>
@@ -195,7 +190,6 @@ Produtividade.Geral = {
                 `;
                 tbody.appendChild(tr);
             } else {
-                // VISUALIZAÇÃO AGRUPADA (SEMANA/MÊS)
                 const meta = d.usuario.meta_diaria || 650;
                 const metaTotal = meta * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
@@ -240,24 +234,28 @@ Produtividade.Geral = {
     
     // Função principal de mudança de Fator
     mudarFator: async function(id, novoFatorStr) {
-        const novoFator = String(novoFatorStr); // Força string para comparação
+        const novoFator = String(novoFatorStr); 
         let justificativa = null;
 
-        // Verifica se é Abono ("0")
-        if (novoFator === '0') {
-            // Pequeno delay para garantir que a UI atualizou antes do prompt travar a tela
+        // Verifica se é Abono TOTAL (0) ou PARCIAL (0.5)
+        if (novoFator === '0' || novoFator === '0.5') {
+            
+            // Pequeno delay para garantir UI
             await new Promise(r => setTimeout(r, 10));
             
-            justificativa = prompt("Informe a justificativa para o abono (obrigatório):");
+            // Texto do prompt muda conforme o caso
+            const tipoAbono = novoFator === '0' ? "ABONO TOTAL" : "MEIO PERÍODO";
             
-            // Se cancelar ou vazio, reverte para o estado anterior (recarregando a tabela)
+            justificativa = prompt(`Informe a justificativa para ${tipoAbono} (obrigatório):`);
+            
+            // Se cancelar ou vazio, reverte
             if (justificativa === null || justificativa.trim() === "") {
-                alert("Ação cancelada: A justificativa é obrigatória para abonar.");
-                this.renderizarTabela(); // Reverte visualmente selecionando o anterior
+                alert("Ação cancelada: A justificativa é obrigatória.");
+                this.renderizarTabela(); // Reverte visualmente
                 return;
             }
         } else {
-            // Se mudou para 0.5 ou 1, limpa a justificativa
+            // Se voltou para 100%, limpa
             justificativa = null;
         }
 
@@ -270,17 +268,16 @@ Produtividade.Geral = {
 
             if (error) throw error;
             
-            // Atualiza localmente para feedback instantâneo (ícone azul)
+            // Atualiza localmente
             let usuarioIdAfetado = null;
             this.dadosOriginais.forEach(group => {
                 group.registros.forEach(r => {
                     if(r.id == id) {
-                        r.fator = novoFator; // Atualiza fator local
-                        r.justificativa = justificativa; // Atualiza justificativa local
+                        r.fator = novoFator; 
+                        r.justificativa = justificativa; 
                         usuarioIdAfetado = group.usuario.id;
                     }
                 });
-                // Recalcula Dias Úteis do grupo para visualização agrupada
                 if(usuarioIdAfetado === group.usuario.id) {
                     let d = group.totais; 
                     d.diasUteis = 0;
@@ -288,8 +285,8 @@ Produtividade.Geral = {
                 }
             });
             
-            this.renderizarTabela(); // Re-renderiza para mostrar o ícone
-            this.carregarTela(); // Recarrega KPIs globais
+            this.renderizarTabela(); 
+            this.carregarTela(); 
 
         } catch (error) {
             console.error(error);
@@ -305,8 +302,9 @@ Produtividade.Geral = {
         }
 
         let justificativa = null;
-        if (String(novoFator) === '0') {
-            justificativa = prompt("Informe a justificativa para o abono em massa:");
+        // Aplica regra de justificativa em massa também para 0 e 0.5
+        if (String(novoFator) === '0' || String(novoFator) === '0.5') {
+            justificativa = prompt("Informe a justificativa para a ação em massa:");
             if (justificativa === null || justificativa.trim() === "") {
                 alert("Justificativa obrigatória.");
                 document.getElementById('bulk-fator').value = "";
@@ -339,21 +337,6 @@ Produtividade.Geral = {
         }
     },
 
-    atualizarValor: async function(id, campo, valor) {
-        try {
-            const { error } = await Produtividade.supabase
-                .from('producao')
-                .update({ [campo]: valor })
-                .eq('id', id);
-
-            if (error) throw error;
-            this.carregarTela(); 
-        } catch (error) {
-            console.error(error);
-            alert("Erro ao salvar valor.");
-        }
-    },
-    
     excluirDadosDia: async function() {
         if(!confirm("Isso apagará TODOS os dados de produção do período selecionado na tela. Continuar?")) return;
         
@@ -438,9 +421,6 @@ Produtividade.Geral = {
         const pj = usersPJ.size;
         const totalUsers = clt + pj;
         
-        // Debug para garantir
-        // console.log(`CLT: ${clt}, PJ: ${pj}, Total: ${totalUsers}`);
-
         const elClt = document.getElementById('kpi-clt-val');
         if(elClt) elClt.innerText = `${clt} (${totalUsers > 0 ? Math.round(clt/totalUsers*100) : 0}%)`;
         
