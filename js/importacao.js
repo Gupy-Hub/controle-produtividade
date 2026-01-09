@@ -25,6 +25,7 @@ Produtividade.Importacao = {
                     error: (err) => reject(err)
                 });
             } else {
+                // Fallback para Excel se necessário no futuro
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
@@ -43,13 +44,12 @@ Produtividade.Importacao = {
         if (!input.files || input.files.length === 0) return;
         const files = Array.from(input.files);
         
-        // Feedback visual no botão
+        // Feedback visual
         const btn = document.querySelector('button[onclick*="importarEmMassa"]') || input.nextElementSibling;
         let originalText = '';
         if(btn) { originalText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...'; btn.disabled = true; }
 
         let totalImportado = 0;
-        let erros = 0;
         let nomesNaoEncontrados = new Set();
 
         try {
@@ -69,22 +69,21 @@ Produtividade.Importacao = {
                 let dados = await this.lerArquivoUnificado(file);
                 const payload = [];
                 
-                // Detecta se é o arquivo de Auditoria (tem coluna 'Auditora' ou 'end_time')
-                // Verifica na primeira linha válida
-                const isAuditoria = dados.some(r => r['Auditora'] || r['end_time'] || r['% Assert']);
+                // Verifica se é o arquivo de Auditoria (procura colunas chave)
+                // O arquivo enviado tem: end_time, Empresa, Assistente, STATUS, Nok, % Assert, Auditora
+                const isAuditoria = dados.some(r => r['end_time'] || r['Auditora'] || r['% Assert']);
 
                 for (let row of dados) {
+                    // Normaliza chaves para facilitar a busca (remove espaços e acentos das colunas)
                     const chaves = {};
-                    // Normaliza chaves
                     Object.keys(row).forEach(k => {
                         chaves[this.normalizar(k).replace(/_/g, '')] = row[k]; 
                     });
 
                     // Identifica Usuário
-                    let idCsv = chaves['idassistente'] || chaves['id'] || chaves['matricula'];
+                    let idCsv = chaves['idassistente'] || chaves['id'];
                     let nomeCsv = chaves['assistente'] || chaves['nome'] || chaves['colaborador'];
                     
-                    // Pula linhas de total ou vazias
                     if (!idCsv && !nomeCsv) continue;
                     if (nomeCsv && this.normalizar(nomeCsv) === 'total') continue;
 
@@ -97,14 +96,13 @@ Produtividade.Importacao = {
                         continue;
                     }
 
-                    // --- LÓGICA DO ARQUIVO DE AUDITORIA ---
+                    // --- TRATAMENTO PARA ARQUIVO DE AUDITORIA ---
                     if (isAuditoria) {
-                        // Data e Hora do end_time (Ex: 2025-10-20T14:02:18.175Z)
+                        // Data e Hora (end_time vem como "2025-10-20T14:02:18.175Z")
                         let dataRef = null;
                         let horaRef = null;
                         
-                        // Tenta pegar do endtime ou enturma
-                        const rawDate = row['end_time'] || row['Data'] || row['Date'];
+                        const rawDate = row['end_time'] || row['Data'];
                         if (rawDate) {
                             try {
                                 const dObj = new Date(rawDate);
@@ -115,68 +113,54 @@ Produtividade.Importacao = {
                             } catch(e) {}
                         }
 
-                        // Se não conseguiu extrair data do registro, tenta do nome do arquivo ou input global
-                        if (!dataRef) {
-                            dataRef = this.extrairDataDoNome(file.name);
-                            if (!dataRef) dataRef = document.getElementById('global-date')?.value;
-                        }
-
-                        if (!dataRef) continue; // Sem data não importa
+                        if (!dataRef) dataRef = this.extrairDataDoNome(file.name) || document.getElementById('global-date')?.value;
+                        if (!dataRef) continue;
 
                         payload.push({
                             usuario_id: usuarioId,
                             data_referencia: dataRef,
-                            quantidade: 1, // Cada linha é 1 documento
+                            quantidade: 1, // Cada linha no relatório de auditoria é 1 documento
                             fator: 1,
                             
-                            // Campos Novos Solicitados
+                            // NOVOS CAMPOS MAPEADOS
                             empresa: row['Empresa'] || '',
                             auditora: row['Auditora'] || '',
                             status: row['STATUS'] || row['Status'] || '',
                             observacao: row['Apontamentos/obs'] || row['Apontamentos'] || '',
                             nok: row['Nok'] || row['NOK'] || '',
-                            assertividade: row['% Assert'] || row['Assertividade'] || '',
+                            assertividade: row['% Assert'] || row['Assertividade'] || '', // Ex: 97,74%
                             hora: horaRef,
                             
-                            // Campos antigos zerados para não bugar
+                            // Campos antigos zerados para compatibilidade
                             fifo: 0, gradual_total: 0, gradual_parcial: 0, perfil_fc: 0
                         });
 
                     } else {
-                        // --- LÓGICA ANTIGA (Contagem Agrupada) ---
+                        // --- TRATAMENTO ANTIGO (Contagem Diária) ---
                         let dataRef = this.extrairDataDoNome(file.name) || document.getElementById('global-date')?.value;
                         if (!dataRef) continue;
-
                         const getNum = (v) => parseFloat(String(v || 0).replace(',', '.')) || 0;
                         
                         payload.push({
                             usuario_id: usuarioId,
                             data_referencia: dataRef,
-                            quantidade: getNum(chaves['documentosvalidados'] || chaves['quantidade'] || chaves['total']),
-                            fifo: getNum(chaves['documentosvalidadosfifo'] || chaves['fifo']),
-                            gradual_total: getNum(chaves['documentosvalidadosgradualtotal'] || chaves['gradualtotal']),
-                            gradual_parcial: getNum(chaves['documentosvalidadosgradualparcial'] || chaves['gradualparcial']),
-                            perfil_fc: getNum(chaves['documentosvalidadosperfilfc'] || chaves['perfilfc']),
+                            quantidade: getNum(chaves['documentosvalidados'] || chaves['quantidade']),
+                            fifo: getNum(chaves['fifo']),
                             fator: 1
                         });
                     }
                 }
 
                 if (payload.length > 0) {
-                    // ATENÇÃO: Se for Auditoria (várias linhas por dia), não podemos usar onConflict que trava data+usuario
-                    // O ideal é a tabela ter ID único autoincrement.
-                    // Aqui usamos upsert básico. Se sua tabela tiver restrição unique(usuario_id, data_referencia), isso dará erro ao tentar inserir a 2ª linha do mesmo dia.
-                    
-                    const { error } = await Sistema.supabase.from('producao').upsert(payload);
-                    // Se der erro de duplicidade, você deve remover a constraint "unique" do banco no Supabase
-
-                    if (error) { console.error(error); erros++; }
+                    // Removemos onConflict para permitir múltiplas linhas por dia (detalhamento)
+                    const { error } = await Sistema.supabase.from('producao').insert(payload);
+                    if (error) { console.error(error); }
                     else { totalImportado += payload.length; }
                 }
             }
 
             let msg = `Finalizado!\nRegistros: ${totalImportado}`;
-            if (nomesNaoEncontrados.size) msg += `\nNão encontrados:\n${Array.from(nomesNaoEncontrados).slice(0,10).join('\n')}`;
+            if (nomesNaoEncontrados.size) msg += `\nNão encontrados:\n${Array.from(nomesNaoEncontrados).slice(0,5).join('\n')}`;
             alert(msg);
             location.reload();
 
