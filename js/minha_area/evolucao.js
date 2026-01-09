@@ -1,9 +1,9 @@
 MinhaArea.Evolucao = {
-    subAbaAtual: 'dash', // dash | auditoria | evolucao
+    subAbaAtual: 'dash', 
     dadosAuditoriaCache: [], 
     dadosProducaoCache: [],
     mapaUsuarios: {},
-    filtroDocumento: null, // Novo: Armazena o documento clicado
+    filtroDocumento: null, 
 
     carregar: async function() {
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
@@ -15,7 +15,6 @@ MinhaArea.Evolucao = {
         await this.carregarMapaUsuarios();
         this.renderizarLayout(isGestora);
         
-        // Garante carregamento inicial
         if (this.subAbaAtual === 'evolucao') {
             await this.carregarEvolucao();
         } else {
@@ -31,14 +30,13 @@ MinhaArea.Evolucao = {
 
     mudarSubAba: function(novaAba) {
         this.subAbaAtual = novaAba;
-        this.filtroDocumento = null; // Limpa filtro ao mudar aba
+        this.filtroDocumento = null;
         this.carregar();
     },
 
     aplicarFiltroDocumento: function(nomeDoc) {
         this.filtroDocumento = nomeDoc;
         this.atualizarVisualizacao();
-        // Rola suave para o topo
         document.getElementById('ma-tab-evolucao').scrollIntoView({ behavior: 'smooth' });
     },
 
@@ -65,7 +63,7 @@ MinhaArea.Evolucao = {
                         Dash Geral
                     </button>
                     <button onclick="MinhaArea.Evolucao.mudarSubAba('evolucao')" class="px-4 py-1.5 rounded-md text-sm font-bold transition ${this.subAbaAtual === 'evolucao' ? 'bg-purple-50 text-purple-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}">
-                        Evolução (Metas)
+                        Evolução
                     </button>
                     <button onclick="MinhaArea.Evolucao.mudarSubAba('auditoria')" class="px-4 py-1.5 rounded-md text-sm font-bold transition ${this.subAbaAtual === 'auditoria' ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}">
                         Auditoria (Log)
@@ -124,7 +122,6 @@ MinhaArea.Evolucao = {
         try {
             const { inicio, fim } = MinhaArea.getPeriodo();
             
-            // Auditoria
             let qAudit = MinhaArea.supabase
                 .from('auditoria_apontamentos')
                 .select('*')
@@ -132,7 +129,6 @@ MinhaArea.Evolucao = {
                 .lte('data_referencia', fim)
                 .order('data_referencia', { ascending: false });
 
-            // Produção (Validados)
             let qProd = MinhaArea.supabase
                 .from('producao')
                 .select('quantidade, usuario_id, data_referencia')
@@ -166,7 +162,7 @@ MinhaArea.Evolucao = {
 
         if (this.subAbaAtual === 'evolucao') return;
 
-        // FILTROS INICIAIS (Usuario e Assistente)
+        // FILTROS
         const usuarioAlvo = document.getElementById('admin-user-select')?.value || MinhaArea.usuarioAlvo;
         let auditFiltrados = this.dadosAuditoriaCache;
         let prodFiltrados = this.dadosProducaoCache;
@@ -185,16 +181,12 @@ MinhaArea.Evolucao = {
             prodFiltrados = this.dadosProducaoCache.filter(d => d.usuario_id == idAlvo);
         }
 
-        // FILTRO POR DOCUMENTO (Se houver)
+        // FILTRO DOCUMENTO
         if (this.filtroDocumento) {
             auditFiltrados = auditFiltrados.filter(d => d.doc_name === this.filtroDocumento);
-            // Produção não tem doc_name, então mantemos a produção geral ou tentamos aproximar? 
-            // Como a produção não detalha por documento, o KPI de "Validados" (Volume) pode ficar distorcido se filtrarmos documento.
-            // Para não quebrar, vamos focar a filtragem na AUDITORIA (Qualidade e Erros). 
-            // O KPI de Volume mostrará "N/A" ou manterá o total se estiver filtrado por doc.
         }
 
-        // FILTRO POR BUSCA
+        // BUSCA
         if (termoBusca) {
             const lower = termoBusca.toLowerCase();
             auditFiltrados = auditFiltrados.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(lower)));
@@ -207,56 +199,39 @@ MinhaArea.Evolucao = {
         }
     },
 
-    // =================================================================================
-    // MÓDULO 1: DASH GERAL (ATUALIZADO)
-    // =================================================================================
     renderizarDashUI: function(container, auditFiltrados, prodFiltrados, nomeExibicao) {
         if (!auditFiltrados || auditFiltrados.length === 0) {
-            container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado para o filtro selecionado.</div>`;
-            if(this.filtroDocumento) container.innerHTML += `<div class="text-center mt-2"><button onclick="MinhaArea.Evolucao.limparFiltroDocumento()" class="text-blue-500 hover:underline">Limpar Filtro de Documento</button></div>`;
+            container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado.</div>`;
+            if(this.filtroDocumento) container.innerHTML += `<div class="text-center mt-2"><button onclick="MinhaArea.Evolucao.limparFiltroDocumento()" class="text-blue-500 hover:underline">Limpar Filtro</button></div>`;
             return;
         }
 
-        const { inicio, fim } = MinhaArea.getPeriodo();
-        const periodoTexto = `${inicio.split('-').reverse().join('/')} à ${fim.split('-').reverse().join('/')}`;
+        const { texto } = MinhaArea.getPeriodo();
 
-        // KPI EQUIPE (Parcial Equipe - Calculada sobre TODO o cache auditado)
+        // CÁLCULOS
         const totalCamposEq = this.dadosAuditoriaCache.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
         const totalOkEq = this.dadosAuditoriaCache.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
         const parcialEquipe = totalCamposEq > 0 ? (totalOkEq / totalCamposEq) * 100 : 0;
-        const parcialEquipeStr = parcialEquipe.toFixed(2).replace('.',',') + '%';
 
-        // KPI SELEÇÃO
-        const totalDocs = auditFiltrados.length; // Total Auditados
+        const totalDocs = auditFiltrados.length;
+        const totalValidados = prodFiltrados.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
         const totalCampos = auditFiltrados.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
         const totalOk = auditFiltrados.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
-        const totalNok = totalCampos - totalOk; // Total de Erros
+        const totalNok = totalCampos - totalOk;
         const atingimento = totalCampos > 0 ? (totalOk / totalCampos) * 100 : 0;
-        const atingimentoStr = atingimento.toFixed(2).replace('.',',') + '%';
-
-        // KPI VOLUME (Produção)
-        // Se estiver filtrado por documento, Volume Validados fica comprometido pois 'producao' não tem doc_name.
-        // Nesse caso, mostramos apenas os auditados desse tipo.
-        let totalValidados = 0;
-        let pctAuditadoStr = '-';
         
-        if (!this.filtroDocumento) {
-            totalValidados = prodFiltrados.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
-            const pct = totalValidados > 0 ? (totalDocs / totalValidados) * 100 : 0;
-            pctAuditadoStr = `${Math.round(pct)}%`;
-        } else {
-            totalValidados = "-"; // Não aplicável por documento
-        }
+        // Se filtrado por documento, Validados Geral não faz sentido, zeramos
+        const displayValidados = this.filtroDocumento ? '-' : totalValidados.toLocaleString('pt-BR');
+        const pctAuditado = (!this.filtroDocumento && totalValidados > 0) ? Math.round((totalDocs / totalValidados)*100) + '%' : '-';
 
-        // Filtro Ativo Warning
+        // Mensagem de Filtro
         let filtroMsg = '';
         if (this.filtroDocumento) {
             filtroMsg = `
                 <div class="mb-4 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg flex justify-between items-center animate-enter border border-blue-100">
                     <span class="text-sm font-bold"><i class="fas fa-filter mr-2"></i> Filtrando por: ${this.filtroDocumento}</span>
                     <button onclick="MinhaArea.Evolucao.limparFiltroDocumento()" class="text-xs bg-white border border-blue-200 hover:bg-blue-100 px-3 py-1 rounded-md font-bold transition">Limpar Filtro</button>
-                </div>
-            `;
+                </div>`;
         }
 
         container.innerHTML = `
@@ -264,73 +239,37 @@ MinhaArea.Evolucao = {
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
                 <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-36">
-                    <div class="flex justify-between items-start">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Assertividade</span>
-                        <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-bullseye"></i></div>
-                    </div>
+                    <div class="flex justify-between items-start"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Assertividade</span><div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-bullseye"></i></div></div>
                     <div class="space-y-3 mt-1">
-                        <div class="flex justify-between items-center border-b border-slate-50 pb-2">
-                            <span class="text-sm text-slate-500 font-medium">Meta Assertividade</span>
-                            <span class="text-lg font-black text-slate-700">97%</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-slate-500 font-medium">Total de Erros</span>
-                            <span class="text-lg font-black text-rose-600">${totalNok}</span>
-                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-50 pb-2"><span class="text-sm text-slate-500 font-medium">Meta Assertividade</span><span class="text-lg font-black text-slate-700">97%</span></div>
+                        <div class="flex justify-between items-center"><span class="text-sm text-slate-500 font-medium">Total de Erros</span><span class="text-lg font-black text-rose-600">${totalNok}</span></div>
                     </div>
                 </div>
 
                 <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-36">
-                    <div class="flex justify-between items-start">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider truncate max-w-[200px]" title="${nomeExibicao}">
-                            Qualidade: <span class="text-blue-600">${nomeExibicao.split(' ')[0]}</span>
-                        </span>
-                        <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-check-double"></i></div>
-                    </div>
+                    <div class="flex justify-between items-start"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider truncate max-w-[200px]" title="${nomeExibicao}">Qualidade: <span class="text-blue-600">${nomeExibicao.split(' ')[0]}</span></span><div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-check-double"></i></div></div>
                     <div class="space-y-3 mt-1">
-                        <div class="flex justify-between items-center border-b border-slate-50 pb-2">
-                            <span class="text-sm text-slate-500 font-medium">Sua Porcentagem</span>
-                            <span class="text-lg font-black ${atingimento >= 97 ? 'text-blue-600' : 'text-amber-600'}">${atingimentoStr}</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-slate-500 font-medium">Média da Equipe</span>
-                            <span class="text-lg font-black text-slate-500">${parcialEquipeStr}</span>
-                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-50 pb-2"><span class="text-sm text-slate-500 font-medium">Sua Porcentagem</span><span class="text-lg font-black ${atingimento>=97?'text-blue-600':'text-amber-600'}">${atingimento.toFixed(2).replace('.',',')}%</span></div>
+                        <div class="flex justify-between items-center"><span class="text-sm text-slate-500 font-medium">Média da Equipe</span><span class="text-lg font-black text-slate-500">${parcialEquipe.toFixed(2).replace('.',',')}%</span></div>
                     </div>
                 </div>
 
                 <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-36">
-                    <div class="flex justify-between items-start">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume de Documentos</span>
-                        <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fas fa-file-contract"></i></div>
-                    </div>
+                    <div class="flex justify-between items-start"><span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume de Documentos</span><div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fas fa-file-contract"></i></div></div>
                     <div class="space-y-3 mt-1">
-                        <div class="flex justify-between items-center border-b border-slate-50 pb-2">
-                            <span class="text-sm text-slate-500 font-medium">Total Validados</span>
-                            <span class="text-lg font-black text-emerald-600">${totalValidados.toLocaleString('pt-BR')}</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-sm text-slate-500 font-medium">Total Auditados</span>
-                            <div class="flex items-baseline gap-1">
-                                <span class="text-lg font-black text-slate-700">${totalDocs.toLocaleString('pt-BR')}</span>
-                                <span class="text-xs text-slate-400 font-bold">(${pctAuditadoStr})</span>
-                            </div>
-                        </div>
+                        <div class="flex justify-between items-center border-b border-slate-50 pb-2"><span class="text-sm text-slate-500 font-medium">Total Validados</span><span class="text-lg font-black text-emerald-600">${displayValidados}</span></div>
+                        <div class="flex justify-between items-center"><span class="text-sm text-slate-500 font-medium">Total Auditados</span><div class="flex items-baseline gap-1"><span class="text-lg font-black text-slate-700">${totalDocs.toLocaleString('pt-BR')}</span><span class="text-xs text-slate-400 font-bold">(${pctAuditado})</span></div></div>
                     </div>
                 </div>
             </div>
 
             <div class="flex justify-end">
-                <button onclick="document.getElementById('modal-resumo-docs').classList.remove('hidden')" class="text-sm text-indigo-600 font-bold hover:underline flex items-center gap-1">
-                    <i class="fas fa-list"></i> Ver Resumo por Documento
-                </button>
+                <button onclick="document.getElementById('modal-resumo-docs').classList.remove('hidden')" class="text-sm text-indigo-600 font-bold hover:underline flex items-center gap-1"><i class="fas fa-list"></i> Ver Resumo por Documento</button>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-                        <i class="fas fa-list-ul text-indigo-500"></i> Histórico Detalhado <span class="text-xs font-normal text-slate-400 ml-1">(${periodoTexto})</span>
-                    </h3>
+                    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2"><i class="fas fa-list-ul text-indigo-500"></i> Histórico Detalhado <span class="text-xs font-normal text-slate-400 ml-1">(${texto})</span></h3>
                 </div>
                 <div class="overflow-x-auto max-h-[600px] custom-scroll">
                     ${this.gerarTabelaDetalhada(auditFiltrados)}
@@ -339,13 +278,8 @@ MinhaArea.Evolucao = {
 
             <div id="modal-resumo-docs" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden animate-enter">
                 <div class="bg-white rounded-xl shadow-2xl w-[95%] max-w-4xl max-h-[80vh] flex flex-col">
-                    <div class="flex justify-between items-center p-4 border-b border-slate-100">
-                        <h3 class="font-bold text-slate-700">Resumo por Documento</h3>
-                        <button onclick="document.getElementById('modal-resumo-docs').classList.add('hidden')" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button>
-                    </div>
-                    <div class="p-0 overflow-auto custom-scroll">
-                        ${this.gerarTabelaResumo(auditFiltrados)}
-                    </div>
+                    <div class="flex justify-between items-center p-4 border-b border-slate-100"><h3 class="font-bold text-slate-700">Resumo por Documento</h3><button onclick="document.getElementById('modal-resumo-docs').classList.add('hidden')" class="text-slate-400 hover:text-red-500"><i class="fas fa-times"></i></button></div>
+                    <div class="p-0 overflow-auto custom-scroll">${this.gerarTabelaResumo(auditFiltrados)}</div>
                 </div>
             </div>
         `;
@@ -353,73 +287,39 @@ MinhaArea.Evolucao = {
 
     gerarTabelaResumo: function(dados) {
         if (!dados.length) return '<div class="p-6 text-center text-slate-400">Sem dados.</div>';
-        
         const agrupado = {};
         dados.forEach(d => {
             const key = `${d.assistente}|${d.doc_name}`;
             if (!agrupado[key]) agrupado[key] = { assistente: d.assistente, documento: d.doc_name, docs: 0, campos: 0, ok: 0 };
-            agrupado[key].docs++;
-            agrupado[key].campos += (parseInt(d.num_campos)||0);
-            agrupado[key].ok += (parseInt(d.acertos)||0);
+            agrupado[key].docs++; agrupado[key].campos += (parseInt(d.num_campos)||0); agrupado[key].ok += (parseInt(d.acertos)||0);
         });
         const lista = Object.values(agrupado).map(i => ({...i, nok: i.campos-i.ok, assert: i.campos>0?(i.ok/i.campos)*100:0})).sort((a,b)=>a.assistente.localeCompare(b.assistente));
-        
         return `<table class="w-full text-xs text-left text-slate-600"><thead class="bg-slate-50 text-slate-500 font-bold sticky top-0"><tr><th class="px-4 py-3">Assistente</th><th class="px-4 py-3">Documento</th><th class="px-4 py-3 text-center">Auditados</th><th class="px-4 py-3 text-center text-rose-600">NOK Total</th><th class="px-4 py-3 text-center text-blue-600">% Assert.</th></tr></thead><tbody class="divide-y divide-slate-100">${lista.map(d=>`<tr class="hover:bg-slate-50"><td class="px-4 py-2 font-bold text-blue-600">${d.assistente}</td><td class="px-4 py-2">${d.documento}</td><td class="px-4 py-2 text-center font-mono">${d.docs}</td><td class="px-4 py-2 text-center font-mono text-rose-600 font-bold">${d.nok>0?d.nok:'-'}</td><td class="px-4 py-2 text-center font-bold">${d.assert.toFixed(2).replace('.',',')}%</td></tr>`).join('')}</tbody></table>`;
     },
 
     gerarTabelaDetalhada: function(dados) {
-        if (!dados.length) return '<div class="p-6 text-center text-slate-400">Sem dados detalhados.</div>';
-        
-        return `
-        <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
-            <thead class="bg-slate-50 text-slate-500 font-bold uppercase sticky top-0 shadow-sm">
-                <tr>
-                    <th class="px-4 py-3">Data</th>
-                    <th class="px-4 py-3">Assistente</th>
-                    <th class="px-4 py-3">Empresa</th>
-                    <th class="px-4 py-3">Documento</th>
-                    <th class="px-4 py-3 text-center">Status</th>
-                    <th class="px-4 py-3 text-center text-rose-600">NOK</th>
-                    <th class="px-4 py-3">Obs</th>
-                </tr>
-            </thead>
-            <tbody class="divide-y divide-slate-100">
-                ${dados.map(d => {
-                    const k_nok = (parseInt(d.num_campos)||0) - (parseInt(d.acertos)||0);
-                    const rowClass = k_nok > 0 ? 'bg-rose-50/30' : 'hover:bg-slate-50';
-                    const obsClass = k_nok > 0 ? 'text-rose-700 font-medium' : 'text-slate-400 italic';
-                    
-                    return `
-                    <tr class="${rowClass} transition border-b border-slate-50 last:border-0">
-                        <td class="px-4 py-2 font-bold text-slate-500">${d.data_referencia ? d.data_referencia.split('-').reverse().join('/') : '-'}</td>
-                        <td class="px-4 py-2 text-blue-600 font-bold">${d.assistente}</td>
-                        <td class="px-4 py-2 text-slate-600">${d.empresa || '-'}</td>
-                        <td class="px-4 py-2">
-                            <button onclick="MinhaArea.Evolucao.aplicarFiltroDocumento('${d.doc_name}')" class="text-blue-500 hover:underline hover:text-blue-700 text-left truncate max-w-[200px]" title="Filtrar por: ${d.doc_name}">
-                                ${d.doc_name}
-                            </button>
-                        </td>
-                        <td class="px-4 py-2 text-center">
-                            <span class="${d.status === 'OK' ? 'text-emerald-600' : 'text-rose-600'} font-bold text-[10px] uppercase">${d.status}</span>
-                        </td>
-                        <td class="px-4 py-2 text-center font-mono ${k_nok > 0 ? 'text-rose-600 font-bold' : 'text-slate-300'}">${k_nok > 0 ? k_nok : '-'}</td>
-                        <td class="px-4 py-2 text-xs ${obsClass} max-w-[300px] whitespace-normal leading-tight">
-                            ${d.apontamentos_obs || '<span class="opacity-30">-</span>'}
-                        </td>
-                    </tr>`;
-                }).join('')}
-            </tbody>
-        </table>`;
+        if (!dados.length) return '<div class="p-6 text-center text-slate-400">Sem dados.</div>';
+        return `<table class="w-full text-xs text-left text-slate-600 whitespace-nowrap"><thead class="bg-slate-50 text-slate-500 font-bold sticky top-0 shadow-sm"><tr><th class="px-4 py-3">Data</th><th class="px-4 py-3">Assistente</th><th class="px-4 py-3">Empresa</th><th class="px-4 py-3">Documento</th><th class="px-4 py-3 text-center">Status</th><th class="px-4 py-3 text-center text-rose-600">NOK</th><th class="px-4 py-3">Obs</th></tr></thead><tbody class="divide-y divide-slate-100">${dados.map(d=>{const k=(parseInt(d.num_campos)||0)-(parseInt(d.acertos)||0); return `<tr class="${k>0?'bg-rose-50/30':'hover:bg-slate-50'} border-b border-slate-50"><td class="px-4 py-2 font-bold">${d.data_referencia?d.data_referencia.split('-').reverse().join('/'):'-'}</td><td class="px-4 py-2 text-blue-600 font-bold">${d.assistente}</td><td class="px-4 py-2 text-slate-600">${d.empresa||'-'}</td><td class="px-4 py-2"><button onclick="MinhaArea.Evolucao.aplicarFiltroDocumento('${d.doc_name}')" class="text-blue-500 hover:underline text-left truncate max-w-[200px]">${d.doc_name}</button></td><td class="px-4 py-2 text-center"><span class="${d.status==='OK'?'text-emerald-600':'text-rose-600'} font-bold text-[10px]">${d.status}</span></td><td class="px-4 py-2 text-center font-bold ${k>0?'text-rose-600':'text-slate-300'}">${k>0?k:'-'}</td><td class="px-4 py-2 text-xs ${k>0?'text-rose-700 font-medium':'text-slate-400 italic'}">${d.apontamentos_obs||'-'}</td></tr>`;}).join('')}</tbody></table>`;
     },
 
-    // ... (IMPORTAÇÃO E OUTROS MÉTODOS MANTIDOS IGUAIS AO ANTERIOR)
     renderizarAuditoriaUI: function(container, dados) {
-        // Tabela Pura para Auditoria (Mantida)
+        if (!dados || dados.length === 0) {
+            container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado.</div>`;
+            if(this.filtroDocumento) container.innerHTML += `<div class="text-center mt-2"><button onclick="MinhaArea.Evolucao.limparFiltroDocumento()" class="text-blue-500 hover:underline">Limpar Filtro</button></div>`;
+            return;
+        }
+
+        let filtroMsg = '';
+        if (this.filtroDocumento) {
+            filtroMsg = `<div class="mb-4 bg-blue-50 text-blue-700 px-4 py-2 rounded-lg flex justify-between items-center border border-blue-100"><span class="text-sm font-bold">Filtro: ${this.filtroDocumento}</span><button onclick="MinhaArea.Evolucao.limparFiltroDocumento()" class="text-xs bg-white border border-blue-200 px-3 py-1 rounded-md font-bold">Limpar</button></div>`;
+        }
+
         const total = dados.length;
         const campos = dados.reduce((acc,cur)=>acc+(parseInt(cur.num_campos)||0),0);
         const nok = dados.reduce((acc,cur)=>acc+((parseInt(cur.num_campos)||0)-(parseInt(cur.acertos)||0)),0);
         
         container.innerHTML = `
+            ${filtroMsg}
             <div class="grid grid-cols-3 gap-4 mb-4">
                 <div class="bg-blue-50 p-3 rounded-lg border border-blue-100 text-center"><span class="block text-xs text-blue-500 font-bold uppercase">Registros</span><span class="text-xl font-black text-blue-700">${total}</span></div>
                 <div class="bg-slate-50 p-3 rounded-lg border border-slate-200 text-center"><span class="block text-xs text-slate-500 font-bold uppercase">Campos</span><span class="text-xl font-black text-slate-700">${campos}</span></div>
@@ -432,7 +332,15 @@ MinhaArea.Evolucao = {
             </div>`;
     },
 
-    importarAuditoria: function(input) {
+    // --- MANTER DEMAIS FUNÇÕES (Importar, Excluir, Evolução) IGUAIS ---
+    // (Apenas replicando o início para garantir integridade, o restante segue o padrão já estabelecido)
+    excluirDadosPeriodo: async function() {
+        const { inicio, fim, tipo } = MinhaArea.getPeriodo();
+        if (tipo === 'dia') { alert("A exclusão é permitida apenas por Mês ou Ano."); return; }
+        if (!confirm(`EXCLUIR DADOS de ${inicio} a ${fim}?`)) return;
+        try { await MinhaArea.supabase.from('auditoria_apontamentos').delete().gte('data_referencia', inicio).lte('data_referencia', fim); alert("Excluído."); this.carregar(); } catch (e) { alert(e.message); }
+    },
+    importarAuditoria: function(input) { /* Código de importação igual ao anterior */ 
         if (!input.files[0]) return;
         const file = input.files[0];
         const labelBtn = input.parentElement.querySelector('label');
@@ -480,19 +388,7 @@ MinhaArea.Evolucao = {
             Papa.parse(file, {header:true, skipEmptyLines:true, complete: res=>processar(res.data)});
         }
     },
-
-    excluirDadosPeriodo: async function() {
-        const { inicio, fim, texto, tipo } = MinhaArea.getPeriodo();
-        if (tipo === 'dia') { alert("A exclusão é permitida apenas por Mês ou Ano."); return; }
-        if (!confirm(`EXCLUIR AUDITORIA: ${texto}\n\nTem certeza?`)) return;
-        try {
-            await MinhaArea.supabase.from('auditoria_apontamentos').delete().gte('data_referencia', inicio).lte('data_referencia', fim);
-            alert("Excluído com sucesso.");
-            this.carregar();
-        } catch (e) { alert("Erro: " + e.message); }
-    },
-
-    carregarEvolucao: async function() {
+    carregarEvolucao: async function() { /* Código de Evolução igual ao anterior */ 
         const container = document.getElementById('conteudo-okr');
         if(!container) return;
         container.innerHTML = '<div class="py-12 text-center text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</div>';
@@ -514,8 +410,7 @@ MinhaArea.Evolucao = {
             this.renderizarEvolucaoUI(container, rAudit.data, rProd.data, ano);
         } catch (e) { console.error(e); }
     },
-
-    renderizarEvolucaoUI: function(container, dadosAuditoria, dadosProducao, ano) {
+    renderizarEvolucaoUI: function(container, dadosAuditoria, dadosProducao, ano) { /* Igual ao anterior */ 
         const meses = Array.from({length: 12}, () => ({ audit_campos: 0, audit_ok: 0, prod_soma: 0, prod_dias: new Set() }));
         dadosAuditoria.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].audit_campos += (parseInt(d.num_campos)||0); meses[m].audit_ok += (parseInt(d.acertos)||0); } });
         dadosProducao.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].prod_soma += (parseInt(d.quantidade)||0); meses[m].prod_dias.add(d.data_referencia); } });

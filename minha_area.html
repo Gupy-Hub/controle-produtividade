@@ -45,11 +45,15 @@
                         <h1 class="text-lg font-bold text-slate-800 tracking-tight hidden sm:block">Performance</h1>
                     </div>
                     
-                    <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
-                        <select id="filtro-tipo" onchange="MinhaArea.mudarTipoFiltro(this.value)" class="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer pl-2 py-1">
-                            <option value="dia">Dia</option>
+                    <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-sm">
+                        <select id="filtro-tipo" onchange="MinhaArea.mudarTipoFiltro(this.value)" class="bg-transparent text-xs font-bold text-slate-600 outline-none cursor-pointer pl-2 py-1 uppercase tracking-wide">
+                            <option value="dia">Dia Específico</option>
+                            <option value="semana">Semana</option>
                             <option value="mes" selected>Mês</option>
+                            <option value="trimestre">Trimestre</option>
+                            <option value="semestre">Semestre</option>
                             <option value="ano">Ano</option>
+                            <option value="todos">Todo Histórico</option>
                         </select>
                         
                         <div class="w-px h-4 bg-slate-300"></div>
