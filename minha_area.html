@@ -8,102 +8,91 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
         
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
-        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; opacity: 0.7; }
+        .tab-btn:hover { opacity: 1; background-color: #f1f5f9; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; opacity: 1; }
         .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
-        .tab-btn:not(.active) { color: #64748b; }
-        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
         
         .animate-enter { animation: enter 0.4s ease-out; }
         @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        .custom-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        .card-stat { transition: transform 0.2s; }
-        .card-stat:hover { transform: translateY(-3px); }
+        .card-stat { transition: transform 0.2s, box-shadow 0.2s; }
+        .card-stat:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
     </style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-slate-50">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     <script src="js/layout.js"></script>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30">
-        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-14 gap-2 py-2 md:py-0">
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40">
+        <div class="max-w-[1600px] mx-auto px-4">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-16 gap-3 py-2 md:py-0">
                 
-                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-between md:justify-start">
-                    <div class="flex items-center gap-3">
-                        <div class="flex items-center gap-2 border-r border-slate-200 pr-3 hidden sm:flex">
-                            <i class="fas fa-user-astronaut text-slate-400 text-lg"></i>
-                            <h1 class="text-lg font-black text-slate-700 tracking-tight">Minha Área</h1>
+                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                    <div class="flex items-center gap-3 border-r border-slate-200 pr-4">
+                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-sm">
+                            <i class="fas fa-chart-line"></i>
                         </div>
-                        
-                        <div id="container-data-global" class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer">
-                            <i class="fas fa-calendar-alt text-blue-500"></i>
-                            <input type="date" id="ma-global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                        <h1 class="text-lg font-bold text-slate-800 tracking-tight hidden sm:block">Performance</h1>
+                    </div>
+                    
+                    <div id="container-data-global" class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-400 transition cursor-pointer group">
+                        <i class="fas fa-calendar-day text-slate-400 group-hover:text-blue-500 transition"></i>
+                        <input type="date" id="ma-global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[120px]">
+                    </div>
+
+                    <div id="okr-header-controls" class="hidden flex items-center gap-2 animate-enter">
+                        <div class="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-200">
+                            <i class="fas fa-filter text-indigo-500"></i>
+                            <select id="filtro-periodo-okr-header" onchange="MinhaArea.Evolucao.mudarPeriodo(this.value)" class="bg-transparent text-sm font-bold text-indigo-900 outline-none cursor-pointer">
+                                <option value="dia">Dia Específico</option>
+                                <option value="semana">Semana</option>
+                                <option value="mes" selected>Mês</option>
+                                <option value="trimestre">Trimestre</option>
+                                <option value="anual">Ano</option>
+                                <option value="todos">Todo Histórico</option>
+                            </select>
                         </div>
+                    </div>
 
-                        <div id="okr-header-controls" class="hidden flex items-center gap-2 animate-enter">
-                            <div class="flex items-center gap-2 bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
-                                <i class="fas fa-calendar-week text-blue-600"></i>
-                                <select id="filtro-periodo-okr-header" onchange="MinhaArea.Evolucao.mudarPeriodo(this.value)" class="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer">
-                                    <option value="semana">Esta Semana</option>
-                                    <option value="mes" selected>Este Mês</option>
-                                    <option value="trimestre">Este Trimestre</option>
-                                    <option value="semestre">Este Semestre</option>
-                                    <option value="anual">Este Ano</option>
-                                    <option value="todos">Todo o Histórico</option>
-                                </select>
-                            </div>
-
-                            <div id="btn-importar-container" class="hidden">
-                                <label for="input-csv-auditoria" class="flex items-center gap-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg border border-emerald-200 cursor-pointer transition text-xs font-bold">
-                                    <i class="fas fa-file-upload"></i> Importar Planilha
-                                </label>
-                                <input type="file" id="input-csv-auditoria" accept=".csv, .xlsx, .xls" class="hidden" onchange="MinhaArea.Evolucao.importarArquivo(this)">
-                            </div>
-                        </div>
-
-                        <div id="admin-controls" class="hidden flex items-center gap-2 pl-2 border-l border-slate-200 animate-enter">
-                            <div class="flex items-center gap-2 bg-blue-50 px-2 py-1 rounded-lg border border-blue-200">
-                                <i class="fas fa-search text-blue-600"></i>
-                                <select id="admin-user-select" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-transparent text-sm font-bold text-blue-800 outline-none cursor-pointer w-[150px] truncate">
-                                    <option value="">Carregando...</option>
-                                </select>
-                            </div>
+                    <div id="admin-controls" class="hidden flex items-center gap-2 pl-2 animate-enter">
+                        <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                            <i class="fas fa-user-circle text-slate-400"></i>
+                            <select id="admin-user-select" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer min-w-[150px] max-w-[200px]">
+                                <option value="todos">Toda a Equipe</option>
+                            </select>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end mt-2 md:mt-0">
-                    <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-start md:justify-end">
+                    <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-calendar-check"></i> Diário
                     </button>
-                    <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-bullseye"></i> Meta / OKR
                     </button>
-                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-users"></i> Comparativo
                     </button>
-                    <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-check-circle"></i> Qualidade
                     </button>
-                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-3 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
                         <i class="fas fa-comments"></i> Feedback
                     </button>
                 </div>
@@ -111,84 +100,75 @@
         </div>
     </div>
 
-    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-6">
-            <div id="box-confirmacao-leitura" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 animate-enter shadow-sm ring-1 ring-yellow-100">
+            <div id="box-confirmacao-leitura" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
                 <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600 text-2xl animate-pulse">
+                    <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 animate-pulse">
                         <i class="fas fa-bell"></i>
                     </div>
                     <div>
-                        <h4 class="font-bold text-yellow-800 text-lg">Ação Necessária: Check-in Diário</h4>
-                        <p class="text-sm text-yellow-700">Confirme que você visualizou suas metas e resultados do dia anterior.</p>
+                        <h4 class="font-bold text-amber-900">Check-in Diário Pendente</h4>
+                        <p class="text-xs text-amber-700">Valide suas metas e resultados de ontem.</p>
                     </div>
                 </div>
-                <button onclick="MinhaArea.Diario.confirmarAcessoHoje()" class="w-full md:w-auto bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-md transition transform active:scale-95">
+                <button onclick="MinhaArea.Diario.confirmarAcessoHoje()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-6 rounded-lg text-sm transition">
                     Confirmar Leitura
                 </button>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 card-stat relative overflow-hidden group">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Atingimento do Usuário</p>
-                    <div class="flex items-end justify-between relative z-10">
-                        <div>
-                            <h3 class="text-3xl font-black text-slate-800 tracking-tighter" id="kpi-total">--</h3>
-                            <span class="text-xs font-bold text-slate-400">Prod. Acumulada</span>
-                        </div>
-                        <div class="text-right">
-                             <h3 class="text-xl font-bold text-blue-600" id="kpi-pct">--%</h3>
-                             <span class="text-xs font-bold text-slate-400">da Meta (<span id="kpi-meta-total">--</span>)</span>
-                        </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Atingimento Acumulado</span>
+                        <span id="kpi-pct" class="text-lg font-black text-blue-600">--%</span>
                     </div>
-                    <div class="mt-3 w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div class="flex items-end gap-2">
+                        <h3 id="kpi-total" class="text-3xl font-black text-slate-800">--</h3>
+                        <span class="text-xs text-slate-400 mb-1">de <span id="kpi-meta-total">--</span> (Meta)</span>
+                    </div>
+                    <div class="mt-3 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                         <div id="bar-progress" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="bg-gradient-to-br from-white to-slate-50 p-5 rounded-2xl shadow-sm border border-slate-200 card-stat">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-3 flex justify-between">
-                        <span>Usuário vs Média Time</span>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
+                    <div class="flex justify-between items-start mb-4">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Comparativo</span>
                         <i class="fas fa-users text-slate-300"></i>
-                    </p>
-                    <div class="flex items-end justify-between gap-4">
-                        <div class="flex flex-col items-center w-1/2">
-                            <span class="text-2xl font-black text-slate-700" id="kpi-media-real">--</span>
-                            <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full mt-1">Média Usuário</span>
+                    </div>
+                    <div class="flex justify-between items-end">
+                        <div>
+                            <span class="text-xs text-slate-400">Sua Média</span>
+                            <div id="kpi-media-real" class="text-2xl font-black text-slate-700">--</div>
                         </div>
-                        <div class="h-10 w-px bg-slate-200"></div>
-                        <div class="flex flex-col items-center w-1/2 opacity-75">
-                            <span class="text-xl font-bold text-slate-500" id="kpi-media-time">--</span>
-                            <span class="text-[10px] font-bold text-slate-400 mt-1">Média Equipe</span>
+                        <div class="text-right">
+                            <span class="text-xs text-slate-400">Média Time</span>
+                            <div id="kpi-media-time" class="text-xl font-bold text-slate-500">--</div>
                         </div>
                     </div>
-                    <div id="kpi-comparativo-msg" class="text-center mt-3 text-[10px] font-bold text-slate-400">
-                        Calculando posição...
-                    </div>
+                    <div id="kpi-comparativo-msg" class="text-center mt-2 text-[10px] font-bold text-slate-400 bg-slate-50 rounded py-1">--</div>
                 </div>
 
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 card-stat flex flex-col justify-between">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Produtivos</p>
-                            <h3 class="text-2xl font-black text-slate-700 mt-1" id="kpi-dias">--</h3>
-                        </div>
-                        <div id="icon-status-container" class="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Eficiência</span>
+                        <div id="icon-status-container" class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center">
                             <i id="icon-status" class="fas fa-minus text-slate-300"></i>
                         </div>
                     </div>
-                    <div class="mt-2">
-                         <p class="text-xs font-bold text-slate-500" id="kpi-status-text">--</p>
+                    <div class="flex items-end gap-2">
+                        <h3 id="kpi-dias" class="text-3xl font-black text-slate-800">--</h3>
+                        <span class="text-xs text-slate-400 mb-1">Dias Produtivos</span>
                     </div>
+                    <div id="kpi-status-text" class="mt-2 text-xs font-bold text-slate-500">--</div>
                 </div>
             </div>
 
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fas fa-list-ul text-blue-500"></i> Detalhamento Diário
-                    </h3>
+                    <h3 class="font-bold text-slate-700 text-sm">Detalhamento Diário</h3>
                 </div>
                 <div class="overflow-x-auto max-h-[500px] custom-scroll">
                     <table class="w-full text-sm text-left">
@@ -198,7 +178,7 @@
                                 <th class="px-6 py-3 text-center">Produção</th>
                                 <th class="px-6 py-3 text-center">Meta/Fator</th>
                                 <th class="px-6 py-3 text-center">Status</th>
-                                <th class="px-6 py-3">Observações / Feedback</th>
+                                <th class="px-6 py-3">Observações</th>
                             </tr>
                         </thead>
                         <tbody id="tabela-diario" class="divide-y divide-slate-100 text-slate-600"></tbody>
@@ -210,7 +190,7 @@
         <div id="ma-tab-evolucao" class="ma-view hidden animate-enter">
             <div class="flex flex-col items-center justify-center h-64 text-slate-400">
                 <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
-                <p>Carregando Módulo OKR...</p>
+                <p>Carregando...</p>
             </div>
         </div>
 

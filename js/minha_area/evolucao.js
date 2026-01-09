@@ -1,5 +1,6 @@
 MinhaArea.Evolucao = {
-    dados: [], // Cache para busca
+    dadosCache: [],
+    assistentesNoPeriodo: [], // Armazena nomes de quem tem dados
 
     carregar: async function() {
         this.renderizarLayout();
@@ -12,38 +13,67 @@ MinhaArea.Evolucao = {
         const container = document.getElementById('ma-tab-evolucao');
         if (!container) return;
 
-        // Atualizei o HTML do seletor para incluir a opção "Dia Específico" se você quiser reinjetar, 
-        // mas como o seletor está no header global (minha_area.html), certifique-se de que ele tenha a option lá ou use o script abaixo para garantir.
-        // Vou forçar a atualização das opções do select do header aqui para garantir que "Dia Específico" apareça.
-        
-        const selectHeader = document.getElementById('filtro-periodo-okr-header');
-        if (selectHeader && !selectHeader.querySelector('option[value="dia"]')) {
-            const optDia = document.createElement('option');
-            optDia.value = 'dia';
-            optDia.innerText = 'Dia Específico';
-            selectHeader.insertBefore(optDia, selectHeader.firstChild); // Insere no topo
-            selectHeader.value = 'mes'; // Default
-        }
-
         container.innerHTML = `
-            <div class="flex flex-col gap-4">
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
-                    <i class="fas fa-search text-slate-400 ml-2"></i>
-                    <input type="text" 
-                        placeholder="Buscar em todos os campos (Nome, Empresa, Documento, Obs...)" 
-                        class="w-full text-sm text-slate-600 outline-none placeholder:text-slate-400"
-                        onkeyup="MinhaArea.Evolucao.filtrar(this.value)">
+            <div class="flex flex-col gap-6">
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-bold text-slate-400 uppercase">Total Auditado</span>
+                            <i class="fas fa-file-alt text-blue-100 bg-blue-500 p-1.5 rounded-md"></i>
+                        </div>
+                        <h3 id="kpi-okr-total" class="text-3xl font-black text-slate-800">--</h3>
+                        <p class="text-xs text-slate-400">Campos verificados</p>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-bold text-slate-400 uppercase">Assertividade Média</span>
+                            <i class="fas fa-percentage text-emerald-100 bg-emerald-500 p-1.5 rounded-md"></i>
+                        </div>
+                        <h3 id="kpi-okr-assert" class="text-3xl font-black text-slate-800">--%</h3>
+                        <div class="w-full bg-slate-100 h-1.5 rounded-full mt-1"><div id="bar-kpi-assert" class="h-full bg-emerald-500 rounded-full" style="width:0%"></div></div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-bold text-slate-400 uppercase">Total de Erros</span>
+                            <i class="fas fa-times-circle text-rose-100 bg-rose-500 p-1.5 rounded-md"></i>
+                        </div>
+                        <h3 id="kpi-okr-erros" class="text-3xl font-black text-rose-600">--</h3>
+                        <p class="text-xs text-slate-400">Apontamentos NOK</p>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28">
+                        <div class="flex justify-between items-start">
+                            <span class="text-xs font-bold text-slate-400 uppercase">Ações</span>
+                            <i class="fas fa-file-import text-indigo-100 bg-indigo-500 p-1.5 rounded-md"></i>
+                        </div>
+                        <div class="flex flex-col gap-2 mt-2">
+                            <label for="input-csv-auditoria" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold py-2 px-3 rounded-lg cursor-pointer text-center transition flex items-center justify-center gap-2">
+                                <i class="fas fa-cloud-upload-alt"></i> Importar Planilha
+                            </label>
+                            <input type="file" id="input-csv-auditoria" accept=".csv, .xlsx, .xls" class="hidden" onchange="MinhaArea.Evolucao.importarArquivo(this)">
+                        </div>
+                    </div>
                 </div>
 
-                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                            <i class="fas fa-table text-slate-400"></i> Registros de Auditoria
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                    <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-center gap-4">
+                        <h3 class="font-bold text-slate-700 flex items-center gap-2 text-sm">
+                            <i class="fas fa-list text-slate-400"></i> Detalhamento dos Apontamentos
                         </h3>
-                        <span id="okr-total-regs" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">0 registros</span>
+                        
+                        <div class="flex items-center gap-3 w-full md:w-auto">
+                            <div class="relative w-full md:w-64">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400"></i>
+                                <input type="text" onkeyup="MinhaArea.Evolucao.filtrarBusca(this.value)" placeholder="Buscar por Nome, Empresa, Obs..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-400 transition">
+                            </div>
+                            <span id="okr-total-regs" class="text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-slate-500 whitespace-nowrap">0 regs</span>
+                        </div>
                     </div>
                     
-                    <div class="overflow-x-auto max-h-[600px] custom-scroll">
+                    <div class="overflow-x-auto max-h-[500px] custom-scroll">
                         <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
                             <thead class="text-xs text-slate-500 font-bold uppercase bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
                                 <tr>
@@ -53,15 +83,15 @@ MinhaArea.Evolucao = {
                                     <th class="px-4 py-3 border-r border-slate-100">Documento</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100">Status</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100">Campos</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-emerald-600">OK</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600">NOK</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-emerald-600">Ok</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600">Nok</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100 text-blue-600">% Assert.</th>
                                     <th class="px-4 py-3 border-r border-slate-100">Auditora</th>
-                                    <th class="px-4 py-3">Apontamentos / Obs</th>
+                                    <th class="px-4 py-3">Observações</th>
                                 </tr>
                             </thead>
                             <tbody id="tabela-okr-body" class="divide-y divide-slate-100">
-                                <tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>
+                                <tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -70,161 +100,173 @@ MinhaArea.Evolucao = {
         `;
     },
 
+    mudarPeriodo: function(tipo) {
+        this.carregarDados(tipo);
+    },
+
     carregarDados: async function(tipoPeriodo) {
         const tbody = document.getElementById('tabela-okr-body');
-        const contador = document.getElementById('okr-total-regs');
         if(!tbody) return;
-
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-blue-500"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando tabela...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-blue-500"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
-            const referencia = MinhaArea.dataAtual || new Date();
+            const ref = MinhaArea.dataAtual || new Date();
             let inicioStr = '', fimStr = '';
-            const y = referencia.getFullYear();
-            const m = referencia.getMonth();
+            const y = ref.getFullYear(), m = ref.getMonth();
 
-            // Lógica de Datas
             switch(tipoPeriodo) {
-                case 'dia':
-                    // Data específica selecionada
-                    inicioStr = referencia.toISOString().split('T')[0];
-                    fimStr = inicioStr;
-                    break;
-                case 'semana':
-                    const day = referencia.getDay(); 
-                    const diff = referencia.getDate() - day + (day === 0 ? -6 : 1); 
-                    const seg = new Date(new Date(referencia).setDate(diff));
-                    const sex = new Date(new Date(seg).setDate(seg.getDate() + 6));
-                    inicioStr = seg.toISOString().split('T')[0];
-                    fimStr = sex.toISOString().split('T')[0];
-                    break;
-                case 'mes':
-                    inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
-                    fimStr = new Date(y, m + 1, 0).toISOString().split('T')[0];
-                    break;
-                case 'trimestre':
-                    const q = Math.floor(m / 3);
-                    inicioStr = new Date(y, q * 3, 1).toISOString().split('T')[0];
-                    fimStr = new Date(y, (q * 3) + 3, 0).toISOString().split('T')[0];
-                    break;
-                case 'semestre':
-                    const s = m < 6 ? 0 : 6;
-                    inicioStr = new Date(y, s, 1).toISOString().split('T')[0];
-                    fimStr = new Date(y, s + 6, 0).toISOString().split('T')[0];
-                    break;
-                case 'anual':
-                    inicioStr = new Date(y, 0, 1).toISOString().split('T')[0];
-                    fimStr = new Date(y, 11, 31).toISOString().split('T')[0];
-                    break;
-                case 'todos':
-                    inicioStr = '2020-01-01'; 
-                    fimStr = new Date().toISOString().split('T')[0];
-                    break;
-                default:
-                    inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
-                    fimStr = new Date(y, m + 1, 0).toISOString().split('T')[0];
+                case 'dia': inicioStr = ref.toISOString().split('T')[0]; fimStr = inicioStr; break;
+                case 'semana': 
+                    const d = ref.getDay(), diff = ref.getDate() - d + (d===0?-6:1);
+                    const seg = new Date(new Date(ref).setDate(diff));
+                    const sex = new Date(new Date(seg).setDate(seg.getDate()+6));
+                    inicioStr = seg.toISOString().split('T')[0]; fimStr = sex.toISOString().split('T')[0]; break;
+                case 'mes': inicioStr = new Date(y,m,1).toISOString().split('T')[0]; fimStr = new Date(y,m+1,0).toISOString().split('T')[0]; break;
+                case 'trimestre': inicioStr = new Date(y, Math.floor(m/3)*3, 1).toISOString().split('T')[0]; fimStr = new Date(y, (Math.floor(m/3)*3)+3, 0).toISOString().split('T')[0]; break;
+                case 'semestre': inicioStr = new Date(y, m<6?0:6, 1).toISOString().split('T')[0]; fimStr = new Date(y, m<6?6:12, 0).toISOString().split('T')[0]; break;
+                case 'anual': inicioStr = new Date(y,0,1).toISOString().split('T')[0]; fimStr = new Date(y,11,31).toISOString().split('T')[0]; break;
+                case 'todos': inicioStr = '2020-01-01'; fimStr = new Date().toISOString().split('T')[0]; break;
+                default: inicioStr = new Date(y,m,1).toISOString().split('T')[0]; fimStr = new Date(y,m+1,0).toISOString().split('T')[0];
             }
 
-            // Construção da Query
-            let query = MinhaArea.supabase
+            const { data, error } = await MinhaArea.supabase
                 .from('auditoria_apontamentos')
                 .select('*')
                 .gte('data_referencia', inicioStr)
                 .lte('data_referencia', fimStr)
                 .order('data_referencia', { ascending: false });
 
-            // FILTRO POR ASSISTENTE
-            const alvo = MinhaArea.usuarioAlvo;
+            if(error) throw error;
+
+            this.dadosCache = data || [];
             
-            // Se NÃO for 'todos' e tiver um ID válido, precisamos filtrar pelo NOME
-            if (alvo && alvo !== 'todos') {
-                // Primeiro buscamos o nome do usuário na tabela de usuarios
-                const { data: userData, error: userError } = await MinhaArea.supabase
-                    .from('usuarios')
-                    .select('nome')
-                    .eq('id', alvo)
-                    .single();
-                
-                if (!userError && userData) {
-                    // A tabela de auditoria usa o nome texto (ex: "Maria Silva"), então filtramos por texto
-                    // Usamos ilike para ignorar maiúsculas/minúsculas
-                    query = query.ilike('assistente', `%${userData.nome}%`);
-                }
-            }
+            // ATUALIZA SELETOR DE ASSISTENTES DO CABEÇALHO
+            this.atualizarOpcoesSeletor(this.dadosCache);
 
-            const { data, error } = await query;
-
-            if (error) throw error;
-
-            this.dados = data || [];
-            this.renderizarTabela(this.dados);
+            // APLICA FILTROS E RENDERIZA
+            this.aplicarFiltroAssistente();
 
         } catch (e) {
-            console.error("Erro carrega auditoria:", e);
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-rose-500 font-bold">Erro: ${e.message}</td></tr>`;
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-rose-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
-    filtrar: function(termo) {
-        if (!termo) {
-            this.renderizarTabela(this.dados);
+    atualizarOpcoesSeletor: function(dados) {
+        // Extrai nomes únicos dos dados importados
+        const nomesUnicos = [...new Set(dados.map(item => item.assistente).filter(n => n))].sort();
+        
+        const select = document.getElementById('admin-user-select');
+        if(!select) return;
+
+        // Guarda seleção atual
+        const atual = MinhaArea.usuarioAlvo;
+
+        // Limpa e recria (apenas com quem tem dados + opção 'todos')
+        select.innerHTML = '<option value="todos">Toda a Equipe</option>';
+        
+        // Mapeia IDs para Nomes (se possível) para manter consistência, 
+        // mas aqui vamos usar o valor do option como o NOME para facilitar o filtro local
+        // Nota: O sistema global usa ID. Se quisermos filtrar por ID, precisamos cruzar com tabela usuarios.
+        // SOLUÇÃO HÍBRIDA: Vamos listar os nomes encontrados no CSV como opções de valor TEXTO.
+        // O main.js espera ID, mas se passarmos texto, ele salva. O filtro local usará esse texto.
+        
+        nomesUnicos.forEach(nome => {
+            const opt = document.createElement('option');
+            opt.value = nome; // Valor é o Nome (ex: "Maria Silva")
+            opt.innerText = nome;
+            select.appendChild(opt);
+        });
+
+        // Tenta restaurar seleção
+        select.value = atual;
+        if(select.value !== atual) select.value = 'todos'; // Fallback se o selecionado não estiver na lista
+    },
+
+    aplicarFiltroAssistente: function() {
+        const alvo = document.getElementById('admin-user-select')?.value || 'todos';
+        let filtrados = this.dadosCache;
+
+        if (alvo !== 'todos') {
+            // Filtra pelo nome exato (ou ID se fosse o caso, mas aqui usamos nome vindo do CSV)
+            filtrados = this.dadosCache.filter(d => d.assistente === alvo);
+        }
+
+        this.calcularKPIs(filtrados);
+        this.renderizarTabela(filtrados);
+    },
+
+    filtrarBusca: function(termo) {
+        const alvo = document.getElementById('admin-user-select')?.value || 'todos';
+        let base = (alvo !== 'todos') ? this.dadosCache.filter(d => d.assistente === alvo) : this.dadosCache;
+
+        if(!termo) {
+            this.renderizarTabela(base);
             return;
         }
-        const termoLower = termo.toLowerCase();
-        const filtrados = this.dados.filter(item => Object.values(item).some(val => String(val).toLowerCase().includes(termoLower)));
-        this.renderizarTabela(filtrados);
+        const lower = termo.toLowerCase();
+        const final = base.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(lower)));
+        this.renderizarTabela(final);
+    },
+
+    calcularKPIs: function(dados) {
+        const totalCampos = dados.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
+        const totalOk = dados.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
+        const totalNok = totalCampos - totalOk;
+        
+        let assertividade = 0;
+        if(totalCampos > 0) assertividade = (totalOk / totalCampos) * 100;
+
+        document.getElementById('kpi-okr-total').innerText = totalCampos.toLocaleString('pt-BR');
+        document.getElementById('kpi-okr-erros').innerText = totalNok.toLocaleString('pt-BR');
+        document.getElementById('kpi-okr-assert').innerText = assertividade.toFixed(2).replace('.', ',') + '%';
+        
+        const bar = document.getElementById('bar-kpi-assert');
+        if(bar) bar.style.width = `${Math.min(assertividade, 100)}%`;
     },
 
     renderizarTabela: function(lista) {
         const tbody = document.getElementById('tabela-okr-body');
         const contador = document.getElementById('okr-total-regs');
-        
-        if (contador) contador.innerText = `${lista.length} registros`;
+        if (contador) contador.innerText = `${lista.length} regs`;
 
-        if (!lista || lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado para este filtro.</td></tr>';
+        if (!lista.length) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado.</td></tr>';
             return;
         }
 
         let html = '';
         lista.forEach(item => {
-            let statusBadge = '';
-            const st = (item.status || '').toUpperCase().trim();
+            const campos = parseInt(item.num_campos)||0;
+            const ok = parseInt(item.acertos)||0;
+            const nok = campos - ok;
+            let assert = 0;
+            if(campos > 0) assert = (ok / campos) * 100;
+            const assertStr = assert.toFixed(2).replace('.', ',') + '%';
             
-            if(st === 'OK' || st === 'ACERTO') statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
-            else if(st.includes('ERRO') || st === 'REV' || st === 'JUST') statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
-            else statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
-
-            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
+            const pctClass = assert >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
             
-            const campos = parseInt(item.num_campos) || 0;
-            const ok = parseInt(item.acertos) || 0;
-            const nok = campos - ok; 
-            
-            let assertividade = 0;
-            if (campos > 0) assertividade = (ok / campos) * 100;
-            
-            // FORMATAÇÃO PEDIDA: 2 CASAS DECIMAIS (97,74%)
-            const pctAssertStr = assertividade.toFixed(2).replace('.', ',') + '%';
-
-            let pctClass = assertividade >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
+            // Status Badge
+            let stBadge = `<span class="bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200 font-bold text-[10px]">${item.status||'-'}</span>`;
+            const st = (item.status||'').toUpperCase();
+            if(st==='OK'||st==='ACERTO') stBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded border border-emerald-200 font-bold text-[10px]"><i class="fas fa-check mr-1"></i>OK</span>`;
+            if(st.includes('ERRO')||st==='REV') stBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded border border-rose-200 font-bold text-[10px]"><i class="fas fa-times mr-1"></i>${st}</span>`;
 
             html += `
-                <tr class="bg-white hover:bg-blue-50/30 transition border-b border-slate-50 last:border-0">
-                    <td class="px-4 py-3 font-bold text-slate-700">${dataFmt}</td>
+                <tr class="bg-white hover:bg-blue-50/40 transition border-b border-slate-50 last:border-0">
+                    <td class="px-4 py-3 font-bold text-slate-700">${item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-'}</td>
                     <td class="px-4 py-3 font-bold text-blue-600">${item.assistente || '-'}</td>
                     <td class="px-4 py-3 text-slate-500">${item.empresa || '-'}</td>
                     <td class="px-4 py-3 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
-                    <td class="px-4 py-3 text-center">${statusBadge}</td>
+                    <td class="px-4 py-3 text-center">${stBadge}</td>
                     <td class="px-4 py-3 text-center text-slate-400 font-mono">${campos}</td>
                     <td class="px-4 py-3 text-center font-bold text-slate-700 font-mono">${ok}</td>
                     <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono bg-rose-50/30">${nok}</td>
-                    <td class="px-4 py-3 text-center ${pctClass}">${pctAssertStr}</td>
+                    <td class="px-4 py-3 text-center ${pctClass}">${assertStr}</td>
                     <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
-                    <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
-                        ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
-                    </td>
-                </tr>`;
+                    <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">${item.apontamentos_obs || '-'}</td>
+                </tr>
+            `;
         });
         tbody.innerHTML = html;
     },
@@ -239,7 +281,6 @@ MinhaArea.Evolucao = {
         const processarDados = async (rows) => {
             try {
                 if (!rows || rows.length === 0) throw new Error("Arquivo vazio.");
-                
                 const headers = Object.keys(rows[0]);
                 const encontrarColuna = (opcoes) => {
                     for (const opt of opcoes) {
@@ -253,7 +294,7 @@ MinhaArea.Evolucao = {
                 const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
 
                 if (!colEndTime || !colAssistente) {
-                    alert(`Erro: Colunas obrigatórias não encontradas.\nNecessário: 'end_time' (ou Data) e 'Assistente'.`);
+                    alert(`Erro: Colunas 'Data/end_time' e 'Assistente' não encontradas.`);
                     return;
                 }
 
