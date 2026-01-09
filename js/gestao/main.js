@@ -12,11 +12,15 @@ Gestao.init = async function() {
     // 1. Renderiza o Sub-Menu
     if(Menu.Gestao) Menu.Gestao.renderizar();
 
-    // 2. Carrega aba inicial
-    Gestao.mudarAba('usuarios');
+    // 2. Recupera a última aba acessada (ou usa 'usuarios' como padrão)
+    const ultimaAba = localStorage.getItem('gestao_aba_ativa') || 'usuarios';
+    Gestao.mudarAba(ultimaAba);
 };
 
 Gestao.mudarAba = function(aba) {
+    // Salva a escolha no navegador
+    localStorage.setItem('gestao_aba_ativa', aba);
+
     // Esconde todas as views
     document.querySelectorAll('.gestao-view').forEach(el => el.classList.add('hidden'));
 
@@ -34,7 +38,7 @@ Gestao.mudarAba = function(aba) {
     else if (aba === 'metas' && Gestao.Metas) Gestao.Metas.carregar();
 };
 
-// ... (Função lerArquivo mantida igual) ...
+// Utilitário de leitura de arquivo (mantido igual)
 Gestao.lerArquivo = async function(file) {
     return new Promise((resolve, reject) => {
         const ext = file.name.split('.').pop().toLowerCase();
