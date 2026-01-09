@@ -1,38 +1,40 @@
 window.Gestao = window.Gestao || {};
 
 Gestao.init = async function() {
-    // Verifica permissão
     await Sistema.inicializar();
     const user = Sistema.usuarioLogado;
+    
+    // Verificação de segurança
     if (!user || (user.funcao !== 'GESTORA' && user.funcao !== 'AUDITORA' && user.id != 1)) {
-        alert("Acesso restrito.");
-        window.location.href = 'minha_area.html';
-        return;
+        alert("Acesso restrito."); window.location.href = 'minha_area.html'; return;
     }
 
-    // Carrega aba inicial (Usuários)
+    // 1. Renderiza o Sub-Menu
+    if(Menu.Gestao) Menu.Gestao.renderizar();
+
+    // 2. Carrega aba inicial
     Gestao.mudarAba('usuarios');
 };
 
 Gestao.mudarAba = function(aba) {
-    // UI Updates
+    // Esconde todas as views
     document.querySelectorAll('.gestao-view').forEach(el => el.classList.add('hidden'));
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
 
+    // Mostra a view selecionada
     const view = document.getElementById(`view-${aba}`);
-    const btn = document.getElementById(`btn-g-${aba}`);
-    
     if (view) view.classList.remove('hidden');
-    if (btn) btn.classList.add('active');
 
-    // Load Data
+    // Atualiza o Sub-Menu (Botão e Abas ativas)
+    if(Menu.Gestao) Menu.Gestao.atualizarAcao(aba);
+
+    // Carrega dados específicos
     if (aba === 'usuarios' && Gestao.Usuarios) Gestao.Usuarios.carregar();
     else if (aba === 'empresas' && Gestao.Empresas) Gestao.Empresas.carregar();
     else if (aba === 'assertividade' && Gestao.Assertividade) Gestao.Assertividade.carregar();
     else if (aba === 'metas' && Gestao.Metas) Gestao.Metas.carregar();
 };
 
-// Utils para importação (CSV/Excel)
+// ... (Função lerArquivo mantida igual) ...
 Gestao.lerArquivo = async function(file) {
     return new Promise((resolve, reject) => {
         const ext = file.name.split('.').pop().toLowerCase();

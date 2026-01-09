@@ -14,9 +14,6 @@
 
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
-        .tab-btn { opacity: 0.6; border-bottom: 2px solid transparent; transition: all 0.2s; }
-        .tab-btn:hover { opacity: 1; background-color: #f1f5f9; }
-        .tab-btn.active { opacity: 1; border-bottom-color: #2563eb; color: #2563eb; background-color: #eff6ff; }
         .animate-fade { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -25,46 +22,12 @@
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     
-    <div id="global-menu"></div>
+    <script src="js/menu/global.js"></script>
+    <script src="js/menu/gestao.js"></script>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40">
-        <div class="max-w-[1600px] mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center gap-4">
-                    <div class="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center text-white shadow-lg">
-                        <i class="fas fa-cogs"></i>
-                    </div>
-                    <div>
-                        <h1 class="text-xl font-black text-slate-800 tracking-tight">Painel de Gestão</h1>
-                        <p class="text-xs text-slate-500">Administração do Sistema</p>
-                    </div>
-                </div>
-
-                <div class="flex gap-1 overflow-x-auto">
-                    <button onclick="Gestao.mudarAba('usuarios')" id="btn-g-usuarios" class="tab-btn active px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-users"></i> Usuários</button>
-                    <button onclick="Gestao.mudarAba('empresas')" id="btn-g-empresas" class="tab-btn px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-building"></i> Empresas</button>
-                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-g-assertividade" class="tab-btn px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-check-double"></i> Assertividade</button>
-                    <button onclick="Gestao.mudarAba('metas')" id="btn-g-metas" class="tab-btn px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-bullseye"></i> Metas Diárias</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="max-w-[1600px] mx-auto px-4 py-8 pt-40">
+    <div class="max-w-[1600px] mx-auto px-4 py-8 pt-32">
         
         <div id="view-usuarios" class="gestao-view animate-fade space-y-4">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
-                <div>
-                    <h2 class="font-bold text-slate-700">Importar Usuários</h2>
-                    <p class="text-xs text-slate-400">CSV ou XLSX contendo: ID, Nome, Função, Cargo (Opcional)</p>
-                </div>
-                <div class="flex gap-2">
-                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
-                        <i class="fas fa-upload"></i> Importar Lista
-                        <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Usuarios.importar(this)">
-                    </label>
-                </div>
-            </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table class="w-full text-sm text-left">
                     <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
@@ -73,21 +36,10 @@
                     <tbody id="lista-usuarios" class="divide-y divide-slate-100"></tbody>
                 </table>
             </div>
+            <div class="text-xs text-slate-400 text-center mt-2">Dica: Use o botão "Importar Usuários" no menu superior para adicionar em massa.</div>
         </div>
 
         <div id="view-empresas" class="gestao-view hidden animate-fade space-y-4">
-            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
-                <div>
-                    <h2 class="font-bold text-slate-700">Importar Empresas</h2>
-                    <p class="text-xs text-slate-400">CSV ou XLSX contendo: Nome, ID (Opcional)</p>
-                </div>
-                <div class="flex gap-2">
-                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
-                        <i class="fas fa-upload"></i> Importar Empresas
-                        <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Empresas.importar(this)">
-                    </label>
-                </div>
-            </div>
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <table class="w-full text-sm text-left">
                     <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
@@ -102,36 +54,25 @@
              <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 max-w-lg mx-auto text-center">
                 <h2 class="font-bold text-slate-700 mb-4">Nova Meta de Assertividade</h2>
                 <div class="flex gap-2 justify-center mb-4">
-                    <input type="date" id="form-assert-data" class="border rounded px-3 py-2 text-sm">
-                    <input type="number" id="form-assert-valor" placeholder="Meta % (Ex: 97.00)" step="0.01" class="border rounded px-3 py-2 text-sm w-32">
+                    <input type="date" id="form-assert-data" class="border rounded px-3 py-2 text-sm outline-none focus:border-purple-500">
+                    <input type="number" id="form-assert-valor" placeholder="Meta % (Ex: 97.00)" step="0.01" class="border rounded px-3 py-2 text-sm w-32 outline-none focus:border-purple-500">
                 </div>
-                <button onclick="Gestao.Assertividade.salvar()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm w-full"><i class="fas fa-save mr-2"></i>Salvar Meta</button>
+                <button onclick="Gestao.Assertividade.salvar()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm w-full transition"><i class="fas fa-save mr-2"></i>Salvar Meta</button>
              </div>
              <div class="bg-white rounded-xl shadow-sm border border-slate-200 max-w-lg mx-auto overflow-hidden">
-                 <div class="px-4 py-2 bg-slate-50 font-bold text-xs uppercase text-slate-500">Histórico de Metas</div>
+                 <div class="px-4 py-2 bg-slate-50 font-bold text-xs uppercase text-slate-500 border-b">Histórico de Metas</div>
                  <div id="lista-assertividade" class="divide-y divide-slate-100"></div>
              </div>
         </div>
 
         <div id="view-metas" class="gestao-view hidden animate-fade space-y-4">
-             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
-                <div>
-                    <h2 class="font-bold text-slate-700">Definir Metas de Produção</h2>
-                    <p class="text-xs text-slate-400">Importe metas individuais por período.</p>
-                </div>
-                <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
-                    <i class="fas fa-file-excel"></i> Importar Metas
-                    <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Metas.importar(this)">
-                </label>
-            </div>
-            <div id="container-metas-lista" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 min-h-[200px]">
-                <p class="text-center text-slate-400 py-10">Carregue um arquivo para visualizar ou editar metas.</p>
+            <div id="container-metas-lista" class="bg-white rounded-xl shadow-sm border border-slate-200 p-0 min-h-[200px] overflow-hidden">
+                <p class="text-center text-slate-400 py-10">Carregando metas...</p>
             </div>
         </div>
 
     </div>
 
-    <script src="js/menu.js"></script>
     <script src="js/gestao/main.js"></script>
     <script src="js/gestao/usuarios.js"></script>
     <script src="js/gestao/empresas.js"></script>
