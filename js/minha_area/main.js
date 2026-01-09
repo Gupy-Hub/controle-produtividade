@@ -9,6 +9,7 @@ window.MinhaArea = window.MinhaArea || {
 };
 
 MinhaArea.init = async function() {
+    // 1. Verifica Login
     const storedUser = localStorage.getItem('usuario_logado');
     if (!storedUser && !window.location.pathname.includes('index.html')) {
         console.warn("MinhaArea: Usuário não logado.");
@@ -21,23 +22,37 @@ MinhaArea.init = async function() {
         MinhaArea.usuarioAlvo = MinhaArea.user.id;
     }
 
-    // Inicializa Supabase
+    // 2. Inicializa Supabase
     if (window.Sistema && !window.Sistema.supabase) {
         await window.Sistema.inicializar(false);
     }
 
-    // Define Data Hoje
+    // 3. RECUPERA E APLICA A DATA SALVA (Lógica de Persistência)
     const dateInput = document.getElementById('ma-global-date');
+    const lastDate = localStorage.getItem('ma_lastGlobalDate');
+
     if (dateInput) {
-        const hoje = new Date();
-        const yyyy = hoje.getFullYear();
-        const mm = String(hoje.getMonth() + 1).padStart(2, '0');
-        const dd = String(hoje.getDate()).padStart(2, '0');
-        dateInput.value = `${yyyy}-${mm}-${dd}`;
-        MinhaArea.dataAtual = hoje;
+        if (lastDate) {
+            // Se tem data salva, usa ela
+            dateInput.value = lastDate;
+            const [ano, mes, dia] = lastDate.split('-').map(Number);
+            MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
+        } else {
+            // Se não tem, usa hoje
+            const hoje = new Date();
+            const yyyy = hoje.getFullYear();
+            const mm = String(hoje.getMonth() + 1).padStart(2, '0');
+            const dd = String(hoje.getDate()).padStart(2, '0');
+            const hojeStr = `${yyyy}-${mm}-${dd}`;
+            
+            dateInput.value = hojeStr;
+            MinhaArea.dataAtual = hoje;
+            // Salva o padrão para consistência
+            localStorage.setItem('ma_lastGlobalDate', hojeStr);
+        }
     }
     
-    // --- LÓGICA DE ADMIN / GESTOR ---
+    // 4. LÓGICA DE ADMIN / GESTOR
     const funcao = MinhaArea.user.funcao ? MinhaArea.user.funcao.toUpperCase() : '';
     const cargo = MinhaArea.user.cargo ? MinhaArea.user.cargo.toUpperCase() : '';
     
@@ -59,7 +74,13 @@ MinhaArea.init = async function() {
         if(btnImport) btnImport.classList.remove('hidden');
     }
 
-    MinhaArea.mudarAba('diario');
+    // 5. RECUPERA A ÚLTIMA ABA SALVA (Lógica de Persistência)
+    const lastTab = localStorage.getItem('ma_lastActiveTab');
+    if (lastTab) {
+        MinhaArea.mudarAba(lastTab);
+    } else {
+        MinhaArea.mudarAba('diario');
+    }
 };
 
 MinhaArea.carregarListaUsuarios = async function(selectElement) {
@@ -119,6 +140,10 @@ MinhaArea.mudarUsuarioAlvo = function(id) {
 
 MinhaArea.atualizarDataGlobal = function(val) {
     if (!val) return;
+    
+    // PERSISTÊNCIA: Salva a data no LocalStorage
+    localStorage.setItem('ma_lastGlobalDate', val);
+
     const [ano, mes, dia] = val.split('-').map(Number);
     MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
 
@@ -130,6 +155,9 @@ MinhaArea.atualizarDataGlobal = function(val) {
 };
 
 MinhaArea.mudarAba = function(aba) {
+    // PERSISTÊNCIA: Salva a aba atual no LocalStorage
+    localStorage.setItem('ma_lastActiveTab', aba);
+
     document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     
