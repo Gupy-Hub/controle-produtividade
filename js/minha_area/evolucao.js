@@ -1,5 +1,5 @@
 MinhaArea.Evolucao = {
-    dados: [], // Cache para busca local
+    dados: [], // Cache para busca
 
     carregar: async function() {
         this.renderizarLayout();
@@ -12,9 +12,21 @@ MinhaArea.Evolucao = {
         const container = document.getElementById('ma-tab-evolucao');
         if (!container) return;
 
+        // Atualizei o HTML do seletor para incluir a opção "Dia Específico" se você quiser reinjetar, 
+        // mas como o seletor está no header global (minha_area.html), certifique-se de que ele tenha a option lá ou use o script abaixo para garantir.
+        // Vou forçar a atualização das opções do select do header aqui para garantir que "Dia Específico" apareça.
+        
+        const selectHeader = document.getElementById('filtro-periodo-okr-header');
+        if (selectHeader && !selectHeader.querySelector('option[value="dia"]')) {
+            const optDia = document.createElement('option');
+            optDia.value = 'dia';
+            optDia.innerText = 'Dia Específico';
+            selectHeader.insertBefore(optDia, selectHeader.firstChild); // Insere no topo
+            selectHeader.value = 'mes'; // Default
+        }
+
         container.innerHTML = `
             <div class="flex flex-col gap-4">
-                
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
                     <i class="fas fa-search text-slate-400 ml-2"></i>
                     <input type="text" 
@@ -58,12 +70,9 @@ MinhaArea.Evolucao = {
         `;
     },
 
-    mudarPeriodo: function(tipo) {
-        this.carregarDados(tipo);
-    },
-
     carregarDados: async function(tipoPeriodo) {
         const tbody = document.getElementById('tabela-okr-body');
+        const contador = document.getElementById('okr-total-regs');
         if(!tbody) return;
 
         tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-blue-500"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando tabela...</td></tr>';
@@ -74,7 +83,13 @@ MinhaArea.Evolucao = {
             const y = referencia.getFullYear();
             const m = referencia.getMonth();
 
+            // Lógica de Datas
             switch(tipoPeriodo) {
+                case 'dia':
+                    // Data específica selecionada
+                    inicioStr = referencia.toISOString().split('T')[0];
+                    fimStr = inicioStr;
+                    break;
                 case 'semana':
                     const day = referencia.getDay(); 
                     const diff = referencia.getDate() - day + (day === 0 ? -6 : 1); 
@@ -110,16 +125,37 @@ MinhaArea.Evolucao = {
                     fimStr = new Date(y, m + 1, 0).toISOString().split('T')[0];
             }
 
-            const { data, error } = await MinhaArea.supabase
+            // Construção da Query
+            let query = MinhaArea.supabase
                 .from('auditoria_apontamentos')
                 .select('*')
                 .gte('data_referencia', inicioStr)
                 .lte('data_referencia', fimStr)
                 .order('data_referencia', { ascending: false });
 
+            // FILTRO POR ASSISTENTE
+            const alvo = MinhaArea.usuarioAlvo;
+            
+            // Se NÃO for 'todos' e tiver um ID válido, precisamos filtrar pelo NOME
+            if (alvo && alvo !== 'todos') {
+                // Primeiro buscamos o nome do usuário na tabela de usuarios
+                const { data: userData, error: userError } = await MinhaArea.supabase
+                    .from('usuarios')
+                    .select('nome')
+                    .eq('id', alvo)
+                    .single();
+                
+                if (!userError && userData) {
+                    // A tabela de auditoria usa o nome texto (ex: "Maria Silva"), então filtramos por texto
+                    // Usamos ilike para ignorar maiúsculas/minúsculas
+                    query = query.ilike('assistente', `%${userData.nome}%`);
+                }
+            }
+
+            const { data, error } = await query;
+
             if (error) throw error;
 
-            // Salva no cache e renderiza
             this.dados = data || [];
             this.renderizarTabela(this.dados);
 
@@ -134,15 +170,8 @@ MinhaArea.Evolucao = {
             this.renderizarTabela(this.dados);
             return;
         }
-
         const termoLower = termo.toLowerCase();
-        const filtrados = this.dados.filter(item => {
-            // Busca em todos os valores do objeto
-            return Object.values(item).some(val => 
-                String(val).toLowerCase().includes(termoLower)
-            );
-        });
-
+        const filtrados = this.dados.filter(item => Object.values(item).some(val => String(val).toLowerCase().includes(termoLower)));
         this.renderizarTabela(filtrados);
     },
 
@@ -153,7 +182,7 @@ MinhaArea.Evolucao = {
         if (contador) contador.innerText = `${lista.length} registros`;
 
         if (!lista || lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado para este filtro.</td></tr>';
             return;
         }
 
@@ -168,16 +197,17 @@ MinhaArea.Evolucao = {
 
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
             
-            // Cálculos
             const campos = parseInt(item.num_campos) || 0;
             const ok = parseInt(item.acertos) || 0;
             const nok = campos - ok; 
             
             let assertividade = 0;
             if (campos > 0) assertividade = (ok / campos) * 100;
-            const pctAssert = Math.round(assertividade);
+            
+            // FORMATAÇÃO PEDIDA: 2 CASAS DECIMAIS (97,74%)
+            const pctAssertStr = assertividade.toFixed(2).replace('.', ',') + '%';
 
-            let pctClass = pctAssert >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
+            let pctClass = assertividade >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
 
             html += `
                 <tr class="bg-white hover:bg-blue-50/30 transition border-b border-slate-50 last:border-0">
@@ -189,7 +219,7 @@ MinhaArea.Evolucao = {
                     <td class="px-4 py-3 text-center text-slate-400 font-mono">${campos}</td>
                     <td class="px-4 py-3 text-center font-bold text-slate-700 font-mono">${ok}</td>
                     <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono bg-rose-50/30">${nok}</td>
-                    <td class="px-4 py-3 text-center ${pctClass}">${pctAssert}%</td>
+                    <td class="px-4 py-3 text-center ${pctClass}">${pctAssertStr}</td>
                     <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
                     <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
                         ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
@@ -223,7 +253,7 @@ MinhaArea.Evolucao = {
                 const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
 
                 if (!colEndTime || !colAssistente) {
-                    alert(`Erro: Colunas obrigatórias não encontradas.\nVerifique se o arquivo tem 'end_time' e 'Assistente'.`);
+                    alert(`Erro: Colunas obrigatórias não encontradas.\nNecessário: 'end_time' (ou Data) e 'Assistente'.`);
                     return;
                 }
 

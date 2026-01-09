@@ -1,7 +1,7 @@
 window.MinhaArea = window.MinhaArea || {
     user: null,
     dataAtual: new Date(),
-    usuarioAlvo: null, 
+    usuarioAlvo: 'todos', // Padrão inicial alterado para facilitar
     
     get supabase() {
         return window.Sistema ? window.Sistema.supabase : (window._supabase || null);
@@ -18,6 +18,7 @@ MinhaArea.init = async function() {
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
+        // Se não houver alvo definido, usa o próprio ID (ou 'todos' se for definido na lógica abaixo)
         MinhaArea.usuarioAlvo = MinhaArea.user.id;
     }
 
@@ -26,7 +27,7 @@ MinhaArea.init = async function() {
         await window.Sistema.inicializar(false);
     }
 
-    // 3. RECUPERA E APLICA A DATA SALVA
+    // 3. DATA GLOBAL
     const dateInput = document.getElementById('ma-global-date');
     const lastDate = localStorage.getItem('ma_lastGlobalDate');
 
@@ -48,7 +49,7 @@ MinhaArea.init = async function() {
         }
     }
     
-    // 4. LÓGICA DE ADMIN / GESTOR
+    // 4. ADMIN / GESTOR
     const funcao = MinhaArea.user.funcao ? MinhaArea.user.funcao.toUpperCase() : '';
     const cargo = MinhaArea.user.cargo ? MinhaArea.user.cargo.toUpperCase() : '';
     
@@ -69,7 +70,7 @@ MinhaArea.init = async function() {
         if(btnImport) btnImport.classList.remove('hidden');
     }
 
-    // 5. RECUPERA ABA SALVA
+    // 5. RECUPERA ABA
     const lastTab = localStorage.getItem('ma_lastActiveTab');
     if (lastTab) {
         MinhaArea.mudarAba(lastTab);
@@ -91,7 +92,8 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
 
         if(error) throw error;
 
-        selectElement.innerHTML = '<option value="">Selecione um assistente...</option>';
+        // Opção padrão para ver todo o time
+        selectElement.innerHTML = '<option value="todos">Toda a Equipe</option>';
         
         if (data && data.length > 0) {
             data.forEach(u => {
@@ -101,17 +103,14 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
                 selectElement.appendChild(opt);
             });
 
-            if (String(MinhaArea.usuarioAlvo) === String(MinhaArea.user.id)) {
-                if (MinhaArea.user.funcao !== 'Assistente') {
-                    MinhaArea.usuarioAlvo = data[0].id;
-                    selectElement.value = data[0].id;
-                }
-            } else {
-                selectElement.value = MinhaArea.usuarioAlvo;
+            // Se for admin/gestor e ainda estiver apontando para si mesmo (ID 1000 etc), muda para 'todos'
+            // Se já tiver um assistente selecionado (navegação persistente), mantem.
+            if (MinhaArea.usuarioAlvo === MinhaArea.user.id && MinhaArea.user.funcao !== 'Assistente') {
+                MinhaArea.usuarioAlvo = 'todos';
             }
-        } else {
-            selectElement.innerHTML = '<option value="">Nenhum assistente ativo</option>';
-        }
+            
+            selectElement.value = MinhaArea.usuarioAlvo;
+        } 
 
     } catch (err) {
         console.error("Erro ao carregar usuários:", err);
@@ -160,15 +159,13 @@ MinhaArea.mudarAba = function(aba) {
     const dateGlobal = document.getElementById('container-data-global');
     const okrControls = document.getElementById('okr-header-controls');
 
-    // MUDANÇA: Data Global sempre visível para Diário e Meta/OKR para permitir seleção do mês
     if (aba === 'evolucao') {
-        if(dateGlobal) dateGlobal.classList.remove('hidden'); // Exibe data para escolher o mês
+        if(dateGlobal) dateGlobal.classList.remove('hidden'); 
         if(okrControls) okrControls.classList.remove('hidden');
     } else if (aba === 'diario') {
         if(dateGlobal) dateGlobal.classList.remove('hidden');
         if(okrControls) okrControls.classList.add('hidden');
     } else {
-        // Outras abas (Feedback, etc)
         if(dateGlobal) dateGlobal.classList.remove('hidden');
         if(okrControls) okrControls.classList.add('hidden');
     }
