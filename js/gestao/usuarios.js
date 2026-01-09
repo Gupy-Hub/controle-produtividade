@@ -1,23 +1,19 @@
 Gestao.Usuarios = {
-    listaCompleta: [], // Armazena todos os dados para filtrar sem ir ao banco
+    listaCompleta: [],
 
     carregar: async function() {
         const tbody = document.getElementById('lista-usuarios');
         if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8"><i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i></td></tr>';
         
-        // 1. Renderiza botão novo se necessário (embora o HTML já tenha)
         this.renderizarBotaoNovo();
 
-        // 2. Busca dados no Banco
         const { data, error } = await Sistema.supabase.from('usuarios').select('*').order('nome');
         if (error) { console.error(error); return; }
 
-        // 3. Salva na memória e chama o filtro para renderizar
         this.listaCompleta = data || [];
         this.filtrar(); 
     },
 
-    // --- FUNÇÃO DE FILTRO (BUSCA E STATUS) ---
     filtrar: function() {
         const inputBusca = document.getElementById('search-usuarios');
         const checkInativos = document.getElementById('toggle-inativos');
@@ -25,39 +21,32 @@ Gestao.Usuarios = {
         const termo = inputBusca ? inputBusca.value.toLowerCase().trim() : '';
         const exibirInativos = checkInativos ? checkInativos.checked : false;
 
-        // Filtra a lista completa
         const filtrados = this.listaCompleta.filter(u => {
-            // 1. Regra de Inativos: Se o checkbox não estiver marcado e o usuário for inativo, esconde.
             if (!exibirInativos && !u.ativo) return false;
-
-            // 2. Regra de Texto: Busca por ID, Nome, Contrato ou Status
             if (termo) {
                 const statusStr = u.ativo ? 'ativo' : 'inativo';
                 const searchStr = `${u.id} ${u.nome} ${u.contrato} ${statusStr}`.toLowerCase();
                 return searchStr.includes(termo);
             }
-
             return true;
         });
 
         this.renderizarTabela(filtrados);
     },
 
-    // --- RENDERIZAÇÃO DA TABELA ---
     renderizarTabela: function(lista) {
         const tbody = document.getElementById('lista-usuarios');
         const contador = document.getElementById('contador-usuarios');
         if (!tbody) return;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum usuário encontrado com estes filtros.</span></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum usuário encontrado.</span></td></tr>';
             if(contador) contador.innerText = '0 Registros';
             return;
         }
 
         let html = '';
         lista.forEach(u => {
-            // Definição de Cores e Badges
             const isAtivo = u.ativo;
             const statusClass = isAtivo ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200';
             const statusLabel = isAtivo ? 'ATIVO' : 'INATIVO';
@@ -71,23 +60,23 @@ Gestao.Usuarios = {
             else if (contrato === 'GESTORA') contratoClass = 'bg-pink-50 text-pink-700 border-pink-200';
             else if (contrato === 'FINALIZADO') contratoClass = 'bg-gray-100 text-gray-500 border-gray-200';
 
-            // Escapa aspas para o JSON
             const userString = JSON.stringify(u).replace(/"/g, '&quot;');
 
+            // Ajuste de classes para alinhar com o HTML (px-4)
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-sm group">
-                <td class="px-6 py-3 font-mono text-slate-500 font-bold group-hover:text-blue-600 transition">#${u.id}</td>
-                <td class="px-6 py-3 font-bold text-slate-700">
+                <td class="px-4 py-3 font-mono text-slate-500 font-bold group-hover:text-blue-600 transition">#${u.id}</td>
+                <td class="px-4 py-3 font-bold text-slate-700">
                     ${u.nome}
                     ${!isAtivo ? '<span class="ml-2 text-[10px] text-slate-400 font-normal italic">(Inativo)</span>' : ''}
                 </td>
-                <td class="px-6 py-3">
+                <td class="px-4 py-3">
                     <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${contratoClass}">${contrato}</span>
                 </td>
-                <td class="px-6 py-3 text-center">
+                <td class="px-4 py-3 text-center">
                     <span class="px-2 py-1 rounded text-xs font-bold border ${statusClass}">${statusLabel}</span>
                 </td>
-                <td class="px-6 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <td class="px-4 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onclick="Gestao.Usuarios.abrirModal(${userString})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
                     <button onclick="Gestao.Usuarios.excluir(${u.id})" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition" title="Excluir"><i class="fas fa-trash"></i></button>
                 </td>
@@ -98,13 +87,9 @@ Gestao.Usuarios = {
         if(contador) contador.innerText = `${lista.length} Registros listados`;
     },
 
-    // --- IMPORTAÇÃO DE ARQUIVO ---
     importar: async function(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
-
-        // Feedback visual
-        const originalLabel = input.parentElement.innerHTML;
         input.parentElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
 
         try {
@@ -116,13 +101,11 @@ Gestao.Usuarios = {
                 const c = {};
                 Object.keys(row).forEach(k => c[this.normalizarChave(k)] = row[k]);
 
-                // Campos Obrigatórios
                 const id = parseInt(c['idassistente'] || c['id'] || 0);
                 const nome = c['nomeassist'] || c['nome'] || '';
                 
                 if (!id || !nome) continue;
 
-                // Normalização de Dados
                 const situacaoRaw = (c['situacao'] || c['status'] || 'ATIVO').toUpperCase().trim();
                 const contrato = (c['contrato'] || 'CLT').toUpperCase().trim();
                 
@@ -133,7 +116,6 @@ Gestao.Usuarios = {
                 if (contrato.includes('AUDITORA')) funcao = 'AUDITORA';
                 if (contrato.includes('GESTORA')) funcao = 'GESTORA';
 
-                // Garante unicidade pelo ID
                 mapUsuarios.set(id, {
                     id: id,
                     nome: String(nome).trim(),
@@ -146,31 +128,24 @@ Gestao.Usuarios = {
             }
 
             const upserts = Array.from(mapUsuarios.values());
-
             if (upserts.length > 0) {
                 const { error } = await Sistema.supabase.from('usuarios').upsert(upserts);
                 if (error) throw error;
                 alert(`Importação concluída com sucesso!\n${upserts.length} usuários processados.`);
-                this.carregar(); // Recarrega do banco para atualizar a listaCompleta
+                this.carregar(); 
             } else {
-                alert("Nenhum dado válido encontrado. Verifique se a planilha possui as colunas ID e NOME.");
+                alert("Nenhum dado válido encontrado.");
             }
-
         } catch (e) {
             console.error(e);
             alert("Erro na importação: " + e.message);
         } finally {
-            // Restaura o botão de importar no menu
-            if(Menu.Gestao) Menu.Gestao.atualizarAcao('usuarios'); 
-            else location.reload();
+            if(Menu.Gestao) Menu.Gestao.atualizarAcao('usuarios'); else location.reload();
         }
     },
 
-    // --- CADASTRO E EDIÇÃO (MODAL) ---
     abrirModal: function(usuario = null) {
         const isEdit = !!usuario;
-        
-        // Remove modal anterior se houver
         const modalAntigo = document.getElementById('modal-usuario');
         if(modalAntigo) modalAntigo.remove();
 
@@ -211,7 +186,6 @@ Gestao.Usuarios = {
                             </select>
                         </div>
                     </div>
-                    
                     ${isEdit ? `
                     <div class="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-100 flex items-center gap-3">
                         <input type="checkbox" id="inp-reset-senha" class="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500">
@@ -225,10 +199,7 @@ Gestao.Usuarios = {
                 </div>
             </div>
         </div>`;
-        
         document.body.insertAdjacentHTML('beforeend', modalHtml);
-
-        // Preenche os selects
         if (usuario) {
             document.getElementById('inp-contrato').value = usuario.contrato || 'CLT';
             document.getElementById('inp-situacao').value = usuario.ativo.toString();
@@ -242,7 +213,7 @@ Gestao.Usuarios = {
         const ativo = document.getElementById('inp-situacao').value === 'true';
         const resetSenha = document.getElementById('inp-reset-senha')?.checked;
 
-        if (!id || !nome) return alert("Por favor, preencha ID e Nome.");
+        if (!id || !nome) return alert("Preencha ID e Nome.");
 
         let funcao = 'ASSISTENTE';
         if (contrato.includes('AUDITORA')) funcao = 'AUDITORA';
@@ -257,26 +228,20 @@ Gestao.Usuarios = {
             perfil: (funcao === 'GESTORA' ? 'admin' : 'user')
         };
 
-        // Aplica senha padrão se for novo ou se o reset foi marcado
-        if (!isEdit || resetSenha) {
-            payload.senha = await Sistema.gerarHash('gupy123');
-        }
+        if (!isEdit || resetSenha) payload.senha = await Sistema.gerarHash('gupy123');
 
         const { error } = await Sistema.supabase.from('usuarios').upsert(payload);
-        
-        if (error) alert("Erro ao salvar: " + error.message);
+        if (error) alert("Erro: " + error.message);
         else {
             document.getElementById('modal-usuario').remove();
-            this.carregar(); // Recarrega e aplica filtros
+            this.carregar();
         }
     },
 
     excluir: async function(id) {
-        if (!confirm(`Tem certeza que deseja excluir o usuário ${id}?\nSe houver produção vinculada, a exclusão falhará. Neste caso, recomendamos INATIVAR.`)) return;
-        
+        if (!confirm(`Confirma a exclusão do usuário ${id}?`)) return;
         const { error } = await Sistema.supabase.from('usuarios').delete().eq('id', id);
-        
-        if (error) alert("Não foi possível excluir. Provavelmente existem registros vinculados.\nEdite o usuário e mude o status para INATIVO.");
+        if (error) alert("Erro ao excluir. Tente inativar.");
         else this.carregar();
     },
 
