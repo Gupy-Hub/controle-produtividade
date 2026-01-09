@@ -4,7 +4,6 @@ Menu.Gestao = {
     renderizar: function() {
         let container = document.getElementById('submenu-gestao');
         if (!container) {
-            // Cria container logo após o menu global se não existir no HTML
             container = document.createElement('div');
             container.id = 'submenu-gestao';
             const globalMenu = document.getElementById('global-menu');
@@ -31,26 +30,25 @@ Menu.Gestao = {
                     </button>
                 </div>
 
-                <div id="gestao-actions" class="flex items-center gap-2">
-                    </div>
+                <div id="gestao-actions" class="flex items-center gap-2"></div>
             </div>
         </div>`;
 
         container.innerHTML = html;
     },
 
-    // Configura o botão de ação baseado na aba ativa
     atualizarAcao: function(aba) {
         const container = document.getElementById('gestao-actions');
         if (!container) return;
 
         let btnHtml = '';
         
+        // AQUI ESTÁ A MUDANÇA: Aponta para Gestao.Importacao.Usuarios.executar(this)
         if (aba === 'usuarios') {
             btnHtml = `
             <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-blue-700">
                 <i class="fas fa-upload"></i> Importar Usuários
-                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Usuarios.importar(this)">
+                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Importacao.Usuarios.executar(this)">
             </label>`;
         } 
         else if (aba === 'empresas') {
@@ -67,11 +65,9 @@ Menu.Gestao = {
                 <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Metas.importar(this)">
             </label>`;
         }
-        // Assertividade não tem importação, então fica vazio ou botão de "Novo"
         
         container.innerHTML = btnHtml;
         
-        // Atualiza estilo das abas
         document.querySelectorAll('.tab-btn').forEach(b => {
             b.classList.remove('bg-blue-50', 'text-blue-700', 'border-b-2', 'border-blue-600');
             b.classList.add('text-slate-600');

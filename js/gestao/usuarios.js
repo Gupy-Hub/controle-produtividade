@@ -1,19 +1,21 @@
 Gestao.Usuarios = {
-    listaCompleta: [],
+    listaCompleta: [], // Cache local para filtro rápido
 
+    // --- CARREGAMENTO INICIAL ---
     carregar: async function() {
         const tbody = document.getElementById('lista-usuarios');
         if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8"><i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i></td></tr>';
         
-        this.renderizarBotaoNovo();
-
+        // Busca dados no Banco
         const { data, error } = await Sistema.supabase.from('usuarios').select('*').order('nome');
         if (error) { console.error(error); return; }
 
+        // Salva na memória e aplica filtros
         this.listaCompleta = data || [];
         this.filtrar(); 
     },
 
+    // --- FILTROS DE TELA ---
     filtrar: function() {
         const inputBusca = document.getElementById('search-usuarios');
         const checkInativos = document.getElementById('toggle-inativos');
@@ -23,6 +25,7 @@ Gestao.Usuarios = {
 
         const filtrados = this.listaCompleta.filter(u => {
             if (!exibirInativos && !u.ativo) return false;
+            
             if (termo) {
                 const statusStr = u.ativo ? 'ativo' : 'inativo';
                 const searchStr = `${u.id} ${u.nome} ${u.contrato} ${statusStr}`.toLowerCase();
@@ -87,63 +90,7 @@ Gestao.Usuarios = {
         if(contador) contador.innerText = `${lista.length} Registros listados`;
     },
 
-    importar: async function(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-        input.parentElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
-
-        try {
-            const linhas = await Gestao.lerArquivo(file);
-            const mapUsuarios = new Map();
-            const hashPadrao = await Sistema.gerarHash('gupy123');
-
-            for (const row of linhas) {
-                const c = {};
-                Object.keys(row).forEach(k => c[this.normalizarChave(k)] = row[k]);
-
-                const id = parseInt(c['idassistente'] || c['id'] || 0);
-                const nome = c['nomeassist'] || c['nome'] || '';
-                
-                if (!id || !nome) continue;
-
-                const situacaoRaw = (c['situacao'] || c['status'] || 'ATIVO').toUpperCase().trim();
-                const contrato = (c['contrato'] || 'CLT').toUpperCase().trim();
-                
-                let ativo = situacaoRaw === 'ATIVO';
-                if (contrato === 'FINALIZADO') ativo = false;
-
-                let funcao = 'ASSISTENTE';
-                if (contrato.includes('AUDITORA')) funcao = 'AUDITORA';
-                if (contrato.includes('GESTORA')) funcao = 'GESTORA';
-
-                mapUsuarios.set(id, {
-                    id: id,
-                    nome: String(nome).trim(),
-                    contrato: contrato,
-                    ativo: ativo,
-                    funcao: funcao,
-                    perfil: (funcao === 'GESTORA' ? 'admin' : 'user'),
-                    senha: hashPadrao
-                });
-            }
-
-            const upserts = Array.from(mapUsuarios.values());
-            if (upserts.length > 0) {
-                const { error } = await Sistema.supabase.from('usuarios').upsert(upserts);
-                if (error) throw error;
-                alert(`Importação concluída com sucesso!\n${upserts.length} usuários processados.`);
-                this.carregar(); 
-            } else {
-                alert("Nenhum dado válido encontrado.");
-            }
-        } catch (e) {
-            console.error(e);
-            alert("Erro na importação: " + e.message);
-        } finally {
-            if(Menu.Gestao) Menu.Gestao.atualizarAcao('usuarios'); else location.reload();
-        }
-    },
-
+    // --- MODAL DE CADASTRO/EDIÇÃO ---
     abrirModal: function(usuario = null) {
         const isEdit = !!usuario;
         const modalAntigo = document.getElementById('modal-usuario');
@@ -243,8 +190,5 @@ Gestao.Usuarios = {
         const { error } = await Sistema.supabase.from('usuarios').delete().eq('id', id);
         if (error) alert("Erro ao excluir. Tente inativar.");
         else this.carregar();
-    },
-
-    renderizarBotaoNovo: function() {}, 
-    normalizarChave: function(k) { return k.trim().toLowerCase().replace(/_/g, '').replace(/ /g, ''); }
+    }
 };
