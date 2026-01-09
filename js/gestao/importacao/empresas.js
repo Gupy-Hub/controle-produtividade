@@ -22,25 +22,18 @@ Gestao.Importacao.Empresas = {
                 Object.keys(row).forEach(k => c[this.normalizarChave(k)] = row[k]);
 
                 // Campos Obrigatórios
-                // O ID pode vir como "idempresa" ou "id"
                 const id = parseInt(c['idempresa'] || c['id'] || 0);
                 const nome = c['nome'] || c['empresa'] || '';
                 
                 if (!id || !nome) continue;
 
-                // Tratamento de Data (Entrou para mesa)
+                // TRATAMENTO ROBUSTO DE DATA
+                // Tenta ler colunas comuns para data
+                const rawDate = c['entrouparamesa'] || c['dataentrada'] || c['inicio'] || c['data'];
                 let dataEntrada = null;
-                const rawDate = c['entrouparamesa'] || c['dataentrada'];
+
                 if (rawDate) {
-                    // Tenta converter se for YYYY-MM-DD
-                    // Se vier do Excel como número serial, a função lerArquivo (XLSX) já tenta converter,
-                    // mas se vier string, garantimos o formato ISO.
-                    try {
-                        // Verifica se é data válida
-                        if(new Date(rawDate).toString() !== 'Invalid Date') {
-                            dataEntrada = new Date(rawDate).toISOString().split('T')[0];
-                        }
-                    } catch(e) {}
+                    dataEntrada = this.parseData(rawDate);
                 }
 
                 upserts.push({
@@ -58,7 +51,6 @@ Gestao.Importacao.Empresas = {
                 
                 alert(`Importação concluída!\n${upserts.length} empresas processadas.`);
                 
-                // Atualiza a tela se estiver carregada
                 if (Gestao.Empresas && typeof Gestao.Empresas.carregar === 'function') {
                     Gestao.Empresas.carregar();
                 }
@@ -76,8 +68,38 @@ Gestao.Importacao.Empresas = {
         }
     },
 
+    // Função Auxiliar para converter qualquer formato de data para YYYY-MM-DD
+    parseData: function(valor) {
+        if (!valor) return null;
+
+        // 1. Se for número (Excel Serial Date)
+        if (typeof valor === 'number' && valor > 20000) {
+            const date = new Date(Math.round((valor - 25569) * 864e5));
+            return date.toISOString().split('T')[0];
+        }
+
+        // 2. Se for string
+        const str = String(valor).trim();
+        
+        // Formato BR: DD/MM/YYYY
+        if (str.includes('/')) {
+            const partes = str.split('/');
+            if (partes.length === 3) {
+                // Assume dia/mes/ano
+                return `${partes[2]}-${partes[1]}-${partes[0]}`;
+            }
+        }
+
+        // Formato ISO ou Excel Texto: YYYY-MM-DD
+        if (str.includes('-')) {
+            // Pega apenas a parte da data (ignora hora se houver T)
+            return str.split('T')[0];
+        }
+
+        return null;
+    },
+
     normalizarChave: function(k) {
-        // Remove acentos, espaços e deixa minúsculo
         return k.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/ /g, '');
     }
 };

@@ -41,9 +41,14 @@ Gestao.Empresas = {
         let html = '';
         lista.forEach(e => {
             // Formata data de entrada
-            let dataFmt = '-';
+            let dataFmt = '<span class="text-slate-300">-</span>';
             if (e.data_entrada) {
-                dataFmt = e.data_entrada.split('-').reverse().join('/');
+                // Garante que não quebra se a data vier estranha do banco
+                try {
+                    const partes = e.data_entrada.split('-');
+                    if(partes.length === 3) dataFmt = `${partes[2]}/${partes[1]}/${partes[0]}`;
+                    else dataFmt = e.data_entrada;
+                } catch(err) { dataFmt = e.data_entrada; }
             }
 
             const empString = JSON.stringify(e).replace(/"/g, '&quot;');
@@ -52,8 +57,8 @@ Gestao.Empresas = {
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-sm group">
                 <td class="px-4 py-3 font-mono text-slate-500 font-bold group-hover:text-blue-600 transition">#${e.id}</td>
                 <td class="px-4 py-3 font-bold text-slate-700">${e.nome}</td>
-                <td class="px-4 py-3 text-slate-600 font-mono text-xs bg-slate-50 rounded w-fit px-2">${e.subdominio || '-'}</td>
-                <td class="px-4 py-3 text-slate-600">${dataFmt}</td>
+                <td class="px-4 py-3 text-slate-600 font-mono text-xs"><span class="bg-slate-100 rounded px-2 py-1">${e.subdominio || '-'}</span></td>
+                <td class="px-4 py-3 text-slate-600 font-semibold">${dataFmt}</td>
                 <td class="px-4 py-3 text-slate-500 max-w-xs truncate" title="${e.observacao || ''}">${e.observacao || '-'}</td>
                 <td class="px-4 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onclick="Gestao.Empresas.abrirModal(${empString})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
@@ -66,9 +71,6 @@ Gestao.Empresas = {
         if(contador) contador.innerText = `${lista.length} Registros`;
     },
 
-    // --- IMPORTAR (Chama o módulo separado) ---
-    // (A chamada é feita diretamente pelo menu, mas mantemos o método aqui se precisar chamar via console)
-    
     // --- MODAL ---
     abrirModal: function(empresa = null) {
         const isEdit = !!empresa;
@@ -87,28 +89,28 @@ Gestao.Empresas = {
                     <div class="grid grid-cols-4 gap-4">
                         <div class="col-span-1">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID</label>
-                            <input type="number" id="inp-emp-id" value="${empresa?.id || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500" ${isEdit ? 'disabled class="bg-slate-100 text-slate-500 w-full border border-slate-200 rounded-lg p-2.5 text-sm"' : ''} placeholder="Ex: 123">
+                            <input type="number" id="inp-emp-id" value="${empresa?.id || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" ${isEdit ? 'disabled class="bg-slate-100 text-slate-500 w-full border border-slate-200 rounded-lg p-2.5 text-sm"' : ''} placeholder="123">
                         </div>
                         <div class="col-span-3">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Empresa</label>
-                            <input type="text" id="inp-emp-nome" value="${empresa?.nome || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500" placeholder="Razão Social ou Nome Fantasia">
+                            <input type="text" id="inp-emp-nome" value="${empresa?.nome || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Razão Social">
                         </div>
                     </div>
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Subdomínio</label>
-                            <input type="text" id="inp-emp-sub" value="${empresa?.subdominio || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500" placeholder="ex: gupy">
+                            <input type="text" id="inp-emp-sub" value="${empresa?.subdominio || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="ex: gupy">
                         </div>
                         <div>
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Entrada</label>
-                            <input type="date" id="inp-emp-data" value="${empresa?.data_entrada || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500">
+                            <input type="date" id="inp-emp-data" value="${empresa?.data_entrada || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition">
                         </div>
                     </div>
 
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Observações</label>
-                        <textarea id="inp-emp-obs" rows="3" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500" placeholder="Informações adicionais...">${empresa?.observacao || ''}</textarea>
+                        <textarea id="inp-emp-obs" rows="3" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Informações adicionais...">${empresa?.observacao || ''}</textarea>
                     </div>
                 </div>
 
