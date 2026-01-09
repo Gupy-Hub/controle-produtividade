@@ -3,25 +3,35 @@ Gestao.Assertividade = {
 
     carregar: async function() {
         const tbody = document.getElementById('lista-assertividade');
-        const container = document.getElementById('view-assertividade');
+        const contador = document.getElementById('contador-assert');
         if (!tbody) return;
 
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando auditorias...</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando dados recentes...</p></td></tr>';
 
-        // Busca dados de produção que tenham dados de auditoria (ex: auditora preenchido ou nok existe)
-        // Limitamos aos últimos 1000 registros para não travar a tela inicial, ou filtramos por data se tivesse filtro.
-        // Aqui pegamos tudo ordenado por data decrescente.
-        const { data, error } = await Sistema.supabase
-            .from('producao')
-            .select('*, usuarios(nome)')
-            .order('data_referencia', { ascending: false })
-            .order('hora', { ascending: false })
-            .limit(2000); // Limite de segurança
+        try {
+            // OTIMIZAÇÃO: Define limite de data (últimos 60 dias) para não travar o banco
+            const dataLimite = new Date();
+            dataLimite.setDate(dataLimite.getDate() - 60);
+            const dataIso = dataLimite.toISOString().split('T')[0];
 
-        if (error) { console.error(error); return; }
+            // Busca Otimizada
+            const { data, error } = await Sistema.supabase
+                .from('producao')
+                .select('*, usuarios(nome)')
+                .gte('data_referencia', dataIso) // Filtra apenas dados recentes
+                .order('data_referencia', { ascending: false })
+                .order('hora', { ascending: false })
+                .limit(2000);
 
-        this.listaCompleta = data || [];
-        this.filtrar();
+            if (error) throw error;
+
+            this.listaCompleta = data || [];
+            this.filtrar();
+
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-red-500"><i class="fas fa-exclamation-triangle text-2xl mb-2"></i><br>Erro ao carregar: ${e.message}<br><small class="text-slate-400">Tente recarregar a página.</small></td></tr>`;
+        }
     },
 
     filtrar: function() {
@@ -31,7 +41,7 @@ Gestao.Assertividade = {
         const filtrados = this.listaCompleta.filter(item => {
             if (!termo) return true;
             
-            // Monta string de busca com todos os campos visíveis
+            // Monta string de busca
             const dataBr = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '';
             const nomeUser = item.usuarios?.nome || '';
             
@@ -58,27 +68,28 @@ Gestao.Assertividade = {
         if (!tbody) return;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro recente encontrado.</span></div></td></tr>';
             if(contador) contador.innerText = '0';
             return;
         }
 
         let html = '';
         lista.forEach(item => {
-            // Formatações
-            const dataFmt = item.data_referencia.split('-').reverse().slice(0,2).join('/'); // DD/MM
+            const dataFmt = item.data_referencia.split('-').reverse().slice(0,2).join('/');
             const horaFmt = item.hora ? item.hora.substring(0, 5) : '-';
             const nomeUser = item.usuarios?.nome || 'ID: ' + item.usuario_id;
             
-            // Status Colorido
+            // Badge Status
             let statusBadge = `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">${item.status}</span>`;
-            if ((item.status||'').toUpperCase() === 'OK') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">OK</span>`;
-            if ((item.status||'').toUpperCase().includes('NOK')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
+            const stUpper = (item.status||'').toUpperCase();
+            if (stUpper === 'OK') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold">OK</span>`;
+            else if (stUpper.includes('NOK')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
+            else if (stUpper.includes('JUST')) statusBadge = `<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold">JUST</span>`;
 
-            // Assertividade Colorida
+            // Cor Assertividade
             const assertVal = parseFloat((item.assertividade || '0').replace('%','').replace(',','.'));
             let assertColor = 'text-slate-600';
-            if (assertVal === 100) assertColor = 'text-emerald-600 font-bold';
+            if (assertVal >= 100) assertColor = 'text-emerald-600 font-bold';
             else if (assertVal < 90) assertColor = 'text-rose-600 font-bold';
 
             html += `
@@ -87,7 +98,7 @@ Gestao.Assertividade = {
                 <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${item.empresa}">${item.empresa || '-'}</td>
                 <td class="px-3 py-2 text-slate-600 max-w-[150px] truncate" title="${nomeUser}">${nomeUser}</td>
                 <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${item.nome_documento}">${item.nome_documento || '-'}</td>
-                <td class="px-3 py-2 text-center text-[10px] font-bold">${statusBadge}</td>
+                <td class="px-3 py-2 text-center text-[10px]">${statusBadge}</td>
                 <td class="px-3 py-2 text-slate-500 max-w-[200px] truncate cursor-help" title="${item.observacao}">${item.observacao || '-'}</td>
                 <td class="px-3 py-2 text-center text-slate-400">${item.num_campos || 0}</td>
                 <td class="px-3 py-2 text-center text-emerald-600 font-bold">${item.qtd_ok || 0}</td>
@@ -101,7 +112,5 @@ Gestao.Assertividade = {
         if(contador) contador.innerText = `${lista.length}`;
     },
 
-    // A função de salvar Meta (anterior) pode ser mantida ou removida dependendo se você ainda quer definir metas aqui.
-    // Vou manter apenas o carregamento da tabela conforme solicitado.
-    salvarMeta: function() { /* ... Lógica de meta se necessário ... */ }
+    salvarMeta: function() { }
 };
