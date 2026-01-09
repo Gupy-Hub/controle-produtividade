@@ -1,7 +1,6 @@
 MinhaArea.Evolucao = {
-    // Nome mantido como Evolucao para compatibilidade, mas representa Meta / OKR
-
-    init: async function() {
+    // Função principal chamada pelo main.js ao trocar de aba
+    carregar: async function() {
         this.renderizarLayout();
         // Carrega dados iniciais (Padrão: Mês Atual)
         await this.carregarDados('mes');
@@ -87,7 +86,7 @@ MinhaArea.Evolucao = {
             // Definição das datas baseadas no seletor
             const hoje = new Date();
             let inicioStr = '';
-            let fimStr = hoje.toISOString().split('T')[0]; // Até hoje
+            let fimStr = hoje.toISOString().split('T')[0];
             
             const y = hoje.getFullYear();
             const m = hoje.getMonth();
@@ -127,9 +126,6 @@ MinhaArea.Evolucao = {
                 .gte('data_referencia', inicioStr)
                 .lte('data_referencia', fimStr)
                 .order('data_referencia', { ascending: false });
-
-            // Se for Gestora/Admin vê tudo. Se for Assistente, podemos filtrar (opcional, deixei aberto para visão geral por enquanto)
-            // if (MinhaArea.user.cargo !== 'GESTORA' ...) query = query.eq('assistente', MinhaArea.user.nome);
 
             const { data, error } = await query;
 
