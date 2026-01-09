@@ -35,7 +35,6 @@ Menu.Gestao = {
 
         let btnHtml = '';
         
-        // --- BOTÃO DE AÇÃO DINÂMICO ---
         if (aba === 'usuarios') {
             btnHtml = `
             <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-blue-700">
@@ -50,17 +49,24 @@ Menu.Gestao = {
                 <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Importacao.Empresas.executar(this)">
             </label>`;
         }
+        else if (aba === 'assertividade') {
+            // NOVO BOTÃO DE IMPORTAR MENSAL
+            btnHtml = `
+            <label class="cursor-pointer bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-purple-700">
+                <i class="fas fa-file-invoice"></i> Importar Relatório Mensal
+                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Importacao.Assertividade.executar(this)">
+            </label>`;
+        }
         else if (aba === 'metas') {
             btnHtml = `
             <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-emerald-700">
-                <i class="fas fa-file-excel"></i> Importar Metas
+                <i class="fas fa-bullseye"></i> Importar Metas
                 <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Metas.importar(this)">
             </label>`;
         }
         
         container.innerHTML = btnHtml;
         
-        // Atualiza Classes CSS das abas
         document.querySelectorAll('.tab-btn').forEach(b => {
             b.classList.remove('bg-blue-50', 'text-blue-700', 'border-b-2', 'border-blue-600');
             b.classList.add('text-slate-600');
