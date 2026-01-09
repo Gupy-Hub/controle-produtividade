@@ -54,8 +54,7 @@ Gestao.Importacao.Assertividade = {
             // 3. Processamento Linha a Linha
             for (const row of linhas) {
                 const c = {};
-                // Normaliza todas as chaves (remove espaços e caracteres especiais)
-                // Ex: "% Assert" vira "assert", "nº Campos" vira "ncampos"
+                // Normaliza todas as chaves
                 for (const k in row) c[this.normalizarKey(k)] = row[k];
 
                 // --- IDENTIFICAÇÃO DO USUÁRIO ---
@@ -83,12 +82,9 @@ Gestao.Importacao.Assertividade = {
                 const nomeEmpresaRaw = c['empresa'] || '';
                 const empresaOficial = mapEmpresas.get(this.normalizar(nomeEmpresaRaw)) || nomeEmpresaRaw;
 
-                // --- DATA (End Time ou Data da Auditoria) ---
+                // --- DATA ---
                 let dataRef = null;
                 let horaRef = null;
-                
-                // Tenta pegar do 'end_time' (precisão de segundos)
-                // Se não tiver, pega 'data da auditoria' (apenas dia)
                 const rawDate = c['endtime'] || c['datadaauditoria'] || c['data'] || c['date'];
                 
                 if (rawDate) {
@@ -96,12 +92,10 @@ Gestao.Importacao.Assertividade = {
                         dataRef = rawDate.toISOString().split('T')[0];
                         horaRef = rawDate.toLocaleTimeString('pt-BR');
                     } else {
-                        // Tenta parser de string ISO ou BR
                         try {
                             const dObj = new Date(rawDate);
                             if (!isNaN(dObj)) {
                                 dataRef = dObj.toISOString().split('T')[0];
-                                // Se for data pura (sem hora), o toLocaleTimeString pode dar 00:00:00, o que é ok
                                 horaRef = dObj.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
                             }
                         } catch(e) {}
@@ -110,28 +104,23 @@ Gestao.Importacao.Assertividade = {
 
                 if (!dataRef) {
                     stats.ignorados++;
-                    continue; // Sem data não tem como lançar produção
+                    continue;
                 }
 
                 // --- PREPARAÇÃO DOS DADOS ---
-                // Nota: O acesso c['assert'] pega a coluna "% Assert" normalizada
                 inserts.push({
                     usuario_id: usuarioId,
                     data_referencia: dataRef,
                     hora: horaRef,
                     empresa: empresaOficial,
                     
-                    // Dados do Documento
-                    nome_documento: c['docname'] || c['documento'] || '', // Garante que importe o nome do doc
+                    nome_documento: c['docname'] || c['documento'] || '',
                     status: c['status'] || '',
                     observacao: c['apontamentosobs'] || c['obs'] || c['apontamentos'] || '',
                     
-                    // Métricas (Se vazio vira 0)
                     num_campos: parseInt(c['ncampos'] || c['numerocampos'] || 0),
                     qtd_ok: parseInt(c['ok'] || 0),
                     nok: parseInt(c['nok'] || 0),
-                    
-                    // Assertividade (Texto, permite vazio)
                     assertividade: c['assert'] || c['assertividade'] || c['%assert'] || '',
                     
                     auditora: c['auditora'] || '',
@@ -140,7 +129,7 @@ Gestao.Importacao.Assertividade = {
                 });
             }
 
-            // 4. Envio ao Banco (Otimizado)
+            // 4. Envio ao Banco (Otimizado e Seguro)
             if (inserts.length > 0) {
                 const totalRegistros = inserts.length;
                 const batchSize = 2000;
@@ -155,10 +144,16 @@ Gestao.Importacao.Assertividade = {
                 
                 for (let i = 0; i < lotes.length; i += limiteConcorrencia) {
                     const chunk = lotes.slice(i, i + limiteConcorrencia);
-                    const promessas = chunk.map(lote => Sistema.supabase.from('producao').insert(lote));
                     
-                    await Promise.all(promessas.map(p => p.catch(e => e))); // Captura erros individuais sem parar tudo
+                    // CORREÇÃO: Usar async/await explícito para garantir compatibilidade
+                    const promessas = chunk.map(async (lote) => {
+                        const { error } = await Sistema.supabase.from('producao').insert(lote);
+                        if (error) throw error;
+                    });
                     
+                    // Espera o lote paralelo terminar
+                    await Promise.all(promessas);
+
                     processados += chunk.reduce((acc, curr) => acc + curr.length, 0);
                     const pct = Math.round((processados / totalRegistros) * 100);
                     atualizarStatus(`Salvando... ${pct}%`);
@@ -215,8 +210,6 @@ Gestao.Importacao.Assertividade = {
     },
 
     normalizarKey: function(k) {
-        // Remove tudo que não for letra ou numero
-        // "% Assert" -> "assert", "Data da Auditoria" -> "datadaauditoria"
         return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
     }
 };
