@@ -9,19 +9,40 @@ Gestao.Empresas = {
         if (error) { console.error(error); return; }
 
         this.listaCompleta = data || [];
-        this.filtrar();
+        this.filtrar(); // Renderiza com os filtros atuais
     },
 
+    // --- LÓGICA DE FILTRO APRIMORADA ---
     filtrar: function() {
         const inputBusca = document.getElementById('search-empresas');
         const termo = inputBusca ? inputBusca.value.toLowerCase().trim() : '';
 
         const filtrados = this.listaCompleta.filter(e => {
             if (termo) {
-                const searchStr = `${e.id} ${e.nome} ${e.subdominio || ''} ${e.observacao || ''}`.toLowerCase();
+                // 1. Formata a data para BR (para permitir busca tipo "15/09")
+                let dataBR = '';
+                if (e.data_entrada) {
+                    try {
+                        const p = e.data_entrada.split('-');
+                        if (p.length === 3) dataBR = `${p[2]}/${p[1]}/${p[0]}`;
+                    } catch(err) {}
+                }
+
+                // 2. Cria uma "Super String" com tudo que existe na linha
+                // Inclui: ID, Nome, Subdominio, Data (ISO), Data (BR) e Observações
+                const searchStr = `
+                    ${e.id} 
+                    ${e.nome} 
+                    ${e.subdominio || ''} 
+                    ${e.observacao || ''} 
+                    ${e.data_entrada || ''} 
+                    ${dataBR}
+                `.toLowerCase();
+
+                // 3. Verifica se o termo digitado está nessa string
                 return searchStr.includes(termo);
             }
-            return true;
+            return true; // Se não tiver termo, mostra tudo
         });
 
         this.renderizarTabela(filtrados);
@@ -33,17 +54,16 @@ Gestao.Empresas = {
         if (!tbody) return;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhuma empresa encontrada.</span></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhuma empresa encontrada com este filtro.</span></td></tr>';
             if(contador) contador.innerText = '0 Registros';
             return;
         }
 
         let html = '';
         lista.forEach(e => {
-            // Formata data de entrada
+            // Formata data de entrada para exibição
             let dataFmt = '<span class="text-slate-300">-</span>';
             if (e.data_entrada) {
-                // Garante que não quebra se a data vier estranha do banco
                 try {
                     const partes = e.data_entrada.split('-');
                     if(partes.length === 3) dataFmt = `${partes[2]}/${partes[1]}/${partes[0]}`;
@@ -52,6 +72,10 @@ Gestao.Empresas = {
             }
 
             const empString = JSON.stringify(e).replace(/"/g, '&quot;');
+            
+            // Tratamento visual para observação vazia
+            const obsTexto = e.observacao || '-';
+            const obsClass = e.observacao ? 'text-slate-600' : 'text-slate-300';
 
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-sm group">
@@ -59,7 +83,7 @@ Gestao.Empresas = {
                 <td class="px-4 py-3 font-bold text-slate-700">${e.nome}</td>
                 <td class="px-4 py-3 text-slate-600 font-mono text-xs"><span class="bg-slate-100 rounded px-2 py-1">${e.subdominio || '-'}</span></td>
                 <td class="px-4 py-3 text-slate-600 font-semibold">${dataFmt}</td>
-                <td class="px-4 py-3 text-slate-500 max-w-xs truncate" title="${e.observacao || ''}">${e.observacao || '-'}</td>
+                <td class="px-4 py-3 ${obsClass} max-w-xs truncate" title="${obsTexto}">${obsTexto}</td>
                 <td class="px-4 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onclick="Gestao.Empresas.abrirModal(${empString})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
                     <button onclick="Gestao.Empresas.excluir(${e.id})" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition" title="Excluir"><i class="fas fa-trash"></i></button>
@@ -68,10 +92,10 @@ Gestao.Empresas = {
         });
 
         tbody.innerHTML = html;
-        if(contador) contador.innerText = `${lista.length} Registros`;
+        if(contador) contador.innerText = `${lista.length} Registros listados`;
     },
 
-    // --- MODAL ---
+    // --- MODAL (Cadastro Manual e Edição) ---
     abrirModal: function(empresa = null) {
         const isEdit = !!empresa;
         const modalAntigo = document.getElementById('modal-empresa');
@@ -93,7 +117,7 @@ Gestao.Empresas = {
                         </div>
                         <div class="col-span-3">
                             <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Empresa</label>
-                            <input type="text" id="inp-emp-nome" value="${empresa?.nome || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Razão Social">
+                            <input type="text" id="inp-emp-nome" value="${empresa?.nome || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Razão Social ou Fantasia">
                         </div>
                     </div>
                     
@@ -110,7 +134,7 @@ Gestao.Empresas = {
 
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Observações</label>
-                        <textarea id="inp-emp-obs" rows="3" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Informações adicionais...">${empresa?.observacao || ''}</textarea>
+                        <textarea id="inp-emp-obs" rows="3" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Detalhes, contatos ou observações...">${empresa?.observacao || ''}</textarea>
                     </div>
                 </div>
 
@@ -146,14 +170,14 @@ Gestao.Empresas = {
         if (error) alert("Erro: " + error.message);
         else {
             document.getElementById('modal-empresa').remove();
-            this.carregar();
+            this.carregar(); // Recarrega e aplica o filtro atual se houver
         }
     },
 
     excluir: async function(id) {
-        if (!confirm(`Excluir empresa ID ${id}?`)) return;
+        if (!confirm(`Confirma exclusão da empresa ID ${id}?`)) return;
         const { error } = await Sistema.supabase.from('empresas').delete().eq('id', id);
-        if (error) alert("Não foi possível excluir (provavelmente possui dados vinculados).");
+        if (error) alert("Não foi possível excluir (provavelmente possui histórico de produção vinculado).");
         else this.carregar();
     }
 };
