@@ -1,12 +1,8 @@
 MinhaArea.Evolucao = {
-    // Gerencia a aba Meta / OKR
     carregar: async function() {
         this.renderizarLayout();
-        
-        // Pega valor do seletor do cabeçalho (se já existir) ou padrão 'mes'
         const headerSelect = document.getElementById('filtro-periodo-okr-header');
         const periodo = headerSelect ? headerSelect.value : 'mes';
-        
         await this.carregarDados(periodo);
     },
 
@@ -14,7 +10,6 @@ MinhaArea.Evolucao = {
         const container = document.getElementById('ma-tab-evolucao');
         if (!container) return;
 
-        // Tabela atualizada com as novas colunas (Nok, Ok)
         container.innerHTML = `
             <div class="flex flex-col gap-6">
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -24,7 +19,6 @@ MinhaArea.Evolucao = {
                         </h3>
                         <span id="okr-total-regs" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">0 registros</span>
                     </div>
-                    
                     <div class="overflow-x-auto max-h-[600px] custom-scroll">
                         <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
                             <thead class="text-xs text-slate-500 font-bold uppercase bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
@@ -65,18 +59,13 @@ MinhaArea.Evolucao = {
 
         try {
             const hoje = new Date();
-            let inicioStr = '';
-            let fimStr = hoje.toISOString().split('T')[0];
-            const y = hoje.getFullYear();
-            const m = hoje.getMonth();
+            let inicioStr = '', fimStr = hoje.toISOString().split('T')[0];
+            const y = hoje.getFullYear(), m = hoje.getMonth();
 
             switch(tipoPeriodo) {
                 case 'semana':
-                    const day = hoje.getDay(); 
-                    const diff = hoje.getDate() - day + (day === 0 ? -6 : 1); 
-                    const seg = new Date(hoje.setDate(diff));
-                    inicioStr = seg.toISOString().split('T')[0];
-                    break;
+                    const day = hoje.getDay(), diff = hoje.getDate() - day + (day === 0 ? -6 : 1);
+                    inicioStr = new Date(hoje.setDate(diff)).toISOString().split('T')[0]; break;
                 case 'mes': inicioStr = new Date(y, m, 1).toISOString().split('T')[0]; break;
                 case 'trimestre': inicioStr = new Date(y, Math.floor(m / 3) * 3, 1).toISOString().split('T')[0]; break;
                 case 'semestre': inicioStr = new Date(y, m < 6 ? 0 : 6, 1).toISOString().split('T')[0]; break;
@@ -93,7 +82,6 @@ MinhaArea.Evolucao = {
                 .order('data_referencia', { ascending: false });
 
             if (error) throw error;
-
             if (contador) contador.innerText = `${data ? data.length : 0} registros`;
 
             if (!data || data.length === 0) {
@@ -103,26 +91,17 @@ MinhaArea.Evolucao = {
 
             let html = '';
             data.forEach(item => {
-                // Formatação de Status
                 let statusBadge = '';
                 const st = (item.status || '').toUpperCase().trim();
-                
-                if(st === 'OK' || st === 'ACERTO') {
-                    statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
-                } else if(st.includes('ERRO') || st === 'REV' || st === 'JUST' || st === 'EMPR') {
-                    statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
-                } else {
-                    statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
-                }
+                if(st === 'OK' || st === 'ACERTO') statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
+                else if(st.includes('ERRO') || st === 'REV' || st === 'JUST') statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
+                else statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
 
                 const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
                 
                 let pctClass = 'text-slate-600';
                 const pctVal = parseFloat(item.pct_assert);
-                if (!isNaN(pctVal)) {
-                    if (pctVal >= 100 || pctVal === 1) pctClass = 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded';
-                    else pctClass = 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
-                }
+                if (!isNaN(pctVal)) pctClass = pctVal >= 100 || pctVal === 1 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
 
                 html += `
                     <tr class="bg-white hover:bg-blue-50/30 transition border-b border-slate-50 last:border-0">
@@ -136,11 +115,8 @@ MinhaArea.Evolucao = {
                         <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono">${item.pct_erros_produtividade || '-'}</td>
                         <td class="px-4 py-3 text-center ${pctClass}">${item.pct_assert || '-'}</td>
                         <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
-                        <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
-                            ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
-                        </td>
-                    </tr>
-                `;
+                        <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}</td>
+                    </tr>`;
             });
             tbody.innerHTML = html;
         } catch (e) {
@@ -151,107 +127,110 @@ MinhaArea.Evolucao = {
 
     importarArquivo: function(input) {
         if (!input.files || !input.files[0]) return;
-        
         const file = input.files[0];
         const labelBtn = input.parentElement.querySelector('label');
         const originalText = labelBtn.innerHTML;
         labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
 
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: async function(results) {
-                try {
-                    const rows = results.data;
-                    const headers = results.meta.fields;
-
-                    console.log("Cabeçalhos detectados:", headers);
-
-                    if (!rows || rows.length === 0) throw new Error("Arquivo vazio.");
-
-                    // Função para encontrar coluna ignorando maiúsculas/minúsculas e espaços
-                    const encontrarColuna = (opcoes) => {
-                        for (const opt of opcoes) {
-                            const found = headers.find(h => h.trim().toLowerCase() === opt.toLowerCase());
-                            if (found) return found;
-                        }
-                        return null;
-                    };
-
-                    // Agora procuramos 'end_time' em vez de 'Data'
-                    const colEndTime = encontrarColuna(['end_time', 'time', 'Data']);
-                    const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
-
-                    if (!colEndTime || !colAssistente) {
-                        alert(`Erro: Colunas obrigatórias não encontradas.\n\nColunas no arquivo: ${headers.join(', ')}\n\nEsperado: 'end_time' e 'Assistente'.`);
-                        return;
+        const processarDados = async (rows) => {
+            try {
+                if (!rows || rows.length === 0) throw new Error("Arquivo vazio.");
+                
+                const headers = Object.keys(rows[0]);
+                const encontrarColuna = (opcoes) => {
+                    for (const opt of opcoes) {
+                        const found = headers.find(h => h.trim().toLowerCase() === opt.toLowerCase());
+                        if (found) return found;
                     }
+                    return null;
+                };
 
-                    const batch = [];
-                    
-                    rows.forEach(row => {
-                        const rawTime = row[colEndTime];
-                        const assistente = row[colAssistente];
+                const colEndTime = encontrarColuna(['end_time', 'time', 'Data']);
+                const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
 
-                        if (!rawTime && !assistente) return;
-
-                        // Tratamento de DATA (Extrair do end_time)
-                        // Formato esperado: "2025-10-20T14:02:18.175Z" ou "2025-10-20"
-                        let dataFinal = null;
-                        if (rawTime) {
-                            if (rawTime.includes('T')) {
-                                dataFinal = rawTime.split('T')[0]; // Pega só a parte da data (YYYY-MM-DD)
-                            } else if (rawTime.includes('/')) {
-                                const parts = rawTime.split('/'); // Se for DD/MM/YYYY
-                                if (parts.length === 3) dataFinal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                            } else {
-                                dataFinal = rawTime; // Assume que já está ok
-                            }
-                        }
-
-                        const getVal = (opts) => {
-                            const key = encontrarColuna(opts);
-                            return key ? row[key] : null;
-                        };
-
-                        batch.push({
-                            mes: getVal(['mês', 'mes', 'month']),
-                            end_time: rawTime, // Salva o original se quiser
-                            data_referencia: dataFinal, // Data limpa
-                            empresa: getVal(['Empresa']),
-                            assistente: assistente,
-                            doc_name: getVal(['doc_name', 'Documento', 'Doc']),
-                            status: getVal(['STATUS', 'Status']),
-                            apontamentos_obs: getVal(['Apontamentos/obs', 'Apontamentos', 'Obs']),
-                            num_campos: parseInt(getVal(['nº Campos', 'Campos', 'num_campos'])) || 0,
-                            // Mapeamento Novo: Ok -> acertos
-                            acertos: parseInt(getVal(['Ok', 'Acertos'])) || 0,
-                            // Mapeamento Novo: Nok -> pct_erros_produtividade (Reutilizando campo do banco)
-                            pct_erros_produtividade: getVal(['Nok', '% de Erros X Produtividade', 'Erros']), 
-                            pct_assert: getVal(['% Assert', '% Assert.', 'Assertividade']),
-                            auditora: getVal(['Auditora', 'Auditor'])
-                        });
-                    });
-
-                    if (batch.length > 0) {
-                        labelBtn.innerHTML = '<i class="fas fa-save"></i> Salvando...';
-                        const { error } = await MinhaArea.supabase.from('auditoria_apontamentos').insert(batch);
-                        if (error) throw error;
-                        
-                        alert(`Sucesso! ${batch.length} registros importados.`);
-                        MinhaArea.Evolucao.carregar(); 
-                    } else {
-                        alert("Nenhum dado válido encontrado para importação.");
-                    }
-
-                } catch (err) {
-                    console.error(err);
-                    alert("Erro ao processar: " + err.message);
-                } finally {
-                    labelBtn.innerHTML = originalText;
-                    input.value = "";
+                if (!colEndTime || !colAssistente) {
+                    alert(`Erro: Colunas não encontradas.\nNecessário: 'end_time' (ou Data) e 'Assistente'.`);
+                    return;
                 }
+
+                const batch = [];
+                rows.forEach(row => {
+                    const rawTime = row[colEndTime];
+                    const assistente = row[colAssistente];
+                    if (!rawTime && !assistente) return;
+
+                    let dataFinal = null;
+                    // Tenta converter se for número (Excel serial date)
+                    if (typeof rawTime === 'number') {
+                        // Conversão simples de data serial Excel para JS Date
+                        const date = new Date(Math.round((rawTime - 25569)*86400*1000));
+                        dataFinal = date.toISOString().split('T')[0];
+                    } else if (rawTime) {
+                        const str = String(rawTime);
+                        if (str.includes('T')) dataFinal = str.split('T')[0];
+                        else if (str.includes('/')) {
+                            const p = str.split('/');
+                            if(p.length === 3) dataFinal = `${p[2]}-${p[1]}-${p[0]}`;
+                        } else {
+                            dataFinal = str; 
+                        }
+                    }
+
+                    const getVal = (opts) => { const k = encontrarColuna(opts); return k ? row[k] : null; };
+
+                    batch.push({
+                        mes: getVal(['mês', 'mes']),
+                        end_time: String(rawTime),
+                        data_referencia: dataFinal,
+                        empresa: getVal(['Empresa']),
+                        assistente: assistente,
+                        doc_name: getVal(['doc_name', 'Documento']),
+                        status: getVal(['STATUS', 'Status']),
+                        apontamentos_obs: getVal(['Apontamentos/obs', 'Apontamentos', 'Obs']),
+                        num_campos: parseInt(getVal(['nº Campos', 'Campos'])) || 0,
+                        acertos: parseInt(getVal(['Ok', 'Acertos'])) || 0,
+                        pct_erros_produtividade: getVal(['Nok', '% de Erros X Produtividade']),
+                        pct_assert: getVal(['% Assert', '% Assert.', 'Assertividade']),
+                        auditora: getVal(['Auditora', 'Auditor'])
+                    });
+                });
+
+                if (batch.length > 0) {
+                    labelBtn.innerHTML = '<i class="fas fa-save"></i> Salvando...';
+                    const { error } = await MinhaArea.supabase.from('auditoria_apontamentos').insert(batch);
+                    if (error) throw error;
+                    alert(`Sucesso! ${batch.length} registros importados.`);
+                    MinhaArea.Evolucao.carregar(); 
+                } else {
+                    alert("Nenhum dado válido para importar.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Erro ao processar: " + err.message);
+            } finally {
+                labelBtn.innerHTML = originalText;
+                input.value = "";
             }
-        });
+        };
+
+        // Decisão: XLSX ou CSV?
+        if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                // raw: false força datas a virem como strings formatadas ou texto, raw: true vem como número
+                const jsonData = XLSX.utils.sheet_to_json(firstSheet, {raw: true}); 
+                processarDados(jsonData);
+            };
+            reader.readAsArrayBuffer(file);
+        } else {
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => processarDados(results.data)
+            });
+        }
     }
 };
