@@ -1,6 +1,6 @@
 window.MinhaArea = window.MinhaArea || {
     user: null,
-    // dataAtual agora será usada mais como referência, mas o filtro real vem do DOM
+    dataAtual: new Date(), // Garante inicialização
     usuarioAlvo: 'todos',
     
     get supabase() { return window.Sistema ? window.Sistema.supabase : (window._supabase || null); }
@@ -13,6 +13,7 @@ MinhaArea.init = async function() {
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
         const isUserAdmin = MinhaArea.user.funcao === 'GESTORA' || MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
+        // Se for admin, começa com 'todos', senão usa o próprio ID
         MinhaArea.usuarioAlvo = isUserAdmin ? 'todos' : MinhaArea.user.id;
     }
 
@@ -25,7 +26,10 @@ MinhaArea.init = async function() {
     const selectType = document.getElementById('filtro-tipo');
     if (selectType) {
         selectType.value = lastType;
-        MinhaArea.mudarTipoFiltro(lastType, lastValue); // Renderiza o input correto
+        MinhaArea.mudarTipoFiltro(lastType, lastValue);
+    } else {
+        // Fallback se o DOM não tiver o filtro ainda (ex: carregou antes do HTML)
+        if (!MinhaArea.dataAtual) MinhaArea.dataAtual = new Date();
     }
 
     // Admin Controls
@@ -43,7 +47,10 @@ MinhaArea.init = async function() {
     MinhaArea.mudarAba(lastTab || 'diario');
 };
 
-// Funções do Filtro Unificado
+// ... (Resto das funções mantidas iguais) ...
+// MinhaArea.mudarTipoFiltro, MinhaArea.atualizarFiltroGlobal, etc.
+// Importante: Manter a lógica de getPeriodo e mudarAba conforme o código anterior.
+
 MinhaArea.mudarTipoFiltro = function(tipo, valorSalvo = null) {
     const container = document.getElementById('filtro-valor-container');
     if (!container) return;
@@ -52,7 +59,6 @@ MinhaArea.mudarTipoFiltro = function(tipo, valorSalvo = null) {
     let html = '';
     const hoje = new Date();
     
-    // Define o valor padrão se não houver um salvo
     let defaultValue = valorSalvo;
 
     if (tipo === 'dia') {
@@ -67,8 +73,6 @@ MinhaArea.mudarTipoFiltro = function(tipo, valorSalvo = null) {
     }
 
     container.innerHTML = html;
-    
-    // Se mudou o tipo manualmente (sem valorSalvo), dispara a atualização para recarregar dados
     if (!valorSalvo) {
         const input = document.getElementById('filtro-valor');
         if (input) MinhaArea.atualizarFiltroGlobal(input.value);
@@ -79,7 +83,17 @@ MinhaArea.atualizarFiltroGlobal = function(val) {
     if (!val) return;
     localStorage.setItem('ma_filter_value', val);
     
-    // Atualiza a aba ativa
+    // Atualiza dataAtual também para consistência com códigos antigos que usam dataAtual
+    if (val.length === 10) { // YYYY-MM-DD
+        const [y, m, d] = val.split('-').map(Number);
+        MinhaArea.dataAtual = new Date(y, m-1, d, 12, 0, 0);
+    } else if (val.length === 7) { // YYYY-MM
+        const [y, m] = val.split('-').map(Number);
+        MinhaArea.dataAtual = new Date(y, m-1, 1, 12, 0, 0);
+    } else if (val.length === 4) { // YYYY
+        MinhaArea.dataAtual = new Date(Number(val), 0, 1, 12, 0, 0);
+    }
+
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) MinhaArea.mudarAba(activeBtn.id.replace('btn-ma-', ''));
 };
@@ -138,40 +152,33 @@ MinhaArea.mudarAba = function(aba) {
     else if (aba === 'feedback' && MinhaArea.Feedback) MinhaArea.Feedback.carregar();
 };
 
-// Funçao auxiliar vital para calcular datas baseada no input unificado
 MinhaArea.getPeriodo = function() {
     const tipo = document.getElementById('filtro-tipo')?.value || 'mes';
     const val = document.getElementById('filtro-valor')?.value;
     
     let inicio = '', fim = '', texto = '';
 
-    if (!val) { // Fallback hoje
+    if (!val) { 
+        // Fallback
         const h = new Date();
         inicio = h.toISOString().split('T')[0];
         fim = inicio;
     } else {
         if (tipo === 'dia') {
-            inicio = val; 
-            fim = val;
-            const d = new Date(val + 'T12:00:00'); // Força timezone
-            texto = d.toLocaleDateString('pt-BR');
-        } 
-        else if (tipo === 'mes') {
-            // val = "2025-01"
+            inicio = val; fim = val;
+            texto = new Date(val + 'T12:00:00').toLocaleDateString('pt-BR');
+        } else if (tipo === 'mes') {
             const [y, m] = val.split('-').map(Number);
             inicio = `${y}-${String(m).padStart(2,'0')}-01`;
             const lastDay = new Date(y, m, 0).getDate();
             fim = `${y}-${String(m).padStart(2,'0')}-${lastDay}`;
             texto = `${String(m).padStart(2,'0')}/${y}`;
-        } 
-        else if (tipo === 'ano') {
-            // val = "2025"
+        } else if (tipo === 'ano') {
             inicio = `${val}-01-01`;
             fim = `${val}-12-31`;
             texto = val;
         }
     }
-    
     return { inicio, fim, texto, tipo };
 };
 
