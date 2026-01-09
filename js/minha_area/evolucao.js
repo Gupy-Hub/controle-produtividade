@@ -173,43 +173,81 @@ MinhaArea.Evolucao = {
         const file = input.files[0];
         const labelBtn = input.parentElement.querySelector('label');
         const originalText = labelBtn.innerHTML;
-        labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
 
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
+            encoding: "UTF-8", // Tenta forçar UTF-8
             complete: async function(results) {
                 try {
                     const rows = results.data;
+                    console.log("Linhas lidas:", rows); // Debug no console
+
+                    if (!rows || rows.length === 0) {
+                        throw new Error("O arquivo CSV parece estar vazio ou ilegível.");
+                    }
+
+                    // --- NORMALIZAÇÃO DE CHAVES ---
+                    // Remove espaços extras e converte para minúsculo para comparar
+                    const normalize = k => k.trim().toLowerCase();
+                    const keys = Object.keys(rows[0]); // Chaves reais do arquivo
+
+                    // Função para buscar valor tolerante a falhas (ex: 'Data', 'data', 'Data ')
+                    const getVal = (row, ...options) => {
+                        for (const opt of options) {
+                            // 1. Tenta direto
+                            if (row[opt] !== undefined) return row[opt];
+                            // 2. Tenta normalizado
+                            const foundKey = keys.find(k => normalize(k) === normalize(opt));
+                            if (foundKey && row[foundKey] !== undefined) return row[foundKey];
+                        }
+                        return null;
+                    };
+
                     const batch = [];
                     
-                    // Mapeamento das colunas do CSV para o Banco
-                    rows.forEach(row => {
-                        // Verifica se a linha tem dados mínimos
-                        if (!row['Data'] && !row['Assistente']) return;
+                    rows.forEach((row, index) => {
+                        // Busca dados essenciais
+                        const dataRef = getVal(row, 'Data', 'data', 'date');
+                        const assistente = getVal(row, 'Assistente', 'assistente', 'Nome');
 
-                        // Tratamento de Data (DD/MM/YYYY ou YYYY-MM-DD)
-                        let dataRef = row['Data']; 
-                        // Se necessário, implementar parser de data mais robusto aqui
-                        
+                        // Pula linhas vazias ou cabeçalhos repetidos
+                        if (!dataRef && !assistente) return;
+
+                        // Tratamento de Data (Excel às vezes exporta DD/MM/YYYY, Supabase quer YYYY-MM-DD)
+                        let dataFinal = dataRef;
+                        if (dataRef && dataRef.includes('/')) {
+                            const parts = dataRef.split('/');
+                            if (parts.length === 3) dataFinal = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                        }
+
+                        // Tratamento Numérico
+                        const numCampos = parseInt(getVal(row, 'nº Campos', 'nºCampos', 'Campos', 'num_campos')) || 0;
+                        const acertos = parseInt(getVal(row, 'Acertos', 'acertos')) || 0;
+
                         batch.push({
-                            mes: row['mês'] || row['Mes'] || null,
-                            end_time: row['end_time'] || null,
-                            data_referencia: dataRef,
-                            empresa: row['Empresa'] || null,
-                            assistente: row['Assistente'] || null,
-                            doc_name: row['doc_name'] || null,
-                            status: row['STATUS'] || row['Status'] || null,
-                            apontamentos_obs: row['Apontamentos/obs'] || null,
-                            num_campos: parseInt(row['nº Campos']) || 0,
-                            acertos: parseInt(row['Acertos']) || 0,
-                            pct_erros_produtividade: row['% de Erros X Produtividade'] || null,
-                            pct_assert: row['% Assert'] || row['% Assert.'] || null,
-                            auditora: row['Auditora'] || null
+                            mes: getVal(row, 'mês', 'mes', 'Mes', 'Month'),
+                            end_time: getVal(row, 'end_time', 'EndTime'),
+                            data_referencia: dataFinal,
+                            empresa: getVal(row, 'Empresa', 'empresa'),
+                            assistente: assistente,
+                            doc_name: getVal(row, 'doc_name', 'Documento', 'Doc'),
+                            status: getVal(row, 'STATUS', 'Status', 'status'),
+                            apontamentos_obs: getVal(row, 'Apontamentos/obs', 'Apontamentos', 'Obs'),
+                            num_campos: numCampos,
+                            acertos: acertos,
+                            pct_erros_produtividade: getVal(row, '% de Erros X Produtividade', 'Erros'),
+                            pct_assert: getVal(row, '% Assert', '% Assert.', 'Assertividade', 'assert'),
+                            auditora: getVal(row, 'Auditora', 'Auditor')
                         });
                     });
 
+                    console.log("Lote preparado para envio:", batch);
+
                     if (batch.length > 0) {
+                        labelBtn.innerHTML = '<i class="fas fa-save"></i> Salvando...';
+                        
                         const { error } = await MinhaArea.supabase
                             .from('auditoria_apontamentos')
                             .insert(batch);
@@ -219,7 +257,7 @@ MinhaArea.Evolucao = {
                         alert(`Sucesso! ${batch.length} registros importados.`);
                         MinhaArea.Evolucao.carregar(); // Recarrega a tabela
                     } else {
-                        alert("Arquivo vazio ou formato inválido.");
+                        alert("Não foi possível identificar as colunas 'Data' e 'Assistente' no arquivo. Verifique se o CSV está correto.");
                     }
 
                 } catch (err) {
@@ -229,6 +267,10 @@ MinhaArea.Evolucao = {
                     labelBtn.innerHTML = originalText;
                     input.value = ""; // Limpa input
                 }
+            },
+            error: function(err) {
+                alert("Erro ao ler arquivo: " + err.message);
+                labelBtn.innerHTML = originalText;
             }
         });
     }
