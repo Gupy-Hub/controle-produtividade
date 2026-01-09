@@ -2,8 +2,8 @@ MinhaArea.Evolucao = {
     subAbaAtual: 'dash', // dash | auditoria | evolucao
     dadosAuditoriaCache: [], 
     dadosProducaoCache: [],
-    mapaUsuarios: {}, // ID -> Nome
-    mapaNomesParaId: {}, // Nome -> ID
+    mapaUsuarios: {},
+    mapaNomesParaId: {},
     filtroDocumento: null, 
 
     carregar: async function() {
@@ -11,15 +11,11 @@ MinhaArea.Evolucao = {
         const cargo = (MinhaArea.user.cargo || '').toUpperCase();
         const isGestora = funcao === 'GESTORA' || funcao === 'AUDITORA' || cargo === 'GESTORA' || cargo === 'AUDITORA' || MinhaArea.user.id == 1000 || MinhaArea.user.perfil === 'admin';
 
-        // Se for assistente, não vê a aba de auditoria detalhada (Log), vai para Dash ou Evolução
         if (!isGestora && this.subAbaAtual === 'auditoria') this.subAbaAtual = 'dash';
 
-        // Carrega mapa de usuários para traduzir ID <-> Nome
         await this.carregarMapaUsuarios();
-
         this.renderizarLayout(isGestora);
         
-        // Carrega dados conforme a sub-aba
         if (this.subAbaAtual === 'evolucao') {
             await this.carregarEvolucao();
         } else {
@@ -29,7 +25,6 @@ MinhaArea.Evolucao = {
 
     carregarMapaUsuarios: async function() {
         if (Object.keys(this.mapaUsuarios).length > 0) return;
-        
         const { data } = await MinhaArea.supabase.from('usuarios').select('id, nome');
         if (data) {
             this.mapaUsuarios = data.reduce((acc, u) => { acc[u.id] = u.nome; return acc; }, {});
@@ -46,8 +41,7 @@ MinhaArea.Evolucao = {
     aplicarFiltroDocumento: function(nomeDoc) {
         this.filtroDocumento = nomeDoc;
         this.atualizarVisualizacao();
-        const el = document.getElementById('conteudo-okr');
-        if(el) el.scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('ma-tab-evolucao').scrollIntoView({ behavior: 'smooth' });
     },
 
     limparFiltroDocumento: function() {
@@ -73,7 +67,7 @@ MinhaArea.Evolucao = {
                         Dash Geral
                     </button>
                     <button onclick="MinhaArea.Evolucao.mudarSubAba('evolucao')" class="px-4 py-1.5 rounded-md text-sm font-bold transition ${this.subAbaAtual === 'evolucao' ? 'bg-purple-50 text-purple-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}">
-                        Evolução (Metas/Consolidado)
+                        Evolução (Metas)
                     </button>
                     <button onclick="MinhaArea.Evolucao.mudarSubAba('auditoria')" class="px-4 py-1.5 rounded-md text-sm font-bold transition ${this.subAbaAtual === 'auditoria' ? 'bg-blue-50 text-blue-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}">
                         Auditoria (Log)
@@ -82,7 +76,7 @@ MinhaArea.Evolucao = {
             `;
         } else {
             navHtml = `
-                <div class="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 w-fit shadow-sm">
+                <div class="flex items-center gap-2 bg-white p-1 rounded-lg border border-slate-200 w-fit">
                     <button onclick="MinhaArea.Evolucao.mudarSubAba('dash')" class="px-4 py-1.5 rounded-md text-sm font-bold transition ${this.subAbaAtual === 'dash' ? 'bg-indigo-50 text-indigo-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}">Resumo</button>
                     <button onclick="MinhaArea.Evolucao.mudarSubAba('evolucao')" class="px-4 py-1.5 rounded-md text-sm font-bold transition ${this.subAbaAtual === 'evolucao' ? 'bg-purple-50 text-purple-700 shadow-sm' : 'text-slate-500 hover:bg-slate-50'}">Minhas Metas</button>
                 </div>`;
@@ -127,9 +121,6 @@ MinhaArea.Evolucao = {
         `;
     },
 
-    // =================================================================================
-    // CARREGAMENTO DE DADOS CRUZADOS (DASH E AUDITORIA)
-    // =================================================================================
     carregarDadosCruzados: async function() {
         const container = document.getElementById('conteudo-okr');
         try {
@@ -158,9 +149,7 @@ MinhaArea.Evolucao = {
             this.dadosAuditoriaCache = rAudit.data || [];
             this.dadosProducaoCache = rProd.data || [];
 
-            // Atualiza o seletor para mostrar apenas quem tem dados
             this.atualizarOpcoesSeletor(this.dadosAuditoriaCache, this.dadosProducaoCache);
-
             this.atualizarVisualizacao();
 
         } catch (e) {
@@ -177,7 +166,6 @@ MinhaArea.Evolucao = {
         const nomesProd = dadosProd.map(d => this.mapaUsuarios[d.usuario_id]).filter(n => n);
         const todosNomes = [...new Set([...nomesAudit, ...nomesProd])].sort();
 
-        // Salva seleção atual
         const selecaoAtual = select.value || MinhaArea.usuarioAlvo;
 
         select.innerHTML = '<option value="todos">Toda a Equipe</option>';
@@ -188,7 +176,6 @@ MinhaArea.Evolucao = {
             select.appendChild(opt);
         });
 
-        // Tenta restaurar seleção
         if (selecaoAtual === 'todos' || todosNomes.includes(selecaoAtual)) {
             select.value = selecaoAtual;
         } else {
@@ -208,8 +195,6 @@ MinhaArea.Evolucao = {
 
         if (this.subAbaAtual === 'evolucao') return;
 
-        // FILTROS
-        // Se o select não estiver pronto, usa a variável global (garante inicialização não branca)
         const usuarioAlvo = document.getElementById('admin-user-select')?.value || MinhaArea.usuarioAlvo || 'todos';
         
         let auditFiltrados = this.dadosAuditoriaCache;
@@ -223,11 +208,7 @@ MinhaArea.Evolucao = {
             prodFiltrados = this.dadosProducaoCache.filter(d => d.usuario_id == MinhaArea.user.id);
         } else if (usuarioAlvo && usuarioAlvo !== 'todos') {
             nomeExibicao = usuarioAlvo;
-            
-            // Filtro Auditoria (Nome)
             auditFiltrados = this.dadosAuditoriaCache.filter(d => d.assistente === usuarioAlvo);
-            
-            // Filtro Produção (ID)
             const idAlvo = this.mapaNomesParaId[usuarioAlvo];
             if (idAlvo) {
                 prodFiltrados = this.dadosProducaoCache.filter(d => d.usuario_id == idAlvo);
@@ -236,12 +217,10 @@ MinhaArea.Evolucao = {
             }
         }
 
-        // Filtro Documento
         if (this.filtroDocumento) {
             auditFiltrados = auditFiltrados.filter(d => d.doc_name === this.filtroDocumento);
         }
 
-        // Filtro Busca
         if (termoBusca) {
             const lower = termoBusca.toLowerCase();
             auditFiltrados = auditFiltrados.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(lower)));
@@ -258,7 +237,6 @@ MinhaArea.Evolucao = {
     // MÓDULO 1: DASH GERAL
     // =================================================================================
     renderizarDashUI: function(container, auditFiltrados, prodFiltrados, nomeExibicao) {
-        // Se estiver vazio, verifica se é filtro ou falta de dados geral
         if ((!auditFiltrados || auditFiltrados.length === 0) && (!prodFiltrados || prodFiltrados.length === 0)) {
             container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado para o filtro selecionado.</div>`;
             if(this.filtroDocumento) container.innerHTML += `<div class="text-center mt-2"><button onclick="MinhaArea.Evolucao.limparFiltroDocumento()" class="text-blue-500 hover:underline">Limpar Filtro</button></div>`;
@@ -273,7 +251,7 @@ MinhaArea.Evolucao = {
         const parcialEquipe = totalCamposEq > 0 ? (totalOkEq / totalCamposEq) * 100 : 0;
         const parcialEquipeStr = parcialEquipe.toFixed(2).replace('.',',') + '%';
 
-        // 2. KPI SELEÇÃO (Individual ou Filtrado)
+        // 2. KPI SELEÇÃO
         const totalDocs = auditFiltrados.length;
         const totalCampos = auditFiltrados.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
         const totalOk = auditFiltrados.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
@@ -281,7 +259,7 @@ MinhaArea.Evolucao = {
         const atingimento = totalCampos > 0 ? (totalOk / totalCampos) * 100 : 0;
         const atingimentoStr = atingimento.toFixed(2).replace('.',',') + '%';
 
-        // 3. KPI VOLUME (Correção: displayValidados)
+        // 3. KPI VOLUME
         let totalValidados = 0;
         let displayValidados = '-';
         let pctAuditadoStr = '-';
@@ -291,13 +269,8 @@ MinhaArea.Evolucao = {
             const pct = totalValidados > 0 ? (totalDocs / totalValidados) * 100 : 0;
             pctAuditadoStr = `${Math.round(pct)}%`;
             displayValidados = totalValidados.toLocaleString('pt-BR');
-        } else {
-            // Se filtrar por documento, não temos como saber o "total produzido" daquele documento específico facilmente,
-            // a menos que a produção detalhe por documento (o que geralmente não faz).
-            displayValidados = "-"; 
         }
 
-        // Filtro Msg
         let filtroMsg = '';
         if (this.filtroDocumento) {
             filtroMsg = `
@@ -309,8 +282,7 @@ MinhaArea.Evolucao = {
 
         container.innerHTML = `
             ${filtroMsg}
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-36">
                     <div class="flex justify-between items-start">
                         <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Assertividade</span>
@@ -368,16 +340,27 @@ MinhaArea.Evolucao = {
                 </div>
             </div>
 
-            <div class="flex justify-end">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                        <i class="fas fa-chart-line text-indigo-500"></i> Consolidado de Performance Mensal
+                    </h3>
+                </div>
+                <div class="overflow-x-auto max-h-[400px] custom-scroll">
+                    ${this.gerarTabelaConsolidadaMensal(auditFiltrados, prodFiltrados)}
+                </div>
+            </div>
+
+            <div class="flex justify-end mb-4">
                 <button onclick="document.getElementById('modal-resumo-docs').classList.remove('hidden')" class="text-sm text-indigo-600 font-bold hover:underline flex items-center gap-1">
-                    <i class="fas fa-list"></i> Ver Resumo por Documento
+                    <i class="fas fa-folder-open"></i> Ver Resumo por Documento
                 </button>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
                     <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-                        <i class="fas fa-list-ul text-indigo-500"></i> Histórico Detalhado <span class="text-xs font-normal text-slate-400 ml-1">(${texto})</span>
+                        <i class="fas fa-list-ul text-slate-400"></i> Histórico Detalhado <span class="text-xs font-normal text-slate-400 ml-1">(${texto})</span>
                     </h3>
                 </div>
                 <div class="overflow-x-auto max-h-[600px] custom-scroll">
@@ -397,6 +380,99 @@ MinhaArea.Evolucao = {
                 </div>
             </div>
         `;
+    },
+
+    gerarTabelaConsolidadaMensal: function(auditData, prodData) {
+        // Agrupa por Mês (YYYY-MM)
+        const meses = {};
+        
+        // Processa Produção
+        prodData.forEach(d => {
+            if(!d.data_referencia) return;
+            const key = d.data_referencia.substring(0, 7); // YYYY-MM
+            if(!meses[key]) meses[key] = { dias: new Set(), total_prod: 0, campos_total: 0, campos_ok: 0, erros: 0 };
+            meses[key].dias.add(d.data_referencia);
+            meses[key].total_prod += (Number(d.quantidade)||0);
+        });
+
+        // Processa Auditoria
+        auditData.forEach(d => {
+            if(!d.data_referencia) return;
+            const key = d.data_referencia.substring(0, 7);
+            if(!meses[key]) meses[key] = { dias: new Set(), total_prod: 0, campos_total: 0, campos_ok: 0, erros: 0 };
+            const n_campos = parseInt(d.num_campos)||0;
+            const n_acertos = parseInt(d.acertos)||0;
+            meses[key].campos_total += n_campos;
+            meses[key].campos_ok += n_acertos;
+            meses[key].erros += (n_campos - n_acertos);
+        });
+
+        const chavesOrdenadas = Object.keys(meses).sort();
+        if(chavesOrdenadas.length === 0) return '<div class="p-4 text-center text-xs text-slate-400">Sem dados para consolidar.</div>';
+
+        // Totais Gerais
+        let gDias = new Set(), gProd = 0, gCampos = 0, gOk = 0, gErros = 0;
+
+        let html = `<table class="w-full text-xs text-left text-slate-600">
+            <thead class="bg-slate-50 text-slate-500 font-bold sticky top-0 shadow-sm">
+                <tr>
+                    <th class="px-4 py-3">Mês</th>
+                    <th class="px-4 py-3 text-center">Dias Trab.</th>
+                    <th class="px-4 py-3 text-center">Total Mês</th>
+                    <th class="px-4 py-3 text-center">Média/Dia</th>
+                    <th class="px-4 py-3 text-center">% Meta</th>
+                    <th class="px-4 py-3 text-center">% Assert.</th>
+                    <th class="px-4 py-3 text-center text-rose-600">Erros</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">`;
+
+        chavesOrdenadas.forEach(k => {
+            const m = meses[k];
+            // Acumula Totais (Usando Set de dias globalmente pode ser tricky se for multi-mês, mas aqui queremos total de dias distintos no período)
+            m.dias.forEach(d => gDias.add(d));
+            gProd += m.total_prod;
+            gCampos += m.campos_total;
+            gOk += m.campos_ok;
+            gErros += m.erros;
+
+            const nDias = m.dias.size;
+            const mediaDia = nDias > 0 ? Math.round(m.total_prod / nDias) : 0;
+            const pctMeta = Math.round((mediaDia / 650) * 100); // Meta fixa 650
+            const assert = m.campos_total > 0 ? ((m.campos_ok / m.campos_total) * 100).toFixed(2) : '0.00';
+            const nomeMes = new Date(k + '-01').toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+
+            html += `
+                <tr class="hover:bg-slate-50">
+                    <td class="px-4 py-3 font-bold capitalize text-slate-700">${nomeMes}</td>
+                    <td class="px-4 py-3 text-center font-mono">${nDias}</td>
+                    <td class="px-4 py-3 text-center font-mono font-bold text-blue-600">${m.total_prod.toLocaleString('pt-BR')}</td>
+                    <td class="px-4 py-3 text-center font-mono">${mediaDia}</td>
+                    <td class="px-4 py-3 text-center font-bold ${pctMeta>=100?'text-emerald-600':'text-amber-600'}">${pctMeta}%</td>
+                    <td class="px-4 py-3 text-center font-bold ${parseFloat(assert)>=97?'text-emerald-600':'text-amber-600'}">${assert.replace('.',',')}%</td>
+                    <td class="px-4 py-3 text-center font-bold text-rose-600">${m.erros}</td>
+                </tr>`;
+        });
+
+        // Linha de Total
+        const gNDias = gDias.size;
+        const gMedia = gNDias > 0 ? Math.round(gProd / gNDias) : 0;
+        const gPctMeta = Math.round((gMedia / 650) * 100);
+        const gAssert = gCampos > 0 ? ((gOk / gCampos) * 100).toFixed(2) : '0.00';
+
+        html += `
+            <tr class="bg-slate-50 font-bold border-t border-slate-200">
+                <td class="px-4 py-3 text-slate-800">TOTAL DO PERÍODO</td>
+                <td class="px-4 py-3 text-center">${gNDias}</td>
+                <td class="px-4 py-3 text-center text-blue-700">${gProd.toLocaleString('pt-BR')}</td>
+                <td class="px-4 py-3 text-center">${gMedia}</td>
+                <td class="px-4 py-3 text-center ${gPctMeta>=100?'text-emerald-700':'text-amber-700'}">${gPctMeta}%</td>
+                <td class="px-4 py-3 text-center ${parseFloat(gAssert)>=97?'text-emerald-700':'text-amber-700'}">${gAssert.replace('.',',')}%</td>
+                <td class="px-4 py-3 text-center text-rose-700">${gErros}</td>
+            </tr>
+        </tbody></table>`;
+
+        return html;
     },
 
     gerarTabelaResumo: function(dados) {
@@ -460,9 +536,6 @@ MinhaArea.Evolucao = {
         </table>`;
     },
 
-    // =================================================================================
-    // MÓDULO 2: AUDITORIA DETALHADA
-    // =================================================================================
     renderizarAuditoriaUI: function(container, dados) {
         if (!dados || dados.length === 0) {
             container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado.</div>`;
@@ -497,80 +570,7 @@ MinhaArea.Evolucao = {
             </div>`;
     },
 
-    // =================================================================================
-    // MÓDULO 3: EVOLUÇÃO (H1 / H2)
-    // =================================================================================
-    carregarEvolucao: async function() {
-        const container = document.getElementById('conteudo-okr');
-        if(!container) return;
-        container.innerHTML = '<div class="py-12 text-center text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</div>';
-        try {
-            const ano = MinhaArea.dataAtual.getFullYear();
-            const inicioAno = `${ano}-01-01`; 
-            const fimAno = `${ano}-12-31`;
-
-            let qAudit = MinhaArea.supabase.from('auditoria_apontamentos').select('data_referencia, assistente, num_campos, acertos').gte('data_referencia', inicioAno).lte('data_referencia', fimAno);
-            let qProd = MinhaArea.supabase.from('producao').select('data_referencia, quantidade, usuario_id, usuarios!inner(nome)').gte('data_referencia', inicioAno).lte('data_referencia', fimAno);
-            
-            const usuarioAlvo = document.getElementById('admin-user-select')?.value || MinhaArea.usuarioAlvo;
-            
-            let nomeFiltro = '';
-            if (MinhaArea.user.funcao === 'Assistente') { 
-                nomeFiltro = MinhaArea.user.nome; 
-                qProd = qProd.eq('usuario_id', MinhaArea.user.id); 
-            }
-            else if (usuarioAlvo && usuarioAlvo !== 'todos') { 
-                nomeFiltro = usuarioAlvo; 
-                const idFiltro = this.mapaNomesParaId[usuarioAlvo];
-                if(idFiltro) qProd = qProd.eq('usuario_id', idFiltro);
-            }
-
-            if (nomeFiltro) {
-                const pNome = nomeFiltro.split(' ')[0];
-                qAudit = qAudit.ilike('assistente', `%${pNome}%`);
-            }
-
-            const [rAudit, rProd] = await Promise.all([qAudit, qProd]);
-            if (rAudit.error) throw rAudit.error; if (rProd.error) throw rProd.error;
-            
-            this.atualizarOpcoesSeletor(rAudit.data || [], rProd.data || []);
-            this.renderizarEvolucaoUI(container, rAudit.data, rProd.data, ano);
-        } catch (e) { console.error(e); }
-    },
-
-    renderizarEvolucaoUI: function(container, dadosAuditoria, dadosProducao, ano) {
-        const meses = Array.from({length: 12}, () => ({ audit_campos: 0, audit_ok: 0, prod_soma: 0, prod_dias: new Set() }));
-        dadosAuditoria.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].audit_campos += (parseInt(d.num_campos)||0); meses[m].audit_ok += (parseInt(d.acertos)||0); } });
-        dadosProducao.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].prod_soma += (parseInt(d.quantidade)||0); meses[m].prod_dias.add(d.data_referencia); } });
-        
-        const dadosFinais = meses.map(m => ({
-            assertividade: m.audit_campos > 0 ? (m.audit_ok / m.audit_campos) * 100 : null,
-            produtividade: m.prod_dias.size > 0 ? Math.round(m.prod_soma / m.prod_dias.size) : null
-        }));
-
-        const nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-        
-        const tabelaHtml = (titulo, inicio) => `
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
-                <div class="bg-slate-50 px-4 py-3 border-b border-slate-200"><h3 class="font-bold text-slate-700 text-sm uppercase">${titulo}</h3></div>
-                <div class="grid grid-cols-2 divide-x divide-slate-100">
-                    <div class="p-4">
-                        <h4 class="text-xs font-bold text-emerald-600 mb-2">Assertividade (Meta 97%)</h4>
-                        <table class="w-full text-xs text-left"><thead class="text-slate-400 font-bold border-b"><tr><th>Mês</th><th>Real</th><th>Status</th></tr></thead>
-                        <tbody class="divide-y">${[0,1,2,3,4,5].map(i => { const d = dadosFinais[inicio+i]; return `<tr><td class="py-2 capitalize">${nomesMeses[inicio+i]}</td><td class="font-bold ${d.assertividade>=97?'text-emerald-600':'text-rose-600'}">${d.assertividade?d.assertividade.toFixed(2)+'%':'-'}</td><td>${d.assertividade?(d.assertividade>=97?'<i class="fas fa-check text-emerald-500"></i>':'<i class="fas fa-times text-rose-400"></i>'):'-'}</td></tr>`;}).join('')}</tbody></table>
-                    </div>
-                    <div class="p-4">
-                        <h4 class="text-xs font-bold text-blue-600 mb-2">Produtividade (Meta 650)</h4>
-                        <table class="w-full text-xs text-left"><thead class="text-slate-400 font-bold border-b"><tr><th>Mês</th><th>Real</th><th>Status</th></tr></thead>
-                        <tbody class="divide-y">${[0,1,2,3,4,5].map(i => { const d = dadosFinais[inicio+i]; return `<tr><td class="py-2 capitalize">${nomesMeses[inicio+i]}</td><td class="font-bold ${d.produtividade>=650?'text-blue-600':'text-amber-600'}">${d.produtividade||'-'}</td><td>${d.produtividade?(d.produtividade>=650?'<i class="fas fa-check text-emerald-500"></i>':'<i class="fas fa-times text-amber-400"></i>'):'-'}</td></tr>`;}).join('')}</tbody></table>
-                    </div>
-                </div>
-            </div>`;
-
-        container.innerHTML = `<div class="grid grid-cols-1 gap-6 animate-enter"><div class="flex justify-between items-center"><h2 class="text-xl font-bold text-slate-800">Consolidado Anual - ${ano}</h2></div>${tabelaHtml('Primeiro Semestre (H1)', 0)}${tabelaHtml('Segundo Semestre (H2)', 6)}</div>`;
-    },
-
-    // --- AÇÕES ---
+    // --- AÇÕES GESTORA ---
     excluirDadosPeriodo: async function() {
         const { inicio, fim, texto, tipo } = MinhaArea.getPeriodo();
         if (tipo === 'dia') { alert("A exclusão é permitida apenas por Mês ou Ano."); return; }
@@ -624,6 +624,52 @@ MinhaArea.Evolucao = {
         } else {
             Papa.parse(file, {header:true, skipEmptyLines:true, complete: res=>processar(res.data)});
         }
+    },
+    carregarEvolucao: async function() {
+        const container = document.getElementById('conteudo-okr');
+        if(!container) return;
+        container.innerHTML = '<div class="py-12 text-center text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</div>';
+        try {
+            const ano = MinhaArea.dataAtual.getFullYear();
+            const inicioAno = `${ano}-01-01`; const fimAno = `${ano}-12-31`;
+            let qAudit = MinhaArea.supabase.from('auditoria_apontamentos').select('data_referencia, assistente, num_campos, acertos').gte('data_referencia', inicioAno).lte('data_referencia', fimAno);
+            let qProd = MinhaArea.supabase.from('producao').select('data_referencia, quantidade, usuario_id, usuarios!inner(nome)').gte('data_referencia', inicioAno).lte('data_referencia', fimAno);
+            
+            const usuarioAlvo = document.getElementById('admin-user-select')?.value || MinhaArea.usuarioAlvo;
+            let nomeFiltro = '';
+            if (MinhaArea.user.funcao === 'Assistente') { nomeFiltro = MinhaArea.user.nome; qProd = qProd.eq('usuario_id', MinhaArea.user.id); }
+            else if (usuarioAlvo && usuarioAlvo !== 'todos') { nomeFiltro = usuarioAlvo; const idFiltro = this.mapaNomesParaId[usuarioAlvo]; if(idFiltro) qProd = qProd.eq('usuario_id', idFiltro); }
+
+            if (nomeFiltro) { const pNome = nomeFiltro.split(' ')[0]; qAudit = qAudit.ilike('assistente', `%${pNome}%`); }
+
+            const [rAudit, rProd] = await Promise.all([qAudit, qProd]);
+            if (rAudit.error) throw rAudit.error; if (rProd.error) throw rProd.error;
+            
+            this.atualizarOpcoesSeletor(rAudit.data || [], rProd.data || []);
+            this.renderizarEvolucaoUI(container, rAudit.data, rProd.data, ano);
+        } catch (e) { console.error(e); }
+    },
+    renderizarEvolucaoUI: function(container, dadosAuditoria, dadosProducao, ano) {
+        const meses = Array.from({length: 12}, () => ({ audit_campos: 0, audit_ok: 0, prod_soma: 0, prod_dias: new Set() }));
+        dadosAuditoria.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].audit_campos += (parseInt(d.num_campos)||0); meses[m].audit_ok += (parseInt(d.acertos)||0); } });
+        dadosProducao.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].prod_soma += (parseInt(d.quantidade)||0); meses[m].prod_dias.add(d.data_referencia); } });
+        
+        const dadosFinais = meses.map(m => ({
+            assertividade: m.audit_campos > 0 ? (m.audit_ok / m.audit_campos) * 100 : null,
+            produtividade: m.prod_dias.size > 0 ? Math.round(m.prod_soma / m.prod_dias.size) : null
+        }));
+
+        const nomesMeses = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+        const tabelaHtml = (titulo, inicio) => `
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+                <div class="bg-slate-50 px-4 py-3 border-b border-slate-200"><h3 class="font-bold text-slate-700 text-sm uppercase">${titulo}</h3></div>
+                <div class="grid grid-cols-2 divide-x divide-slate-100">
+                    <div class="p-4"><h4 class="text-xs font-bold text-emerald-600 mb-2">Assertividade (Meta 97%)</h4><table class="w-full text-xs text-left"><thead class="text-slate-400 font-bold border-b"><tr><th>Mês</th><th>Real</th><th>Status</th></tr></thead><tbody class="divide-y">${[0,1,2,3,4,5].map(i => { const d = dadosFinais[inicio+i]; return `<tr><td class="py-2 capitalize">${nomesMeses[inicio+i]}</td><td class="font-bold ${d.assertividade>=97?'text-emerald-600':'text-rose-600'}">${d.assertividade?d.assertividade.toFixed(2)+'%':'-'}</td><td>${d.assertividade?(d.assertividade>=97?'<i class="fas fa-check text-emerald-500"></i>':'<i class="fas fa-times text-rose-400"></i>'):'-'}</td></tr>`;}).join('')}</tbody></table></div>
+                    <div class="p-4"><h4 class="text-xs font-bold text-blue-600 mb-2">Produtividade (Meta 650)</h4><table class="w-full text-xs text-left"><thead class="text-slate-400 font-bold border-b"><tr><th>Mês</th><th>Real</th><th>Status</th></tr></thead><tbody class="divide-y">${[0,1,2,3,4,5].map(i => { const d = dadosFinais[inicio+i]; return `<tr><td class="py-2 capitalize">${nomesMeses[inicio+i]}</td><td class="font-bold ${d.produtividade>=650?'text-blue-600':'text-amber-600'}">${d.produtividade||'-'}</td><td>${d.produtividade?(d.produtividade>=650?'<i class="fas fa-check text-emerald-500"></i>':'<i class="fas fa-times text-amber-400"></i>'):'-'}</td></tr>`;}).join('')}</tbody></table></div>
+                </div>
+            </div>`;
+
+        container.innerHTML = `<div class="grid grid-cols-1 gap-6 animate-enter"><div class="flex justify-between items-center"><h2 class="text-xl font-bold text-slate-800">Consolidado Anual - ${ano}</h2></div>${tabelaHtml('Primeiro Semestre (H1)', 0)}${tabelaHtml('Segundo Semestre (H2)', 6)}</div>`;
     },
     getDatasPorPeriodo: function(tipo) { return MinhaArea.getPeriodo(); }
 };
