@@ -1,4 +1,6 @@
 MinhaArea.Evolucao = {
+    dados: [], // Cache para busca local
+
     carregar: async function() {
         this.renderizarLayout();
         const headerSelect = document.getElementById('filtro-periodo-okr-header');
@@ -11,7 +13,16 @@ MinhaArea.Evolucao = {
         if (!container) return;
 
         container.innerHTML = `
-            <div class="flex flex-col gap-6">
+            <div class="flex flex-col gap-4">
+                
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+                    <i class="fas fa-search text-slate-400 ml-2"></i>
+                    <input type="text" 
+                        placeholder="Buscar em todos os campos (Nome, Empresa, Documento, Obs...)" 
+                        class="w-full text-sm text-slate-600 outline-none placeholder:text-slate-400"
+                        onkeyup="MinhaArea.Evolucao.filtrar(this.value)">
+                </div>
+
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h3 class="font-bold text-slate-700 flex items-center gap-2">
@@ -29,10 +40,10 @@ MinhaArea.Evolucao = {
                                     <th class="px-4 py-3 border-r border-slate-100">Empresa</th>
                                     <th class="px-4 py-3 border-r border-slate-100">Documento</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100">Status</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100" title="Total de Campos Auditados">Campos</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-emerald-600" title="Quantidade de Acertos (Ok)">OK</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600" title="Campos - OK">NOK</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-blue-600" title="(OK / Campos) * 100">% Assert.</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100">Campos</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-emerald-600">OK</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600">NOK</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-blue-600">% Assert.</th>
                                     <th class="px-4 py-3 border-r border-slate-100">Auditora</th>
                                     <th class="px-4 py-3">Apontamentos / Obs</th>
                                 </tr>
@@ -53,20 +64,16 @@ MinhaArea.Evolucao = {
 
     carregarDados: async function(tipoPeriodo) {
         const tbody = document.getElementById('tabela-okr-body');
-        const contador = document.getElementById('okr-total-regs');
         if(!tbody) return;
 
         tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-blue-500"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando tabela...</td></tr>';
 
         try {
-            // USA A DATA SELECIONADA NO TOPO DA TELA (MinhaArea.dataAtual)
             const referencia = MinhaArea.dataAtual || new Date();
-            
             let inicioStr = '', fimStr = '';
             const y = referencia.getFullYear();
             const m = referencia.getMonth();
 
-            // Lógica de Datas baseada na Data Selecionada
             switch(tipoPeriodo) {
                 case 'semana':
                     const day = referencia.getDay(); 
@@ -111,68 +118,85 @@ MinhaArea.Evolucao = {
                 .order('data_referencia', { ascending: false });
 
             if (error) throw error;
-            if (contador) contador.innerText = `${data ? data.length : 0} registros`;
 
-            if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado para este período.</td></tr>';
-                return;
-            }
+            // Salva no cache e renderiza
+            this.dados = data || [];
+            this.renderizarTabela(this.dados);
 
-            let html = '';
-            data.forEach(item => {
-                let statusBadge = '';
-                const st = (item.status || '').toUpperCase().trim();
-                if(st === 'OK' || st === 'ACERTO') statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
-                else if(st.includes('ERRO') || st === 'REV' || st === 'JUST') statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
-                else statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
-
-                const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
-                
-                // --- CÁLCULOS DINÂMICOS (REGRAS DEFINIDAS) ---
-                const campos = parseInt(item.num_campos) || 0;
-                const ok = parseInt(item.acertos) || 0; // Coluna 'Ok'
-                
-                // Regra: NOK = Campos - OK
-                const nok = campos - ok; 
-                
-                // Regra: Assertividade = (OK / Campos) * 100
-                let assertividade = 0;
-                if (campos > 0) {
-                    assertividade = (ok / campos) * 100;
-                } else {
-                    // Se não tem campos, assertividade é 100% se não houver erro? 
-                    // Padrão seguro é 0 ou traço, mas se NOK é 0, pode ser 100%. 
-                    // Vamos manter 0 se campos for 0 para evitar divisão por zero.
-                    assertividade = 0;
-                }
-                const pctAssert = Math.round(assertividade); // Arredonda
-
-                let pctClass = pctAssert >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
-
-                html += `
-                    <tr class="bg-white hover:bg-blue-50/30 transition border-b border-slate-50 last:border-0">
-                        <td class="px-4 py-3 font-bold text-slate-700">${dataFmt}</td>
-                        <td class="px-4 py-3 font-bold text-blue-600">${item.assistente || '-'}</td>
-                        <td class="px-4 py-3 text-slate-500">${item.empresa || '-'}</td>
-                        <td class="px-4 py-3 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
-                        <td class="px-4 py-3 text-center">${statusBadge}</td>
-                        
-                        <td class="px-4 py-3 text-center text-slate-400 font-mono">${campos}</td>
-                        <td class="px-4 py-3 text-center font-bold text-slate-700 font-mono">${ok}</td>
-                        <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono bg-rose-50/30">${nok}</td>
-                        <td class="px-4 py-3 text-center ${pctClass}">${pctAssert}%</td>
-                        
-                        <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
-                        <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
-                            ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
-                        </td>
-                    </tr>`;
-            });
-            tbody.innerHTML = html;
         } catch (e) {
             console.error("Erro carrega auditoria:", e);
             tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-rose-500 font-bold">Erro: ${e.message}</td></tr>`;
         }
+    },
+
+    filtrar: function(termo) {
+        if (!termo) {
+            this.renderizarTabela(this.dados);
+            return;
+        }
+
+        const termoLower = termo.toLowerCase();
+        const filtrados = this.dados.filter(item => {
+            // Busca em todos os valores do objeto
+            return Object.values(item).some(val => 
+                String(val).toLowerCase().includes(termoLower)
+            );
+        });
+
+        this.renderizarTabela(filtrados);
+    },
+
+    renderizarTabela: function(lista) {
+        const tbody = document.getElementById('tabela-okr-body');
+        const contador = document.getElementById('okr-total-regs');
+        
+        if (contador) contador.innerText = `${lista.length} registros`;
+
+        if (!lista || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        lista.forEach(item => {
+            let statusBadge = '';
+            const st = (item.status || '').toUpperCase().trim();
+            
+            if(st === 'OK' || st === 'ACERTO') statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
+            else if(st.includes('ERRO') || st === 'REV' || st === 'JUST') statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
+            else statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
+
+            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
+            
+            // Cálculos
+            const campos = parseInt(item.num_campos) || 0;
+            const ok = parseInt(item.acertos) || 0;
+            const nok = campos - ok; 
+            
+            let assertividade = 0;
+            if (campos > 0) assertividade = (ok / campos) * 100;
+            const pctAssert = Math.round(assertividade);
+
+            let pctClass = pctAssert >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
+
+            html += `
+                <tr class="bg-white hover:bg-blue-50/30 transition border-b border-slate-50 last:border-0">
+                    <td class="px-4 py-3 font-bold text-slate-700">${dataFmt}</td>
+                    <td class="px-4 py-3 font-bold text-blue-600">${item.assistente || '-'}</td>
+                    <td class="px-4 py-3 text-slate-500">${item.empresa || '-'}</td>
+                    <td class="px-4 py-3 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
+                    <td class="px-4 py-3 text-center">${statusBadge}</td>
+                    <td class="px-4 py-3 text-center text-slate-400 font-mono">${campos}</td>
+                    <td class="px-4 py-3 text-center font-bold text-slate-700 font-mono">${ok}</td>
+                    <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono bg-rose-50/30">${nok}</td>
+                    <td class="px-4 py-3 text-center ${pctClass}">${pctAssert}%</td>
+                    <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
+                    <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
+                        ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
+                    </td>
+                </tr>`;
+        });
+        tbody.innerHTML = html;
     },
 
     importarArquivo: function(input) {
@@ -195,7 +219,6 @@ MinhaArea.Evolucao = {
                     return null;
                 };
 
-                // Busca coluna 'end_time' (ou 'Data') e 'Assistente'
                 const colEndTime = encontrarColuna(['end_time', 'time', 'Data']);
                 const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
 
@@ -210,7 +233,6 @@ MinhaArea.Evolucao = {
                     const assistente = row[colAssistente];
                     if (!rawTime && !assistente) return;
 
-                    // Tratamento de Data
                     let dataFinal = null;
                     if (typeof rawTime === 'number') {
                         const date = new Date(Math.round((rawTime - 25569)*86400*1000));
