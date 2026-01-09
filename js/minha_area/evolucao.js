@@ -1,6 +1,8 @@
 MinhaArea.Evolucao = {
     subAbaAtual: 'dash', // dash | auditoria | evolucao
-    dadosCache: [], 
+    dadosAuditoriaCache: [], 
+    dadosProducaoCache: [],
+    mapaUsuarios: {}, // Cache de ID -> Nome para cruzar dados
 
     carregar: async function() {
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
@@ -9,12 +11,23 @@ MinhaArea.Evolucao = {
 
         if (!isGestora && this.subAbaAtual === 'auditoria') this.subAbaAtual = 'dash';
 
+        // Carrega mapa de usuários para traduzir ID (Produção) <-> Nome (Auditoria)
+        await this.carregarMapaUsuarios();
+
         this.renderizarLayout(isGestora);
         
         if (this.subAbaAtual === 'evolucao') {
             await this.carregarEvolucao();
         } else {
-            await this.carregarDadosBase();
+            await this.carregarDadosCruzados();
+        }
+    },
+
+    carregarMapaUsuarios: async function() {
+        // Cria um mapa ID -> Nome para facilitar filtros
+        const { data } = await MinhaArea.supabase.from('usuarios').select('id, nome');
+        if (data) {
+            this.mapaUsuarios = data.reduce((acc, u) => { acc[u.id] = u.nome; return acc; }, {});
         }
     },
 
@@ -56,28 +69,27 @@ MinhaArea.Evolucao = {
                 </div>`;
         }
 
-        // BARRA DE BUSCA (GLOBAL PARA TODAS SUB-ABAS)
-        // Só não mostra na Evolução Anual pois lá é agregado
+        // Barra de Busca Global (Em todas as sub-abas exceto evolução anual)
         let searchHtml = '';
         if (this.subAbaAtual !== 'evolucao') {
             searchHtml = `
-                <div class="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm w-full md:w-96">
+                <div class="flex items-center gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm w-full md:w-80">
                     <i class="fas fa-search text-slate-400 ml-2"></i>
-                    <input type="text" onkeyup="MinhaArea.Evolucao.filtrarBusca(this.value)" placeholder="Buscar em todos os campos..." class="w-full text-sm text-slate-600 outline-none placeholder:text-slate-400 bg-transparent">
+                    <input type="text" onkeyup="MinhaArea.Evolucao.filtrarBusca(this.value)" placeholder="Buscar..." class="w-full text-sm text-slate-600 outline-none placeholder:text-slate-400 bg-transparent">
                 </div>
             `;
         }
 
-        // BOTÕES DE AÇÃO (IMPORTAR / EXCLUIR)
+        // Ações Gestora
         let actionsHtml = '';
         if (isGestora && this.subAbaAtual === 'auditoria') {
             actionsHtml = `
                 <div class="flex items-center gap-2">
-                    <button onclick="MinhaArea.Evolucao.excluirDadosPeriodo()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold py-2 px-3 rounded-lg transition flex items-center gap-2" title="Excluir dados do período selecionado">
-                        <i class="fas fa-trash-alt"></i> Excluir Período
+                    <button onclick="MinhaArea.Evolucao.excluirDadosPeriodo()" class="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 text-xs font-bold py-2 px-3 rounded-lg transition flex items-center gap-2" title="Excluir período">
+                        <i class="fas fa-trash-alt"></i> Excluir
                     </button>
                     <label class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 text-xs font-bold py-2 px-3 rounded-lg cursor-pointer transition flex items-center gap-2">
-                        <i class="fas fa-cloud-upload-alt"></i> Importar Auditoria
+                        <i class="fas fa-cloud-upload-alt"></i> Importar
                         <input type="file" accept=".csv, .xlsx, .xls" class="hidden" onchange="MinhaArea.Evolucao.importarAuditoria(this)">
                     </label>
                 </div>
@@ -99,31 +111,36 @@ MinhaArea.Evolucao = {
     },
 
     // =================================================================================
-    // CARREGAMENTO DE DADOS (BASE)
+    // CARREGAMENTO DE DADOS CRUZADOS (AUDITORIA + PRODUÇÃO)
     // =================================================================================
-    carregarDadosBase: async function() {
+    carregarDadosCruzados: async function() {
         const container = document.getElementById('conteudo-okr');
         
         try {
-            // Usa o novo seletor unificado
             const { inicio, fim } = MinhaArea.getPeriodo();
             
-            let query = MinhaArea.supabase
+            // 1. Busca Auditoria (Qualidade/Erros)
+            let qAudit = MinhaArea.supabase
                 .from('auditoria_apontamentos')
                 .select('*')
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .order('data_referencia', { ascending: false });
 
-            const { data, error } = await query;
-            if(error) throw error;
+            // 2. Busca Produção (Volume Validados)
+            let qProd = MinhaArea.supabase
+                .from('producao')
+                .select('quantidade, usuario_id, data_referencia')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
 
-            this.dadosCache = data || []; // Cache contém TODOS do período
-            
-            // Se for gestora, atualiza o select do topo (se necessário, mas o select unificado já é inteligente)
-            if (document.getElementById('admin-user-select')) {
-                this.atualizarOpcoesSeletor(this.dadosCache);
-            }
+            const [rAudit, rProd] = await Promise.all([qAudit, qProd]);
+
+            if(rAudit.error) throw rAudit.error;
+            if(rProd.error) throw rProd.error;
+
+            this.dadosAuditoriaCache = rAudit.data || [];
+            this.dadosProducaoCache = rProd.data || [];
 
             this.atualizarVisualizacao();
 
@@ -134,9 +151,7 @@ MinhaArea.Evolucao = {
     },
 
     filtrarBusca: function(termo) {
-        if (!this.dadosCache) return;
-        
-        // Reaplica filtros de assistente + busca
+        if (!this.dadosAuditoriaCache) return;
         this.atualizarVisualizacao(termo);
     },
 
@@ -146,63 +161,89 @@ MinhaArea.Evolucao = {
 
         if (this.subAbaAtual === 'evolucao') return;
 
-        // 1. Filtra por Assistente
-        let dadosFiltrados = this.dadosCache;
+        // FILTROS
         const usuarioAlvo = document.getElementById('admin-user-select')?.value || MinhaArea.usuarioAlvo;
-
-        // Variável para o título do card
+        let auditFiltrados = this.dadosAuditoriaCache;
+        let prodFiltrados = this.dadosProducaoCache;
+        
+        // Nome para exibição no card
         let nomeExibicao = "Equipe Geral";
 
+        // Filtro por Assistente
         if (MinhaArea.user.funcao === 'Assistente') {
-            const primeiroNome = MinhaArea.user.nome.split(' ')[0].toLowerCase();
-            dadosFiltrados = this.dadosCache.filter(d => d.assistente && d.assistente.toLowerCase().includes(primeiroNome));
+            // Visão do próprio assistente
             nomeExibicao = MinhaArea.user.nome;
+            const primeiroNome = nomeExibicao.split(' ')[0].toLowerCase();
+            
+            auditFiltrados = this.dadosAuditoriaCache.filter(d => d.assistente && d.assistente.toLowerCase().includes(primeiroNome));
+            prodFiltrados = this.dadosProducaoCache.filter(d => d.usuario_id == MinhaArea.user.id);
+
         } else if (usuarioAlvo && usuarioAlvo !== 'todos') {
-            dadosFiltrados = this.dadosCache.filter(d => d.assistente === usuarioAlvo); // usuarioAlvo aqui é o Nome (texto)
-            nomeExibicao = usuarioAlvo;
+            // Visão da Gestora filtrando alguém
+            const idAlvo = usuarioAlvo;
+            const nomeAlvo = this.mapaUsuarios[idAlvo] || '';
+            nomeExibicao = nomeAlvo || "Assistente";
+            const primeiroNome = nomeExibicao.split(' ')[0].toLowerCase();
+
+            auditFiltrados = this.dadosAuditoriaCache.filter(d => d.assistente && d.assistente.toLowerCase().includes(primeiroNome));
+            prodFiltrados = this.dadosProducaoCache.filter(d => d.usuario_id == idAlvo);
         }
 
-        // 2. Filtra por Busca (Texto)
+        // Filtro por Busca (Apenas na Auditoria, pois Produção não tem obs/doc)
         if (termoBusca) {
             const lower = termoBusca.toLowerCase();
-            dadosFiltrados = dadosFiltrados.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(lower)));
+            auditFiltrados = auditFiltrados.filter(d => Object.values(d).some(v => String(v).toLowerCase().includes(lower)));
         }
 
-        // Renderiza
+        // RENDERIZAÇÃO
         if (this.subAbaAtual === 'auditoria') {
-            this.renderizarAuditoriaUI(container, dadosFiltrados);
+            this.renderizarAuditoriaUI(container, auditFiltrados);
         } else {
-            this.renderizarDashUI(container, dadosFiltrados, this.dadosCache, nomeExibicao);
+            // Passa os dados filtrados E os totais (para cálculo de parciais de equipe se precisar)
+            this.renderizarDashUI(container, auditFiltrados, prodFiltrados, nomeExibicao);
         }
     },
 
     // =================================================================================
-    // MÓDULO 1: DASH GERAL
+    // MÓDULO 1: DASH GERAL (COM DADOS CRUZADOS)
     // =================================================================================
-    renderizarDashUI: function(container, dadosFiltrados, dadosEquipeTotal, nomeExibicao) {
-        if (!dadosFiltrados || dadosFiltrados.length === 0) {
-            container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado para o filtro selecionado.</div>`;
+    renderizarDashUI: function(container, auditFiltrados, prodFiltrados, nomeExibicao) {
+        // Se não houver dados em nenhum dos dois, avisa
+        if (auditFiltrados.length === 0 && prodFiltrados.length === 0) {
+            container.innerHTML = `<div class="text-center py-12 text-slate-400 bg-white rounded-xl border border-slate-200">Nenhum dado encontrado para o período/filtro.</div>`;
             return;
         }
 
         const { inicio, fim } = MinhaArea.getPeriodo();
-        const dataFormatada = `${inicio.split('-').reverse().join('/')} à ${fim.split('-').reverse().join('/')}`;
+        const periodoTexto = `${inicio.split('-').reverse().join('/')} à ${fim.split('-').reverse().join('/')}`;
 
-        // KPI Equipe (Assertividade)
-        const totalCamposEq = dadosEquipeTotal.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
-        const totalOkEq = dadosEquipeTotal.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
+        // --- CÁLCULO KPIS ---
+
+        // 1. VOLUME (Base Produção)
+        // Total Validados = Soma da produção (quantidade)
+        const totalValidados = prodFiltrados.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0);
+        
+        // Total Auditados = Quantidade de registros na auditoria (amostragem)
+        const totalAuditados = auditFiltrados.length;
+
+        // % Auditado sobre o total produzido
+        const pctAuditado = totalValidados > 0 ? Math.round((totalAuditados / totalValidados) * 100) : 0;
+
+        // 2. QUALIDADE (Base Auditoria)
+        const camposAuditados = auditFiltrados.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
+        const camposOk = auditFiltrados.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
+        const camposNok = camposAuditados - camposOk;
+        
+        // Atingimento (Assertividade do Filtro)
+        const atingimento = camposAuditados > 0 ? (camposOk / camposAuditados) * 100 : 0;
+        const atingimentoStr = atingimento.toFixed(2).replace('.',',') + '%';
+
+        // 3. PARCIAL EQUIPE (Base Auditoria Total do Cache - Sem filtros de usuário)
+        // Calcula a média de assertividade de TODO o time no período carregado
+        const totalCamposEq = this.dadosAuditoriaCache.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
+        const totalOkEq = this.dadosAuditoriaCache.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
         const parcialEquipe = totalCamposEq > 0 ? (totalOkEq / totalCamposEq) * 100 : 0;
-
-        // KPI Seleção (Qualidade e Volume)
-        const totalDocs = dadosFiltrados.length;
-        const totalValidados = dadosFiltrados.filter(d => ((parseInt(d.num_campos)||0) - (parseInt(d.acertos)||0)) === 0).length;
-        const totalCampos = dadosFiltrados.reduce((acc, cur) => acc + (parseInt(cur.num_campos)||0), 0);
-        const totalOk = dadosFiltrados.reduce((acc, cur) => acc + (parseInt(cur.acertos)||0), 0);
-        const totalNok = totalCampos - totalOk;
-        const atingimento = totalCampos > 0 ? (totalOk / totalCampos) * 100 : 0;
-        const pctAuditados = 10; // Exemplo fixo pedido ou precisa calcular sobre meta? Vou deixar calculado se possível ou fixo conforme exemplo.
-        // O exemplo "100 (10%)" sugere percentual sobre um total esperado. Como não temos a meta de volume aqui, mostrarei % de Validados sobre Auditados
-        const pctValidados = totalDocs > 0 ? Math.round((totalValidados / totalDocs)*100) : 0;
+        const parcialEquipeStr = parcialEquipe.toFixed(2).replace('.',',') + '%';
 
         // HTML
         container.innerHTML = `
@@ -215,31 +256,31 @@ MinhaArea.Evolucao = {
                     </div>
                     <div class="space-y-3 mt-1">
                         <div class="flex justify-between items-center border-b border-slate-50 pb-2">
-                            <span class="text-sm text-slate-500 font-medium">Meta</span>
+                            <span class="text-sm text-slate-500 font-medium">Meta Assertividade</span>
                             <span class="text-lg font-black text-slate-700">97%</span>
                         </div>
                         <div class="flex justify-between items-center">
                             <span class="text-sm text-slate-500 font-medium">Parcial Equipe</span>
-                            <span class="text-lg font-black ${parcialEquipe >= 97 ? 'text-emerald-600' : 'text-amber-600'}">${parcialEquipe.toFixed(2).replace('.',',')}%</span>
+                            <span class="text-lg font-black ${parcialEquipe >= 97 ? 'text-emerald-600' : 'text-amber-600'}">${parcialEquipeStr}</span>
                         </div>
                     </div>
                 </div>
 
                 <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between h-36">
                     <div class="flex justify-between items-start">
-                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider truncate max-w-[200px]" title="${nomeExibicao}">
-                            Qualidade: <span class="text-blue-600">${nomeExibicao}</span>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider truncate max-w-[200px]" title="Análise de: ${nomeExibicao}">
+                            Qualidade: <span class="text-blue-600">${nomeExibicao.split(' ')[0]}</span>
                         </span>
                         <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><i class="fas fa-check-double"></i></div>
                     </div>
                     <div class="space-y-3 mt-1">
                         <div class="flex justify-between items-center border-b border-slate-50 pb-2">
                             <span class="text-sm text-slate-500 font-medium">Atingimento</span>
-                            <span class="text-lg font-black ${atingimento >= 97 ? 'text-blue-600' : 'text-amber-600'}">${atingimento.toFixed(2).replace('.',',')}%</span>
+                            <span class="text-lg font-black ${atingimento >= 97 ? 'text-blue-600' : 'text-amber-600'}">${atingimentoStr}</span>
                         </div>
                         <div class="flex justify-between items-center">
                             <span class="text-sm text-slate-500 font-medium">Campos com Erros</span>
-                            <span class="text-lg font-black text-rose-600">${totalNok}</span>
+                            <span class="text-lg font-black text-rose-600">${camposNok}</span>
                         </div>
                     </div>
                 </div>
@@ -252,13 +293,13 @@ MinhaArea.Evolucao = {
                     <div class="space-y-3 mt-1">
                         <div class="flex justify-between items-center border-b border-slate-50 pb-2">
                             <span class="text-sm text-slate-500 font-medium">Total Validados</span>
-                            <span class="text-lg font-black text-emerald-600">${totalValidados}</span>
+                            <span class="text-lg font-black text-emerald-600">${totalValidados.toLocaleString('pt-BR')}</span>
                         </div>
                         <div class="flex justify-between items-center">
                             <span class="text-sm text-slate-500 font-medium">Total Auditados</span>
                             <div class="flex items-baseline gap-1">
-                                <span class="text-lg font-black text-slate-700">${totalDocs}</span>
-                                <span class="text-xs text-slate-400 font-bold">(${pctValidados}%)</span>
+                                <span class="text-lg font-black text-slate-700">${totalAuditados.toLocaleString('pt-BR')}</span>
+                                <span class="text-xs text-slate-400 font-bold">(${pctAuditado}%)</span>
                             </div>
                         </div>
                     </div>
@@ -268,12 +309,12 @@ MinhaArea.Evolucao = {
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center cursor-pointer" onclick="document.getElementById('dash-table-resumo').classList.toggle('hidden')">
                     <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-                        <i class="fas fa-folder text-blue-400"></i> Resumo por Documento <span class="text-xs font-normal text-slate-400 ml-2">(${dataFormatada})</span>
+                        <i class="fas fa-folder text-blue-400"></i> Resumo por Documento <span class="text-xs font-normal text-slate-400 ml-2">(${periodoTexto})</span>
                     </h3>
                     <i class="fas fa-chevron-down text-slate-400 text-xs"></i>
                 </div>
                 <div id="dash-table-resumo" class="overflow-x-auto max-h-[400px] custom-scroll">
-                    ${this.gerarTabelaResumo(dadosFiltrados)}
+                    ${this.gerarTabelaResumo(auditFiltrados)}
                 </div>
             </div>
 
@@ -284,13 +325,15 @@ MinhaArea.Evolucao = {
                     </h3>
                 </div>
                 <div class="overflow-x-auto max-h-[500px] custom-scroll">
-                    ${this.gerarTabelaDetalhada(dadosFiltrados)}
+                    ${this.gerarTabelaDetalhada(auditFiltrados)}
                 </div>
             </div>
         `;
     },
 
     gerarTabelaResumo: function(dados) {
+        if (!dados.length) return '<div class="p-4 text-center text-xs text-slate-400">Sem dados de auditoria para exibir resumo.</div>';
+        
         const agrupado = {};
         dados.forEach(d => {
             const key = `${d.assistente}|${d.doc_name}`;
@@ -301,15 +344,16 @@ MinhaArea.Evolucao = {
         });
         const lista = Object.values(agrupado).map(i => ({...i, nok: i.campos-i.ok, assert: i.campos>0?(i.ok/i.campos)*100:0})).sort((a,b)=>a.assistente.localeCompare(b.assistente));
         
-        return `<table class="w-full text-xs text-left text-slate-600"><thead class="bg-slate-50 text-slate-500 font-bold sticky top-0"><tr><th class="px-4 py-3">Assistente</th><th class="px-4 py-3">Documento</th><th class="px-4 py-3 text-center">Auditados</th><th class="px-4 py-3 text-center text-rose-600">NOK</th><th class="px-4 py-3 text-center text-blue-600">% Assert.</th></tr></thead><tbody class="divide-y divide-slate-100">${lista.map(d=>`<tr class="hover:bg-slate-50"><td class="px-4 py-2 font-bold text-blue-600">${d.assistente}</td><td class="px-4 py-2">${d.documento}</td><td class="px-4 py-2 text-center font-mono">${d.docs}</td><td class="px-4 py-2 text-center font-mono text-rose-600 font-bold">${d.nok>0?d.nok:'-'}</td><td class="px-4 py-2 text-center font-bold">${d.assert.toFixed(2).replace('.',',')}%</td></tr>`).join('')}</tbody></table>`;
+        return `<table class="w-full text-xs text-left text-slate-600"><thead class="bg-slate-50 text-slate-500 font-bold sticky top-0"><tr><th class="px-4 py-3">Assistente</th><th class="px-4 py-3">Documento</th><th class="px-4 py-3 text-center">Auditados</th><th class="px-4 py-3 text-center text-rose-600">NOK Total</th><th class="px-4 py-3 text-center text-blue-600">% Assert.</th></tr></thead><tbody class="divide-y divide-slate-100">${lista.map(d=>`<tr class="hover:bg-slate-50"><td class="px-4 py-2 font-bold text-blue-600">${d.assistente}</td><td class="px-4 py-2">${d.documento}</td><td class="px-4 py-2 text-center font-mono">${d.docs}</td><td class="px-4 py-2 text-center font-mono text-rose-600 font-bold">${d.nok>0?d.nok:'-'}</td><td class="px-4 py-2 text-center font-bold">${d.assert.toFixed(2).replace('.',',')}%</td></tr>`).join('')}</tbody></table>`;
     },
 
     gerarTabelaDetalhada: function(dados) {
+        if (!dados.length) return '<div class="p-4 text-center text-xs text-slate-400">Sem dados detalhados.</div>';
+        
         return `<table class="w-full text-xs text-left text-slate-600"><thead class="bg-slate-50 text-slate-500 font-bold sticky top-0"><tr><th class="px-4 py-3">Data</th><th class="px-4 py-3">Assistente</th><th class="px-4 py-3">Documento</th><th class="px-4 py-3 text-center">Status</th><th class="px-4 py-3 text-center text-rose-600">NOK</th><th class="px-4 py-3">Obs</th></tr></thead><tbody class="divide-y divide-slate-100">${dados.map(d=>{const k=(parseInt(d.num_campos)||0)-(parseInt(d.acertos)||0); return `<tr class="${k>0?'bg-rose-50/30':'hover:bg-slate-50'} border-b border-slate-50"><td class="px-4 py-2 font-bold">${d.data_referencia?d.data_referencia.split('-').reverse().join('/'):'-'}</td><td class="px-4 py-2 text-blue-600 font-bold">${d.assistente}</td><td class="px-4 py-2 truncate max-w-[200px]" title="${d.doc_name}">${d.doc_name}</td><td class="px-4 py-2 text-center"><span class="${d.status==='OK'?'text-emerald-600':'text-rose-600'} font-bold text-[10px]">${d.status}</span></td><td class="px-4 py-2 text-center font-bold ${k>0?'text-rose-600':'text-slate-300'}">${k>0?k:'-'}</td><td class="px-4 py-2 text-xs ${k>0?'text-rose-700 font-medium':'text-slate-400 italic'}">${d.apontamentos_obs||'-'}</td></tr>`;}).join('')}</tbody></table>`;
     },
 
     renderizarAuditoriaUI: function(container, dados) {
-        // ... (Mantém a tabela de Auditoria igual, com a barra de busca funcionando)
         const total = dados.length;
         const campos = dados.reduce((acc,cur)=>acc+(parseInt(cur.num_campos)||0),0);
         const nok = dados.reduce((acc,cur)=>acc+((parseInt(cur.num_campos)||0)-(parseInt(cur.acertos)||0)),0);
@@ -328,41 +372,25 @@ MinhaArea.Evolucao = {
     },
 
     // --- FUNÇÕES DE AÇÃO ---
-    
     excluirDadosPeriodo: async function() {
         const { inicio, fim, texto, tipo } = MinhaArea.getPeriodo();
-        
-        if (tipo === 'dia') {
-            alert("A exclusão em massa só é permitida por Mês ou Ano para segurança.");
-            return;
-        }
-
-        if (!confirm(`ATENÇÃO GESTORA!\n\nVocê está prestes a EXCLUIR TODOS os registros de auditoria de:\n\n${texto} (${inicio} a ${fim})\n\nEssa ação não pode ser desfeita. Tem certeza?`)) return;
+        if (tipo === 'dia') { alert("A exclusão é permitida apenas por Mês ou Ano."); return; }
+        if (!confirm(`EXCLUIR AUDITORIA: ${texto}\n\nTem certeza?`)) return;
 
         try {
-            const { error } = await MinhaArea.supabase
-                .from('auditoria_apontamentos')
-                .delete()
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim);
-
-            if (error) throw error;
-
-            alert("Registros excluídos com sucesso.");
-            this.carregar(); // Recarrega
-
-        } catch (e) {
-            console.error(e);
-            alert("Erro ao excluir: " + e.message);
-        }
+            await MinhaArea.supabase.from('auditoria_apontamentos').delete().gte('data_referencia', inicio).lte('data_referencia', fim);
+            alert("Excluído com sucesso.");
+            this.carregar();
+        } catch (e) { alert("Erro: " + e.message); }
     },
 
     importarAuditoria: function(input) {
-        // ... (Mantém a importação igual)
         if (!input.files[0]) return;
         const file = input.files[0];
-        const label = input.parentElement.querySelector('label'); // Ajuste se necessário para achar o texto ou icone
-        
+        const labelBtn = input.parentElement.querySelector('label');
+        const originalText = labelBtn.innerHTML;
+        labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
+
         const processar = async (rows) => {
             try {
                 if (!rows.length) throw new Error("Vazio");
@@ -370,7 +398,7 @@ MinhaArea.Evolucao = {
                 const find = (opts) => { for(const o of opts) { const f = keys.find(k=>k.trim().toLowerCase()===o.toLowerCase()); if(f) return f; } return null; };
                 const cTime = find(['end_time','time','Data']);
                 const cAsst = find(['Assistente','Nome']);
-                if(!cTime || !cAsst) { alert("Colunas obrigatórias não encontradas."); return; }
+                if(!cTime || !cAsst) { alert("Colunas 'end_time' e 'Assistente' não encontradas."); return; }
 
                 const batch = [];
                 rows.forEach(r => {
@@ -378,7 +406,7 @@ MinhaArea.Evolucao = {
                     if(!rt && !as) return;
                     let df = null;
                     if(typeof rt==='number') df = new Date(Math.round((rt-25569)*864e5)).toISOString().split('T')[0];
-                    else if(rt) { const s=String(rt); df = s.includes('T')?s.split('T')[0]:s; }
+                    else if(rt) { const s=String(rt); df = s.includes('T')?s.split('T')[0]:(s.includes('/')?`${s.split('/')[2]}-${s.split('/')[1]}-${s.split('/')[0]}`:s); }
                     const get = (o) => { const k=find(o); return k?r[k]:null; };
                     batch.push({
                         mes: get(['mês']), end_time: String(rt), data_referencia: df, empresa: get(['Empresa']), assistente: as, doc_name: get(['doc_name']),
@@ -393,7 +421,7 @@ MinhaArea.Evolucao = {
                     alert(`Importado ${batch.length} registros!`);
                     MinhaArea.Evolucao.carregar();
                 }
-            } catch(e) { console.error(e); alert(e.message); } finally { input.value = ''; }
+            } catch(e) { console.error(e); alert(e.message); } finally { labelBtn.innerHTML = originalText; input.value = ''; }
         };
 
         if(file.name.endsWith('.xlsx')) {
@@ -405,16 +433,13 @@ MinhaArea.Evolucao = {
         }
     },
 
-    // --- EVOLUÇÃO ---
+    // --- EVOLUÇÃO (MANTIDA) ---
     carregarEvolucao: async function() {
-        // ... (Mantém igual ao anterior)
         const container = document.getElementById('conteudo-okr');
         if(!container) return;
         container.innerHTML = '<div class="py-12 text-center text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando...</div>';
         try {
-            const { inicio, fim, texto, tipo } = MinhaArea.getPeriodo(); // Usa filtro global agora? Se for evolução ANUAL, talvez force o ano.
-            // Para evolução, geralmente queremos o ANO TODO. Vamos pegar o ano do filtro.
-            const ano = inicio.split('-')[0];
+            const ano = MinhaArea.dataAtual.getFullYear(); // Evolução é sempre ANUAL baseada na data selecionada
             const inicioAno = `${ano}-01-01`;
             const fimAno = `${ano}-12-31`;
 
@@ -424,7 +449,10 @@ MinhaArea.Evolucao = {
             const usuarioAlvo = document.getElementById('admin-user-select')?.value || MinhaArea.usuarioAlvo;
             let nomeFiltro = '';
             if (MinhaArea.user.funcao === 'Assistente') { nomeFiltro = MinhaArea.user.nome; qProd = qProd.eq('usuario_id', MinhaArea.user.id); }
-            else if (usuarioAlvo && usuarioAlvo !== 'todos') { nomeFiltro = usuarioAlvo; } // usuarioAlvo é o nome
+            else if (usuarioAlvo && usuarioAlvo !== 'todos') { 
+                // Tenta achar nome no mapaUsuarios
+                nomeFiltro = this.mapaUsuarios[usuarioAlvo] || '';
+            }
 
             if (nomeFiltro) {
                 const pNome = nomeFiltro.split(' ')[0];
@@ -441,7 +469,7 @@ MinhaArea.Evolucao = {
     },
 
     renderizarEvolucaoUI: function(container, dadosAuditoria, dadosProducao, ano) {
-        // ... (Mantém o render da evolução)
+        // ... (Mantém renderização de Evolução igual)
         const meses = Array.from({length: 12}, () => ({ audit_campos: 0, audit_ok: 0, prod_soma: 0, prod_dias: new Set() }));
         dadosAuditoria.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].audit_campos += (parseInt(d.num_campos)||0); meses[m].audit_ok += (parseInt(d.acertos)||0); } });
         dadosProducao.forEach(d => { if(d.data_referencia) { const m = new Date(d.data_referencia).getMonth(); meses[m].prod_soma += (parseInt(d.quantidade)||0); meses[m].prod_dias.add(d.data_referencia); } });
@@ -470,15 +498,5 @@ MinhaArea.Evolucao = {
             </div>`;
 
         container.innerHTML = `<div class="grid grid-cols-1 gap-6 animate-enter"><div class="flex justify-between items-center"><h2 class="text-xl font-bold text-slate-800">Metas Anuais - ${ano}</h2></div>${tabelaHtml('Primeiro Semestre (H1)', 0)}${tabelaHtml('Segundo Semestre (H2)', 6)}</div>`;
-    },
-
-    atualizarOpcoesSeletor: function(dados) {
-        const nomes = [...new Set(dados.map(i => i.assistente).filter(n => n))].sort();
-        const sel = document.getElementById('admin-user-select');
-        if(!sel) return;
-        const atual = sel.value;
-        sel.innerHTML = '<option value="todos">Toda a Equipe</option>';
-        nomes.forEach(n => { const o = document.createElement('option'); o.value = n; o.innerText = n; sel.appendChild(o); });
-        if(atual === 'todos' || nomes.includes(atual)) sel.value = atual;
     }
 };
