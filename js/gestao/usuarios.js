@@ -3,7 +3,6 @@ Gestao.Usuarios = {
         const tbody = document.getElementById('lista-usuarios');
         if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8"><i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i></td></tr>';
         
-        // Renderiza botão de Novo Usuário se não existir
         this.renderizarBotaoNovo();
 
         const { data, error } = await Sistema.supabase.from('usuarios').select('*').order('nome');
@@ -11,25 +10,46 @@ Gestao.Usuarios = {
 
         let html = '';
         data.forEach(u => {
-            const statusClass = u.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700';
-            const statusLabel = u.ativo ? 'ATIVO' : 'INATIVO';
+            // Badges de Status
+            const isAtivo = u.ativo;
+            const statusClass = isAtivo ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200';
+            const statusLabel = isAtivo ? 'ATIVO' : 'INATIVO';
+
+            // Badges de Contrato (Visual Limpo)
+            let contratoClass = 'bg-slate-50 text-slate-600 border-slate-200';
+            const contrato = (u.contrato || '').toUpperCase();
             
-            // Escapa aspas para evitar erro no JSON.stringify
+            if (contrato === 'CLT') contratoClass = 'bg-blue-50 text-blue-700 border-blue-200';
+            else if (contrato === 'PJ') contratoClass = 'bg-sky-50 text-sky-700 border-sky-200';
+            else if (contrato === 'AUDITORA') contratoClass = 'bg-purple-50 text-purple-700 border-purple-200';
+            else if (contrato === 'GESTORA') contratoClass = 'bg-pink-50 text-pink-700 border-pink-200';
+            else if (contrato === 'FINALIZADO') contratoClass = 'bg-gray-100 text-gray-500 border-gray-200';
+
             const userString = JSON.stringify(u).replace(/"/g, '&quot;');
 
             html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-sm">
-                <td class="px-6 py-3 font-mono text-slate-500 font-bold">#${u.id}</td>
-                <td class="px-6 py-3 font-bold text-slate-700">${u.nome}</td>
-                <td class="px-6 py-3 text-slate-600">${u.contrato || '-'}</td>
-                <td class="px-6 py-3 text-center"><span class="px-2 py-1 rounded text-xs font-bold ${statusClass}">${statusLabel}</span></td>
-                <td class="px-6 py-3 text-right flex justify-end gap-2">
-                    <button onclick="Gestao.Usuarios.abrirModal(${userString})" class="p-2 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
-                    <button onclick="Gestao.Usuarios.excluir(${u.id})" class="p-2 text-red-400 hover:bg-red-50 rounded transition" title="Excluir"><i class="fas fa-trash"></i></button>
+            <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-sm group">
+                <td class="px-6 py-3 font-mono text-slate-500 font-bold group-hover:text-blue-600 transition">#${u.id}</td>
+                <td class="px-6 py-3 font-bold text-slate-700">
+                    ${u.nome}
+                    ${!isAtivo ? '<span class="ml-2 text-[10px] text-slate-400 font-normal italic">(Inativo)</span>' : ''}
+                </td>
+                <td class="px-6 py-3">
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${contratoClass}">${contrato}</span>
+                </td>
+                <td class="px-6 py-3 text-center">
+                    <div class="flex items-center justify-center gap-1">
+                        <div class="w-2 h-2 rounded-full ${isAtivo ? 'bg-emerald-500' : 'bg-slate-400'}"></div>
+                        <span class="text-xs font-semibold ${isAtivo ? 'text-emerald-700' : 'text-slate-500'}">${statusLabel}</span>
+                    </div>
+                </td>
+                <td class="px-6 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onclick="Gestao.Usuarios.abrirModal(${userString})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
+                    <button onclick="Gestao.Usuarios.excluir(${u.id})" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition" title="Excluir"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
         });
-        if (tbody) tbody.innerHTML = html || '<tr><td colspan="5" class="text-center py-8 text-slate-400">Nenhum usuário cadastrado. Importe uma planilha ou cadastre manualmente.</td></tr>';
+        if (tbody) tbody.innerHTML = html || '<tr><td colspan="5" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-users text-3xl opacity-20"></i><span>Nenhum usuário cadastrado.</span></td></tr>';
     },
 
     importar: async function(input) {
@@ -37,122 +57,123 @@ Gestao.Usuarios = {
         const file = input.files[0];
 
         // Feedback visual
-        const labelOriginal = input.parentElement.innerHTML;
-        input.parentElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        const originalLabel = input.parentElement.innerHTML;
+        input.parentElement.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
 
         try {
             const linhas = await Gestao.lerArquivo(file);
-            
-            // CORREÇÃO: Usar um Map para garantir unicidade por ID e evitar erro "row a second time"
             const mapUsuarios = new Map();
             const hashPadrao = await Sistema.gerarHash('gupy123');
 
             for (const row of linhas) {
-                // Normaliza chaves
                 const c = {};
                 Object.keys(row).forEach(k => c[this.normalizarChave(k)] = row[k]);
 
-                // Campos Obrigatórios
+                // Campos Obrigatórios (ID é a chave única)
                 const id = parseInt(c['idassistente'] || c['id'] || 0);
                 const nome = c['nomeassist'] || c['nome'] || '';
                 
                 if (!id || !nome) continue;
 
-                const situacao = (c['situacao'] || c['status'] || 'ATIVO').toUpperCase().trim();
+                // Mapeamento de Colunas
+                // STATUS/SITUAÇÃO: CSV pode vir "ATIVO" ou "INATIVO"
+                const situacaoRaw = (c['situacao'] || c['status'] || 'ATIVO').toUpperCase().trim();
                 const contrato = (c['contrato'] || 'CLT').toUpperCase().trim();
                 
+                // Regra de Status: Se contrato for FINALIZADO, força inativo, senão segue a coluna Situação
+                let ativo = situacaoRaw === 'ATIVO';
+                if (contrato === 'FINALIZADO') ativo = false;
+
+                // Definição de Função/Permissão
                 let funcao = 'ASSISTENTE';
                 if (contrato.includes('AUDITORA')) funcao = 'AUDITORA';
                 if (contrato.includes('GESTORA')) funcao = 'GESTORA';
 
-                // Adiciona ao Map (se o ID já existir, sobrescreve com o último da lista)
                 mapUsuarios.set(id, {
                     id: id,
                     nome: String(nome).trim(),
                     contrato: contrato,
-                    ativo: situacao === 'ATIVO',
+                    ativo: ativo,
                     funcao: funcao,
                     perfil: (funcao === 'GESTORA' ? 'admin' : 'user'),
-                    senha: hashPadrao // Senha padrão criptografada
+                    senha: hashPadrao
                 });
             }
 
-            // Converte o Map de volta para Array
             const upserts = Array.from(mapUsuarios.values());
 
             if (upserts.length > 0) {
                 const { error } = await Sistema.supabase.from('usuarios').upsert(upserts);
                 if (error) throw error;
-                
-                alert(`Sucesso! ${upserts.length} usuários processados (duplicatas removidas).`);
+                alert(`Importação concluída!\n${upserts.length} usuários processados.`);
                 this.carregar();
             } else {
-                alert("Nenhum dado válido encontrado. Verifique as colunas da planilha.");
+                alert("Nenhum dado válido. Verifique se a planilha tem: ID ASSISTENTE, NOME ASSIST");
             }
 
         } catch (e) {
             console.error(e);
-            alert("Erro na importação: " + (e.message || e.details || e));
+            alert("Erro: " + e.message);
         } finally {
-            // Restaura o botão e limpa o input
-            // Como alteramos o innerHTML, precisamos recriar o input para funcionar de novo
-            const parent = document.querySelector('#gestao-actions'); 
             if(Menu.Gestao) Menu.Gestao.atualizarAcao('usuarios'); 
-            else location.reload(); // Fallback se o menu falhar
+            else location.reload();
         }
     },
 
-    // --- CADASTRO MANUAL E EDIÇÃO ---
+    // --- MODAL ---
     abrirModal: function(usuario = null) {
         const isEdit = !!usuario;
-        
-        // Remove modal anterior se existir
         const modalAntigo = document.getElementById('modal-usuario');
         if(modalAntigo) modalAntigo.remove();
 
         const modalHtml = `
-        <div id="modal-usuario" class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center backdrop-blur-sm animate-fade">
-            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
-                <h3 class="text-xl font-bold text-slate-800 mb-4 border-b pb-2">${isEdit ? 'Editar Usuário' : 'Novo Usuário'}</h3>
+        <div id="modal-usuario" class="fixed inset-0 bg-slate-900/40 z-[70] flex items-center justify-center backdrop-blur-sm animate-fade">
+            <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
+                    <h3 class="text-lg font-bold text-slate-800">${isEdit ? 'Editar Usuário' : 'Novo Usuário'}</h3>
+                    <button onclick="document.getElementById('modal-usuario').remove()" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+                </div>
                 
-                <div class="space-y-3">
+                <div class="p-6 space-y-4">
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase">ID (Matrícula)</label>
-                        <input type="number" id="inp-id" value="${usuario?.id || ''}" class="w-full border rounded p-2 text-sm outline-none focus:border-blue-500" ${isEdit ? 'disabled class="bg-slate-100 w-full border rounded p-2 text-sm"' : ''}>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Único)</label>
+                        <input type="number" id="inp-id" value="${usuario?.id || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" ${isEdit ? 'disabled class="bg-slate-100 text-slate-500 w-full border border-slate-200 rounded-lg p-2.5 text-sm"' : ''} placeholder="Ex: 102030">
+                        ${!isEdit ? '<p class="text-[10px] text-slate-400 mt-1">O ID não pode ser alterado após a criação.</p>' : ''}
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-500 uppercase">Nome Completo</label>
-                        <input type="text" id="inp-nome" value="${usuario?.nome || ''}" class="w-full border rounded p-2 text-sm outline-none focus:border-blue-500">
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label>
+                        <input type="text" id="inp-nome" value="${usuario?.nome || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition" placeholder="Nome do assistente">
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
+                    <div class="grid grid-cols-2 gap-4">
                         <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase">Contrato</label>
-                            <select id="inp-contrato" class="w-full border rounded p-2 text-sm bg-white outline-none focus:border-blue-500">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label>
+                            <select id="inp-contrato" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:border-blue-500 outline-none">
                                 <option value="CLT">CLT</option>
                                 <option value="PJ">PJ</option>
-                                <option value="ESTAGIO">ESTÁGIO</option>
                                 <option value="AUDITORA">AUDITORA</option>
                                 <option value="GESTORA">GESTORA</option>
+                                <option value="FINALIZADO">FINALIZADO</option>
                             </select>
                         </div>
                         <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase">Situação</label>
-                            <select id="inp-situacao" class="w-full border rounded p-2 text-sm bg-white outline-none focus:border-blue-500">
+                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Status</label>
+                            <select id="inp-situacao" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm bg-white focus:border-blue-500 outline-none">
                                 <option value="true">ATIVO</option>
                                 <option value="false">INATIVO</option>
                             </select>
                         </div>
                     </div>
+                    
                     ${isEdit ? `
-                    <div class="p-3 bg-amber-50 rounded text-xs text-amber-800 flex items-center gap-2 border border-amber-100">
-                        <input type="checkbox" id="inp-reset-senha" class="accent-amber-600 w-4 h-4">
-                        <label for="inp-reset-senha" class="cursor-pointer font-bold">Resetar senha para "gupy123"?</label>
+                    <div class="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-100 flex items-center gap-3">
+                        <input type="checkbox" id="inp-reset-senha" class="w-4 h-4 text-amber-600 rounded border-amber-300 focus:ring-amber-500">
+                        <label for="inp-reset-senha" class="text-xs font-bold text-amber-800 cursor-pointer select-none">Resetar senha para padrão ("gupy123")</label>
                     </div>` : ''}
                 </div>
 
-                <div class="flex justify-end gap-2 mt-6">
-                    <button onclick="document.getElementById('modal-usuario').remove()" class="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded font-bold text-sm transition">Cancelar</button>
-                    <button onclick="Gestao.Usuarios.salvar(${isEdit})" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-sm shadow-md transition">Salvar</button>
+                <div class="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100">
+                    <button onclick="document.getElementById('modal-usuario').remove()" class="px-4 py-2 text-slate-600 hover:bg-slate-200 rounded-lg font-bold text-sm transition">Cancelar</button>
+                    <button onclick="Gestao.Usuarios.salvar(${isEdit})" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-md transition transform active:scale-95">Salvar Usuário</button>
                 </div>
             </div>
         </div>`;
@@ -180,14 +201,13 @@ Gestao.Usuarios = {
 
         const payload = {
             id: parseInt(id),
-            nome: nome,
+            nome: nome.trim(),
             contrato: contrato,
             ativo: ativo,
             funcao: funcao,
             perfil: (funcao === 'GESTORA' ? 'admin' : 'user')
         };
 
-        // Aplica hash se for novo usuário ou reset solicitado
         if (!isEdit || resetSenha) {
             payload.senha = await Sistema.gerarHash('gupy123');
         }
@@ -196,32 +216,20 @@ Gestao.Usuarios = {
         
         if (error) alert("Erro ao salvar: " + error.message);
         else {
-            alert("Salvo com sucesso!");
             document.getElementById('modal-usuario').remove();
             this.carregar();
         }
     },
 
     excluir: async function(id) {
-        if (!confirm(`Tem certeza que deseja excluir o usuário ${id}?\nIsso pode falhar se houver produção vinculada.`)) return;
+        if (!confirm(`Confirma a exclusão do usuário ID ${id}?\n\nCuidado: Se ele tiver produção lançada, a exclusão falhará. Neste caso, use a opção "Inativar".`)) return;
         
         const { error } = await Sistema.supabase.from('usuarios').delete().eq('id', id);
         
-        if (error) alert("Não foi possível excluir (provavelmente o usuário possui histórico de produção).\nSugestão: Edite e mude a situação para INATIVO.");
+        if (error) alert("Não foi possível excluir. Provavelmente existem registros de produção vinculados.\n\nEdite o usuário e mude o Status para INATIVO.");
         else this.carregar();
     },
 
-    renderizarBotaoNovo: function() {
-        const header = document.querySelector('#view-usuarios');
-        // Evita duplicar se a função for chamada várias vezes
-        if (header && !document.getElementById('btn-novo-user-float')) {
-             // Vamos inserir o botão na área de dicas ou criar um container
-             // Como o layout é controlado pelo Menu Gestão, o botão 'Novo' idealmente deveria estar lá.
-             // Mas como fallback, deixaremos um botão flutuante ou no rodapé da tabela.
-        }
-    },
-
-    normalizarChave: function(k) {
-        return k.trim().toLowerCase().replace(/_/g, '').replace(/ /g, '');
-    }
+    renderizarBotaoNovo: function() {}, 
+    normalizarChave: function(k) { return k.trim().toLowerCase().replace(/_/g, '').replace(/ /g, ''); }
 };
