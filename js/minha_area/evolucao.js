@@ -1,12 +1,9 @@
 MinhaArea.Evolucao = {
-    // Agora 'evolucao' gerencia Meta / OKR
+    // Gerencia a aba Meta / OKR
     carregar: async function() {
         this.renderizarLayout();
-        
-        // Pega valor do seletor do cabeçalho (se já existir) ou padrão 'mes'
         const headerSelect = document.getElementById('filtro-periodo-okr-header');
         const periodo = headerSelect ? headerSelect.value : 'mes';
-        
         await this.carregarDados(periodo);
     },
 
@@ -14,10 +11,8 @@ MinhaArea.Evolucao = {
         const container = document.getElementById('ma-tab-evolucao');
         if (!container) return;
 
-        // O cabeçalho foi movido para o topo da página (header global), então aqui fica só a tabela
         container.innerHTML = `
             <div class="flex flex-col gap-6">
-                
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h3 class="font-bold text-slate-700 flex items-center gap-2">
@@ -68,7 +63,6 @@ MinhaArea.Evolucao = {
             const hoje = new Date();
             let inicioStr = '';
             let fimStr = hoje.toISOString().split('T')[0];
-            
             const y = hoje.getFullYear();
             const m = hoje.getMonth();
 
@@ -79,35 +73,20 @@ MinhaArea.Evolucao = {
                     const seg = new Date(hoje.setDate(diff));
                     inicioStr = seg.toISOString().split('T')[0];
                     break;
-                case 'mes':
-                    inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
-                    break;
-                case 'trimestre':
-                    const q = Math.floor(m / 3);
-                    inicioStr = new Date(y, q * 3, 1).toISOString().split('T')[0];
-                    break;
-                case 'semestre':
-                    const s = m < 6 ? 0 : 6;
-                    inicioStr = new Date(y, s, 1).toISOString().split('T')[0];
-                    break;
-                case 'anual':
-                    inicioStr = new Date(y, 0, 1).toISOString().split('T')[0];
-                    break;
-                case 'todos':
-                    inicioStr = '2020-01-01'; 
-                    break;
-                default:
-                    inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
+                case 'mes': inicioStr = new Date(y, m, 1).toISOString().split('T')[0]; break;
+                case 'trimestre': inicioStr = new Date(y, Math.floor(m / 3) * 3, 1).toISOString().split('T')[0]; break;
+                case 'semestre': inicioStr = new Date(y, m < 6 ? 0 : 6, 1).toISOString().split('T')[0]; break;
+                case 'anual': inicioStr = new Date(y, 0, 1).toISOString().split('T')[0]; break;
+                case 'todos': inicioStr = '2020-01-01'; break;
+                default: inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
             }
 
-            let query = MinhaArea.supabase
+            const { data, error } = await MinhaArea.supabase
                 .from('auditoria_apontamentos')
                 .select('*')
                 .gte('data_referencia', inicioStr)
                 .lte('data_referencia', fimStr)
                 .order('data_referencia', { ascending: false });
-
-            const { data, error } = await query;
 
             if (error) throw error;
 
@@ -158,12 +137,10 @@ MinhaArea.Evolucao = {
                     </tr>
                 `;
             });
-
             tbody.innerHTML = html;
-
         } catch (e) {
-            console.error("Erro ao carregar auditoria:", e);
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-rose-500 font-bold bg-rose-50 border border-rose-100 rounded-lg m-4">Erro ao carregar dados: ${e.message}</td></tr>`;
+            console.error("Erro carrega auditoria:", e);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-rose-500 font-bold">Erro: ${e.message}</td></tr>`;
         }
     },
 
@@ -178,99 +155,99 @@ MinhaArea.Evolucao = {
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
-            encoding: "UTF-8", // Tenta forçar UTF-8
             complete: async function(results) {
                 try {
                     const rows = results.data;
-                    console.log("Linhas lidas:", rows); // Debug no console
+                    const headers = results.meta.fields; // Cabeçalhos reais encontrados no arquivo
 
-                    if (!rows || rows.length === 0) {
-                        throw new Error("O arquivo CSV parece estar vazio ou ilegível.");
-                    }
+                    console.log("Cabeçalhos encontrados:", headers);
 
-                    // --- NORMALIZAÇÃO DE CHAVES ---
-                    // Remove espaços extras e converte para minúsculo para comparar
-                    const normalize = k => k.trim().toLowerCase();
-                    const keys = Object.keys(rows[0]); // Chaves reais do arquivo
+                    if (!rows || rows.length === 0) throw new Error("Arquivo vazio.");
 
-                    // Função para buscar valor tolerante a falhas (ex: 'Data', 'data', 'Data ')
-                    const getVal = (row, ...options) => {
-                        for (const opt of options) {
-                            // 1. Tenta direto
-                            if (row[opt] !== undefined) return row[opt];
-                            // 2. Tenta normalizado
-                            const foundKey = keys.find(k => normalize(k) === normalize(opt));
-                            if (foundKey && row[foundKey] !== undefined) return row[foundKey];
+                    // --- FUNÇÃO PARA ENCONTRAR COLUNA INDEPENDENTE DE CASE/ESPAÇOS ---
+                    const encontrarColuna = (opcoes) => {
+                        // 1. Tenta match exato ou normalizado
+                        for (const opt of opcoes) {
+                            const found = headers.find(h => h.trim().toLowerCase() === opt.toLowerCase());
+                            if (found) return found;
+                        }
+                        // 2. Tenta 'contém' (ex: acha 'Data de Nascimento' se buscar 'Data')
+                        for (const opt of opcoes) {
+                            const found = headers.find(h => h.trim().toLowerCase().includes(opt.toLowerCase()));
+                            if (found) return found;
                         }
                         return null;
                     };
 
+                    // Mapeia as colunas críticas
+                    const colData = encontrarColuna(['Data', 'date', 'dt_referencia']);
+                    const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
+
+                    if (!colData || !colAssistente) {
+                        alert(`Erro: Colunas obrigatórias não encontradas.\n\nColunas no arquivo: ${headers.join(', ')}\n\nEsperado: 'Data' e 'Assistente'.`);
+                        return;
+                    }
+
                     const batch = [];
                     
-                    rows.forEach((row, index) => {
-                        // Busca dados essenciais
-                        const dataRef = getVal(row, 'Data', 'data', 'date');
-                        const assistente = getVal(row, 'Assistente', 'assistente', 'Nome');
+                    rows.forEach(row => {
+                        const rawDate = row[colData];
+                        const assistente = row[colAssistente];
 
-                        // Pula linhas vazias ou cabeçalhos repetidos
-                        if (!dataRef && !assistente) return;
+                        if (!rawDate && !assistente) return;
 
-                        // Tratamento de Data (Excel às vezes exporta DD/MM/YYYY, Supabase quer YYYY-MM-DD)
-                        let dataFinal = dataRef;
-                        if (dataRef && dataRef.includes('/')) {
-                            const parts = dataRef.split('/');
+                        // Tratamento de Data (Aceita DD/MM/YYYY ou YYYY-MM-DD)
+                        let dataFinal = rawDate;
+                        if (rawDate && rawDate.includes('/')) {
+                            // Se for DD/MM/YYYY
+                            const parts = rawDate.split('/');
                             if (parts.length === 3) dataFinal = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                        } else if (rawDate && rawDate.includes('T')) {
+                            // Se for ISO completo 2025-10-20T...
+                            dataFinal = rawDate.split('T')[0];
                         }
 
-                        // Tratamento Numérico
-                        const numCampos = parseInt(getVal(row, 'nº Campos', 'nºCampos', 'Campos', 'num_campos')) || 0;
-                        const acertos = parseInt(getVal(row, 'Acertos', 'acertos')) || 0;
+                        // Função auxiliar para pegar valor seguro
+                        const getVal = (opts) => {
+                            const key = encontrarColuna(opts);
+                            return key ? row[key] : null;
+                        };
 
                         batch.push({
-                            mes: getVal(row, 'mês', 'mes', 'Mes', 'Month'),
-                            end_time: getVal(row, 'end_time', 'EndTime'),
+                            mes: getVal(['mês', 'mes', 'month']),
+                            end_time: getVal(['end_time', 'time']),
                             data_referencia: dataFinal,
-                            empresa: getVal(row, 'Empresa', 'empresa'),
+                            empresa: getVal(['Empresa']),
                             assistente: assistente,
-                            doc_name: getVal(row, 'doc_name', 'Documento', 'Doc'),
-                            status: getVal(row, 'STATUS', 'Status', 'status'),
-                            apontamentos_obs: getVal(row, 'Apontamentos/obs', 'Apontamentos', 'Obs'),
-                            num_campos: numCampos,
-                            acertos: acertos,
-                            pct_erros_produtividade: getVal(row, '% de Erros X Produtividade', 'Erros'),
-                            pct_assert: getVal(row, '% Assert', '% Assert.', 'Assertividade', 'assert'),
-                            auditora: getVal(row, 'Auditora', 'Auditor')
+                            doc_name: getVal(['doc_name', 'Documento', 'Doc']),
+                            status: getVal(['STATUS', 'Status']),
+                            apontamentos_obs: getVal(['Apontamentos/obs', 'Apontamentos', 'Obs']),
+                            num_campos: parseInt(getVal(['nº Campos', 'Campos', 'num_campos'])) || 0,
+                            acertos: parseInt(getVal(['Acertos'])) || 0,
+                            pct_erros_produtividade: getVal(['% de Erros X Produtividade', 'Erros']),
+                            pct_assert: getVal(['% Assert', '% Assert.', 'Assertividade']),
+                            auditora: getVal(['Auditora', 'Auditor'])
                         });
                     });
 
-                    console.log("Lote preparado para envio:", batch);
-
                     if (batch.length > 0) {
                         labelBtn.innerHTML = '<i class="fas fa-save"></i> Salvando...';
-                        
-                        const { error } = await MinhaArea.supabase
-                            .from('auditoria_apontamentos')
-                            .insert(batch);
-                        
+                        const { error } = await MinhaArea.supabase.from('auditoria_apontamentos').insert(batch);
                         if (error) throw error;
                         
                         alert(`Sucesso! ${batch.length} registros importados.`);
-                        MinhaArea.Evolucao.carregar(); // Recarrega a tabela
+                        MinhaArea.Evolucao.carregar(); 
                     } else {
-                        alert("Não foi possível identificar as colunas 'Data' e 'Assistente' no arquivo. Verifique se o CSV está correto.");
+                        alert("Nenhum dado válido encontrado para importação.");
                     }
 
                 } catch (err) {
-                    console.error("Erro import:", err);
-                    alert("Erro ao importar: " + err.message);
+                    console.error(err);
+                    alert("Erro ao processar: " + err.message);
                 } finally {
                     labelBtn.innerHTML = originalText;
-                    input.value = ""; // Limpa input
+                    input.value = "";
                 }
-            },
-            error: function(err) {
-                alert("Erro ao ler arquivo: " + err.message);
-                labelBtn.innerHTML = originalText;
             }
         });
     }
