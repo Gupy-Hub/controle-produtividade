@@ -16,18 +16,10 @@ Menu.Gestao = {
             <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
                 
                 <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                    <button onclick="Gestao.mudarAba('usuarios')" id="btn-g-usuarios" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-users"></i> Usuários
-                    </button>
-                    <button onclick="Gestao.mudarAba('empresas')" id="btn-g-empresas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-building"></i> Empresas
-                    </button>
-                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-g-assertividade" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-check-double"></i> Assertividade
-                    </button>
-                    <button onclick="Gestao.mudarAba('metas')" id="btn-g-metas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-bullseye"></i> Metas
-                    </button>
+                    <button onclick="Gestao.mudarAba('usuarios')" id="btn-g-usuarios" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition"><i class="fas fa-users"></i> Usuários</button>
+                    <button onclick="Gestao.mudarAba('empresas')" id="btn-g-empresas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition"><i class="fas fa-building"></i> Empresas</button>
+                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-g-assertividade" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition"><i class="fas fa-check-double"></i> Assertividade</button>
+                    <button onclick="Gestao.mudarAba('metas')" id="btn-g-metas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition"><i class="fas fa-bullseye"></i> Metas</button>
                 </div>
 
                 <div id="gestao-actions" class="flex items-center gap-2"></div>
@@ -43,7 +35,7 @@ Menu.Gestao = {
 
         let btnHtml = '';
         
-        // AQUI ESTÁ A MUDANÇA: Aponta para Gestao.Importacao.Usuarios.executar(this)
+        // --- BOTÃO DE AÇÃO DINÂMICO ---
         if (aba === 'usuarios') {
             btnHtml = `
             <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-blue-700">
@@ -55,7 +47,7 @@ Menu.Gestao = {
             btnHtml = `
             <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-blue-700">
                 <i class="fas fa-upload"></i> Importar Empresas
-                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Empresas.importar(this)">
+                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Importacao.Empresas.executar(this)">
             </label>`;
         }
         else if (aba === 'metas') {
@@ -68,6 +60,7 @@ Menu.Gestao = {
         
         container.innerHTML = btnHtml;
         
+        // Atualiza Classes CSS das abas
         document.querySelectorAll('.tab-btn').forEach(b => {
             b.classList.remove('bg-blue-50', 'text-blue-700', 'border-b-2', 'border-blue-600');
             b.classList.add('text-slate-600');
