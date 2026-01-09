@@ -1,168 +1,111 @@
-// Namespace específico para a subpasta Diario
 MinhaArea.Diario = {
     dadosAtuais: [],
 
     carregar: async function() {
         if (!MinhaArea.user || !MinhaArea.supabase) return;
         
-        // Loader na tabela
         const tbody = document.getElementById('tabela-diario');
-        if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12"><i class="fas fa-spinner fa-spin"></i> Carregando detalhamento...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
-        // 1. Configurações de Filtro
         if (!MinhaArea.dataAtual) MinhaArea.dataAtual = new Date();
         const periodo = MinhaArea.getPeriodo();
         let uid = MinhaArea.usuarioAlvo || MinhaArea.user.id;
         
-        // Verifica permissões para botão de gestora
+        // Verifica permissão Admin
         const funcao = (MinhaArea.user.funcao || '').toUpperCase();
         if (['GESTORA', 'AUDITORA'].includes(funcao) || MinhaArea.user.id == 1000) {
             this.renderizarBotaoGestora();
         }
 
         try {
-            // 2. Busca Dados (Incluindo as novas colunas)
+            // Busca dados
             let query = MinhaArea.supabase
                 .from('producao')
                 .select('*, usuarios!inner(nome)')
                 .gte('data_referencia', periodo.inicio)
                 .lte('data_referencia', periodo.fim)
-                .order('data_referencia', { ascending: false });
+                .order('data_referencia', { ascending: false })
+                .order('created_at', { ascending: false }); // Ordem de inserção para desempatar
 
-            // Se não for visão geral, filtra pelo usuário
             if (uid !== 'todos') query = query.eq('usuario_id', uid);
 
             const { data: producao, error } = await query;
             if (error) throw error;
 
-            // 3. Busca Metas (para cálculo de eficiência)
+            // Busca Metas
             let metas = [];
             if (uid !== 'todos') {
                 const { data: m } = await MinhaArea.supabase.from('metas').select('*').eq('usuario_id', uid);
                 metas = m || [];
             }
 
-            // 4. Busca Dados do Time (para Comparativo)
-            // Agrupamos apenas quantidade para não pesar a query
-            const { data: producaoTime } = await MinhaArea.supabase
-                .from('producao')
-                .select('quantidade, data_referencia, usuario_id')
-                .gte('data_referencia', periodo.inicio)
-                .lte('data_referencia', periodo.fim);
-
-            // PROCESSAMENTO DOS DADOS
+            // Processamento
             this.dadosAtuais = producao.map(item => {
-                // Define Meta do dia (Prioridade: Meta Diaria na tabela > Meta Configurada > Padrão 650)
                 let metaBase = 650;
                 if (item.meta_diaria > 0) metaBase = Number(item.meta_diaria);
                 else if (metas.length) {
                     const m = metas.find(mt => mt.data_inicio <= item.data_referencia);
                     if (m) metaBase = Number(m.valor_meta);
                 }
-
                 return {
                     ...item,
                     quantidade: Number(item.quantidade) || 0,
                     meta: metaBase,
-                    fator: Number(item.fator ?? 1) // Operador de coalescência nula
+                    fator: Number(item.fator ?? 1)
                 };
             });
 
-            // Média do Time (Agrupado por Dia/Pessoa para não distorcer com detalhamento)
-            let mediaTime = 0;
-            if (producaoTime && producaoTime.length) {
-                const agrupado = {};
-                producaoTime.forEach(p => {
-                    const k = `${p.usuario_id}_${p.data_referencia}`;
-                    if(!agrupado[k]) agrupado[k] = 0;
-                    agrupado[k] += (Number(p.quantidade) || 0);
-                });
-                const valores = Object.values(agrupado);
-                mediaTime = valores.length ? Math.round(valores.reduce((a,b)=>a+b,0) / valores.length) : 0;
-            }
+            // KPI Dummy para evitar erro se não tiver dados de time
+            const mediaTime = 0; 
 
             this.atualizarKPIs(this.dadosAtuais, mediaTime, uid);
-            this.atualizarTabelaDiaria(this.dadosAtuais, uid);
+            this.atualizarTabelaDiaria(this.dadosAtuais, uid, periodo);
 
         } catch (e) {
             console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="9" class="text-center text-red-500 py-4">Erro: ${e.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
     atualizarKPIs: function(dados, mediaTime, uid) {
-        // LÓGICA DE AGRUPAMENTO:
-        // Como agora temos múltiplas linhas por dia (detalhamento), precisamos somar a produção
-        // mas considerar a meta apenas UMA VEZ por dia trabalhado.
-        
-        const diasTrabalhados = {}; // Chave: data_referencia
-        let totalProduzido = 0;
-
+        // Agrupa por Dia para contar meta apenas uma vez
+        const dias = {};
+        let totalProd = 0;
         dados.forEach(d => {
-            totalProduzido += d.quantidade;
-            
-            if (!diasTrabalhados[d.data_referencia]) {
-                diasTrabalhados[d.data_referencia] = {
-                    meta: d.meta,
-                    fator: d.fator,
-                    realizadoNoDia: 0
-                };
-            }
-            diasTrabalhados[d.data_referencia].realizadoNoDia += d.quantidade;
+            totalProd += d.quantidade;
+            if(!dias[d.data_referencia]) dias[d.data_referencia] = { meta: d.meta, fator: d.fator };
         });
 
-        // Calcula eficiência baseada na soma das metas dos dias trabalhados
-        let metaAcumulada = 0;
-        let diasCount = 0;
-
-        Object.values(diasTrabalhados).forEach(dia => {
-            if (dia.fator > 0) {
-                metaAcumulada += (dia.meta * dia.fator);
-                diasCount++;
-            }
+        let metaTotal = 0;
+        let diasTrab = 0;
+        Object.values(dias).forEach(d => {
+            if(d.fator > 0) { metaTotal += (d.meta * d.fator); diasTrab++; }
         });
 
-        const eficiencia = metaAcumulada > 0 ? Math.round((totalProduzido / metaAcumulada) * 100) : 0;
-        const mediaDiaria = diasCount > 0 ? Math.round(totalProduzido / diasCount) : 0;
+        const pct = metaTotal > 0 ? Math.round((totalProd/metaTotal)*100) : 0;
+        const media = diasTrab > 0 ? Math.round(totalProd/diasTrab) : 0;
 
-        // Atualiza Cards na Tela
-        this.setTxt('kpi-total', totalProduzido.toLocaleString('pt-BR'));
-        this.setTxt('kpi-meta-total', Math.round(metaAcumulada).toLocaleString('pt-BR'));
-        this.setTxt('kpi-pct', `${eficiencia}%`);
-        this.setTxt('kpi-media-real', mediaDiaria.toLocaleString('pt-BR'));
-        this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
-        this.setTxt('kpi-dias', `${diasCount}`);
-
-        // Atualiza Barra e Status
+        this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
+        this.setTxt('kpi-meta-total', Math.round(metaTotal).toLocaleString('pt-BR'));
+        this.setTxt('kpi-pct', `${pct}%`);
+        this.setTxt('kpi-media-real', media.toLocaleString('pt-BR'));
+        this.setTxt('kpi-dias', diasTrab);
+        
         const bar = document.getElementById('bar-progress');
         if(bar) {
-            bar.style.width = `${Math.min(eficiencia, 100)}%`;
-            bar.className = eficiencia >= 100 ? "h-full bg-emerald-500 rounded-full" : (eficiencia >= 85 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
-        }
-
-        const statusTxt = document.getElementById('kpi-status-text');
-        const icon = document.getElementById('icon-status');
-        if (statusTxt && icon) {
-             if(eficiencia >= 100) {
-                statusTxt.innerHTML = "<span class='text-emerald-600'>Excelente!</span>";
-                icon.className = "fas fa-star text-emerald-500";
-            } else if(eficiencia >= 85) {
-                statusTxt.innerHTML = "<span class='text-blue-600'>Na Meta.</span>";
-                icon.className = "fas fa-thumbs-up text-blue-500";
-            } else {
-                statusTxt.innerHTML = "<span class='text-rose-600'>Abaixo.</span>";
-                icon.className = "fas fa-thumbs-down text-rose-500";
-            }
+            bar.style.width = `${Math.min(pct, 100)}%`;
+            bar.className = pct >= 100 ? "h-full bg-emerald-500 rounded-full" : (pct >= 85 ? "h-full bg-blue-500 rounded-full" : "h-full bg-amber-500 rounded-full");
         }
     },
 
-    atualizarTabelaDiaria: function(dados, uid) {
+    atualizarTabelaDiaria: function(dados, uid, periodo) {
         const tbody = document.getElementById('tabela-diario');
-        // Reconstrói o cabeçalho para incluir as colunas novas
-        const thead = document.querySelector('#tabela-diario').parentElement.querySelector('thead tr');
+        
+        // Renderiza Cabeçalho com as Colunas Solicitadas
+        const thead = document.querySelector('#tabela-diario').closest('table').querySelector('thead tr');
         if(thead) {
             thead.innerHTML = `
-                <th class="px-4 py-3 text-left">Data</th>
+                <th class="px-4 py-3 text-left">Data / Hora</th>
                 <th class="px-4 py-3 text-left">Empresa (ID)</th>
                 <th class="px-4 py-3 text-left">Assistente</th>
                 <th class="px-4 py-3 text-center">Status</th>
@@ -174,52 +117,55 @@ MinhaArea.Diario = {
         }
 
         if (!dados.length) { 
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400">Nenhum registro encontrado no período.</td></tr>'; 
+            // Mensagem de ajuda se não tiver dados
+            const dtIni = periodo.inicio.split('-').reverse().join('/');
+            const dtFim = periodo.fim.split('-').reverse().join('/');
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="text-center py-12 text-slate-400">
+                        <div class="flex flex-col items-center gap-2">
+                            <i class="fas fa-search text-2xl mb-2 opacity-50"></i>
+                            <span class="font-bold">Nenhum registro encontrado.</span>
+                            <span class="text-xs">Filtro atual: ${dtIni} até ${dtFim}</span>
+                            <span class="text-xs text-blue-500 bg-blue-50 px-2 py-1 rounded mt-2">Dica: Verifique se o filtro de data (no topo da página) engloba a data do arquivo importado.</span>
+                        </div>
+                    </td>
+                </tr>`; 
             return; 
         }
 
         let html = '';
         dados.forEach(item => {
-            // Formata Data e Hora (End Time)
+            // Data e Hora
             let dataFmt = item.data_referencia.split('-').reverse().slice(0,2).join('/');
-            if (item.hora) dataFmt += ` <span class="text-[10px] text-slate-400 block">${item.hora}</span>`;
+            if (item.hora) dataFmt += ` <span class="text-[10px] text-slate-400 block font-normal">${item.hora}</span>`;
 
-            // Formata Status (Cores)
+            // Status Colorido
+            const statusRaw = (item.status || '').toUpperCase();
             let statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-[10px] font-bold border">${item.status || '-'}</span>`;
-            const st = (item.status || '').toLowerCase();
-            if (st.includes('ok')) statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold border">OK</span>`;
-            else if (st.includes('nok') || st.includes('rev')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-bold border">${item.status}</span>`;
-            else if (st.includes('just')) statusBadge = `<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold border">JUST</span>`;
+            if (statusRaw.includes('OK')) statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-[10px] font-bold border">OK</span>`;
+            else if (statusRaw.includes('NOK') || statusRaw.includes('REV')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-1 rounded text-[10px] font-bold border">${item.status}</span>`;
+            else if (statusRaw.includes('JUST')) statusBadge = `<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] font-bold border">JUST</span>`;
 
-            // Tratamento de valores nulos
-            const empresa = item.empresa || '-';
-            const nomeAssistente = item.usuarios?.nome || '-';
-            const obs = item.observacao || '-';
-            const nok = item.nok || '-';
-            const assertividade = item.assertividade || '-';
-            const auditora = item.auditora || '-';
+            // Empresa (Tenta pegar valor importado, ou fallback)
+            const empresaDisplay = item.empresa || '-';
 
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-100 transition text-xs">
                 <td class="px-4 py-3 font-bold text-slate-600 whitespace-nowrap">${dataFmt}</td>
-                <td class="px-4 py-3 text-slate-600 font-semibold">${empresa}</td>
-                <td class="px-4 py-3 text-slate-500">${nomeAssistente}</td>
+                <td class="px-4 py-3 text-slate-700 font-semibold">${empresaDisplay}</td>
+                <td class="px-4 py-3 text-slate-500">${item.usuarios?.nome || '-'}</td>
                 <td class="px-4 py-3 text-center">${statusBadge}</td>
-                <td class="px-4 py-3 text-slate-600 max-w-xs break-words leading-tight" title="${obs}">${obs}</td>
-                <td class="px-4 py-3 text-center text-rose-600 font-bold">${nok}</td>
-                <td class="px-4 py-3 text-center text-blue-600 font-mono font-bold">${assertividade}</td>
-                <td class="px-4 py-3 text-slate-500 italic">${auditora}</td>
+                <td class="px-4 py-3 text-slate-600 max-w-xs break-words leading-tight" title="${item.observacao || ''}">${item.observacao || '-'}</td>
+                <td class="px-4 py-3 text-center text-rose-600 font-bold">${item.nok || '-'}</td>
+                <td class="px-4 py-3 text-center text-blue-600 font-mono font-bold">${item.assertividade || '-'}</td>
+                <td class="px-4 py-3 text-slate-500 italic">${item.auditora || '-'}</td>
             </tr>`;
         });
         tbody.innerHTML = html;
     },
 
-    setTxt: function(id, txt) {
-        const el = document.getElementById(id);
-        if(el) el.innerText = txt;
-    },
-
-    // Funções placeholder para manter compatibilidade se chamadas externamente
+    setTxt: function(id, txt) { const el = document.getElementById(id); if(el) el.innerText = txt; },
     verificarAcessoHoje: function() {},
     renderizarBotaoGestora: function() {}
 };

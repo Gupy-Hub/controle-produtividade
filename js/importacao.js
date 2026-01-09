@@ -25,7 +25,6 @@ Produtividade.Importacao = {
                     error: (err) => reject(err)
                 });
             } else {
-                // Fallback para Excel se necessário no futuro
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
@@ -44,37 +43,44 @@ Produtividade.Importacao = {
         if (!input.files || input.files.length === 0) return;
         const files = Array.from(input.files);
         
-        // Feedback visual
         const btn = document.querySelector('button[onclick*="importarEmMassa"]') || input.nextElementSibling;
         let originalText = '';
         if(btn) { originalText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...'; btn.disabled = true; }
 
         let totalImportado = 0;
+        let erros = 0;
         let nomesNaoEncontrados = new Set();
 
         try {
-            // 1. Busca usuários
-            const { data: usersData, error: userError } = await Sistema.supabase.from('usuarios').select('id, nome');
-            if (userError) throw new Error("Erro ao buscar usuários: " + userError.message);
+            // 1. Busca USUÁRIOS
+            const { data: usersData } = await Sistema.supabase.from('usuarios').select('id, nome');
+            // 2. Busca EMPRESAS (Para cruzar ID e Nome)
+            const { data: empresasData } = await Sistema.supabase.from('empresas').select('id, nome, subdominio');
 
-            const mapaPorID = {};
-            const mapaPorNome = {};
-            usersData.forEach(u => {
-                if (u.id) mapaPorID[String(u.id).trim()] = u.id;
-                if (u.nome) mapaPorNome[this.normalizar(u.nome)] = u.id;
+            // Mapas de Busca Rápida
+            const mapaUsuariosID = {};
+            const mapaUsuariosNome = {};
+            (usersData || []).forEach(u => {
+                if (u.id) mapaUsuariosID[String(u.id).trim()] = u.id;
+                if (u.nome) mapaUsuariosNome[this.normalizar(u.nome)] = u.id;
             });
 
-            // 2. Processa arquivos
+            const mapaEmpresas = {}; // Chave: nome ou subdominio normalizado -> Valor: Objeto Empresa
+            (empresasData || []).forEach(e => {
+                mapaEmpresas[this.normalizar(e.nome)] = e;
+                if(e.subdominio) mapaEmpresas[this.normalizar(e.subdominio)] = e;
+            });
+
+            // 3. Processa Arquivos
             for (const file of files) {
                 let dados = await this.lerArquivoUnificado(file);
                 const payload = [];
                 
-                // Verifica se é o arquivo de Auditoria (procura colunas chave)
-                // O arquivo enviado tem: end_time, Empresa, Assistente, STATUS, Nok, % Assert, Auditora
+                // Detecta se é arquivo de Auditoria
                 const isAuditoria = dados.some(r => r['end_time'] || r['Auditora'] || r['% Assert']);
 
                 for (let row of dados) {
-                    // Normaliza chaves para facilitar a busca (remove espaços e acentos das colunas)
+                    // Normaliza chaves
                     const chaves = {};
                     Object.keys(row).forEach(k => {
                         chaves[this.normalizar(k).replace(/_/g, '')] = row[k]; 
@@ -84,25 +90,24 @@ Produtividade.Importacao = {
                     let idCsv = chaves['idassistente'] || chaves['id'];
                     let nomeCsv = chaves['assistente'] || chaves['nome'] || chaves['colaborador'];
                     
-                    if (!idCsv && !nomeCsv) continue;
-                    if (nomeCsv && this.normalizar(nomeCsv) === 'total') continue;
+                    if ((!idCsv && !nomeCsv) || (nomeCsv && this.normalizar(nomeCsv) === 'total')) continue;
 
                     let usuarioId = null;
-                    if (idCsv && mapaPorID[String(idCsv).trim()]) usuarioId = mapaPorID[String(idCsv).trim()];
-                    else if (nomeCsv && mapaPorNome[this.normalizar(nomeCsv)]) usuarioId = mapaPorNome[this.normalizar(nomeCsv)];
+                    if (idCsv && mapaUsuariosID[String(idCsv).trim()]) usuarioId = mapaUsuariosID[String(idCsv).trim()];
+                    else if (nomeCsv && mapaUsuariosNome[this.normalizar(nomeCsv)]) usuarioId = mapaUsuariosNome[this.normalizar(nomeCsv)];
 
                     if (!usuarioId) {
                         nomesNaoEncontrados.add(nomeCsv || idCsv);
                         continue;
                     }
 
-                    // --- TRATAMENTO PARA ARQUIVO DE AUDITORIA ---
+                    // --- AUDITORIA ---
                     if (isAuditoria) {
-                        // Data e Hora (end_time vem como "2025-10-20T14:02:18.175Z")
                         let dataRef = null;
                         let horaRef = null;
                         
-                        const rawDate = row['end_time'] || row['Data'];
+                        // Extrai Data/Hora do end_time
+                        const rawDate = row['end_time'] || row['Data']; // Ex: 2025-10-20T14:02...
                         if (rawDate) {
                             try {
                                 const dObj = new Date(rawDate);
@@ -112,31 +117,46 @@ Produtividade.Importacao = {
                                 }
                             } catch(e) {}
                         }
-
                         if (!dataRef) dataRef = this.extrairDataDoNome(file.name) || document.getElementById('global-date')?.value;
                         if (!dataRef) continue;
+
+                        // Identifica Empresa (Nome e ID)
+                        const empRaw = row['Empresa'] || '';
+                        let empFinal = empRaw;
+                        
+                        // Tenta achar no cadastro de empresas
+                        if (empRaw) {
+                            const empEncontrada = mapaEmpresas[this.normalizar(empRaw)];
+                            if (empEncontrada) {
+                                // Formato solicitado: Nome Oficial (ID: 123)
+                                empFinal = `${empEncontrada.nome} (ID: ${empEncontrada.id})`;
+                            } else {
+                                // Se não achar, mantém o que veio no CSV
+                                empFinal = empRaw;
+                            }
+                        }
 
                         payload.push({
                             usuario_id: usuarioId,
                             data_referencia: dataRef,
-                            quantidade: 1, // Cada linha no relatório de auditoria é 1 documento
+                            quantidade: 1,
                             fator: 1,
                             
-                            // NOVOS CAMPOS MAPEADOS
-                            empresa: row['Empresa'] || '',
+                            // Campos Mapeados
+                            empresa: empFinal, // Agora contém o ID se encontrado
                             auditora: row['Auditora'] || '',
                             status: row['STATUS'] || row['Status'] || '',
                             observacao: row['Apontamentos/obs'] || row['Apontamentos'] || '',
                             nok: row['Nok'] || row['NOK'] || '',
-                            assertividade: row['% Assert'] || row['Assertividade'] || '', // Ex: 97,74%
+                            assertividade: row['% Assert'] || row['Assertividade'] || '',
                             hora: horaRef,
                             
-                            // Campos antigos zerados para compatibilidade
+                            // Campos zerados
                             fifo: 0, gradual_total: 0, gradual_parcial: 0, perfil_fc: 0
                         });
 
                     } else {
-                        // --- TRATAMENTO ANTIGO (Contagem Diária) ---
+                        // --- IMPORTAÇÃO ANTIGA ---
                         let dataRef = this.extrairDataDoNome(file.name) || document.getElementById('global-date')?.value;
                         if (!dataRef) continue;
                         const getNum = (v) => parseFloat(String(v || 0).replace(',', '.')) || 0;
@@ -152,21 +172,21 @@ Produtividade.Importacao = {
                 }
 
                 if (payload.length > 0) {
-                    // Removemos onConflict para permitir múltiplas linhas por dia (detalhamento)
                     const { error } = await Sistema.supabase.from('producao').insert(payload);
-                    if (error) { console.error(error); }
-                    else { totalImportado += payload.length; }
+                    if (error) console.error("Erro ao inserir:", error);
+                    else totalImportado += payload.length;
                 }
             }
 
-            let msg = `Finalizado!\nRegistros: ${totalImportado}`;
-            if (nomesNaoEncontrados.size) msg += `\nNão encontrados:\n${Array.from(nomesNaoEncontrados).slice(0,5).join('\n')}`;
+            let msg = `Processo Finalizado!\nRegistros Importados: ${totalImportado}`;
+            if (nomesNaoEncontrados.size) msg += `\n\nALERTA: Usuários não cadastrados:\n${Array.from(nomesNaoEncontrados).slice(0,10).join('\n')}`;
+            
             alert(msg);
             location.reload();
 
         } catch (e) {
             console.error(e);
-            alert("Erro: " + e.message);
+            alert("Erro fatal: " + e.message);
         } finally {
             if(btn) { btn.innerHTML = originalText; btn.disabled = false; }
             input.value = "";
