@@ -2,55 +2,37 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Importacao = {
     
-    // Normaliza texto para o Fallback de nomes
     normalizar: function(texto) {
         if (!texto) return "";
         return String(texto).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "");
     },
 
-    // Extrai data do nome do arquivo (DDMMAAAA)
     extrairDataDoNome: function(nomeArquivo) {
         const match = nomeArquivo.match(/(\d{2})(\d{2})(\d{4})/);
-        if (match) {
-            const dia = match[1];
-            const mes = match[2];
-            const ano = match[3];
-            return `${ano}-${mes}-${dia}`;
-        }
+        if (match) return `${match[3]}-${match[2]}-${match[1]}`;
         return null;
     },
 
     lerArquivoUnificado: async function(file) {
         return new Promise((resolve, reject) => {
             const ext = file.name.split('.').pop().toLowerCase();
-
-            // CSV (PapaParse)
             if (ext === 'csv') {
                 Papa.parse(file, {
-                    header: true, // Importante: Usa o cabeçalho para achar 'id_assistente'
+                    header: true,
                     skipEmptyLines: true,
                     encoding: "UTF-8",
-                    complete: function(results) {
-                        resolve(results.data);
-                    },
-                    error: function(err) {
-                        reject(err);
-                    }
+                    complete: (results) => resolve(results.data),
+                    error: (err) => reject(err)
                 });
-            } 
-            // Excel (SheetJS)
-            else {
+            } else {
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     try {
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                        const jsonData = XLSX.utils.sheet_to_json(firstSheet); 
-                        resolve(jsonData);
-                    } catch (err) {
-                        reject(err);
-                    }
+                        resolve(XLSX.utils.sheet_to_json(firstSheet));
+                    } catch (err) { reject(err); }
                 };
                 reader.readAsArrayBuffer(file);
             }
@@ -59,158 +41,153 @@ Produtividade.Importacao = {
 
     importarEmMassa: async function(input) {
         if (!input.files || input.files.length === 0) return;
-
         const files = Array.from(input.files);
-        const btn = document.querySelector('button[onclick*="importarEmMassa"]') || 
-                    (input.nextElementSibling && input.nextElementSibling.tagName === 'BUTTON' ? input.nextElementSibling : null);
         
+        // Feedback visual no botão
+        const btn = document.querySelector('button[onclick*="importarEmMassa"]') || input.nextElementSibling;
         let originalText = '';
-        if(btn) {
-            originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando IDs...';
-            btn.disabled = true;
-        }
+        if(btn) { originalText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...'; btn.disabled = true; }
 
         let totalImportado = 0;
         let erros = 0;
         let nomesNaoEncontrados = new Set();
 
         try {
-            // 1. Busca usuários do banco (ID e Nome)
-            const { data: usersData, error: userError } = await Sistema.supabase
-                .from('usuarios')
-                .select('id, nome');
-
+            // 1. Busca usuários
+            const { data: usersData, error: userError } = await Sistema.supabase.from('usuarios').select('id, nome');
             if (userError) throw new Error("Erro ao buscar usuários: " + userError.message);
 
-            // Cria dois mapas para busca rápida
             const mapaPorID = {};
             const mapaPorNome = {};
-
             usersData.forEach(u => {
-                // Mapa de IDs (Converte tudo para string para evitar erro de tipo numero vs texto)
                 if (u.id) mapaPorID[String(u.id).trim()] = u.id;
-                
-                // Mapa de Nomes (Fallback)
                 if (u.nome) mapaPorNome[this.normalizar(u.nome)] = u.id;
             });
 
             // 2. Processa arquivos
             for (const file of files) {
-                let dataReferencia = this.extrairDataDoNome(file.name);
-                
-                // Fallback de data
-                if (!dataReferencia) {
-                    const dataGlobal = document.getElementById('global-date').value;
-                    if (dataGlobal) dataReferencia = dataGlobal;
-                    else continue; 
-                }
-
-                const dados = await this.lerArquivoUnificado(file);
+                let dados = await this.lerArquivoUnificado(file);
                 const payload = [];
+                
+                // Detecta se é o arquivo de Auditoria (tem coluna 'Auditora' ou 'end_time')
+                // Verifica na primeira linha válida
+                const isAuditoria = dados.some(r => r['Auditora'] || r['end_time'] || r['% Assert']);
 
                 for (let row of dados) {
-                    // Normaliza chaves do objeto para minúsculas e sem espaços
-                    // Ex: "ID Assistente" vira "idassistente"
-                    const chaves = Object.keys(row).reduce((acc, k) => {
-                        const keyClean = this.normalizar(k).replace(/_/g, ''); // remove underscores também
-                        acc[keyClean] = row[k];
-                        return acc;
-                    }, {});
+                    const chaves = {};
+                    // Normaliza chaves
+                    Object.keys(row).forEach(k => {
+                        chaves[this.normalizar(k).replace(/_/g, '')] = row[k]; 
+                    });
 
-                    // Tenta encontrar o ID na linha do CSV
-                    const idCsv = chaves['idassistente'] || chaves['id'] || chaves['matricula'];
-                    const nomeCsv = chaves['assistente'] || chaves['nome'] || chaves['colaborador'];
+                    // Identifica Usuário
+                    let idCsv = chaves['idassistente'] || chaves['id'] || chaves['matricula'];
+                    let nomeCsv = chaves['assistente'] || chaves['nome'] || chaves['colaborador'];
                     
-                    // Ignora linha de Totais
-                    if ((nomeCsv && this.normalizar(nomeCsv) === 'total') || (!idCsv && !nomeCsv)) continue;
+                    // Pula linhas de total ou vazias
+                    if (!idCsv && !nomeCsv) continue;
+                    if (nomeCsv && this.normalizar(nomeCsv) === 'total') continue;
 
-                    let usuarioIdEncontrado = null;
+                    let usuarioId = null;
+                    if (idCsv && mapaPorID[String(idCsv).trim()]) usuarioId = mapaPorID[String(idCsv).trim()];
+                    else if (nomeCsv && mapaPorNome[this.normalizar(nomeCsv)]) usuarioId = mapaPorNome[this.normalizar(nomeCsv)];
 
-                    // ESTRATÉGIA 1: BUSCA POR ID (PRIORIDADE)
-                    if (idCsv && mapaPorID[String(idCsv).trim()]) {
-                        usuarioIdEncontrado = mapaPorID[String(idCsv).trim()];
+                    if (!usuarioId) {
+                        nomesNaoEncontrados.add(nomeCsv || idCsv);
+                        continue;
                     }
-                    // ESTRATÉGIA 2: BUSCA POR NOME (FALLBACK)
-                    else if (nomeCsv && mapaPorNome[this.normalizar(nomeCsv)]) {
-                        usuarioIdEncontrado = mapaPorNome[this.normalizar(nomeCsv)];
-                    }
 
-                    if (usuarioIdEncontrado) {
-                        const getNum = (val) => {
-                            if (typeof val === 'number') return val;
-                            if (!val) return 0;
-                            let v = String(val).replace(/\./g, '').replace(',', '.');
-                            return parseFloat(v) || 0;
-                        };
+                    // --- LÓGICA DO ARQUIVO DE AUDITORIA ---
+                    if (isAuditoria) {
+                        // Data e Hora do end_time (Ex: 2025-10-20T14:02:18.175Z)
+                        let dataRef = null;
+                        let horaRef = null;
+                        
+                        // Tenta pegar do endtime ou enturma
+                        const rawDate = row['end_time'] || row['Data'] || row['Date'];
+                        if (rawDate) {
+                            try {
+                                const dObj = new Date(rawDate);
+                                if (!isNaN(dObj)) {
+                                    dataRef = dObj.toISOString().split('T')[0];
+                                    horaRef = dObj.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+                                }
+                            } catch(e) {}
+                        }
 
-                        // Mapeamento das colunas de produção
-                        // Tenta variações de nomes para garantir o match
-                        const qtd = getNum(chaves['documentosvalidados'] || chaves['quantidade'] || chaves['total']);
-                        const fifo = getNum(chaves['documentosvalidadosfifo'] || chaves['fifo']);
-                        const gTotal = getNum(chaves['documentosvalidadosgradualtotal'] || chaves['gradualtotal']);
-                        const gParcial = getNum(chaves['documentosvalidadosgradualparcial'] || chaves['gradualparcial']);
-                        const perfilFc = getNum(chaves['documentosvalidadosperfilfc'] || chaves['perfilfc']);
+                        // Se não conseguiu extrair data do registro, tenta do nome do arquivo ou input global
+                        if (!dataRef) {
+                            dataRef = this.extrairDataDoNome(file.name);
+                            if (!dataRef) dataRef = document.getElementById('global-date')?.value;
+                        }
+
+                        if (!dataRef) continue; // Sem data não importa
 
                         payload.push({
-                            usuario_id: usuarioIdEncontrado,
-                            data_referencia: dataReferencia,
-                            quantidade: qtd,
-                            fifo: fifo,
-                            gradual_total: gTotal,
-                            gradual_parcial: gParcial,
-                            perfil_fc: perfilFc,
+                            usuario_id: usuarioId,
+                            data_referencia: dataRef,
+                            quantidade: 1, // Cada linha é 1 documento
+                            fator: 1,
+                            
+                            // Campos Novos Solicitados
+                            empresa: row['Empresa'] || '',
+                            auditora: row['Auditora'] || '',
+                            status: row['STATUS'] || row['Status'] || '',
+                            observacao: row['Apontamentos/obs'] || row['Apontamentos'] || '',
+                            nok: row['Nok'] || row['NOK'] || '',
+                            assertividade: row['% Assert'] || row['Assertividade'] || '',
+                            hora: horaRef,
+                            
+                            // Campos antigos zerados para não bugar
+                            fifo: 0, gradual_total: 0, gradual_parcial: 0, perfil_fc: 0
+                        });
+
+                    } else {
+                        // --- LÓGICA ANTIGA (Contagem Agrupada) ---
+                        let dataRef = this.extrairDataDoNome(file.name) || document.getElementById('global-date')?.value;
+                        if (!dataRef) continue;
+
+                        const getNum = (v) => parseFloat(String(v || 0).replace(',', '.')) || 0;
+                        
+                        payload.push({
+                            usuario_id: usuarioId,
+                            data_referencia: dataRef,
+                            quantidade: getNum(chaves['documentosvalidados'] || chaves['quantidade'] || chaves['total']),
+                            fifo: getNum(chaves['documentosvalidadosfifo'] || chaves['fifo']),
+                            gradual_total: getNum(chaves['documentosvalidadosgradualtotal'] || chaves['gradualtotal']),
+                            gradual_parcial: getNum(chaves['documentosvalidadosgradualparcial'] || chaves['gradualparcial']),
+                            perfil_fc: getNum(chaves['documentosvalidadosperfilfc'] || chaves['perfilfc']),
                             fator: 1
                         });
-                    } else {
-                        // Se não achou nem por ID nem por Nome, registra erro
-                        const identificador = nomeCsv ? `${nomeCsv} (ID: ${idCsv})` : `ID: ${idCsv}`;
-                        nomesNaoEncontrados.add(identificador);
                     }
                 }
 
                 if (payload.length > 0) {
-                    const { error } = await Sistema.supabase
-                        .from('producao')
-                        .upsert(payload, { onConflict: 'usuario_id, data_referencia' });
+                    // ATENÇÃO: Se for Auditoria (várias linhas por dia), não podemos usar onConflict que trava data+usuario
+                    // O ideal é a tabela ter ID único autoincrement.
+                    // Aqui usamos upsert básico. Se sua tabela tiver restrição unique(usuario_id, data_referencia), isso dará erro ao tentar inserir a 2ª linha do mesmo dia.
+                    
+                    const { error } = await Sistema.supabase.from('producao').upsert(payload);
+                    // Se der erro de duplicidade, você deve remover a constraint "unique" do banco no Supabase
 
-                    if (error) {
-                        console.error(`Erro ao salvar dados:`, error);
-                        erros++;
-                    } else {
-                        totalImportado += payload.length;
-                    }
+                    if (error) { console.error(error); erros++; }
+                    else { totalImportado += payload.length; }
                 }
             }
 
-            let msg = `Processamento Finalizado!\n\nRegistros Salvos: ${totalImportado}`;
-            
-            if (nomesNaoEncontrados.size > 0) {
-                const lista = Array.from(nomesNaoEncontrados).slice(0, 10).join('\n');
-                msg += `\n\nALERTA: Usuários não encontrados no cadastro:\n${lista}${nomesNaoEncontrados.size > 10 ? '\n... e outros' : ''}`;
-            }
-
+            let msg = `Finalizado!\nRegistros: ${totalImportado}`;
+            if (nomesNaoEncontrados.size) msg += `\nNão encontrados:\n${Array.from(nomesNaoEncontrados).slice(0,10).join('\n')}`;
             alert(msg);
-
-            // Atualiza tela
-            if(window.Produtividade && window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
-                window.Produtividade.Geral.carregarTela();
-            } else {
-                location.reload();
-            }
+            location.reload();
 
         } catch (e) {
             console.error(e);
-            alert("Erro fatal: " + e.message);
+            alert("Erro: " + e.message);
         } finally {
-            if(btn) {
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-            }
+            if(btn) { btn.innerHTML = originalText; btn.disabled = false; }
             input.value = "";
         }
     }
 };
-
 window.Importacao = Produtividade.Importacao;
 window.Produtividade.importarEmMassa = (el) => Produtividade.Importacao.importarEmMassa(el);
