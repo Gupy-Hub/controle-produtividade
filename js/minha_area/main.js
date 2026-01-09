@@ -1,7 +1,7 @@
 window.MinhaArea = window.MinhaArea || {
     user: null,
-    dataAtual: new Date(),
-    usuarioAlvo: 'todos', // Padrão
+    // dataAtual agora será usada mais como referência, mas o filtro real vem do DOM
+    usuarioAlvo: 'todos',
     
     get supabase() { return window.Sistema ? window.Sistema.supabase : (window._supabase || null); }
 };
@@ -12,32 +12,24 @@ MinhaArea.init = async function() {
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
-        // Se não for admin, o alvo é ele mesmo. Se for admin, começa com 'todos'
         const isUserAdmin = MinhaArea.user.funcao === 'GESTORA' || MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
         MinhaArea.usuarioAlvo = isUserAdmin ? 'todos' : MinhaArea.user.id;
     }
 
     if (window.Sistema && !window.Sistema.supabase) await window.Sistema.inicializar(false);
 
-    // Data Global
-    const dateInput = document.getElementById('ma-global-date');
-    const lastDate = localStorage.getItem('ma_lastGlobalDate');
-    if (dateInput) {
-        if (lastDate) {
-            dateInput.value = lastDate;
-            const [ano, mes, dia] = lastDate.split('-').map(Number);
-            MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
-        } else {
-            const hoje = new Date();
-            dateInput.value = hoje.toISOString().split('T')[0];
-            MinhaArea.dataAtual = hoje;
-            localStorage.setItem('ma_lastGlobalDate', dateInput.value);
-        }
-    }
+    // --- LÓGICA DO FILTRO UNIFICADO ---
+    const lastType = localStorage.getItem('ma_filter_type') || 'mes';
+    const lastValue = localStorage.getItem('ma_filter_value');
     
+    const selectType = document.getElementById('filtro-tipo');
+    if (selectType) {
+        selectType.value = lastType;
+        MinhaArea.mudarTipoFiltro(lastType, lastValue); // Renderiza o input correto
+    }
+
     // Admin Controls
     const isAdmin = ['GESTORA', 'AUDITORA'].includes((MinhaArea.user.funcao||'').toUpperCase()) || MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
-
     if (isAdmin) {
         const controls = document.getElementById('admin-controls');
         const select = document.getElementById('admin-user-select');
@@ -47,9 +39,49 @@ MinhaArea.init = async function() {
         }
     }
 
-    // Restore Tab
     const lastTab = localStorage.getItem('ma_lastActiveTab');
     MinhaArea.mudarAba(lastTab || 'diario');
+};
+
+// Funções do Filtro Unificado
+MinhaArea.mudarTipoFiltro = function(tipo, valorSalvo = null) {
+    const container = document.getElementById('filtro-valor-container');
+    if (!container) return;
+
+    localStorage.setItem('ma_filter_type', tipo);
+    let html = '';
+    const hoje = new Date();
+    
+    // Define o valor padrão se não houver um salvo
+    let defaultValue = valorSalvo;
+
+    if (tipo === 'dia') {
+        if (!defaultValue) defaultValue = hoje.toISOString().split('T')[0];
+        html = `<input type="date" id="filtro-valor" value="${defaultValue}" onchange="MinhaArea.atualizarFiltroGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[120px]">`;
+    } else if (tipo === 'mes') {
+        if (!defaultValue) defaultValue = `${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+        html = `<input type="month" id="filtro-valor" value="${defaultValue}" onchange="MinhaArea.atualizarFiltroGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[120px]">`;
+    } else if (tipo === 'ano') {
+        if (!defaultValue) defaultValue = hoje.getFullYear();
+        html = `<input type="number" id="filtro-valor" value="${defaultValue}" min="2020" max="2030" onchange="MinhaArea.atualizarFiltroGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[60px]">`;
+    }
+
+    container.innerHTML = html;
+    
+    // Se mudou o tipo manualmente (sem valorSalvo), dispara a atualização para recarregar dados
+    if (!valorSalvo) {
+        const input = document.getElementById('filtro-valor');
+        if (input) MinhaArea.atualizarFiltroGlobal(input.value);
+    }
+};
+
+MinhaArea.atualizarFiltroGlobal = function(val) {
+    if (!val) return;
+    localStorage.setItem('ma_filter_value', val);
+    
+    // Atualiza a aba ativa
+    const activeBtn = document.querySelector('.tab-btn.active');
+    if (activeBtn) MinhaArea.mudarAba(activeBtn.id.replace('btn-ma-', ''));
 };
 
 MinhaArea.carregarListaUsuarios = async function(selectElement) {
@@ -77,7 +109,6 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
 
 MinhaArea.mudarUsuarioAlvo = function(val) {
     MinhaArea.usuarioAlvo = val;
-    // Se estiver na aba OKR, dispara o filtro local, senão recarrega aba
     if (document.getElementById('ma-tab-evolucao').classList.contains('hidden') === false) {
         if(MinhaArea.Evolucao && MinhaArea.Evolucao.aplicarFiltroAssistente) {
             MinhaArea.Evolucao.aplicarFiltroAssistente();
@@ -90,16 +121,6 @@ MinhaArea.mudarUsuarioAlvo = function(val) {
     }
 };
 
-MinhaArea.atualizarDataGlobal = function(val) {
-    if (!val) return;
-    localStorage.setItem('ma_lastGlobalDate', val);
-    const [ano, mes, dia] = val.split('-').map(Number);
-    MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
-
-    const activeBtn = document.querySelector('.tab-btn.active');
-    if (activeBtn) MinhaArea.mudarAba(activeBtn.id.replace('btn-ma-', ''));
-};
-
 MinhaArea.mudarAba = function(aba) {
     localStorage.setItem('ma_lastActiveTab', aba);
     document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
@@ -110,18 +131,6 @@ MinhaArea.mudarAba = function(aba) {
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
-    // Header Controls Logic
-    const dateGlobal = document.getElementById('container-data-global');
-    const okrControls = document.getElementById('okr-header-controls');
-
-    if (aba === 'evolucao') {
-        if(dateGlobal) dateGlobal.classList.remove('hidden');
-        if(okrControls) okrControls.classList.remove('hidden');
-    } else {
-        if(dateGlobal) dateGlobal.classList.remove('hidden');
-        if(okrControls) okrControls.classList.add('hidden');
-    }
-
     if (aba === 'diario' && MinhaArea.Diario) MinhaArea.Diario.carregar();
     else if (aba === 'evolucao' && MinhaArea.Evolucao) MinhaArea.Evolucao.carregar();
     else if (aba === 'comparativo' && MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
@@ -129,13 +138,41 @@ MinhaArea.mudarAba = function(aba) {
     else if (aba === 'feedback' && MinhaArea.Feedback) MinhaArea.Feedback.carregar();
 };
 
+// Funçao auxiliar vital para calcular datas baseada no input unificado
 MinhaArea.getPeriodo = function() {
-    const y = MinhaArea.dataAtual.getFullYear();
-    const m = MinhaArea.dataAtual.getMonth();
-    return {
-        inicio: new Date(y, m, 1).toISOString().split('T')[0],
-        fim: new Date(y, m + 1, 0).toISOString().split('T')[0]
-    };
+    const tipo = document.getElementById('filtro-tipo')?.value || 'mes';
+    const val = document.getElementById('filtro-valor')?.value;
+    
+    let inicio = '', fim = '', texto = '';
+
+    if (!val) { // Fallback hoje
+        const h = new Date();
+        inicio = h.toISOString().split('T')[0];
+        fim = inicio;
+    } else {
+        if (tipo === 'dia') {
+            inicio = val; 
+            fim = val;
+            const d = new Date(val + 'T12:00:00'); // Força timezone
+            texto = d.toLocaleDateString('pt-BR');
+        } 
+        else if (tipo === 'mes') {
+            // val = "2025-01"
+            const [y, m] = val.split('-').map(Number);
+            inicio = `${y}-${String(m).padStart(2,'0')}-01`;
+            const lastDay = new Date(y, m, 0).getDate();
+            fim = `${y}-${String(m).padStart(2,'0')}-${lastDay}`;
+            texto = `${String(m).padStart(2,'0')}/${y}`;
+        } 
+        else if (tipo === 'ano') {
+            // val = "2025"
+            inicio = `${val}-01-01`;
+            fim = `${val}-12-31`;
+            texto = val;
+        }
+    }
+    
+    return { inicio, fim, texto, tipo };
 };
 
 document.addEventListener('DOMContentLoaded', MinhaArea.init);

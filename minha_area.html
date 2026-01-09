@@ -45,26 +45,20 @@
                         <h1 class="text-lg font-bold text-slate-800 tracking-tight hidden sm:block">Performance</h1>
                     </div>
                     
-                    <div id="container-data-global" class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-400 transition cursor-pointer group">
-                        <i class="fas fa-calendar-day text-slate-400 group-hover:text-blue-500 transition"></i>
-                        <input type="date" id="ma-global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[120px]">
+                    <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                        <select id="filtro-tipo" onchange="MinhaArea.mudarTipoFiltro(this.value)" class="bg-transparent text-sm font-bold text-slate-600 outline-none cursor-pointer pl-2 py-1">
+                            <option value="dia">Dia</option>
+                            <option value="mes" selected>Mês</option>
+                            <option value="ano">Ano</option>
+                        </select>
+                        
+                        <div class="w-px h-4 bg-slate-300"></div>
+
+                        <div id="filtro-valor-container" class="px-2">
+                            </div>
                     </div>
 
-                    <div id="okr-header-controls" class="hidden flex items-center gap-2 animate-enter">
-                        <div class="flex items-center gap-2 bg-indigo-50 px-3 py-1.5 rounded-lg border border-indigo-200">
-                            <i class="fas fa-filter text-indigo-500"></i>
-                            <select id="filtro-periodo-okr-header" onchange="MinhaArea.Evolucao.mudarPeriodo(this.value)" class="bg-transparent text-sm font-bold text-indigo-900 outline-none cursor-pointer">
-                                <option value="dia">Dia Específico</option>
-                                <option value="semana">Semana</option>
-                                <option value="mes" selected>Mês</option>
-                                <option value="trimestre">Trimestre</option>
-                                <option value="anual">Ano</option>
-                                <option value="todos">Todo Histórico</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div id="admin-controls" class="hidden flex items-center gap-2 pl-2 animate-enter">
+                    <div id="admin-controls" class="hidden flex items-center gap-2 animate-enter">
                         <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
                             <i class="fas fa-user-circle text-slate-400"></i>
                             <select id="admin-user-select" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer min-w-[150px] max-w-[200px]">
@@ -96,7 +90,6 @@
     </div>
 
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-6">
             <div id="box-confirmacao-leitura" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
                 <div class="flex items-center gap-3">
@@ -105,7 +98,6 @@
                 </div>
                 <button onclick="MinhaArea.Diario.confirmarAcessoHoje()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-6 rounded-lg text-sm">Confirmar</button>
             </div>
-
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
                     <div class="flex justify-between mb-2"><span class="text-xs font-bold text-slate-400 uppercase">Atingimento</span><span id="kpi-pct" class="text-lg font-black text-blue-600">--%</span></div>
@@ -126,7 +118,6 @@
                     <div id="kpi-status-text" class="mt-2 text-xs font-bold text-slate-500">--</div>
                 </div>
             </div>
-
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700 text-sm">Detalhamento Diário</h3></div>
                 <div class="overflow-x-auto max-h-[500px] custom-scroll">
@@ -136,7 +127,6 @@
         </div>
 
         <div id="ma-tab-evolucao" class="ma-view hidden animate-enter"></div>
-
         <div id="ma-tab-comparativo" class="ma-view hidden animate-enter"></div>
         <div id="ma-tab-assertividade" class="ma-view hidden animate-enter"></div>
         <div id="ma-tab-feedback" class="ma-view hidden animate-enter"></div>
