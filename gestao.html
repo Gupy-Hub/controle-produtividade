@@ -1,279 +1,141 @@
 <!DOCTYPE html>
-<html lang="pt-pt">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gestão Administrativa</title>
+    <title>Gestão - Performance Pro</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    
-    <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; }
-        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
-        .tab-btn:not(.active) { color: #64748b; }
-        .tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
-        .sub-tab-btn { transition: all 0.2s; border-bottom: 2px solid transparent; }
-        .sub-tab-btn.active { color: #2563eb; border-bottom-color: #2563eb; background-color: #eff6ff; }
-        .sub-tab-btn:not(.active) { color: #64748b; }
-        .sub-tab-btn:not(.active):hover { color: #334155; background-color: #f8fafc; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+
+    <style>
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .tab-btn { opacity: 0.6; border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .tab-btn:hover { opacity: 1; background-color: #f1f5f9; }
+        .tab-btn.active { opacity: 1; border-bottom-color: #2563eb; color: #2563eb; background-color: #eff6ff; }
+        .animate-fade { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
-<body class="bg-slate-100">
-    
+<body class="bg-slate-50">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
-    <script src="js/layout.js"></script> 
-    <script src="js/importacao.js"></script> 
+    
+    <div id="global-menu"></div>
 
-    <script src="js/gestao/main.js" defer></script>
-    <script src="js/gestao/equipe.js" defer></script>
-    <script src="js/gestao/empresas.js" defer></script>
-    <script src="js/gestao/producao.js" defer></script>
-    <script src="js/gestao/assertividade.js" defer></script>
-
-    <div class="bg-white border-b border-slate-200 shadow-sm">
-        <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex flex-col md:flex-row items-center justify-between h-14 gap-2">
-                
-                <div class="flex items-center gap-3 w-full md:w-auto">
-                    <div class="flex items-center gap-2 border-r border-slate-200 pr-3">
-                        <i class="fas fa-cogs text-slate-400 text-lg"></i>
-                        <h1 class="text-lg font-black text-slate-700 tracking-tight">Gestão</h1>
+    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40">
+        <div class="max-w-[1600px] mx-auto px-4">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 bg-slate-800 rounded-lg flex items-center justify-center text-white shadow-lg">
+                        <i class="fas fa-cogs"></i>
                     </div>
-                    <span class="text-xs text-slate-400 font-bold hidden sm:inline">Administração do Sistema</span>
+                    <div>
+                        <h1 class="text-xl font-black text-slate-800 tracking-tight">Painel de Gestão</h1>
+                        <p class="text-xs text-slate-500">Administração do Sistema</p>
+                    </div>
                 </div>
 
-                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end">
-                    <button onclick="Gestao.mudarAba('equipe')" id="btn-equipe" class="tab-btn active px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                        <i class="fas fa-users"></i> Equipe
-                    </button>
-                    <button onclick="Gestao.mudarAba('producao')" id="btn-producao" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                        <i class="fas fa-chart-line"></i> Prod. Individual
-                    </button>
-                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                        <i class="fas fa-bullseye"></i> Assertividade
-                    </button>
-                    <button onclick="Gestao.mudarAba('empresas')" id="btn-empresas" class="tab-btn px-4 py-3 text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                        <i class="fas fa-building"></i> Empresas
-                    </button>
+                <div class="flex gap-1 overflow-x-auto">
+                    <button onclick="Gestao.mudarAba('usuarios')" id="btn-g-usuarios" class="tab-btn active px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-users"></i> Usuários</button>
+                    <button onclick="Gestao.mudarAba('empresas')" id="btn-g-empresas" class="tab-btn px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-building"></i> Empresas</button>
+                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-g-assertividade" class="tab-btn px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-check-double"></i> Assertividade</button>
+                    <button onclick="Gestao.mudarAba('metas')" id="btn-g-metas" class="tab-btn px-4 py-2 rounded-t-lg font-bold text-sm flex items-center gap-2"><i class="fas fa-bullseye"></i> Metas Diárias</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6">
-
-        <div id="tab-equipe" class="view-section animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[600px]">
-                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <div class="flex items-center gap-2 w-full sm:w-auto">
-                        <div class="relative w-full sm:w-64">
-                            <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
-                            <input type="text" id="search-user" onkeyup="Gestao.Equipe.filtrar()" placeholder="Buscar colaborador..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
-                        </div>
-                    </div>
-                    
-                    <div class="flex gap-2 w-full sm:w-auto justify-end items-center">
-                        <button id="btn-delete-mass-equipe" onclick="Gestao.Equipe.excluirMassa()" class="hidden bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm items-center gap-2">
-                            <i class="fas fa-trash-alt"></i> Excluir (<span id="count-sel-equipe">0</span>)
-                        </button>
-
-                        <input type="file" id="input-import-users" accept=".xlsx, .csv" class="hidden" onchange="Gestao.Equipe.importar(this)">
-                        <button onclick="document.getElementById('input-import-users').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
-                            <i class="fas fa-file-excel"></i> Importar
-                        </button>
-                        
-                        <button onclick="Gestao.Equipe.abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
-                            <i class="fas fa-plus"></i> Novo
-                        </button>
-                    </div>
-                </div>
-
-                <div class="flex border-b border-slate-200">
-                    <button onclick="Gestao.Equipe.mudarFiltro('ativos')" id="btn-sub-ativos" class="sub-tab-btn active flex-1 py-3 text-sm font-bold text-center">
-                        <i class="fas fa-check-circle mr-2 text-emerald-500"></i> Ativos (<span id="count-ativos">0</span>)
-                    </button>
-                    <button onclick="Gestao.Equipe.mudarFiltro('inativos')" id="btn-sub-inativos" class="sub-tab-btn flex-1 py-3 text-sm font-bold text-center">
-                        <i class="fas fa-times-circle mr-2 text-red-500"></i> Inativos / Finalizados (<span id="count-inativos">0</span>)
-                    </button>
-                </div>
-
-                <div class="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center gap-3 text-xs font-bold text-slate-500 uppercase">
-                    <input type="checkbox" onchange="Gestao.Equipe.toggleSelecionarTodos(this)" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                    <span>Selecionar Todos</span>
-                </div>
-
-                <div class="overflow-y-auto flex-1 p-2 space-y-2 relative custom-scrollbar bg-slate-50/50" id="user-list">
-                    <div class="text-center p-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>Carregando equipe...</div>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-producao" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-4xl mx-auto">
-                <div class="mb-6 border-b border-slate-100 pb-4">
-                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fas fa-chart-line text-blue-600"></i> Metas de Produção
-                    </h2>
-                    <p class="text-sm text-slate-500">Defina a meta diária de documentos processados por colaborador.</p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="space-y-4">
-                        <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg text-xs text-blue-800">
-                            <i class="fas fa-info-circle mr-1"></i> O sistema considera a meta válida na data do registro.
-                        </div>
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Colaborador</label>
-                            <select id="meta-user" onchange="Gestao.Producao.carregar()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500 transition">
-                                <option>Carregando...</option>
-                            </select>
-                        </div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label><input type="date" id="meta-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500"></div>
-                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Meta (Docs)</label><input type="number" id="meta-value" placeholder="Ex: 650" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-blue-500"></div>
-                        </div>
-                        <button onclick="Gestao.Producao.salvar()" id="btn-meta" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 active:scale-95">Gravar Meta</button>
-                    </div>
-                    <div class="border-l border-slate-100 pl-6 flex flex-col">
-                        <div class="flex justify-between items-center mb-3">
-                            <h4 class="text-sm font-bold text-slate-700">Histórico Recente</h4>
-                            <button onclick="Gestao.Producao.carregar()" class="text-xs text-blue-600 hover:underline font-bold"><i class="fas fa-sync"></i> Atualizar</button>
-                        </div>
-                        <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar max-h-[400px]" id="meta-list"><div class="text-xs text-slate-400 italic text-center py-4">Selecione um usuário para ver.</div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-assertividade" class="view-section hidden animate-fade-in space-y-6">
-             <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 max-w-4xl mx-auto">
-                <div class="mb-6 border-b border-slate-100 pb-4">
-                    <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2"><i class="fas fa-bullseye text-purple-600"></i> Assertividade Global</h2>
-                    <p class="text-sm text-slate-500">Meta de qualidade mínima aplicada a <b>todas</b> as assistentes.</p>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="space-y-4">
-                        <div class="bg-purple-50 border border-purple-100 p-3 rounded-lg text-xs text-purple-800"><i class="fas fa-check-double mr-1"></i> Atingimento abaixo deste valor será destacado em vermelho nos relatórios.</div>
-                        <div class="grid grid-cols-2 gap-4">
-                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Início Vigência</label><input type="date" id="assert-date" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-purple-500"></div>
-                            <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Mínimo (%)</label><div class="relative"><input type="number" id="assert-value" placeholder="Ex: 97" step="0.1" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-purple-500 pr-8"><span class="absolute right-3 top-2.5 text-slate-400 font-bold">%</span></div></div>
-                        </div>
-                        <button onclick="Gestao.Assertividade.salvar()" id="btn-assert" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-purple-200 active:scale-95">Gravar Meta Global</button>
-                    </div>
-                     <div class="border-l border-slate-100 pl-6 flex flex-col"><h4 class="text-sm font-bold text-slate-700 mb-3">Histórico</h4><div class="overflow-y-auto flex-1 pr-2 custom-scrollbar max-h-[400px]" id="assert-list"><div class="text-xs text-slate-400 italic text-center py-4">Carregando...</div></div></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-empresas" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col min-h-[600px]">
-                <div class="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-4">
-                    <div class="relative w-full sm:w-80">
-                        <i class="fas fa-search absolute left-3 top-3 text-slate-400"></i>
-                        <input type="text" id="search-empresa" onkeyup="Gestao.Empresas.filtrar()" placeholder="Buscar empresa por nome ou ID..." class="w-full bg-white border border-slate-300 text-slate-700 text-sm rounded-lg pl-10 p-2.5 outline-none focus:border-blue-500 transition">
-                    </div>
-                    
-                    <div class="flex gap-2 w-full sm:w-auto justify-end items-center">
-                        <button id="btn-delete-mass-empresa" onclick="Gestao.Empresas.excluirMassa()" class="hidden bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm items-center gap-2">
-                            <i class="fas fa-trash-alt"></i> Excluir (<span id="count-sel-empresa">0</span>)
-                        </button>
-
-                        <input type="file" id="input-import-empresas" accept=".xlsx, .csv" class="hidden" onchange="Gestao.Empresas.importar(this)">
-                        <button onclick="document.getElementById('input-import-empresas').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
-                            <i class="fas fa-file-excel"></i> Importar
-                        </button>
-
-                        <button onclick="Gestao.Empresas.abrirModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition shadow-sm flex items-center gap-2">
-                            <i class="fas fa-plus"></i> Nova Empresa
-                        </button>
-                    </div>
-                </div>
-
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left">
-                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                            <tr>
-                                <th class="px-4 py-3 w-10 text-center border-b border-slate-200">
-                                    <input type="checkbox" onchange="Gestao.Empresas.toggleSelecionarTodos(this)" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
-                                </th>
-                                <th class="px-6 py-3 border-b border-slate-200 w-24">ID</th>
-                                <th class="px-6 py-3 border-b border-slate-200">Nome da Empresa</th>
-                                <th class="px-6 py-3 border-b border-slate-200">Subdomínio</th>
-                                <th class="px-6 py-3 border-b border-slate-200 text-center">Data Entrada</th>
-                                <th class="px-6 py-3 border-b border-slate-200">Obs</th>
-                                <th class="px-6 py-3 border-b border-slate-200 text-center w-24">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="lista-empresas" class="divide-y divide-slate-100 bg-white">
-                            </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-    </div>
-
-    <div id="modal-user" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all scale-100">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 class="font-bold text-slate-800" id="modal-user-title">Novo Colaborador</h3>
-                <button onclick="Gestao.fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
-            </div>
-            <div class="p-6 space-y-4">
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Login)</label><input type="number" id="form-user-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label><input type="text" id="form-user-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Senha</label><input type="text" id="form-user-senha" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none"></div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Função</label><select id="form-user-funcao" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none"><option value="Assistente">Assistente</option><option value="Gestora">Gestora</option><option value="Auditora">Auditora</option></select></div>
-                    <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Contrato</label><select id="form-user-contrato" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none"><option value="PJ">PJ</option><option value="CLT">CLT</option><option value="FINALIZADO" class="text-red-500">FINALIZADO</option></select></div>
-                </div>
+    <div class="max-w-[1600px] mx-auto px-4 py-8 pt-40">
+        
+        <div id="view-usuarios" class="gestao-view animate-fade space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
                 <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Situação</label>
-                    <select id="form-user-ativo" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 font-bold text-slate-700 outline-none">
-                        <option value="true" class="text-green-600">🟢 ATIVO</option>
-                        <option value="false" class="text-red-600">🔴 INATIVO / FINALIZADO</option>
-                    </select>
+                    <h2 class="font-bold text-slate-700">Importar Usuários</h2>
+                    <p class="text-xs text-slate-400">CSV ou XLSX contendo: ID, Nome, Função, Cargo (Opcional)</p>
+                </div>
+                <div class="flex gap-2">
+                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
+                        <i class="fas fa-upload"></i> Importar Lista
+                        <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Usuarios.importar(this)">
+                    </label>
                 </div>
             </div>
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onclick="Gestao.Equipe.salvar()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar</button>
-                <button onclick="Gestao.Equipe.excluir()" id="btn-user-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                        <tr><th class="px-6 py-3">ID</th><th class="px-6 py-3">Nome</th><th class="px-6 py-3">Função</th><th class="px-6 py-3">Status</th><th class="px-6 py-3 text-right">Ações</th></tr>
+                    </thead>
+                    <tbody id="lista-usuarios" class="divide-y divide-slate-100"></tbody>
+                </table>
             </div>
         </div>
-    </div>
 
-    <div id="modal-empresa" class="fixed inset-0 bg-black/50 z-[100] hidden items-center justify-center backdrop-blur-sm p-4">
-        <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100">
-            <div class="bg-slate-50 px-6 py-4 border-b border-slate-100 flex justify-between items-center">
-                <h3 class="font-bold text-slate-800" id="modal-empresa-title">Nova Empresa</h3>
-                <button onclick="Gestao.fecharModais()" class="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
-            </div>
-            <div class="p-6 space-y-4">
-                <input type="hidden" id="form-empresa-uid"> 
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="col-span-1"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID Empresa</label><input type="number" id="form-empresa-id" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
-                    <div class="col-span-2"><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Data Entrada Mesa</label><input type="date" id="form-empresa-data" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 font-bold text-slate-700 outline-none"></div>
+        <div id="view-empresas" class="gestao-view hidden animate-fade space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+                <div>
+                    <h2 class="font-bold text-slate-700">Importar Empresas</h2>
+                    <p class="text-xs text-slate-400">CSV ou XLSX contendo: Nome, ID (Opcional)</p>
                 </div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da Empresa</label><input type="text" id="form-empresa-nome" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none" placeholder="Ex: Gupy Tecnologia"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Subdomínio</label><input type="text" id="form-empresa-sub" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none" placeholder="Ex: gupy.com.br"></div>
-                <div><label class="block text-xs font-bold text-slate-500 uppercase mb-1">Observação</label><textarea id="form-empresa-obs" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 focus:ring-blue-500 text-slate-700 outline-none resize-none"></textarea></div>
+                <div class="flex gap-2">
+                    <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
+                        <i class="fas fa-upload"></i> Importar Empresas
+                        <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Empresas.importar(this)">
+                    </label>
+                </div>
             </div>
-            <div class="px-6 py-4 bg-slate-50 border-t border-slate-100 flex gap-3">
-                <button onclick="Gestao.Empresas.salvar()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-lg transition shadow-md">Salvar Empresa</button>
-                <button onclick="Gestao.Empresas.excluir()" id="btn-empresa-delete" class="hidden bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold py-2 px-4 rounded-lg transition">Excluir</button>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
+                        <tr><th class="px-6 py-3">ID</th><th class="px-6 py-3">Nome</th><th class="px-6 py-3">Obs</th><th class="px-6 py-3 text-right">Ações</th></tr>
+                    </thead>
+                    <tbody id="lista-empresas" class="divide-y divide-slate-100"></tbody>
+                </table>
             </div>
         </div>
+
+        <div id="view-assertividade" class="gestao-view hidden animate-fade space-y-4">
+             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 max-w-lg mx-auto text-center">
+                <h2 class="font-bold text-slate-700 mb-4">Nova Meta de Assertividade</h2>
+                <div class="flex gap-2 justify-center mb-4">
+                    <input type="date" id="form-assert-data" class="border rounded px-3 py-2 text-sm">
+                    <input type="number" id="form-assert-valor" placeholder="Meta % (Ex: 97.00)" step="0.01" class="border rounded px-3 py-2 text-sm w-32">
+                </div>
+                <button onclick="Gestao.Assertividade.salvar()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-bold text-sm w-full"><i class="fas fa-save mr-2"></i>Salvar Meta</button>
+             </div>
+             <div class="bg-white rounded-xl shadow-sm border border-slate-200 max-w-lg mx-auto overflow-hidden">
+                 <div class="px-4 py-2 bg-slate-50 font-bold text-xs uppercase text-slate-500">Histórico de Metas</div>
+                 <div id="lista-assertividade" class="divide-y divide-slate-100"></div>
+             </div>
+        </div>
+
+        <div id="view-metas" class="gestao-view hidden animate-fade space-y-4">
+             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex justify-between items-center">
+                <div>
+                    <h2 class="font-bold text-slate-700">Definir Metas de Produção</h2>
+                    <p class="text-xs text-slate-400">Importe metas individuais por período.</p>
+                </div>
+                <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition">
+                    <i class="fas fa-file-excel"></i> Importar Metas
+                    <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Metas.importar(this)">
+                </label>
+            </div>
+            <div id="container-metas-lista" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 min-h-[200px]">
+                <p class="text-center text-slate-400 py-10">Carregue um arquivo para visualizar ou editar metas.</p>
+            </div>
+        </div>
+
     </div>
 
+    <script src="js/menu.js"></script>
+    <script src="js/gestao/main.js"></script>
+    <script src="js/gestao/usuarios.js"></script>
+    <script src="js/gestao/empresas.js"></script>
+    <script src="js/gestao/assertividade.js"></script>
+    <script src="js/gestao/metas.js"></script>
 </body>
 </html>

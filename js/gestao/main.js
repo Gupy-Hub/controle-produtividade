@@ -1,59 +1,53 @@
-// Define o objeto globalmente de forma segura
-window.Gestao = window.Gestao || {
-    supabase: null,
-    dados: { usuarios: [], empresas: [] }
-};
+window.Gestao = window.Gestao || {};
 
 Gestao.init = async function() {
-    // 1. Configuração do Supabase (Reutiliza ou cria)
-    if (window._supabase) {
-        Gestao.supabase = window._supabase;
-    } else if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
-        Gestao.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
-        window._supabase = Gestao.supabase;
-    } else {
-        console.error("Supabase não configurado.");
-        return; // Para aqui se não tiver banco, mas não quebra o JS
+    // Verifica permissão
+    await Sistema.inicializar();
+    const user = Sistema.usuarioLogado;
+    if (!user || (user.funcao !== 'GESTORA' && user.funcao !== 'AUDITORA' && user.id != 1)) {
+        alert("Acesso restrito.");
+        window.location.href = 'minha_area.html';
+        return;
     }
 
-    // 2. Define datas nos inputs (com verificação de segurança)
-    const today = new Date().toISOString().substring(0, 10);
-    const inputsData = ['meta-date', 'assert-date', 'form-empresa-data'];
-    
-    inputsData.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.value = today; // SÓ TENTA DEFINIR SE O ELEMENTO EXISTIR
-    });
-
-    // 3. Carrega os módulos (se existirem)
-    if(Gestao.Equipe) await Gestao.Equipe.carregar();
-    if(Gestao.Empresas) await Gestao.Empresas.carregar();
-    if(Gestao.Producao) await Gestao.Producao.carregar();
-    if(Gestao.Assertividade) await Gestao.Assertividade.carregar();
-
-    // 4. Inicia na aba padrão
-    Gestao.mudarAba('equipe');
+    // Carrega aba inicial (Usuários)
+    Gestao.mudarAba('usuarios');
 };
 
 Gestao.mudarAba = function(aba) {
-    // Esconde todas as seções
-    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+    // UI Updates
+    document.querySelectorAll('.gestao-view').forEach(el => el.classList.add('hidden'));
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+
+    const view = document.getElementById(`view-${aba}`);
+    const btn = document.getElementById(`btn-g-${aba}`);
     
-    // Mostra a selecionada (se existir)
-    const tab = document.getElementById(`tab-${aba}`);
-    const btn = document.getElementById(`btn-${aba}`);
-    
-    if (tab) tab.classList.remove('hidden');
+    if (view) view.classList.remove('hidden');
     if (btn) btn.classList.add('active');
+
+    // Load Data
+    if (aba === 'usuarios' && Gestao.Usuarios) Gestao.Usuarios.carregar();
+    else if (aba === 'empresas' && Gestao.Empresas) Gestao.Empresas.carregar();
+    else if (aba === 'assertividade' && Gestao.Assertividade) Gestao.Assertividade.carregar();
+    else if (aba === 'metas' && Gestao.Metas) Gestao.Metas.carregar();
 };
 
-Gestao.fecharModais = function() {
-    const modalUser = document.getElementById('modal-user');
-    const modalEmpresa = document.getElementById('modal-empresa');
-    if(modalUser) modalUser.classList.add('hidden');
-    if(modalEmpresa) modalEmpresa.classList.add('hidden');
+// Utils para importação (CSV/Excel)
+Gestao.lerArquivo = async function(file) {
+    return new Promise((resolve, reject) => {
+        const ext = file.name.split('.').pop().toLowerCase();
+        if (ext === 'csv') {
+            Papa.parse(file, { header: true, skipEmptyLines: true, complete: (res) => resolve(res.data), error: reject });
+        } else {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                resolve(XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]));
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    });
 };
 
-// Inicializa apenas quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', Gestao.init);
