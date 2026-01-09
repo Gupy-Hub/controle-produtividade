@@ -2,8 +2,11 @@ MinhaArea.Evolucao = {
     // Gerencia a aba Meta / OKR
     carregar: async function() {
         this.renderizarLayout();
+        
+        // Pega valor do seletor do cabeçalho (se já existir) ou padrão 'mes'
         const headerSelect = document.getElementById('filtro-periodo-okr-header');
         const periodo = headerSelect ? headerSelect.value : 'mes';
+        
         await this.carregarDados(periodo);
     },
 
@@ -11,6 +14,7 @@ MinhaArea.Evolucao = {
         const container = document.getElementById('ma-tab-evolucao');
         if (!container) return;
 
+        // Tabela atualizada com as novas colunas (Nok, Ok)
         container.innerHTML = `
             <div class="flex flex-col gap-6">
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -31,9 +35,9 @@ MinhaArea.Evolucao = {
                                     <th class="px-4 py-3 border-r border-slate-100">Documento</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100">Status</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100">Campos</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100">Acertos</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100">Ok</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600">Nok</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100 text-blue-600">% Assert.</th>
-                                    <th class="px-4 py-3 border-r border-slate-100">% Erro/Prod</th>
                                     <th class="px-4 py-3 border-r border-slate-100">Auditora</th>
                                     <th class="px-4 py-3">Apontamentos / Obs</th>
                                 </tr>
@@ -99,12 +103,13 @@ MinhaArea.Evolucao = {
 
             let html = '';
             data.forEach(item => {
+                // Formatação de Status
                 let statusBadge = '';
                 const st = (item.status || '').toUpperCase().trim();
                 
                 if(st === 'OK' || st === 'ACERTO') {
                     statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
-                } else if(st.includes('ERRO') || st === 'REV' || st === 'JUST') {
+                } else if(st.includes('ERRO') || st === 'REV' || st === 'JUST' || st === 'EMPR') {
                     statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
                 } else {
                     statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
@@ -128,8 +133,8 @@ MinhaArea.Evolucao = {
                         <td class="px-4 py-3 text-center">${statusBadge}</td>
                         <td class="px-4 py-3 text-center text-slate-400 font-mono">${item.num_campos ?? '-'}</td>
                         <td class="px-4 py-3 text-center font-bold text-slate-600 font-mono">${item.acertos ?? '-'}</td>
+                        <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono">${item.pct_erros_produtividade || '-'}</td>
                         <td class="px-4 py-3 text-center ${pctClass}">${item.pct_assert || '-'}</td>
-                        <td class="px-4 py-3 text-center text-xs text-slate-400">${item.pct_erros_produtividade || '-'}</td>
                         <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
                         <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
                             ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
@@ -158,56 +163,52 @@ MinhaArea.Evolucao = {
             complete: async function(results) {
                 try {
                     const rows = results.data;
-                    const headers = results.meta.fields; // Cabeçalhos reais encontrados no arquivo
+                    const headers = results.meta.fields;
 
-                    console.log("Cabeçalhos encontrados:", headers);
+                    console.log("Cabeçalhos detectados:", headers);
 
                     if (!rows || rows.length === 0) throw new Error("Arquivo vazio.");
 
-                    // --- FUNÇÃO PARA ENCONTRAR COLUNA INDEPENDENTE DE CASE/ESPAÇOS ---
+                    // Função para encontrar coluna ignorando maiúsculas/minúsculas e espaços
                     const encontrarColuna = (opcoes) => {
-                        // 1. Tenta match exato ou normalizado
                         for (const opt of opcoes) {
                             const found = headers.find(h => h.trim().toLowerCase() === opt.toLowerCase());
-                            if (found) return found;
-                        }
-                        // 2. Tenta 'contém' (ex: acha 'Data de Nascimento' se buscar 'Data')
-                        for (const opt of opcoes) {
-                            const found = headers.find(h => h.trim().toLowerCase().includes(opt.toLowerCase()));
                             if (found) return found;
                         }
                         return null;
                     };
 
-                    // Mapeia as colunas críticas
-                    const colData = encontrarColuna(['Data', 'date', 'dt_referencia']);
+                    // Agora procuramos 'end_time' em vez de 'Data'
+                    const colEndTime = encontrarColuna(['end_time', 'time', 'Data']);
                     const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
 
-                    if (!colData || !colAssistente) {
-                        alert(`Erro: Colunas obrigatórias não encontradas.\n\nColunas no arquivo: ${headers.join(', ')}\n\nEsperado: 'Data' e 'Assistente'.`);
+                    if (!colEndTime || !colAssistente) {
+                        alert(`Erro: Colunas obrigatórias não encontradas.\n\nColunas no arquivo: ${headers.join(', ')}\n\nEsperado: 'end_time' e 'Assistente'.`);
                         return;
                     }
 
                     const batch = [];
                     
                     rows.forEach(row => {
-                        const rawDate = row[colData];
+                        const rawTime = row[colEndTime];
                         const assistente = row[colAssistente];
 
-                        if (!rawDate && !assistente) return;
+                        if (!rawTime && !assistente) return;
 
-                        // Tratamento de Data (Aceita DD/MM/YYYY ou YYYY-MM-DD)
-                        let dataFinal = rawDate;
-                        if (rawDate && rawDate.includes('/')) {
-                            // Se for DD/MM/YYYY
-                            const parts = rawDate.split('/');
-                            if (parts.length === 3) dataFinal = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                        } else if (rawDate && rawDate.includes('T')) {
-                            // Se for ISO completo 2025-10-20T...
-                            dataFinal = rawDate.split('T')[0];
+                        // Tratamento de DATA (Extrair do end_time)
+                        // Formato esperado: "2025-10-20T14:02:18.175Z" ou "2025-10-20"
+                        let dataFinal = null;
+                        if (rawTime) {
+                            if (rawTime.includes('T')) {
+                                dataFinal = rawTime.split('T')[0]; // Pega só a parte da data (YYYY-MM-DD)
+                            } else if (rawTime.includes('/')) {
+                                const parts = rawTime.split('/'); // Se for DD/MM/YYYY
+                                if (parts.length === 3) dataFinal = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                            } else {
+                                dataFinal = rawTime; // Assume que já está ok
+                            }
                         }
 
-                        // Função auxiliar para pegar valor seguro
                         const getVal = (opts) => {
                             const key = encontrarColuna(opts);
                             return key ? row[key] : null;
@@ -215,16 +216,18 @@ MinhaArea.Evolucao = {
 
                         batch.push({
                             mes: getVal(['mês', 'mes', 'month']),
-                            end_time: getVal(['end_time', 'time']),
-                            data_referencia: dataFinal,
+                            end_time: rawTime, // Salva o original se quiser
+                            data_referencia: dataFinal, // Data limpa
                             empresa: getVal(['Empresa']),
                             assistente: assistente,
                             doc_name: getVal(['doc_name', 'Documento', 'Doc']),
                             status: getVal(['STATUS', 'Status']),
                             apontamentos_obs: getVal(['Apontamentos/obs', 'Apontamentos', 'Obs']),
                             num_campos: parseInt(getVal(['nº Campos', 'Campos', 'num_campos'])) || 0,
-                            acertos: parseInt(getVal(['Acertos'])) || 0,
-                            pct_erros_produtividade: getVal(['% de Erros X Produtividade', 'Erros']),
+                            // Mapeamento Novo: Ok -> acertos
+                            acertos: parseInt(getVal(['Ok', 'Acertos'])) || 0,
+                            // Mapeamento Novo: Nok -> pct_erros_produtividade (Reutilizando campo do banco)
+                            pct_erros_produtividade: getVal(['Nok', '% de Erros X Produtividade', 'Erros']), 
                             pct_assert: getVal(['% Assert', '% Assert.', 'Assertividade']),
                             auditora: getVal(['Auditora', 'Auditor'])
                         });
