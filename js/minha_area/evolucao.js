@@ -19,6 +19,7 @@ MinhaArea.Evolucao = {
                         </h3>
                         <span id="okr-total-regs" class="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">0 registros</span>
                     </div>
+                    
                     <div class="overflow-x-auto max-h-[600px] custom-scroll">
                         <table class="w-full text-xs text-left text-slate-600 whitespace-nowrap">
                             <thead class="text-xs text-slate-500 font-bold uppercase bg-slate-50 border-b border-slate-200 sticky top-0 z-10 shadow-sm">
@@ -28,10 +29,10 @@ MinhaArea.Evolucao = {
                                     <th class="px-4 py-3 border-r border-slate-100">Empresa</th>
                                     <th class="px-4 py-3 border-r border-slate-100">Documento</th>
                                     <th class="px-4 py-3 text-center border-r border-slate-100">Status</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100">Campos</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100">Ok</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600">Nok</th>
-                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-blue-600">% Assert.</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100" title="Total de Campos Auditados">Campos</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-emerald-600" title="Quantidade de Acertos (Ok)">OK</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-rose-600" title="Campos - OK">NOK</th>
+                                    <th class="px-4 py-3 text-center border-r border-slate-100 text-blue-600" title="(OK / Campos) * 100">% Assert.</th>
                                     <th class="px-4 py-3 border-r border-slate-100">Auditora</th>
                                     <th class="px-4 py-3">Apontamentos / Obs</th>
                                 </tr>
@@ -58,20 +59,48 @@ MinhaArea.Evolucao = {
         tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-blue-500"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando tabela...</td></tr>';
 
         try {
-            const hoje = new Date();
-            let inicioStr = '', fimStr = hoje.toISOString().split('T')[0];
-            const y = hoje.getFullYear(), m = hoje.getMonth();
+            // USA A DATA SELECIONADA NO TOPO DA TELA (MinhaArea.dataAtual)
+            const referencia = MinhaArea.dataAtual || new Date();
+            
+            let inicioStr = '', fimStr = '';
+            const y = referencia.getFullYear();
+            const m = referencia.getMonth();
 
+            // Lógica de Datas baseada na Data Selecionada
             switch(tipoPeriodo) {
                 case 'semana':
-                    const day = hoje.getDay(), diff = hoje.getDate() - day + (day === 0 ? -6 : 1);
-                    inicioStr = new Date(hoje.setDate(diff)).toISOString().split('T')[0]; break;
-                case 'mes': inicioStr = new Date(y, m, 1).toISOString().split('T')[0]; break;
-                case 'trimestre': inicioStr = new Date(y, Math.floor(m / 3) * 3, 1).toISOString().split('T')[0]; break;
-                case 'semestre': inicioStr = new Date(y, m < 6 ? 0 : 6, 1).toISOString().split('T')[0]; break;
-                case 'anual': inicioStr = new Date(y, 0, 1).toISOString().split('T')[0]; break;
-                case 'todos': inicioStr = '2020-01-01'; break;
-                default: inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
+                    const day = referencia.getDay(); 
+                    const diff = referencia.getDate() - day + (day === 0 ? -6 : 1); 
+                    const seg = new Date(new Date(referencia).setDate(diff));
+                    const sex = new Date(new Date(seg).setDate(seg.getDate() + 6));
+                    inicioStr = seg.toISOString().split('T')[0];
+                    fimStr = sex.toISOString().split('T')[0];
+                    break;
+                case 'mes':
+                    inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
+                    fimStr = new Date(y, m + 1, 0).toISOString().split('T')[0];
+                    break;
+                case 'trimestre':
+                    const q = Math.floor(m / 3);
+                    inicioStr = new Date(y, q * 3, 1).toISOString().split('T')[0];
+                    fimStr = new Date(y, (q * 3) + 3, 0).toISOString().split('T')[0];
+                    break;
+                case 'semestre':
+                    const s = m < 6 ? 0 : 6;
+                    inicioStr = new Date(y, s, 1).toISOString().split('T')[0];
+                    fimStr = new Date(y, s + 6, 0).toISOString().split('T')[0];
+                    break;
+                case 'anual':
+                    inicioStr = new Date(y, 0, 1).toISOString().split('T')[0];
+                    fimStr = new Date(y, 11, 31).toISOString().split('T')[0];
+                    break;
+                case 'todos':
+                    inicioStr = '2020-01-01'; 
+                    fimStr = new Date().toISOString().split('T')[0];
+                    break;
+                default:
+                    inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
+                    fimStr = new Date(y, m + 1, 0).toISOString().split('T')[0];
             }
 
             const { data, error } = await MinhaArea.supabase
@@ -85,7 +114,7 @@ MinhaArea.Evolucao = {
             if (contador) contador.innerText = `${data ? data.length : 0} registros`;
 
             if (!data || data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado neste período.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 bg-slate-50 italic">Nenhum registro encontrado para este período.</td></tr>';
                 return;
             }
 
@@ -99,9 +128,26 @@ MinhaArea.Evolucao = {
 
                 const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
                 
-                let pctClass = 'text-slate-600';
-                const pctVal = parseFloat(item.pct_assert);
-                if (!isNaN(pctVal)) pctClass = pctVal >= 100 || pctVal === 1 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
+                // --- CÁLCULOS DINÂMICOS (REGRAS DEFINIDAS) ---
+                const campos = parseInt(item.num_campos) || 0;
+                const ok = parseInt(item.acertos) || 0; // Coluna 'Ok'
+                
+                // Regra: NOK = Campos - OK
+                const nok = campos - ok; 
+                
+                // Regra: Assertividade = (OK / Campos) * 100
+                let assertividade = 0;
+                if (campos > 0) {
+                    assertividade = (ok / campos) * 100;
+                } else {
+                    // Se não tem campos, assertividade é 100% se não houver erro? 
+                    // Padrão seguro é 0 ou traço, mas se NOK é 0, pode ser 100%. 
+                    // Vamos manter 0 se campos for 0 para evitar divisão por zero.
+                    assertividade = 0;
+                }
+                const pctAssert = Math.round(assertividade); // Arredonda
+
+                let pctClass = pctAssert >= 100 ? 'text-emerald-600 font-bold bg-emerald-50 px-1 rounded' : 'text-rose-600 font-bold bg-rose-50 px-1 rounded';
 
                 html += `
                     <tr class="bg-white hover:bg-blue-50/30 transition border-b border-slate-50 last:border-0">
@@ -110,12 +156,16 @@ MinhaArea.Evolucao = {
                         <td class="px-4 py-3 text-slate-500">${item.empresa || '-'}</td>
                         <td class="px-4 py-3 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
                         <td class="px-4 py-3 text-center">${statusBadge}</td>
-                        <td class="px-4 py-3 text-center text-slate-400 font-mono">${item.num_campos ?? '-'}</td>
-                        <td class="px-4 py-3 text-center font-bold text-slate-600 font-mono">${item.acertos ?? '-'}</td>
-                        <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono">${item.pct_erros_produtividade || '-'}</td>
-                        <td class="px-4 py-3 text-center ${pctClass}">${item.pct_assert || '-'}</td>
+                        
+                        <td class="px-4 py-3 text-center text-slate-400 font-mono">${campos}</td>
+                        <td class="px-4 py-3 text-center font-bold text-slate-700 font-mono">${ok}</td>
+                        <td class="px-4 py-3 text-center font-bold text-rose-500 font-mono bg-rose-50/30">${nok}</td>
+                        <td class="px-4 py-3 text-center ${pctClass}">${pctAssert}%</td>
+                        
                         <td class="px-4 py-3 text-xs text-slate-500 bg-slate-50/50">${item.auditora || '-'}</td>
-                        <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}</td>
+                        <td class="px-4 py-3 text-xs text-slate-500 italic max-w-[200px] truncate" title="${item.apontamentos_obs}">
+                            ${item.apontamentos_obs || '<span class="text-slate-300">-</span>'}
+                        </td>
                     </tr>`;
             });
             tbody.innerHTML = html;
@@ -145,11 +195,12 @@ MinhaArea.Evolucao = {
                     return null;
                 };
 
+                // Busca coluna 'end_time' (ou 'Data') e 'Assistente'
                 const colEndTime = encontrarColuna(['end_time', 'time', 'Data']);
                 const colAssistente = encontrarColuna(['Assistente', 'Nome', 'Funcionário']);
 
                 if (!colEndTime || !colAssistente) {
-                    alert(`Erro: Colunas não encontradas.\nNecessário: 'end_time' (ou Data) e 'Assistente'.`);
+                    alert(`Erro: Colunas obrigatórias não encontradas.\nVerifique se o arquivo tem 'end_time' e 'Assistente'.`);
                     return;
                 }
 
@@ -159,10 +210,9 @@ MinhaArea.Evolucao = {
                     const assistente = row[colAssistente];
                     if (!rawTime && !assistente) return;
 
+                    // Tratamento de Data
                     let dataFinal = null;
-                    // Tenta converter se for número (Excel serial date)
                     if (typeof rawTime === 'number') {
-                        // Conversão simples de data serial Excel para JS Date
                         const date = new Date(Math.round((rawTime - 25569)*86400*1000));
                         dataFinal = date.toISOString().split('T')[0];
                     } else if (rawTime) {
@@ -171,9 +221,7 @@ MinhaArea.Evolucao = {
                         else if (str.includes('/')) {
                             const p = str.split('/');
                             if(p.length === 3) dataFinal = `${p[2]}-${p[1]}-${p[0]}`;
-                        } else {
-                            dataFinal = str; 
-                        }
+                        } else { dataFinal = str; }
                     }
 
                     const getVal = (opts) => { const k = encontrarColuna(opts); return k ? row[k] : null; };
@@ -213,14 +261,12 @@ MinhaArea.Evolucao = {
             }
         };
 
-        // Decisão: XLSX ou CSV?
         if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
             const reader = new FileReader();
             reader.onload = (e) => {
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, {type: 'array'});
                 const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-                // raw: false força datas a virem como strings formatadas ou texto, raw: true vem como número
                 const jsonData = XLSX.utils.sheet_to_json(firstSheet, {raw: true}); 
                 processarDados(jsonData);
             };

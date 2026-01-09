@@ -18,7 +18,6 @@ MinhaArea.init = async function() {
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
-        // Define o alvo inicial como o próprio usuário
         MinhaArea.usuarioAlvo = MinhaArea.user.id;
     }
 
@@ -27,18 +26,16 @@ MinhaArea.init = async function() {
         await window.Sistema.inicializar(false);
     }
 
-    // 3. RECUPERA E APLICA A DATA SALVA (Lógica de Persistência)
+    // 3. RECUPERA E APLICA A DATA SALVA
     const dateInput = document.getElementById('ma-global-date');
     const lastDate = localStorage.getItem('ma_lastGlobalDate');
 
     if (dateInput) {
         if (lastDate) {
-            // Se tem data salva, usa ela
             dateInput.value = lastDate;
             const [ano, mes, dia] = lastDate.split('-').map(Number);
             MinhaArea.dataAtual = new Date(ano, mes - 1, dia, 12, 0, 0);
         } else {
-            // Se não tem, usa hoje
             const hoje = new Date();
             const yyyy = hoje.getFullYear();
             const mm = String(hoje.getMonth() + 1).padStart(2, '0');
@@ -47,7 +44,6 @@ MinhaArea.init = async function() {
             
             dateInput.value = hojeStr;
             MinhaArea.dataAtual = hoje;
-            // Salva o padrão para consistência
             localStorage.setItem('ma_lastGlobalDate', hojeStr);
         }
     }
@@ -70,11 +66,10 @@ MinhaArea.init = async function() {
             await MinhaArea.carregarListaUsuarios(select);
         }
 
-        // Mostra botão de importar se for admin
         if(btnImport) btnImport.classList.remove('hidden');
     }
 
-    // 5. RECUPERA A ÚLTIMA ABA SALVA (Lógica de Persistência)
+    // 5. RECUPERA ABA SALVA
     const lastTab = localStorage.getItem('ma_lastActiveTab');
     if (lastTab) {
         MinhaArea.mudarAba(lastTab);
@@ -85,10 +80,7 @@ MinhaArea.init = async function() {
 
 MinhaArea.carregarListaUsuarios = async function(selectElement) {
     try {
-        if (!MinhaArea.supabase) {
-            console.error("Supabase não disponível para carregar usuários.");
-            return;
-        }
+        if (!MinhaArea.supabase) return;
 
         const { data, error } = await MinhaArea.supabase
             .from('usuarios')
@@ -123,7 +115,6 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
 
     } catch (err) {
         console.error("Erro ao carregar usuários:", err);
-        selectElement.innerHTML = '<option value="">Erro ao carregar</option>';
     }
 };
 
@@ -141,7 +132,6 @@ MinhaArea.mudarUsuarioAlvo = function(id) {
 MinhaArea.atualizarDataGlobal = function(val) {
     if (!val) return;
     
-    // PERSISTÊNCIA: Salva a data no LocalStorage
     localStorage.setItem('ma_lastGlobalDate', val);
 
     const [ano, mes, dia] = val.split('-').map(Number);
@@ -155,7 +145,6 @@ MinhaArea.atualizarDataGlobal = function(val) {
 };
 
 MinhaArea.mudarAba = function(aba) {
-    // PERSISTÊNCIA: Salva a aba atual no LocalStorage
     localStorage.setItem('ma_lastActiveTab', aba);
 
     document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
@@ -167,16 +156,19 @@ MinhaArea.mudarAba = function(aba) {
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
-    // CONTROLES DO CABEÇALHO (Dinâmico)
+    // CONTROLES DO CABEÇALHO
     const dateGlobal = document.getElementById('container-data-global');
     const okrControls = document.getElementById('okr-header-controls');
 
-    // Se estiver na aba META / OKR ('evolucao'), esconde Data e mostra Controles OKR
+    // MUDANÇA: Data Global sempre visível para Diário e Meta/OKR para permitir seleção do mês
     if (aba === 'evolucao') {
-        if(dateGlobal) dateGlobal.classList.add('hidden');
+        if(dateGlobal) dateGlobal.classList.remove('hidden'); // Exibe data para escolher o mês
         if(okrControls) okrControls.classList.remove('hidden');
+    } else if (aba === 'diario') {
+        if(dateGlobal) dateGlobal.classList.remove('hidden');
+        if(okrControls) okrControls.classList.add('hidden');
     } else {
-        // Nas outras abas, mostra Data e esconde Controles OKR
+        // Outras abas (Feedback, etc)
         if(dateGlobal) dateGlobal.classList.remove('hidden');
         if(okrControls) okrControls.classList.add('hidden');
     }
