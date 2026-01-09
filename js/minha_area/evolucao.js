@@ -1,41 +1,23 @@
 MinhaArea.Evolucao = {
-    // Função principal chamada pelo main.js ao trocar de aba
+    // Agora 'evolucao' gerencia Meta / OKR
     carregar: async function() {
         this.renderizarLayout();
-        // Carrega dados iniciais (Padrão: Mês Atual)
-        await this.carregarDados('mes');
+        
+        // Pega valor do seletor do cabeçalho (se já existir) ou padrão 'mes'
+        const headerSelect = document.getElementById('filtro-periodo-okr-header');
+        const periodo = headerSelect ? headerSelect.value : 'mes';
+        
+        await this.carregarDados(periodo);
     },
 
     renderizarLayout: function() {
         const container = document.getElementById('ma-tab-evolucao');
         if (!container) return;
 
+        // O cabeçalho foi movido para o topo da página (header global), então aqui fica só a tabela
         container.innerHTML = `
             <div class="flex flex-col gap-6">
-                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
-                            <i class="fas fa-bullseye text-xl"></i>
-                        </div>
-                        <div>
-                            <h2 class="text-lg font-bold text-slate-800">Meta / OKR</h2>
-                            <p class="text-xs text-slate-500">Auditoria e Qualidade dos Apontamentos</p>
-                        </div>
-                    </div>
-
-                    <div class="flex items-center gap-3 bg-slate-50 p-2 rounded-lg border border-slate-200">
-                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider ml-2">Período:</label>
-                        <select id="filtro-periodo-okr" class="bg-white border border-slate-300 text-slate-700 text-sm font-bold rounded-md focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none cursor-pointer" onchange="MinhaArea.Evolucao.mudarPeriodo(this.value)">
-                            <option value="semana">Esta Semana</option>
-                            <option value="mes" selected>Este Mês</option>
-                            <option value="trimestre">Este Trimestre</option>
-                            <option value="semestre">Este Semestre</option>
-                            <option value="anual">Este Ano</option>
-                            <option value="todos">Todo o Histórico</option>
-                        </select>
-                    </div>
-                </div>
-
+                
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                         <h3 class="font-bold text-slate-700 flex items-center gap-2">
@@ -83,7 +65,6 @@ MinhaArea.Evolucao = {
         tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-blue-500"><i class="fas fa-spinner fa-spin mr-2"></i> Atualizando tabela...</td></tr>';
 
         try {
-            // Definição das datas baseadas no seletor
             const hoje = new Date();
             let inicioStr = '';
             let fimStr = hoje.toISOString().split('T')[0];
@@ -119,7 +100,6 @@ MinhaArea.Evolucao = {
                     inicioStr = new Date(y, m, 1).toISOString().split('T')[0];
             }
 
-            // Consulta ao Supabase
             let query = MinhaArea.supabase
                 .from('auditoria_apontamentos')
                 .select('*')
@@ -140,21 +120,19 @@ MinhaArea.Evolucao = {
 
             let html = '';
             data.forEach(item => {
-                // Formatação de Status
                 let statusBadge = '';
                 const st = (item.status || '').toUpperCase().trim();
                 
                 if(st === 'OK' || st === 'ACERTO') {
-                    statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200 shadow-sm"><i class="fas fa-check mr-1"></i>OK</span>';
+                    statusBadge = '<span class="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold border border-emerald-200"><i class="fas fa-check mr-1"></i>OK</span>';
                 } else if(st.includes('ERRO') || st === 'REV' || st === 'JUST') {
-                    statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200 shadow-sm"><i class="fas fa-times mr-1"></i>${st}</span>`;
+                    statusBadge = `<span class="bg-rose-100 text-rose-700 px-2 py-0.5 rounded text-[10px] font-bold border border-rose-200"><i class="fas fa-times mr-1"></i>${st}</span>`;
                 } else {
                     statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200">${st}</span>`;
                 }
 
                 const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
                 
-                // Formatação % Assertividade
                 let pctClass = 'text-slate-600';
                 const pctVal = parseFloat(item.pct_assert);
                 if (!isNaN(pctVal)) {
@@ -187,5 +165,71 @@ MinhaArea.Evolucao = {
             console.error("Erro ao carregar auditoria:", e);
             tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-rose-500 font-bold bg-rose-50 border border-rose-100 rounded-lg m-4">Erro ao carregar dados: ${e.message}</td></tr>`;
         }
+    },
+
+    importarArquivo: function(input) {
+        if (!input.files || !input.files[0]) return;
+        
+        const file = input.files[0];
+        const labelBtn = input.parentElement.querySelector('label');
+        const originalText = labelBtn.innerHTML;
+        labelBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async function(results) {
+                try {
+                    const rows = results.data;
+                    const batch = [];
+                    
+                    // Mapeamento das colunas do CSV para o Banco
+                    rows.forEach(row => {
+                        // Verifica se a linha tem dados mínimos
+                        if (!row['Data'] && !row['Assistente']) return;
+
+                        // Tratamento de Data (DD/MM/YYYY ou YYYY-MM-DD)
+                        let dataRef = row['Data']; 
+                        // Se necessário, implementar parser de data mais robusto aqui
+                        
+                        batch.push({
+                            mes: row['mês'] || row['Mes'] || null,
+                            end_time: row['end_time'] || null,
+                            data_referencia: dataRef,
+                            empresa: row['Empresa'] || null,
+                            assistente: row['Assistente'] || null,
+                            doc_name: row['doc_name'] || null,
+                            status: row['STATUS'] || row['Status'] || null,
+                            apontamentos_obs: row['Apontamentos/obs'] || null,
+                            num_campos: parseInt(row['nº Campos']) || 0,
+                            acertos: parseInt(row['Acertos']) || 0,
+                            pct_erros_produtividade: row['% de Erros X Produtividade'] || null,
+                            pct_assert: row['% Assert'] || row['% Assert.'] || null,
+                            auditora: row['Auditora'] || null
+                        });
+                    });
+
+                    if (batch.length > 0) {
+                        const { error } = await MinhaArea.supabase
+                            .from('auditoria_apontamentos')
+                            .insert(batch);
+                        
+                        if (error) throw error;
+                        
+                        alert(`Sucesso! ${batch.length} registros importados.`);
+                        MinhaArea.Evolucao.carregar(); // Recarrega a tabela
+                    } else {
+                        alert("Arquivo vazio ou formato inválido.");
+                    }
+
+                } catch (err) {
+                    console.error("Erro import:", err);
+                    alert("Erro ao importar: " + err.message);
+                } finally {
+                    labelBtn.innerHTML = originalText;
+                    input.value = ""; // Limpa input
+                }
+            }
+        });
     }
 };

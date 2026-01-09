@@ -17,13 +17,8 @@ MinhaArea.init = async function() {
     
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
-        
         // Define o alvo inicial como o próprio usuário
         MinhaArea.usuarioAlvo = MinhaArea.user.id;
-        
-        const elRole = document.getElementById('user-role-label');
-        // Exibe Funcao (ex: Assistente/Gestora) no topo
-        if(elRole) elRole.innerText = `${MinhaArea.user.nome.split(' ')[0]} • ${MinhaArea.user.funcao || MinhaArea.user.cargo || 'User'}`;
     }
 
     // Inicializa Supabase
@@ -43,11 +38,9 @@ MinhaArea.init = async function() {
     }
     
     // --- LÓGICA DE ADMIN / GESTOR ---
-    // Verifica se é Gestora, Auditora ou ID 1000 (Admin)
     const funcao = MinhaArea.user.funcao ? MinhaArea.user.funcao.toUpperCase() : '';
     const cargo = MinhaArea.user.cargo ? MinhaArea.user.cargo.toUpperCase() : '';
     
-    // Permite acesso ao seletor se for Gestora, Auditora ou Admin
     const isAdmin = funcao === 'GESTORA' || funcao === 'AUDITORA' || 
                     cargo === 'GESTORA' || cargo === 'AUDITORA' || 
                     MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
@@ -55,12 +48,15 @@ MinhaArea.init = async function() {
     if (isAdmin) {
         const controls = document.getElementById('admin-controls');
         const select = document.getElementById('admin-user-select');
+        const btnImport = document.getElementById('btn-importar-container');
         
         if(controls && select) {
             controls.classList.remove('hidden');
-            // Chama a função corrigida para buscar usuarios
             await MinhaArea.carregarListaUsuarios(select);
         }
+
+        // Mostra botão de importar se for admin
+        if(btnImport) btnImport.classList.remove('hidden');
     }
 
     MinhaArea.mudarAba('diario');
@@ -73,12 +69,10 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
             return;
         }
 
-        // --- CORREÇÃO AQUI ---
-        // Busca na coluna 'funcao' em vez de 'perfil', pois é onde o Gestao.Equipe salva "Assistente"
         const { data, error } = await MinhaArea.supabase
             .from('usuarios')
             .select('id, nome')
-            .eq('funcao', 'Assistente') // Corrigido de 'perfil' para 'funcao'
+            .eq('funcao', 'Assistente')
             .eq('ativo', true)
             .order('nome');
 
@@ -94,15 +88,12 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
                 selectElement.appendChild(opt);
             });
 
-            // Se eu sou o Admin (ID 1000 ou sem dados proprios), seleciono o primeiro da lista automaticamente
             if (String(MinhaArea.usuarioAlvo) === String(MinhaArea.user.id)) {
-                // Se eu não sou um assistente (sou gestor), mudo o alvo para o primeiro assistente da lista
                 if (MinhaArea.user.funcao !== 'Assistente') {
                     MinhaArea.usuarioAlvo = data[0].id;
                     selectElement.value = data[0].id;
                 }
             } else {
-                // Mantém o selecionado
                 selectElement.value = MinhaArea.usuarioAlvo;
             }
         } else {
@@ -119,7 +110,6 @@ MinhaArea.mudarUsuarioAlvo = function(id) {
     if (!id) return;
     MinhaArea.usuarioAlvo = id;
     
-    // Recarrega a aba ativa para buscar os dados do novo ID
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) {
         const abaAtiva = activeBtn.id.replace('btn-ma-', '');
@@ -149,7 +139,21 @@ MinhaArea.mudarAba = function(aba) {
     if(view) view.classList.remove('hidden');
     if(btn) btn.classList.add('active');
 
-    // Módulos
+    // CONTROLES DO CABEÇALHO (Dinâmico)
+    const dateGlobal = document.getElementById('container-data-global');
+    const okrControls = document.getElementById('okr-header-controls');
+
+    // Se estiver na aba META / OKR ('evolucao'), esconde Data e mostra Controles OKR
+    if (aba === 'evolucao') {
+        if(dateGlobal) dateGlobal.classList.add('hidden');
+        if(okrControls) okrControls.classList.remove('hidden');
+    } else {
+        // Nas outras abas, mostra Data e esconde Controles OKR
+        if(dateGlobal) dateGlobal.classList.remove('hidden');
+        if(okrControls) okrControls.classList.add('hidden');
+    }
+
+    // Carrega Módulos
     if (aba === 'diario') {
         if(MinhaArea.Diario) MinhaArea.Diario.carregar();
     }
