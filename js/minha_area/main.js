@@ -1,6 +1,6 @@
 window.MinhaArea = window.MinhaArea || {
     user: null,
-    dataAtual: new Date(), // Garante inicialização
+    dataAtual: new Date(),
     usuarioAlvo: 'todos',
     
     get supabase() { return window.Sistema ? window.Sistema.supabase : (window._supabase || null); }
@@ -13,23 +13,27 @@ MinhaArea.init = async function() {
     if (storedUser) {
         MinhaArea.user = JSON.parse(storedUser);
         const isUserAdmin = MinhaArea.user.funcao === 'GESTORA' || MinhaArea.user.perfil === 'admin' || MinhaArea.user.id == 1000;
-        // Se for admin, começa com 'todos', senão usa o próprio ID
-        MinhaArea.usuarioAlvo = isUserAdmin ? 'todos' : MinhaArea.user.id;
+        
+        // Garante que usuarioAlvo tenha valor válido
+        const lastAlvo = localStorage.getItem('ma_lastUserAlvo');
+        if (isUserAdmin) {
+            MinhaArea.usuarioAlvo = lastAlvo && lastAlvo !== 'null' ? lastAlvo : 'todos';
+        } else {
+            MinhaArea.usuarioAlvo = MinhaArea.user.id;
+        }
     }
 
     if (window.Sistema && !window.Sistema.supabase) await window.Sistema.inicializar(false);
 
-    // --- LÓGICA DO FILTRO UNIFICADO ---
+    // Filtro Unificado
     const lastType = localStorage.getItem('ma_filter_type') || 'mes';
     const lastValue = localStorage.getItem('ma_filter_value');
-    
     const selectType = document.getElementById('filtro-tipo');
     if (selectType) {
         selectType.value = lastType;
         MinhaArea.mudarTipoFiltro(lastType, lastValue);
-    } else {
-        // Fallback se o DOM não tiver o filtro ainda (ex: carregou antes do HTML)
-        if (!MinhaArea.dataAtual) MinhaArea.dataAtual = new Date();
+    } else if (!MinhaArea.dataAtual) {
+        MinhaArea.dataAtual = new Date();
     }
 
     // Admin Controls
@@ -47,10 +51,6 @@ MinhaArea.init = async function() {
     MinhaArea.mudarAba(lastTab || 'diario');
 };
 
-// ... (Resto das funções mantidas iguais) ...
-// MinhaArea.mudarTipoFiltro, MinhaArea.atualizarFiltroGlobal, etc.
-// Importante: Manter a lógica de getPeriodo e mudarAba conforme o código anterior.
-
 MinhaArea.mudarTipoFiltro = function(tipo, valorSalvo = null) {
     const container = document.getElementById('filtro-valor-container');
     if (!container) return;
@@ -58,7 +58,6 @@ MinhaArea.mudarTipoFiltro = function(tipo, valorSalvo = null) {
     localStorage.setItem('ma_filter_type', tipo);
     let html = '';
     const hoje = new Date();
-    
     let defaultValue = valorSalvo;
 
     if (tipo === 'dia') {
@@ -83,16 +82,9 @@ MinhaArea.atualizarFiltroGlobal = function(val) {
     if (!val) return;
     localStorage.setItem('ma_filter_value', val);
     
-    // Atualiza dataAtual também para consistência com códigos antigos que usam dataAtual
-    if (val.length === 10) { // YYYY-MM-DD
-        const [y, m, d] = val.split('-').map(Number);
-        MinhaArea.dataAtual = new Date(y, m-1, d, 12, 0, 0);
-    } else if (val.length === 7) { // YYYY-MM
-        const [y, m] = val.split('-').map(Number);
-        MinhaArea.dataAtual = new Date(y, m-1, 1, 12, 0, 0);
-    } else if (val.length === 4) { // YYYY
-        MinhaArea.dataAtual = new Date(Number(val), 0, 1, 12, 0, 0);
-    }
+    if (val.length === 10) { const [y, m, d] = val.split('-').map(Number); MinhaArea.dataAtual = new Date(y, m-1, d, 12, 0, 0); }
+    else if (val.length === 7) { const [y, m] = val.split('-').map(Number); MinhaArea.dataAtual = new Date(y, m-1, 1, 12, 0, 0); }
+    else if (val.length === 4) { MinhaArea.dataAtual = new Date(Number(val), 0, 1, 12, 0, 0); }
 
     const activeBtn = document.querySelector('.tab-btn.active');
     if (activeBtn) MinhaArea.mudarAba(activeBtn.id.replace('btn-ma-', ''));
@@ -112,17 +104,27 @@ MinhaArea.carregarListaUsuarios = async function(selectElement) {
         selectElement.innerHTML = '<option value="todos">Toda a Equipe</option>';
         data.forEach(u => {
             const opt = document.createElement('option');
-            opt.value = u.id;
+            opt.value = u.id; // ID numérico
             opt.innerText = u.nome;
             selectElement.appendChild(opt);
         });
-        selectElement.value = MinhaArea.usuarioAlvo;
+        
+        // Recupera seleção salva ou usa padrão
+        if (MinhaArea.usuarioAlvo && MinhaArea.usuarioAlvo !== 'todos') {
+             // Verifica se o ID salvo ainda existe na lista
+             const exists = Array.from(selectElement.options).some(o => o.value == MinhaArea.usuarioAlvo);
+             selectElement.value = exists ? MinhaArea.usuarioAlvo : 'todos';
+        } else {
+            selectElement.value = 'todos';
+        }
 
     } catch (err) { console.error(err); }
 };
 
 MinhaArea.mudarUsuarioAlvo = function(val) {
     MinhaArea.usuarioAlvo = val;
+    localStorage.setItem('ma_lastUserAlvo', val);
+
     if (document.getElementById('ma-tab-evolucao').classList.contains('hidden') === false) {
         if(MinhaArea.Evolucao && MinhaArea.Evolucao.aplicarFiltroAssistente) {
             MinhaArea.Evolucao.aplicarFiltroAssistente();
@@ -155,14 +157,10 @@ MinhaArea.mudarAba = function(aba) {
 MinhaArea.getPeriodo = function() {
     const tipo = document.getElementById('filtro-tipo')?.value || 'mes';
     const val = document.getElementById('filtro-valor')?.value;
-    
     let inicio = '', fim = '', texto = '';
 
     if (!val) { 
-        // Fallback
-        const h = new Date();
-        inicio = h.toISOString().split('T')[0];
-        fim = inicio;
+        const h = new Date(); inicio = h.toISOString().split('T')[0]; fim = inicio; 
     } else {
         if (tipo === 'dia') {
             inicio = val; fim = val;
@@ -174,9 +172,7 @@ MinhaArea.getPeriodo = function() {
             fim = `${y}-${String(m).padStart(2,'0')}-${lastDay}`;
             texto = `${String(m).padStart(2,'0')}/${y}`;
         } else if (tipo === 'ano') {
-            inicio = `${val}-01-01`;
-            fim = `${val}-12-31`;
-            texto = val;
+            inicio = `${val}-01-01`; fim = `${val}-12-31`; texto = val;
         }
     }
     return { inicio, fim, texto, tipo };
