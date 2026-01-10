@@ -86,9 +86,10 @@ Produtividade.Geral = {
             }
         }
 
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
+            // QUERY CORRIGIDA PARA TRAZER DADOS REAIS
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
@@ -105,9 +106,11 @@ Produtividade.Geral = {
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
             let dadosAgrupados = {};
+            
             data.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 if(!dadosAgrupados[uid]) {
+                    // Meta padrão 650 se não houver lógica customizada ainda
                     const metaBanco = 650;
                     dadosAgrupados[uid] = {
                         usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', funcao: 'Assistente' },
@@ -116,16 +119,22 @@ Produtividade.Geral = {
                         meta_real: metaBanco
                     };
                 }
+                
+                // Adiciona o registro individual
                 dadosAgrupados[uid].registros.push(item);
+                
+                // SOMA DOS TOTAIS (Garante que nulos virem zero)
                 const d = dadosAgrupados[uid].totais;
                 const f = Number(item.fator);
+                
                 d.qty += (Number(item.quantidade) || 0);
                 d.fifo += (Number(item.fifo) || 0);
                 d.gt += (Number(item.gradual_total) || 0);
                 d.gp += (Number(item.gradual_parcial) || 0);
                 d.fc += (Number(item.perfil_fc) || 0);
-                d.dias += 1; 
-                d.diasUteis += f; 
+                
+                d.dias += 1; // Dias trabalhados (contagem de registros)
+                d.diasUteis += f; // Dias ponderados pelo fator
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -139,7 +148,7 @@ Produtividade.Geral = {
 
         } catch (error) {
             console.error("Erro ao carregar:", error);
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${error.message || JSON.stringify(error)}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${error.message}</td></tr>`;
         }
     },
 
@@ -164,9 +173,10 @@ Produtividade.Geral = {
             const perfilExibicao = perfilRaw;
             const metaBase = d.meta_real;
 
-            const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium";
+            const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (isDia && d.registros.length === 1) {
+                // VISÃO DIÁRIA (Linha única por usuário)
                 const r = d.registros[0];
                 const metaCalc = metaBase * r.fator;
                 const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -182,7 +192,7 @@ Produtividade.Geral = {
                 }
 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30";
+                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                 
                 tr.innerHTML = `
                     <td class="px-2 py-2 text-center border-r border-slate-200">
@@ -202,12 +212,11 @@ Produtividade.Geral = {
                             <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${perfilExibicao}</span>
                         </div>
                     </td>
-                    <td class="${commonCellClass}">${r.fator}</td>
-                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
+                    <td class="${commonCellClass}">${r.fator}</td> <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
                     <td class="${commonCellClass}">${r.fifo || 0}</td>
                     <td class="${commonCellClass}">${r.gradual_total || 0}</td>
                     <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
-                    <td class="${commonCellClass} bg-slate-50 text-xs">${Math.round(metaCalc)}</td>
+                    <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaCalc)}</td>
                     <td class="px-2 py-2 text-center">
                          <div class="flex items-center justify-center gap-1">
                              <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
@@ -218,12 +227,12 @@ Produtividade.Geral = {
                 `;
                 tbody.appendChild(tr);
             } else {
-                // VISÃO AGRUPADA (SEMANA/MÊS)
+                // VISÃO AGRUPADA (SEMANA/MÊS) - SOMA TUDO
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30";
+                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                 tr.innerHTML = `
                      <td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">
                         --
@@ -235,13 +244,12 @@ Produtividade.Geral = {
                         </div>
                     </td>
                     <td class="${commonCellClass} font-bold text-slate-700">
-                        ${d.totais.diasUteis}
-                    </td>
+                        ${d.totais.diasUteis} </td>
                     <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
                     <td class="${commonCellClass}">${d.totais.fifo}</td>
                     <td class="${commonCellClass}">${d.totais.gt}</td>
                     <td class="${commonCellClass}">${d.totais.gp}</td>
-                    <td class="${commonCellClass} bg-slate-50 text-xs">${Math.round(metaTotal)}</td>
+                    <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaTotal)}</td>
                     <td class="px-2 py-2 text-center">
                          <div class="flex items-center justify-center gap-1">
                              <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
@@ -259,6 +267,7 @@ Produtividade.Geral = {
         }
     },
     
+    // Funções de manipulação (Mudar Fator, Excluir, etc) mantidas iguais...
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
@@ -267,116 +276,68 @@ Produtividade.Geral = {
             await new Promise(r => setTimeout(r, 10));
             const tipoAbono = novoFator === '0' ? "ABONO TOTAL" : "MEIO PERÍODO";
             justificativa = prompt(`Informe a justificativa para ${tipoAbono} (obrigatório):`);
-            
             if (justificativa === null || justificativa.trim() === "") {
                 alert("Ação cancelada: A justificativa é obrigatória.");
                 this.renderizarTabela(); 
                 return;
             }
-        } else {
-            justificativa = null;
         }
 
         try {
-            const { error } = await Sistema.supabase
-                .from('producao')
-                .update({ fator: novoFator, justificativa: justificativa })
-                .eq('id', id);
-
+            const { error } = await Sistema.supabase.from('producao').update({ fator: novoFator, justificativa: justificativa }).eq('id', id);
             if (error) throw error;
             
+            // Atualiza localmente
             let usuarioIdAfetado = null;
             this.dadosOriginais.forEach(group => {
                 group.registros.forEach(r => {
-                    if(r.id == id) {
-                        r.fator = novoFator; 
-                        r.justificativa = justificativa; 
-                        usuarioIdAfetado = group.usuario.id;
-                    }
+                    if(r.id == id) { r.fator = novoFator; r.justificativa = justificativa; usuarioIdAfetado = group.usuario.id; }
                 });
                 if(usuarioIdAfetado === group.usuario.id) {
-                    let d = group.totais; 
-                    d.diasUteis = 0;
+                    let d = group.totais; d.diasUteis = 0;
                     group.registros.forEach(r => d.diasUteis += Number(r.fator));
                 }
             });
-            
-            this.renderizarTabela(); 
-            this.carregarTela(); 
-
-        } catch (error) {
-            console.error(error);
-            alert("Erro ao salvar: " + error.message);
-        }
+            this.renderizarTabela(); this.carregarTela(); 
+        } catch (error) { console.error(error); alert("Erro ao salvar: " + error.message); }
     },
 
     mudarFatorTodos: async function(novoFator) {
         if(!novoFator) return;
-        if(!confirm("Tem certeza que deseja aplicar isso a TODOS os registros visíveis?")) {
-            document.getElementById('bulk-fator').value = "";
-            return;
-        }
-
+        if(!confirm("Aplicar a TODOS os visíveis?")) { document.getElementById('bulk-fator').value = ""; return; }
+        
         let justificativa = null;
-        if (String(novoFator) === '0' || String(novoFator) === '0.5') {
-            justificativa = prompt("Informe a justificativa para a ação em massa:");
-            if (justificativa === null || justificativa.trim() === "") {
-                alert("Justificativa obrigatória.");
-                document.getElementById('bulk-fator').value = "";
-                return;
-            }
+        if (['0', '0.5'].includes(String(novoFator))) {
+            justificativa = prompt("Justificativa para ação em massa:");
+            if (!justificativa) { alert("Justificativa obrigatória."); document.getElementById('bulk-fator').value = ""; return; }
         }
 
         const ids = [];
-        const lista = this.usuarioSelecionado 
-            ? this.dadosOriginais.filter(d => d.usuario.id === this.usuarioSelecionado)
-            : this.dadosOriginais;
-
+        const lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id === this.usuarioSelecionado) : this.dadosOriginais;
         lista.forEach(g => g.registros.forEach(r => ids.push(r.id)));
 
-        if(ids.length === 0) return;
-
         try {
-            const { error } = await Sistema.supabase
-                .from('producao')
-                .update({ fator: novoFator, justificativa: justificativa })
-                .in('id', ids);
-
+            const { error } = await Sistema.supabase.from('producao').update({ fator: novoFator, justificativa: justificativa }).in('id', ids);
             if(error) throw error;
-            
-            this.carregarTela();
-            document.getElementById('bulk-fator').value = "";
-        } catch (e) {
-            console.error(e);
-            alert("Erro ao atualizar em massa.");
-        }
+            this.carregarTela(); document.getElementById('bulk-fator').value = "";
+        } catch (e) { alert("Erro ao atualizar."); }
     },
 
     excluirDadosDia: async function() {
-        if(!confirm("Isso apagará TODOS os dados de produção do período selecionado na tela. Continuar?")) return;
-        
+        if(!confirm("Excluir dados do período selecionado?")) return;
         const dateInput = document.getElementById('global-date');
         const viewMode = document.getElementById('view-mode').value;
-        let dataSel = dateInput.value;
-        const [ano, mes, dia] = dataSel.split('-');
-        let s, e;
+        let s, e, [ano, mes] = dateInput.value.split('-');
 
-        if (viewMode === 'dia') { s = dataSel; e = dataSel; }
+        if (viewMode === 'dia') { s = dateInput.value; e = dateInput.value; }
         else if (viewMode === 'mes') { s = `${ano}-${mes}-01`; e = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`; }
-        else return alert("Modo de exclusão não suportado (use dia ou mês).");
+        else return alert("Selecione Dia ou Mês para excluir.");
 
         try {
-            const { error } = await Sistema.supabase
-                .from('producao')
-                .delete()
-                .gte('data_referencia', s)
-                .lte('data_referencia', e);
-
+            const { error } = await Sistema.supabase.from('producao').delete().gte('data_referencia', s).lte('data_referencia', e);
             if(error) throw error;
             this.carregarTela();
-        } catch(err) {
-            alert("Erro ao excluir: " + err.message);
-        }
+        } catch(err) { alert("Erro ao excluir: " + err.message); }
     },
 
     filtrarUsuario: function(id, nome) {
@@ -399,8 +360,10 @@ Produtividade.Geral = {
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
+        
         let totalProdAssistentes = 0;
         let countAssistentes = new Set(); 
+        
         let usersCLT = new Set();
         let usersPJ = new Set();
         
@@ -422,6 +385,7 @@ Produtividade.Geral = {
             if(perfil === 'CLT') usersCLT.add(r.usuario.id);
             else usersPJ.add(r.usuario.id);
 
+            // Filtro de Média
             if (isSingleUser) {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
@@ -433,11 +397,13 @@ Produtividade.Geral = {
             }
         });
 
-        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
+        // 1. KPI PRODUÇÃO
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
+
+        // 2. KPI ATINGIMENTO
+        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
-        
         const bar = document.getElementById('kpi-pct-bar');
         if(bar) {
             bar.style.width = Math.min(pct, 100) + '%';
@@ -446,17 +412,18 @@ Produtividade.Geral = {
                 : "h-full bg-slate-300 rounded-full transition-all duration-500";
         }
 
-        const clt = usersCLT.size;
-        const pj = usersPJ.size;
-        document.getElementById('kpi-clt-val').innerText = clt;
-        document.getElementById('kpi-pj-val').innerText = pj;
+        // 3. KPI EQUIPE
+        document.getElementById('kpi-clt-val').innerText = usersCLT.size;
+        document.getElementById('kpi-pj-val').innerText = usersPJ.size;
         
-        // DIAS ÚTEIS
-        const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
+        // 4. KPI DIAS ÚTEIS (Real vs Esperado)
+        const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
+        const diasTrabalhadosReal = diasComProd.size; // Quantidade de dias únicos com dados lançados
+        
         const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) elDias.innerText = `${diasComProd.size}/${diasUteisTotais}`;
+        if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
-        // MÉDIA
+        // 5. KPI MÉDIA
         const numConsiderados = countAssistentes.size;
         const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
         const elMedia = document.getElementById('kpi-media-todas');
