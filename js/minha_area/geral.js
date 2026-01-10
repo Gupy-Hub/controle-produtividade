@@ -16,7 +16,6 @@ MinhaArea.Geral = {
 
         try {
             // 1. BUSCAR PRODUÇÃO (Tabela 'producao')
-            // Ajustado para os campos corretos vistos no validacao.js
             const { data: dadosProducao, error: erroProd } = await window.supabase
                 .from('producao')
                 .select('*')
@@ -28,13 +27,13 @@ MinhaArea.Geral = {
             if (erroProd) throw new Error("Erro ao buscar produção: " + erroProd.message);
 
             // 2. BUSCAR METAS (Tabela 'metas')
-            // Precisamos do histórico de metas para saber qual era a meta valendo no dia
+            // CORREÇÃO: Usar 'mes' e 'ano' em vez de 'data_inicio'
+            // Buscamos todas as metas do usuário para garantir que teremos a competência necessária
+            // (Poderíamos filtrar por ano, mas buscar tudo é seguro dado o volume baixo de metas/ano)
             const { data: dadosMetas, error: erroMetas } = await window.supabase
                 .from('metas')
-                .select('*')
-                .eq('usuario_id', usuario.id)
-                .lte('data_inicio', datas.fim) // Metas que começaram antes do fim do período
-                .order('data_inicio', { ascending: false }); // As mais recentes primeiro
+                .select('mes, ano, meta') // Colunas corretas baseadas em gestao/metas.js
+                .eq('usuario_id', usuario.id);
 
             if (erroMetas) throw new Error("Erro ao buscar metas: " + erroMetas.message);
 
@@ -47,7 +46,6 @@ MinhaArea.Geral = {
 
         } catch (erro) {
             console.error("Erro Geral:", erro);
-            // Mostra erro na tabela para feedback visual
             const tbody = document.getElementById('tabela-diario');
             if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-400">Erro: ${erro.message}</td></tr>`;
         } finally {
@@ -55,31 +53,32 @@ MinhaArea.Geral = {
         }
     },
 
-    // Função para cruzar Produção com a Meta vigente na data
+    // Função para cruzar Produção com a Meta da competência (Mês/Ano)
     processarDados: function(listaProducao, listaMetas) {
-        // Agrupa producao por dia (caso haja duplicidade, embora o validacao.js limpe antes)
         const mapaDias = {};
 
         listaProducao.forEach(reg => {
-            const data = reg.data_referencia;
+            const data = reg.data_referencia; // Formato YYYY-MM-DD
             
             if (!mapaDias[data]) {
-                // Encontrar a meta que estava valendo nesta data
-                // Como a listaMetas está ordenada da mais recente para a antiga,
-                // pegamos a primeira cuja data_inicio seja <= data da produção
-                const metaVigente = listaMetas.find(m => m.data_inicio <= data);
-                const valorMeta = metaVigente ? Number(metaVigente.valor_meta) : 0;
+                // Extrai Mês e Ano da data da produção para encontrar a meta correspondente
+                const [anoStr, mesStr, diaStr] = data.split('-');
+                const anoRef = parseInt(anoStr);
+                const mesRef = parseInt(mesStr);
+
+                // Busca a meta onde mes e ano batem
+                const metaCompetencia = listaMetas.find(m => m.mes === mesRef && m.ano === anoRef);
+                const valorMeta = metaCompetencia ? Number(metaCompetencia.meta) : 0;
 
                 mapaDias[data] = {
                     data: data,
                     producao: 0,
                     meta: valorMeta,
-                    fator: Number(reg.fator) || 1, // Default 1 se nulo
-                    detalhes: [] // Para debug ou tooltip
+                    fator: Number(reg.fator) || 1, 
+                    detalhes: [] 
                 };
             }
 
-            // Somar producao (campo 'quantidade' do banco)
             mapaDias[data].producao += Number(reg.quantidade || 0);
         });
 
@@ -95,7 +94,11 @@ MinhaArea.Geral = {
 
         dados.forEach(d => {
             totalProduzido += d.producao;
-            totalMeta += d.meta;
+            // A meta total é a soma das metas diárias ponderadas ou simples?
+            // Geralmente: Meta do Mês * Fator do Dia (se houver lógica de dias úteis)
+            // Aqui vamos somar a meta do dia apenas se houver produção ou se esperava produção
+            totalMeta += d.meta; 
+            
             if (d.producao > 0) diasProdutivos++;
             somaFatores += d.fator;
         });
@@ -106,7 +109,7 @@ MinhaArea.Geral = {
 
         // 2. Atingimento
         let atingimento = totalMeta > 0 ? (totalProduzido / totalMeta) * 100 : 0;
-        if (totalMeta === 0 && totalProduzido > 0) atingimento = 100; // Se produziu sem meta, considera 100%
+        if (totalMeta === 0 && totalProduzido > 0) atingimento = 100;
 
         const elPct = document.getElementById('kpi-pct');
         const elBar = document.getElementById('bar-progress');
@@ -115,7 +118,6 @@ MinhaArea.Geral = {
         if(elBar) {
             elBar.style.width = Math.min(atingimento, 100) + '%';
             
-            // Cores
             if(atingimento >= 100) {
                 elPct.className = "text-2xl font-black text-emerald-600";
                 elBar.className = "h-full bg-emerald-500 rounded-full transition-all duration-500";
@@ -137,7 +139,6 @@ MinhaArea.Geral = {
         const elMedia = document.getElementById('kpi-media-real');
         if(elMedia) elMedia.innerText = media.toFixed(0);
         
-        // Placeholder Time
         const elMediaTime = document.getElementById('kpi-media-time');
         if(elMediaTime) elMediaTime.innerText = "-"; 
     },
@@ -167,9 +168,7 @@ MinhaArea.Geral = {
                 statusHtml = `<span class="bg-red-50 text-red-500 py-1 px-3 rounded-full text-[10px] font-bold border border-red-100">ABAIXO</span>`;
             }
 
-            // Ajuste data UTC
-            const partesData = dia.data.split('-'); // YYYY-MM-DD
-            // Cria data localmente sem conversão de fuso forçada pelo construtor Date() string
+            const partesData = dia.data.split('-'); 
             const dataVisual = `${partesData[2]}/${partesData[1]}/${partesData[0]}`;
 
             const tr = document.createElement('tr');
