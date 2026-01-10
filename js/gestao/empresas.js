@@ -1,67 +1,96 @@
 Gestao.Empresas = {
-    listaCompleta: [],
+    timerBusca: null,
 
+    // --- CARREGAMENTO INICIAL (Apenas as primeiras 100 para ser rápido) ---
     carregar: async function() {
         const tbody = document.getElementById('lista-empresas');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8"><i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i></td></tr>';
+        const contador = document.getElementById('contador-empresas');
+        const searchInput = document.getElementById('search-empresas');
+
+        // Se já tiver algo digitado, prioriza a busca
+        if (searchInput && searchInput.value.trim().length > 0) {
+            this.filtrar();
+            return;
+        }
+
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8"><i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i><p class="text-slate-400 mt-2">Carregando catálogo...</p></td></tr>';
         
-        const { data, error } = await Sistema.supabase.from('empresas').select('*').order('nome');
+        const { data, error } = await Sistema.supabase
+            .from('empresas')
+            .select('*')
+            .order('nome', { ascending: true })
+            .limit(100); // Limite inicial para a tela abrir instantaneamente
+
         if (error) { console.error(error); return; }
 
-        this.listaCompleta = data || [];
-        this.filtrar(); // Renderiza com os filtros atuais
+        this.renderizarTabela(data || [], "Exibindo as primeiras 100 (use a busca para ver mais)");
     },
 
-    // --- LÓGICA DE FILTRO APRIMORADA ---
+    // --- BUSCA NO SERVIDOR (Ao digitar) ---
     filtrar: function() {
-        const inputBusca = document.getElementById('search-empresas');
-        const termo = inputBusca ? inputBusca.value.toLowerCase().trim() : '';
+        const termo = document.getElementById('search-empresas').value.trim();
+        
+        clearTimeout(this.timerBusca);
 
-        const filtrados = this.listaCompleta.filter(e => {
-            if (termo) {
-                // 1. Formata a data para BR (para permitir busca tipo "15/09")
-                let dataBR = '';
-                if (e.data_entrada) {
-                    try {
-                        const p = e.data_entrada.split('-');
-                        if (p.length === 3) dataBR = `${p[2]}/${p[1]}/${p[0]}`;
-                    } catch(err) {}
-                }
+        if (termo.length === 0) {
+            this.carregar(); // Se limpar, volta ao padrão
+            return;
+        }
 
-                // 2. Cria uma "Super String" com tudo que existe na linha
-                // Inclui: ID, Nome, Subdominio, Data (ISO), Data (BR) e Observações
-                const searchStr = `
-                    ${e.id} 
-                    ${e.nome} 
-                    ${e.subdominio || ''} 
-                    ${e.observacao || ''} 
-                    ${e.data_entrada || ''} 
-                    ${dataBR}
-                `.toLowerCase();
-
-                // 3. Verifica se o termo digitado está nessa string
-                return searchStr.includes(termo);
-            }
-            return true; // Se não tiver termo, mostra tudo
-        });
-
-        this.renderizarTabela(filtrados);
+        // Delay de 500ms para esperar terminar de digitar
+        this.timerBusca = setTimeout(() => {
+            this.executarBusca(termo);
+        }, 500);
     },
 
-    renderizarTabela: function(lista) {
+    executarBusca: async function(termo) {
+        const tbody = document.getElementById('lista-empresas');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Buscando no banco de dados...</p></td></tr>';
+
+        try {
+            let query = Sistema.supabase
+                .from('empresas')
+                .select('*')
+                .limit(100);
+
+            // Lógica de Busca: ID ou (Nome ou Subdominio)
+            if (!isNaN(termo) && termo.length > 0) {
+                // Se for número, busca exata pelo ID
+                query = query.eq('id', parseInt(termo));
+            } else {
+                // Se for texto, busca parcial (ILIKE) em nome ou subdominio
+                // Sintaxe do Supabase para OR: "coluna.operador.valor,coluna.operador.valor"
+                query = query.or(`nome.ilike.%${termo}%,subdominio.ilike.%${termo}%,observacao.ilike.%${termo}%`);
+            }
+            
+            query = query.order('nome', { ascending: true });
+
+            const { data, error } = await query;
+            
+            if (error) throw error;
+            
+            this.renderizarTabela(data || [], `Resultados para: "${termo}"`);
+
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500">Erro na busca: ${e.message}</td></tr>`;
+        }
+    },
+
+    renderizarTabela: function(lista, mensagemRodape = "") {
         const tbody = document.getElementById('lista-empresas');
         const contador = document.getElementById('contador-empresas');
         if (!tbody) return;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhuma empresa encontrada com este filtro.</span></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhuma empresa encontrada.</span></td></tr>';
             if(contador) contador.innerText = '0 Registros';
             return;
         }
 
         let html = '';
         lista.forEach(e => {
-            // Formata data de entrada para exibição
+            // Formata data de entrada
             let dataFmt = '<span class="text-slate-300">-</span>';
             if (e.data_entrada) {
                 try {
@@ -73,7 +102,6 @@ Gestao.Empresas = {
 
             const empString = JSON.stringify(e).replace(/"/g, '&quot;');
             
-            // Tratamento visual para observação vazia
             const obsTexto = e.observacao || '-';
             const obsClass = e.observacao ? 'text-slate-600' : 'text-slate-300';
 
@@ -92,7 +120,9 @@ Gestao.Empresas = {
         });
 
         tbody.innerHTML = html;
-        if(contador) contador.innerText = `${lista.length} Registros listados`;
+        if(contador) {
+            contador.innerHTML = `<strong>${lista.length}</strong> <span class="text-xs font-normal text-slate-400 ml-2">(${mensagemRodape})</span>`;
+        }
     },
 
     // --- MODAL (Cadastro Manual e Edição) ---
@@ -170,7 +200,7 @@ Gestao.Empresas = {
         if (error) alert("Erro: " + error.message);
         else {
             document.getElementById('modal-empresa').remove();
-            this.carregar(); // Recarrega e aplica o filtro atual se houver
+            this.carregar(); // Recarrega para ver a alteração
         }
     },
 
