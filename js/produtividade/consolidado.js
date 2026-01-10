@@ -1,28 +1,28 @@
 Produtividade.Consolidado = {
+    dadosProcessados: [],
+
     carregar: async function() {
         const tbody = document.getElementById('tabela-consolidado-body');
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados consolidados...</td></tr>';
 
-        // 1. Pega datas do filtro global
+        // 1. Pega datas do filtro global (Reutiliza lógica do Geral para consistência)
         const dateInput = document.getElementById('global-date');
         const viewMode = document.getElementById('view-mode').value;
         let dataSel = dateInput.value;
         const [ano, mes, dia] = dataSel.split('-');
         let dataInicio, dataFim;
 
-        // Reaproveita a lógica de datas do Geral para consistência
         if (viewMode === 'dia') { dataInicio = dataSel; dataFim = dataSel; }
         else if (viewMode === 'mes') { dataInicio = `${ano}-${mes}-01`; dataFim = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`; }
         else if (viewMode === 'ano') { dataInicio = `${ano}-01-01`; dataFim = `${ano}-12-31`; }
         else if (viewMode === 'semana') {
-            // Lógica simplificada de semana (idealmente deveria vir de um helper compartilhado)
             const semanaSel = parseInt(document.getElementById('select-semana').value) - 1;
             const semanas = Produtividade.Geral.getSemanasDoMes(parseInt(ano), parseInt(mes));
             if (semanas[semanaSel]) { dataInicio = semanas[semanaSel].inicio; dataFim = semanas[semanaSel].fim; }
         }
 
         try {
-            // 2. Busca dados (Poderia usar cache do Geral, mas fetch direto garante atualização)
+            // 2. Busca dados brutos no banco
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
@@ -34,7 +34,7 @@ Produtividade.Consolidado = {
 
             if (error) throw error;
 
-            // 3. Agrupa por Usuário
+            // 3. Agrupa por Usuário (Lógica de Consolidação)
             let dadosAgrupados = {};
             
             data.forEach(r => {
@@ -47,20 +47,20 @@ Produtividade.Consolidado = {
                         gt: 0,
                         gp: 0,
                         producao: 0,
-                        meta_base: 650
+                        meta_base: 650 // Padrão
                     };
                 }
                 const d = dadosAgrupados[uid];
                 const fator = Number(r.fator) || 0;
                 
-                d.dias += fator; // Soma dias ponderados (0.5 ou 1)
+                d.dias += fator; // Dias ponderados (0.5 ou 1)
                 d.fifo += (Number(r.fifo) || 0);
                 d.gt += (Number(r.gradual_total) || 0);
                 d.gp += (Number(r.gradual_parcial) || 0);
                 d.producao += (Number(r.quantidade) || 0);
             });
 
-            this.dadosProcessados = Object.values(dadosAgrupados); // Salva para renderizar com filtro depois
+            this.dadosProcessados = Object.values(dadosAgrupados); 
             this.renderizar();
 
         } catch (err) {
@@ -77,7 +77,7 @@ Produtividade.Consolidado = {
 
         if (!this.dadosProcessados) return;
 
-        // Filtro de Gestão
+        // Filtro de Gestão (Mesmo checkbox da aba Geral)
         let lista = this.dadosProcessados.filter(d => {
             if (mostrarGestao) return true;
             const funcao = (d.usuario.funcao || '').toUpperCase();

@@ -16,7 +16,7 @@
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
         
-        /* Abas - Estilo Unificado Gestão */
+        /* Abas */
         .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
         .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
@@ -94,7 +94,7 @@
                         </select>
 
                         <label class="inline-flex items-center cursor-pointer border-l border-slate-200 pl-3" title="Exibir Auditoras e Gestoras na tabela">
-                            <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.Geral.renderizarTabela()">
+                            <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()">
                             <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
                             <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Ver Gestão</span>
                         </label>
@@ -108,16 +108,6 @@
                             <option value="semestre">Semestral</option>
                             <option value="ano">Anual</option>
                         </select>
-                        <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Trimestre</option>
-                            <option value="2">2º Trimestre</option>
-                            <option value="3">3º Trimestre</option>
-                            <option value="4">4º Trimestre</option>
-                        </select>
-                        <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Semestre</option>
-                            <option value="2">2º Semestre</option>
-                        </select>
                         <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95">
                             <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
                         </button>
@@ -129,16 +119,6 @@
                             <option value="trimestre">Trimestral</option>
                             <option value="semestre">Semestral</option>
                             <option value="ano">Anual</option>
-                        </select>
-                        <select id="perf-select-quarter" onchange="Produtividade.Performance.carregarRanking()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Trimestre</option>
-                            <option value="2">2º Trimestre</option>
-                            <option value="3">3º Trimestre</option>
-                            <option value="4">4º Trimestre</option>
-                        </select>
-                        <select id="perf-select-semester" onchange="Produtividade.Performance.carregarRanking()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Semestre</option>
-                            <option value="2">2º Semestre</option>
                         </select>
                     </div>
                 </div>
@@ -168,109 +148,21 @@
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
             
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden">
-                    <div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção</p>
-                        <div class="text-center">
-                            <h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3>
-                            <p class="text-[9px] text-slate-500 font-bold mt-1">Exp: <span class="text-blue-600" id="kpi-meta-total">--</span></p>
-                        </div>
-                    </div>
-                    <div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Assistentes</p>
-                        <div class="text-right">
-                            <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-assistentes-val">--</h3>
-                            <p class="text-[9px] text-slate-500 font-bold mt-1">Esperado: <span class="text-blue-600">17</span></p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24 relative overflow-hidden">
-                     <div class="flex justify-between items-start z-10">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Atingimento</p>
-                        <i class="fas fa-chart-pie text-slate-100 text-4xl absolute -right-2 -bottom-2 transform rotate-12"></i>
-                    </div>
-                     <div class="z-10 mt-1">
-                        <div class="flex items-baseline gap-1">
-                            <h3 class="text-2xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3>
-                        </div>
-                         <p class="text-[10px] text-slate-500 font-bold mt-1">
-                            Meta Esperada: <span class="text-slate-400">100%</span>
-                        </p>
-                    </div>
-                     <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-2"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div>
-                </div>
-
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Equipe</p>
-                    <div class="space-y-2 flex-1 flex flex-col justify-center">
-                        <div>
-                            <div class="flex justify-between items-center text-[10px] mb-0.5">
-                                <span class="font-bold text-slate-600"><i class="fas fa-user-tie mr-1 text-blue-500"></i>CLT</span>
-                                <span class="font-bold text-slate-800" id="kpi-clt-val">0 (0%)</span>
-                            </div>
-                            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div>
-                        </div>
-                        <div>
-                            <div class="flex justify-between items-center text-[10px] mb-0.5">
-                                <span class="font-bold text-slate-600"><i class="fas fa-briefcase mr-1 text-purple-500"></i>PJ</span>
-                                <span class="font-bold text-slate-800" id="kpi-pj-val">0 (0%)</span>
-                            </div>
-                            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden">
-                    <div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between">
-                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p>
-                         <div class="text-center">
-                             <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias-val">--</h3>
-                             <p class="text-[9px] text-slate-400 font-bold mt-1">Trab / Mês</p>
-                         </div>
-                    </div>
-                    <div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Média/Dia</p>
-                        <div class="text-right">
-                            <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-media-todas">--</h3>
-                            <p class="text-[9px] text-slate-500 font-bold mt-1">Meta: <span class="text-emerald-600">650</span></p>
-                        </div>
-                    </div>
-                </div>
-
-                <div onclick="Produtividade.Geral.abrirRankingDetalhado()" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col h-24 overflow-hidden cursor-pointer hover:shadow-md hover:border-blue-300 transition group relative">
-                    <div class="flex justify-between items-center mb-1">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><i class="fas fa-crown text-yellow-400 mr-1"></i> Top Performance</p>
-                        <i class="fas fa-external-link-alt text-slate-300 text-[10px] opacity-0 group-hover:opacity-100 transition"></i>
-                    </div>
-                    <div id="kpi-top3-list" class="flex-1 flex flex-col justify-center space-y-1">
-                        <div class="text-[10px] text-slate-400 italic text-center mt-2">Sem dados</div>
-                    </div>
-                </div>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden"><div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção</p><div class="text-center"><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Exp: <span class="text-blue-600" id="kpi-meta-total">--</span></p></div></div><div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Assistentes</p><div class="text-right"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-assistentes-val">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Esperado: <span class="text-blue-600">17</span></p></div></div></div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24 relative overflow-hidden"><div class="flex justify-between items-start z-10"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Atingimento</p><i class="fas fa-chart-pie text-slate-100 text-4xl absolute -right-2 -bottom-2 transform rotate-12"></i></div><div class="z-10 mt-1"><div class="flex items-baseline gap-1"><h3 class="text-2xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><p class="text-[10px] text-slate-500 font-bold mt-1">Meta Esperada: <span class="text-slate-400">100%</span></p></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-2"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
+                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Equipe</p><div class="space-y-2 flex-1 flex flex-col justify-center"><div><div class="flex justify-between items-center text-[10px] mb-0.5"><span class="font-bold text-slate-600"><i class="fas fa-user-tie mr-1 text-blue-500"></i>CLT</span><span class="font-bold text-slate-800" id="kpi-clt-val">0 (0%)</span></div><div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div></div><div><div class="flex justify-between items-center text-[10px] mb-0.5"><span class="font-bold text-slate-600"><i class="fas fa-briefcase mr-1 text-purple-500"></i>PJ</span><span class="font-bold text-slate-800" id="kpi-pj-val">0 (0%)</span></div><div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div></div></div></div>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden"><div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p><div class="text-center"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias-val">--</h3><p class="text-[9px] text-slate-400 font-bold mt-1">Trab / Mês</p></div></div><div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Média/Dia</p><div class="text-right"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-media-todas">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Meta: <span class="text-emerald-600">650</span></p></div></div></div>
+                <div onclick="Produtividade.Geral.abrirRankingDetalhado()" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col h-24 overflow-hidden cursor-pointer hover:shadow-md hover:border-blue-300 transition group relative"><div class="flex justify-between items-center mb-1"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><i class="fas fa-crown text-yellow-400 mr-1"></i> Top Performance</p><i class="fas fa-external-link-alt text-slate-300 text-[10px] opacity-0 group-hover:opacity-100 transition"></i></div><div id="kpi-top3-list" class="flex-1 flex flex-col justify-center space-y-1"><div class="text-[10px] text-slate-400 italic text-center mt-2">Sem dados</div></div></div>
             </div>
-
-            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in">
-                <span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span>
-                <button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button>
-            </div>
+            
+            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
                             <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-2 py-3 text-center w-24 bg-slate-50">
-                                    <div class="flex flex-col items-center gap-1">
-                                        <span>Fator</span>
-                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[9px] bg-white border border-slate-300 rounded px-1 py-0.5 font-bold text-slate-700 outline-none cursor-pointer">
-                                            <option value="">Aplicar...</option>
-                                            <option value="1">Todos 100%</option>
-                                            <option value="0.5">Todos 50%</option>
-                                            <option value="0">Todos Abonar</option>
-                                        </select>
-                                    </div>
-                                </th>
+                                <th class="px-2 py-3 text-center w-24 bg-slate-50"><div class="flex flex-col items-center gap-1"><span>Fator</span><select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[9px] bg-white border border-slate-300 rounded px-1 py-0.5 font-bold text-slate-700 outline-none cursor-pointer"><option value="">Aplicar...</option><option value="1">Todos 100%</option><option value="0.5">Todos 50%</option><option value="0">Todos Abonar</option></select></div></th>
                                 <th class="px-3 py-3 w-[25%]">Assistente</th>
                                 <th class="px-2 py-3 text-center w-[6%]">Dias</th>
                                 <th class="px-2 py-3 text-center w-[7%]">FIFO</th>
@@ -285,15 +177,41 @@
                         <tbody id="tabela-corpo" class="divide-y divide-slate-200 bg-white"></tbody>
                     </table>
                 </div>
+                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">0</span></span></div>
+            </div>
+        </div>
+
+        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-4">
+            
+            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
+                <div class="overflow-auto custom-scrollbar flex-1">
+                    <table class="w-full text-sm text-left border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
+                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
+                                <th class="px-3 py-3 w-[25%]">Assistente</th>
+                                <th class="px-2 py-3 text-center w-[8%]">Dias Trab.</th>
+                                <th class="px-2 py-3 text-center w-[8%]">FIFO</th>
+                                <th class="px-2 py-3 text-center w-[8%]">G. Total</th>
+                                <th class="px-2 py-3 text-center w-[8%]">G. Parcial</th>
+                                <th class="px-2 py-3 text-center w-[8%] bg-slate-100">Meta Base</th>
+                                <th class="px-2 py-3 text-center w-[10%] bg-slate-100">Meta Período</th>
+                                <th class="px-2 py-3 text-center w-[10%] text-blue-700">Produção</th>
+                                <th class="px-2 py-3 text-center w-[10%]">% Ating.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-consolidado-body" class="divide-y divide-slate-200 bg-white">
+                            </tbody>
+                    </table>
+                </div>
                 <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
-                    <span><i class="fas fa-table mr-1"></i> Visão de Grade</span>
-                    <span>Total Registros: <span id="total-registros-footer">0</span></span>
+                    <span><i class="fas fa-layer-group mr-1"></i> Visão Agrupada por Período</span>
+                    <span>Total Assistentes: <span id="total-consolidado-footer">0</span></span>
                 </div>
             </div>
         </div>
 
-        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6"><div class="p-8 text-center text-slate-400">Carregando Consolidado...</div></div>
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6"><div class="p-8 text-center text-slate-400">Carregando Performance...</div></div>
+        
         <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6"><div class="p-8 text-center text-slate-400">Carregando Matriz...</div></div>
     </div>
 
@@ -303,5 +221,13 @@
     <script src="js/produtividade/performance.js"></script>
     <script src="js/produtividade/matriz.js"></script>
     <script src="js/produtividade/importacao/validacao.js"></script>
+    
+    <script>
+        // Função auxiliar para atualizar tudo quando muda o checkbox de gestão
+        Produtividade.atualizarTodasAbas = function() {
+            if(Produtividade.Geral && document.getElementById('tab-geral').classList.contains('hidden') === false) Produtividade.Geral.renderizarTabela();
+            if(Produtividade.Consolidado && document.getElementById('tab-consolidado').classList.contains('hidden') === false) Produtividade.Consolidado.renderizar();
+        }
+    </script>
 </body>
 </html>
