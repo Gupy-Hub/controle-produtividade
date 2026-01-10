@@ -3,33 +3,68 @@ const MinhaArea = {
     filtroPeriodo: 'mes',
 
     init: async function() {
-        console.log("Minha Área Iniciada (App Unificado)");
+        console.log("Minha Área Iniciada");
         
-        // 1. Identificar Usuário (Sessão Única)
+        // 1. Verificação de Segurança
         const storedUser = localStorage.getItem('usuario_logado');
-        
         if (!storedUser) {
-            // Se não houver sessão, redireciona para login
             window.location.href = 'index.html';
             return;
         }
-
         this.usuario = JSON.parse(storedUser);
 
-        // 2. Data Inicial (Hoje)
+        // 2. Data Global
+        this.configurarDataGlobal();
+
+        // 3. Inicia na aba padrão (Dia a Dia)
+        this.mudarAba('diario');
+    },
+
+    configurarDataGlobal: function() {
         const dateInput = document.getElementById('global-date');
-        if (dateInput) {
+        if (dateInput && !dateInput.value) {
             dateInput.value = new Date().toISOString().split('T')[0];
         }
+    },
 
-        // 3. Inicia na aba padrão
-        this.mudarAba('diario');
+    atualizarTudo: function() {
+        // Identifica qual aba está ativa para recarregar apenas ela
+        const abaAtiva = document.querySelector('.tab-btn.active');
+        if (abaAtiva) {
+            const id = abaAtiva.id.replace('btn-ma-', '');
+            this.carregarDadosAba(id);
+        }
+    },
+
+    mudarAba: function(abaId) {
+        // Esconde todas as views e remove active dos botões
+        document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+        // Mostra a view alvo e ativa o botão
+        const aba = document.getElementById(`ma-tab-${abaId}`);
+        const btn = document.getElementById(`btn-ma-${abaId}`);
+        
+        if(aba) aba.classList.remove('hidden');
+        if(btn) btn.classList.add('active');
+
+        // Carrega os dados da aba selecionada
+        this.carregarDadosAba(abaId);
+    },
+
+    carregarDadosAba: function(abaId) {
+        // Mapeamento das funções de carregamento
+        if (abaId === 'diario' && this.Geral) this.Geral.carregar();
+        if (abaId === 'metas' && this.Metas) this.Metas.carregar();
+        if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar(); // Nova Aba
+        if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
+        if (abaId === 'feedback' && this.Feedback) this.Feedback.carregar(); // Nova Aba
     },
 
     mudarPeriodo: function(tipo) {
         this.filtroPeriodo = tipo;
         
-        // Atualiza botões visuais
+        // Atualiza estilo dos botões
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
@@ -40,35 +75,6 @@ const MinhaArea = {
                 }
             }
         });
-
-        this.atualizarTudo();
-    },
-
-    atualizarTudo: function() {
-        const abaAtiva = document.querySelector('.tab-btn.active');
-        if (abaAtiva) {
-            const id = abaAtiva.id.replace('btn-ma-', '');
-            
-            // Mapeamento correto das funções
-            // Nota: Se o arquivo se chama 'geral.js', ele provavelmente define MinhaArea.Geral
-            if (id === 'diario') {
-                if (this.Geral) this.Geral.carregar();
-                else if (this.Diario) this.Diario.carregar();
-            }
-            if (id === 'metas' && this.Metas) this.Metas.carregar();
-            if (id === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
-        }
-    },
-
-    mudarAba: function(abaId) {
-        document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
-        const aba = document.getElementById(`ma-tab-${abaId}`);
-        const btn = document.getElementById(`btn-ma-${abaId}`);
-        
-        if(aba) aba.classList.remove('hidden');
-        if(btn) btn.classList.add('active');
 
         this.atualizarTudo();
     },
@@ -102,7 +108,6 @@ const MinhaArea = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Aguarda o sistema base e menu carregarem
     setTimeout(() => { 
         if(typeof MinhaArea !== 'undefined') MinhaArea.init(); 
     }, 100);
