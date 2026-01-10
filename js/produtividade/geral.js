@@ -95,11 +95,12 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
+            // CORREÇÃO: Removida a coluna 'meta_diaria' que não existe na tabela usuarios
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
-                    usuario:usuarios ( id, nome, perfil, cargo, meta_diaria )
+                    usuario:usuarios ( id, nome, perfil, cargo )
                 `)
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
@@ -116,13 +117,14 @@ Produtividade.Geral = {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
                 if(!dadosAgrupados[uid]) {
-                    const metaBanco = item.usuario ? Number(item.usuario.meta_diaria) : 0;
+                    // Tenta ler meta_diaria (agora virá undefined), fallback para 650
+                    const metaBanco = item.usuario && item.usuario.meta_diaria ? Number(item.usuario.meta_diaria) : 0;
                     
                     dadosAgrupados[uid] = {
-                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente', meta_diaria: 650 },
+                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente' },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
-                        meta_real: metaBanco > 0 ? metaBanco : 650
+                        meta_real: metaBanco > 0 ? metaBanco : 650 // Padrão 650
                     };
                 }
                 dadosAgrupados[uid].registros.push(item);
@@ -444,7 +446,8 @@ Produtividade.Geral = {
 
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
-            const metaUser = Number(r.usuario.meta_diaria) > 0 ? Number(r.usuario.meta_diaria) : 650;
+            // CORREÇÃO: Fallback se meta_diaria for undefined
+            const metaUser = (r.usuario && r.usuario.meta_diaria && Number(r.usuario.meta_diaria) > 0) ? Number(r.usuario.meta_diaria) : 650;
             const metaCalc = metaUser * r.fator;
             
             // 1. SOMA TUDO NO GERAL (Inclusive Auditoras se elas estiverem na lista filtrada)
