@@ -6,13 +6,13 @@
     <title>Produtividade - Performance Pro</title>
     
     <script src="https://cdn.tailwindcss.com/3.4.1"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
@@ -20,6 +20,7 @@
         .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
@@ -32,6 +33,7 @@
 <body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
+    
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
@@ -51,6 +53,7 @@
                 </div>
 
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4" id="top-bar-controls">
+                    
                     <div id="ctrl-geral" class="flex items-center gap-3">
                         <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
                             <option value="dia">Apenas o Dia</option>
@@ -59,14 +62,9 @@
                             <option value="semana">Semana Específica</option>
                         </select>
                         <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">Semana 1</option>
-                            <option value="2">Semana 2</option>
-                            <option value="3">Semana 3</option>
-                            <option value="4">Semana 4</option>
-                            <option value="5">Semana 5</option>
-                            <option value="6">Semana 6</option>
+                            <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option><option value="6">Semana 6</option>
                         </select>
-                        <label class="inline-flex items-center cursor-pointer border-l border-slate-200 pl-3" title="Exibir Auditoras e Gestoras na tabela">
+                        <label class="inline-flex items-center cursor-pointer border-l border-slate-200 pl-3" title="Exibir Auditoras e Gestoras">
                             <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()">
                             <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
                             <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Ver Gestão</span>
@@ -81,9 +79,13 @@
                             <option value="semestre">Semestral</option>
                             <option value="ano">Anual</option>
                         </select>
-                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95">
-                            <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
-                        </button>
+                        <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option><option value="2">2º Semestre</option>
+                        </select>
+                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95"><i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span></button>
                     </div>
 
                     <div id="ctrl-performance" class="hidden flex items-center gap-2">
@@ -93,20 +95,20 @@
                             <option value="semestre">Semestral</option>
                             <option value="ano">Anual</option>
                         </select>
+                        <select id="perf-select-quarter" onchange="Produtividade.Performance.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="perf-select-semester" onchange="Produtividade.Performance.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option><option value="2">2º Semestre</option>
+                        </select>
                     </div>
                 </div>
 
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4">
                     <input type="file" id="input-excel" accept=".csv" multiple class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar em Massa">
-                        <i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span>
-                    </button>
-                    <button onclick="Produtividade.Importacao.Validacao.limparBancoCompleto()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Resetar Banco">
-                        <i class="fas fa-skull"></i> <span class="hidden sm:inline">Resetar</span>
-                    </button>
-                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir Período">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar"><i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span></button>
+                    <button onclick="Produtividade.Importacao.Validacao.limparBancoCompleto()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Resetar"><i class="fas fa-skull"></i> <span class="hidden sm:inline">Resetar</span></button>
+                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir"><i class="fas fa-trash-alt"></i></button>
                 </div>
             </div>
         </div>
@@ -116,11 +118,11 @@
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden"><div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção</p><div class="text-center"><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Exp: <span class="text-blue-600" id="kpi-meta-total">--</span></p></div></div><div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Assistentes</p><div class="text-right"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-assistentes-val">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Esperado: <span class="text-blue-600">17</span></p></div></div></div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24 relative overflow-hidden"><div class="flex justify-between items-start z-10"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Atingimento</p><i class="fas fa-chart-pie text-slate-100 text-4xl absolute -right-2 -bottom-2 transform rotate-12"></i></div><div class="z-10 mt-1"><div class="flex items-baseline gap-1"><h3 class="text-2xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><p class="text-[10px] text-slate-500 font-bold mt-1">Meta Esperada: <span class="text-slate-400">100%</span></p></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-2"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Equipe</p><div class="space-y-2 flex-1 flex flex-col justify-center"><div><div class="flex justify-between items-center text-[10px] mb-0.5"><span class="font-bold text-slate-600"><i class="fas fa-user-tie mr-1 text-blue-500"></i>CLT</span><span class="font-bold text-slate-800" id="kpi-clt-val">0 (0%)</span></div><div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div></div><div><div class="flex justify-between items-center text-[10px] mb-0.5"><span class="font-bold text-slate-600"><i class="fas fa-briefcase mr-1 text-purple-500"></i>PJ</span><span class="font-bold text-slate-800" id="kpi-pj-val">0 (0%)</span></div><div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden"><div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div></div></div></div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden"><div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Úteis</p><div class="text-center"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias-val">--</h3><p class="text-[9px] text-slate-400 font-bold mt-1">Trab / Mês</p></div></div><div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Média/Dia</p><div class="text-right"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-media-todas">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Meta: <span class="text-emerald-600">650</span></p></div></div></div>
-                <div onclick="Produtividade.Geral.abrirRankingDetalhado()" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col h-24 overflow-hidden cursor-pointer hover:shadow-md hover:border-blue-300 transition group relative"><div class="flex justify-between items-center mb-1"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><i class="fas fa-crown text-yellow-400 mr-1"></i> Top Performance</p><i class="fas fa-external-link-alt text-slate-300 text-[10px] opacity-0 group-hover:opacity-100 transition"></i></div><div id="kpi-top3-list" class="flex-1 flex flex-col justify-center space-y-1"><div class="text-[10px] text-slate-400 italic text-center mt-2">Sem dados</div></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Produção</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3><span class="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">Meta: --</span></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Atingimento</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-1"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Equipe</p><div class="space-y-1"><div class="flex justify-between items-center text-[9px]"><span class="font-bold text-slate-500">CLT</span><span class="font-bold text-blue-600" id="kpi-clt-val">0</span></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div><div class="flex justify-between items-center text-[9px]"><span class="font-bold text-slate-500">PJ</span><span class="font-bold text-purple-600" id="kpi-pj-val">0</span></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Dias Úteis</p><div class="flex items-center gap-2"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias-val">--</h3></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Média / Dia</p><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-media-todas">--</h3></div>
             </div>
             
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
@@ -156,12 +158,23 @@
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
             <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 <div class="col-span-8 flex flex-col gap-4">
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center"><div><h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3><p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p></div><button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button></div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]"><canvas id="evolutionChart"></canvas></div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3>
+                            <p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p>
+                        </div>
+                        <button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]">
+                        <canvas id="evolutionChart"></canvas>
+                    </div>
                 </div>
                 <div class="col-span-4 flex flex-col gap-4">
                     <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-start gap-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i><p class="text-xs text-blue-800">Clique em uma assistente abaixo para ver a <strong>evolução individual</strong>.</p></div>
-                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden"><div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center"><span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Ranking de Produção</span><i class="fas fa-filter text-slate-300"></i></div><div class="overflow-y-auto custom-scrollbar flex-1 p-2" id="ranking-list-container"><div class="text-center text-slate-400 py-10 text-xs">Carregando...</div></div></div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+                        <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center"><span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Ranking de Produção</span><i class="fas fa-filter text-slate-300"></i></div>
+                        <div class="overflow-y-auto custom-scrollbar flex-1 p-2" id="ranking-list-container"><div class="text-center text-slate-400 py-10 text-xs">Carregando...</div></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -195,7 +208,6 @@
     <script src="js/produtividade/performance.js"></script>
     <script src="js/produtividade/matriz.js"></script>
     <script src="js/produtividade/importacao/validacao.js"></script>
-    
     <script>
         Produtividade.atualizarTodasAbas = function() {
             if(Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) Produtividade.Geral.renderizarTabela();
