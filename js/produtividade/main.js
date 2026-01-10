@@ -1,9 +1,22 @@
 const Produtividade = {
     supabase: null, 
+    usuario: null,
 
     init: async function() {
         console.log("Módulo Produtividade Iniciado");
+        
+        // 1. Verificação de Segurança (App Único)
+        const storedUser = localStorage.getItem('usuario_logado');
+        if (!storedUser) {
+            window.location.href = 'index.html';
+            return;
+        }
+        this.usuario = JSON.parse(storedUser);
+
+        // 2. Data Global
         this.configurarDataGlobal();
+
+        // 3. Inicia na aba padrão
         this.mudarAba('geral');
     },
 
@@ -50,6 +63,7 @@ const Produtividade = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Timeout para garantir que o sistema base carregou
     setTimeout(() => {
         if(typeof Produtividade !== 'undefined') Produtividade.init();
     }, 100);
