@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metas - Gestão</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }</style>
+</head>
+<body class="bg-slate-50">
+    <script src="../js/config.js"></script>
+    <script src="../js/sistema.js"></script>
+    <script src="../js/menu/global.js"></script>
+    <script src="../js/menu/gestao.js"></script>
+
+    <div class="max-w-[1600px] mx-auto px-4 py-8 pt-32">
+        
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-6 justify-between items-center z-20 mb-4">
+            <div class="flex items-center gap-3 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                <button onclick="Gestao.Metas.mudarMes(-1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-white hover:shadow rounded transition"><i class="fas fa-chevron-left"></i></button>
+                <div class="text-center px-4 min-w-[140px]">
+                    <span class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Competência</span>
+                    <span id="metas-periodo-label" class="text-base font-bold text-slate-700 capitalize">Carregando...</span>
+                </div>
+                <button onclick="Gestao.Metas.mudarMes(1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-white hover:shadow rounded transition"><i class="fas fa-chevron-right"></i></button>
+            </div>
+
+            <div class="flex items-center gap-3 bg-blue-50 p-2 rounded-lg border border-blue-100 w-full xl:w-auto">
+                <span class="text-xs font-bold text-blue-700 uppercase hidden md:inline">Definição em Massa:</span>
+                <input type="number" id="input-meta-massa" placeholder="Valor (ex: 650)" class="w-32 px-3 py-1.5 text-sm border border-blue-200 rounded text-center font-bold text-blue-800 placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                <button onclick="Gestao.Metas.aplicarEmMassa()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition active:scale-95 whitespace-nowrap">
+                    <i class="fas fa-check-double mr-1.5"></i> Aplicar
+                </button>
+            </div>
+
+            <button onclick="Gestao.Metas.salvarTodas()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition transform active:scale-95 w-full xl:w-auto flex justify-center items-center gap-2">
+                <i class="fas fa-save"></i> Salvar Alterações
+            </button>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[800px] text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100">
+                        <tr>
+                            <th class="px-6 py-4 w-[5%] text-center"><input type="checkbox" id="check-meta-todos" onclick="Gestao.Metas.toggleSelecionarTodos()" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"></th>
+                            <th class="px-6 py-4 w-[10%]">ID</th>
+                            <th class="px-6 py-4 w-[30%]">Assistente</th>
+                            <th class="px-6 py-4 w-[15%]">Contrato</th>
+                            <th class="px-6 py-4 w-[25%] text-center">Meta do Mês</th>
+                            <th class="px-6 py-4 w-[20%] text-right">Histórico</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-metas" class="divide-y divide-slate-100 bg-white"></tbody>
+                </table>
+            </div>
+            <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 font-medium">
+                <span><i class="fas fa-info-circle mr-1"></i> Selecione as caixas para aplicar o valor em massa.</span>
+                <span id="resumo-metas-footer">Total Previsto: 0</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/gestao/metas.js"></script>
+    <script>document.addEventListener('DOMContentLoaded', () => Gestao.Metas.init());</script>
+</body>
+</html>
