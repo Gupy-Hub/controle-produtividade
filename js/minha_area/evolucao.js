@@ -9,9 +9,9 @@ MinhaArea.Evolucao = {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
-        // Data Atual (Mês) - Simplificado para Mês Atual
         const hoje = new Date();
-        const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
+        // Pega últimos 30 dias para o gráfico ficar bonito
+        const inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1).toISOString().split('T')[0]; 
         const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
 
         try {
@@ -24,26 +24,24 @@ MinhaArea.Evolucao = {
                 .order('data_referencia', { ascending: true });
 
             if (error) throw error;
-
             this.renderizarGrafico(data);
-
         } catch (err) {
-            console.error("Erro Evolução:", err);
+            console.error(err);
         }
     },
 
     renderizarGrafico: function(dados) {
-        const ctx = document.getElementById('graficoEvolucao');
-        if (!ctx) return;
-
+        const canvas = document.getElementById('graficoEvolucaoPessoal');
+        if (!canvas) return;
+        
         if (this.chart) this.chart.destroy();
 
         const labels = dados.map(d => {
-            const parts = d.data_referencia.split('-');
-            return `${parts[2]}/${parts[1]}`;
+            const p = d.data_referencia.split('-'); return `${p[2]}/${p[1]}`;
         });
         const values = dados.map(d => d.quantidade);
 
+        const ctx = canvas.getContext('2d');
         this.chart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -51,22 +49,18 @@ MinhaArea.Evolucao = {
                 datasets: [{
                     label: 'Minha Produção',
                     data: values,
-                    borderColor: '#2563eb', // Blue 600
+                    borderColor: '#2563eb',
                     backgroundColor: 'rgba(37, 99, 235, 0.1)',
                     borderWidth: 3,
                     tension: 0.4,
                     fill: true,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#fff',
-                    pointBorderColor: '#2563eb'
+                    pointRadius: 4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false }
-                },
+                plugins: { legend: { display: false } },
                 scales: {
                     y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
                     x: { grid: { display: false } }

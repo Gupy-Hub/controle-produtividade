@@ -1,38 +1,44 @@
 const MinhaArea = {
-    usuario: null, // Guarda os dados do usuário logado
+    usuario: null,
 
     init: async function() {
-        console.log("Minha Área Iniciada");
+        console.log("Módulo Minha Área Iniciado");
         
-        // 1. Verificar Login (Simulação de Segurança)
-        const storedUser = localStorage.getItem('usuario_ativo'); // Assumindo que o Login salva isso
-        // SE NÃO TIVER LOGIN, REDIRECIONA (Comentado para dev, descomentar em prod)
-        // if (!storedUser) { window.location.href = 'index.html'; return; }
+        // 1. Simulação de Login (Substituir por lógica real de Auth)
+        // Tenta pegar do localStorage ou usa um mock para dev
+        const storedUser = localStorage.getItem('usuario_ativo');
         
-        // Simulando usuário se não tiver (apenas para teste, remover em prod)
-        this.usuario = storedUser ? JSON.parse(storedUser) : { id: 1, nome: "Usuário Teste" }; 
-        
-        // Atualiza UI
-        const nomeDisplay = document.getElementById('user-name-display');
-        if(nomeDisplay) nomeDisplay.innerText = this.usuario.nome;
+        if (storedUser) {
+            this.usuario = JSON.parse(storedUser);
+        } else {
+            // Mock de Fallback (Apenas para desenvolvimento)
+            // Em produção, redirecionar para login.html
+            // window.location.href = 'login.html'; 
+            this.usuario = { id: 1, nome: "Colaborador Teste" }; // Mock ID 1
+            console.warn("Usando usuário Mock ID 1");
+        }
 
-        // Inicia a aba padrão
+        // Atualiza UI
+        const nomeEl = document.getElementById('user-name-display');
+        if(nomeEl) nomeEl.innerText = this.usuario.nome;
+
+        // Inicia na aba Diário
         this.mudarAba('diario');
     },
 
     mudarAba: function(abaId) {
-        // Esconde todas
+        // Esconde todas as abas
         document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
-        // Mostra alvo
-        const abaAlvo = document.getElementById(`tab-${abaId}`);
-        const btnAlvo = document.getElementById(`btn-${abaId}`);
+        // Mostra aba selecionada
+        const abaAlvo = document.getElementById(`ma-tab-${abaId}`);
+        const btnAlvo = document.getElementById(`btn-ma-${abaId}`);
         
         if (abaAlvo) abaAlvo.classList.remove('hidden');
         if (btnAlvo) btnAlvo.classList.add('active');
 
-        // Carrega dados específicos
+        // Carrega submódulos sob demanda
         if (abaId === 'diario' && this.Diario) this.Diario.init();
         if (abaId === 'evolucao' && this.Evolucao) this.Evolucao.init();
         if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.init();

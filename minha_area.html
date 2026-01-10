@@ -7,6 +7,8 @@
     
     <script src="https://cdn.tailwindcss.com/3.4.1"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -19,12 +21,12 @@
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        /* Inputs numéricos sem setas */
-        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        /* Inputs numéricos sem setas */
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -38,155 +40,183 @@
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
             
             <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200">
+                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200 shadow-sm">
                     <i class="fas fa-user"></i>
                 </div>
-                <div class="flex flex-col">
+                <div class="flex flex-col leading-tight">
                     <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Colaborador</span>
-                    <span class="text-xs font-black text-slate-700" id="user-name-display">Carregando...</span>
+                    <span class="text-xs font-black text-slate-700 truncate max-w-[150px]" id="user-name-display">Carregando...</span>
                 </div>
             </div>
 
-            <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                <button onclick="MinhaArea.mudarAba('diario')" id="btn-diario" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-edit"></i> Lançamento Diário
+            <div class="flex gap-1 overflow-x-auto no-scrollbar mx-4">
+                <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-calendar-check"></i> Diário
                 </button>
-                <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-evolucao" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
+                <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
                     <i class="fas fa-chart-line"></i> Evolução
                 </button>
-                <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-comparativo" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-exchange-alt"></i> Comparativo
+                <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
+                    <i class="fas fa-users"></i> Comparativo
                 </button>
             </div>
 
             <div class="flex items-center gap-3">
-                <div class="hidden md:flex items-center gap-2 text-xs bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
-                    <span class="text-slate-400 font-bold">Meta Hoje:</span>
-                    <span class="text-blue-700 font-black" id="meta-dia-display">650</span>
+                <div class="hidden md:flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm">
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">Meta Hoje:</span>
+                    <span class="text-xs font-black text-blue-700" id="meta-dia-display">650</span>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="max-w-[1000px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
+    <div class="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
         
-        <div id="tab-diario" class="view-section animate-fade-in space-y-6">
+        <div id="ma-tab-diario" class="view-section animate-fade-in space-y-6">
             
-            <div class="flex justify-center mb-6">
-                <div class="bg-white p-2 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4">
-                    <button onclick="MinhaArea.Diario.mudarDia(-1)" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition flex items-center justify-center">
-                        <i class="fas fa-chevron-left"></i>
-                    </button>
-                    <div class="text-center px-4 border-x border-slate-100">
-                        <span class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest">Data de Referência</span>
-                        <input type="date" id="input-data-lancamento" onchange="MinhaArea.Diario.carregarDadosDoDia()" class="font-black text-slate-700 outline-none text-center bg-transparent cursor-pointer">
-                    </div>
-                    <button onclick="MinhaArea.Diario.mudarDia(1)" class="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-blue-600 transition flex items-center justify-center">
-                        <i class="fas fa-chevron-right"></i>
-                    </button>
+            <div id="box-confirmacao-leitura" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between shadow-sm animate-fade-in">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 animate-pulse"><i class="fas fa-bell"></i></div>
+                    <div><h4 class="font-bold text-amber-900 text-sm">Atenção</h4><p class="text-xs text-amber-700">Você tem metas pendentes de validação.</p></div>
                 </div>
+                <button onclick="MinhaArea.Diario.confirmarLeitura()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-1.5 px-4 rounded-lg text-xs shadow-sm transition">OK, Entendi</button>
             </div>
 
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="fas fa-pen-nib text-blue-500"></i> Produção do Dia</h3>
-                    <div id="status-lancamento" class="text-xs font-bold text-slate-400 flex items-center gap-1">
-                        <i class="fas fa-circle text-[8px]"></i> Aguardando
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Eficiência Mensal</span>
+                        <span id="kpi-pct" class="text-sm font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">--%</span>
+                    </div>
+                    <div class="flex items-baseline gap-1">
+                        <h3 id="kpi-total" class="text-2xl font-black text-slate-800">--</h3>
+                        <span class="text-[10px] text-slate-400 font-bold">/ <span id="kpi-meta-total">--</span></span>
+                    </div>
+                    <div class="mt-3 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div id="bar-progress" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
                     </div>
                 </div>
                 
-                <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div class="space-y-6">
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Quantidade Produzida</label>
-                            <div class="relative group">
-                                <i class="fas fa-layer-group absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-500 transition"></i>
-                                <input type="number" id="input-quantidade" placeholder="0" class="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-200 font-black text-xl text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition bg-slate-50 focus:bg-white">
-                            </div>
-                            <p class="text-[10px] text-slate-400 mt-1 ml-1">Total de documentos validados no dia.</p>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">FIFO</label>
-                                <input type="number" id="input-fifo" placeholder="0" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 font-bold text-slate-700 outline-none focus:border-blue-400 transition text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Perfil FC</label>
-                                <input type="number" id="input-fc" placeholder="0" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 font-bold text-slate-700 outline-none focus:border-blue-400 transition text-sm">
-                            </div>
-                        </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition">
+                    <div class="flex justify-between items-start mb-4">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sua Média Diária</span>
+                        <i class="fas fa-chart-bar text-slate-200 text-lg group-hover:text-blue-200 transition"></i>
                     </div>
-
-                    <div class="space-y-6">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Gradual Total</label>
-                                <input type="number" id="input-gt" placeholder="0" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 font-bold text-slate-700 outline-none focus:border-blue-400 transition text-sm">
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Gradual Parcial</label>
-                                <input type="number" id="input-gp" placeholder="0" class="w-full px-4 py-2.5 rounded-lg border border-slate-200 font-bold text-slate-700 outline-none focus:border-blue-400 transition text-sm">
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Observação / Justificativa</label>
-                            <textarea id="input-obs" rows="3" class="w-full px-4 py-3 rounded-lg border border-slate-200 font-medium text-slate-600 outline-none focus:border-blue-400 transition text-xs resize-none" placeholder="Opcional: Alguma observação sobre o dia?"></textarea>
+                    <div class="flex justify-between items-end">
+                        <div id="kpi-media-real" class="text-2xl font-black text-slate-700">--</div>
+                        <div class="text-right">
+                            <span class="text-[9px] text-slate-400 font-bold block">Média Equipe</span>
+                            <span id="kpi-media-time" class="text-xs font-bold text-slate-500">--</span>
                         </div>
                     </div>
                 </div>
+                
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 relative overflow-hidden group hover:border-blue-300 transition">
+                    <div class="flex justify-between items-start mb-2">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Dias Trabalhados</span>
+                        <div id="icon-status-container" class="w-6 h-6 rounded-full bg-slate-50 flex items-center justify-center text-slate-300"><i id="icon-status" class="fas fa-check text-xs"></i></div>
+                    </div>
+                    <div class="flex items-baseline gap-1">
+                        <h3 id="kpi-dias" class="text-2xl font-black text-slate-800">--</h3>
+                        <span class="text-[10px] text-slate-400 font-bold">dias</span>
+                    </div>
+                    <div id="kpi-status-text" class="mt-2 text-[10px] font-bold text-slate-400 italic">Em andamento...</div>
+                </div>
+            </div>
 
-                <div class="bg-slate-50 px-8 py-5 border-t border-slate-200 flex justify-end">
-                    <button onclick="MinhaArea.Diario.salvar()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition transform active:scale-95 flex items-center gap-2">
-                        <i class="fas fa-save"></i> Salvar Lançamento
-                    </button>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <div class="lg:col-span-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                    <div class="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2"><i class="fas fa-pen-nib text-blue-500"></i> Lançar Produção</h3>
+                        <div id="status-lancamento" class="text-[10px] font-bold text-slate-400 flex items-center gap-1"><i class="fas fa-circle text-[6px]"></i> Novo</div>
+                    </div>
+                    
+                    <div class="p-5 flex-1 flex flex-col gap-4">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data de Referência</label>
+                            <input type="date" id="input-data-lancamento" onchange="MinhaArea.Diario.carregarDadosDoDia()" class="w-full px-3 py-2 rounded-lg border border-slate-200 font-bold text-slate-700 text-sm outline-none focus:border-blue-400 transition bg-slate-50 focus:bg-white">
+                        </div>
+
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quantidade Total</label>
+                            <div class="relative">
+                                <i class="fas fa-layer-group absolute left-3 top-1/2 -translate-y-1/2 text-slate-300"></i>
+                                <input type="number" id="input-quantidade" placeholder="0" class="w-full pl-9 pr-3 py-2.5 rounded-lg border border-slate-200 font-black text-lg text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-50 transition">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">FIFO</label>
+                                <input type="number" id="input-fifo" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Perfil FC</label>
+                                <input type="number" id="input-fc" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Gradual Total</label>
+                                <input type="number" id="input-gt" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Gradual Parcial</label>
+                                <input type="number" id="input-gp" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Observação</label>
+                            <textarea id="input-obs" rows="2" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 outline-none focus:border-blue-400 transition resize-none" placeholder="Opcional..."></textarea>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-50 px-5 py-4 border-t border-slate-200">
+                        <button onclick="MinhaArea.Diario.salvar()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-lg font-bold text-sm shadow-md transition transform active:scale-95 flex items-center justify-center gap-2">
+                            <i class="fas fa-save"></i> Salvar Lançamento
+                        </button>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[500px]">
+                    <div class="bg-slate-50 px-5 py-3 border-b border-slate-200">
+                        <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-history text-slate-400 mr-2"></i> Histórico Recente</h3>
+                    </div>
+                    <div class="overflow-auto custom-scrollbar flex-1">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] sticky top-0 z-10 shadow-sm">
+                                <tr>
+                                    <th class="px-4 py-3 border-b border-slate-200">Data</th>
+                                    <th class="px-4 py-3 border-b border-slate-200 text-center text-blue-600">Qtd.</th>
+                                    <th class="px-4 py-3 border-b border-slate-200 text-center">Fator</th>
+                                    <th class="px-4 py-3 border-b border-slate-200 text-center">Status</th>
+                                    <th class="px-4 py-3 border-b border-slate-200">Obs</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tabela-historico-body" class="divide-y divide-slate-100 text-xs text-slate-600">
+                                </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div id="tab-evolucao" class="view-section hidden animate-fade-in space-y-6">
+        <div id="ma-tab-evolucao" class="view-section hidden animate-fade-in space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                 <div class="flex justify-between items-center mb-6">
-                    <h3 class="font-bold text-slate-700 text-lg">Sua Evolução Mensal</h3>
-                    <select id="select-mes-evolucao" onchange="MinhaArea.Evolucao.carregar()" class="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 outline-none font-bold text-slate-600 cursor-pointer">
-                        </select>
-                </div>
-                <div class="relative h-[350px] w-full">
-                    <canvas id="graficoEvolucao"></canvas>
+                    <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Mensal</h3>
+                    </div>
+                <div class="relative h-[400px] w-full">
+                    <canvas id="graficoEvolucaoPessoal"></canvas>
                 </div>
             </div>
         </div>
 
-        <div id="tab-comparativo" class="view-section hidden animate-fade-in space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 relative overflow-hidden">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Você</p>
-                    <h3 class="text-4xl font-black text-blue-600 mb-1" id="comp-meu-total">--</h3>
-                    <p class="text-sm font-bold text-slate-500">Docs. este Mês</p>
-                    <div class="mt-6 flex items-center gap-2">
-                        <span class="text-xs font-bold text-slate-400">Média Diária:</span>
-                        <span class="text-sm font-black text-slate-700" id="comp-minha-media">--</span>
-                    </div>
-                    <i class="fas fa-user absolute -right-4 -bottom-4 text-9xl text-blue-50 opacity-50"></i>
-                </div>
-
-                <div class="bg-slate-50 p-6 rounded-2xl shadow-inner border border-slate-200 relative overflow-hidden">
-                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Média da Equipe</p>
-                    <h3 class="text-4xl font-black text-slate-600 mb-1" id="comp-time-total">--</h3>
-                    <p class="text-sm font-bold text-slate-400">Docs. este Mês</p>
-                    <div class="mt-6 flex items-center gap-2">
-                        <span class="text-xs font-bold text-slate-400">Média Diária:</span>
-                        <span class="text-sm font-black text-slate-500" id="comp-time-media">--</span>
-                    </div>
-                    <i class="fas fa-users absolute -right-4 -bottom-4 text-9xl text-slate-200 opacity-50"></i>
-                </div>
-            </div>
-            
+        <div id="ma-tab-comparativo" class="view-section hidden animate-fade-in space-y-6">
             <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                <h3 class="font-bold text-slate-700 mb-4">Comparativo Diário</h3>
-                <div class="relative h-[300px] w-full">
-                    <canvas id="graficoComparativo"></canvas>
+                <h3 class="font-bold text-slate-700 text-lg mb-4 flex items-center gap-2"><i class="fas fa-users text-blue-500"></i> Você vs. Time</h3>
+                <div class="relative h-[400px] w-full">
+                    <canvas id="graficoComparativoPessoal"></canvas>
                 </div>
             </div>
         </div>
@@ -197,5 +227,9 @@
     <script src="js/minha_area/diario/controle.js"></script>
     <script src="js/minha_area/evolucao.js"></script>
     <script src="js/minha_area/comparativo.js"></script>
+    
+    <script>
+        // Inicialização Global se necessário
+    </script>
 </body>
 </html>
