@@ -4,6 +4,7 @@ Produtividade.Geral = {
     cacheData: [],      
     cacheDatas: { start: null, end: null }, 
     usuarioSelecionado: null,
+    cacheRanking: [], // Armazena o ranking calculado nos KPIs
     
     init: function() { 
         const lastViewMode = localStorage.getItem('lastViewMode');
@@ -330,7 +331,6 @@ Produtividade.Geral = {
         let usersPJ = new Set();
         let ranking = {}; 
         
-        // Novo contador para Headcount (Assistentes Ativos)
         let countAssistentesAtivos = new Set();
 
         data.forEach(r => {
@@ -349,21 +349,21 @@ Produtividade.Geral = {
             if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
 
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            
-            // Só conta para ranking e headcount se NÃO for gestão
             if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                 countAssistentesAtivos.add(r.usuario.id);
-                
                 if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
                 ranking[r.usuario.id].total += qtd;
             }
         });
 
-        // 1. KPI PRODUÇÃO (Atingido vs Esperado)
+        // Prepara Cache para o Modal de Ranking
+        this.cacheRanking = Object.values(ranking).sort((a, b) => b.total - a.total);
+
+        // 1. KPI PRODUÇÃO
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
         
-        // 1.1 KPI ASSISTENTES (Ativos vs Meta 17)
+        // 1.1 KPI ASSISTENTES
         document.getElementById('kpi-assistentes-val').innerText = `${countAssistentesAtivos.size} / 17`;
 
         // 2. KPI ATINGIMENTO
@@ -398,8 +398,8 @@ Produtividade.Geral = {
         const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdGeral / totalDiasTrabalhadosPonderados) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
 
-        // 5. KPI TOP PERFORMANCE
-        const listaRanking = Object.values(ranking).sort((a, b) => b.total - a.total).slice(0, 3);
+        // 5. KPI TOP PERFORMANCE (Card Resumido Top 3)
+        const listaRanking = this.cacheRanking.slice(0, 3);
         const containerTop3 = document.getElementById('kpi-top3-list');
         if(containerTop3) {
             if (listaRanking.length === 0) {
@@ -420,6 +420,76 @@ Produtividade.Geral = {
                 containerTop3.innerHTML = htmlRanking;
             }
         }
+    },
+
+    // --- NOVA FUNÇÃO: Modal Ranking Completo ---
+    abrirRankingDetalhado: function() {
+        if (!this.cacheRanking || this.cacheRanking.length === 0) {
+            alert("Não há dados de produção para exibir o ranking.");
+            return;
+        }
+
+        const modalAntigo = document.getElementById('modal-ranking');
+        if(modalAntigo) modalAntigo.remove();
+
+        const listaRanking = this.cacheRanking;
+        const totalUsers = listaRanking.length;
+
+        let htmlLista = '';
+        
+        listaRanking.forEach((u, index) => {
+            const pos = index + 1;
+            let bgClass = "bg-white";
+            let icon = `<span class="text-slate-400 w-6 text-center">${pos}º</span>`;
+            let borderClass = "border-slate-100";
+
+            // Lógica de Destaque: Top 5 (Verde) e Bottom 5 (Vermelho)
+            if (index < 5) {
+                bgClass = "bg-emerald-50/50";
+                borderClass = "border-emerald-100";
+                if(index === 0) icon = `<i class="fas fa-trophy text-yellow-500 w-6 text-center"></i>`;
+                else if(index === 1) icon = `<i class="fas fa-trophy text-slate-400 w-6 text-center"></i>`;
+                else if(index === 2) icon = `<i class="fas fa-trophy text-amber-700 w-6 text-center"></i>`;
+                else icon = `<i class="fas fa-medal text-emerald-500 w-6 text-center"></i>`;
+            } else if (index >= totalUsers - 5) {
+                bgClass = "bg-rose-50/50";
+                borderClass = "border-rose-100";
+                icon = `<i class="fas fa-arrow-down text-rose-400 w-6 text-center"></i>`;
+            }
+
+            htmlLista += `
+                <div class="flex items-center justify-between p-3 rounded-lg border ${borderClass} ${bgClass} mb-2 transition hover:shadow-sm">
+                    <div class="flex items-center gap-3">
+                        <div class="font-bold text-slate-500 text-sm">${icon}</div>
+                        <div class="flex flex-col">
+                            <span class="font-bold text-slate-700 text-sm">${u.nome}</span>
+                            <span class="text-[10px] text-slate-400 uppercase font-bold">Produção Total</span>
+                        </div>
+                    </div>
+                    <div class="font-black text-slate-800 text-lg">${u.total.toLocaleString('pt-BR')}</div>
+                </div>
+            `;
+        });
+
+        const html = `
+        <div id="modal-ranking" class="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center backdrop-blur-sm animate-fade-in">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
+                <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                    <h3 class="text-lg font-black text-slate-800 tracking-tight"><i class="fas fa-list-ol text-blue-600 mr-2"></i> Ranking de Produção</h3>
+                    <button onclick="document.getElementById('modal-ranking').remove()" class="text-slate-400 hover:text-red-500 transition"><i class="fas fa-times text-xl"></i></button>
+                </div>
+                
+                <div class="p-4 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/30">
+                    ${htmlLista}
+                </div>
+
+                <div class="bg-white px-6 py-3 border-t border-slate-100 text-center text-xs text-slate-400 font-bold">
+                    Total de ${totalUsers} Assistentes no Ranking
+                </div>
+            </div>
+        </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', html);
     },
 
     mudarFator: async function(id, novoFatorStr) {

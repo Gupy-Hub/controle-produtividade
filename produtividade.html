@@ -231,8 +231,11 @@
                     </div>
                 </div>
 
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col h-24 overflow-hidden">
-                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1"><i class="fas fa-crown text-yellow-400 mr-1"></i> Top Performance</p>
+                <div onclick="Produtividade.Geral.abrirRankingDetalhado()" class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col h-24 overflow-hidden cursor-pointer hover:shadow-md hover:border-blue-300 transition group relative">
+                    <div class="flex justify-between items-center mb-1">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider"><i class="fas fa-crown text-yellow-400 mr-1"></i> Top Performance</p>
+                        <i class="fas fa-external-link-alt text-slate-300 text-[10px] opacity-0 group-hover:opacity-100 transition"></i>
+                    </div>
                     <div id="kpi-top3-list" class="flex-1 flex flex-col justify-center space-y-1">
                         <div class="text-[10px] text-slate-400 italic text-center mt-2">Sem dados</div>
                     </div>
