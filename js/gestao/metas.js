@@ -22,10 +22,11 @@ Gestao.Metas = {
 
         const tbody = document.getElementById('lista-metas');
         if(tbody) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando metas...</p></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Buscando usuários ativos...</p></td></tr>';
         }
 
         try {
+            // Busca dados da tabela oficial de usuarios + metas do mês
             const { data, error } = await Sistema.supabase.rpc('buscar_metas_periodo', { 
                 p_mes: parseInt(mes), 
                 p_ano: parseInt(ano) 
@@ -55,7 +56,7 @@ Gestao.Metas = {
         if (!tbody) return;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400">Nenhum usuário ativo encontrado para este período.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400">Nenhum usuário ativo encontrado na base de dados.</td></tr>';
             return;
         }
 
@@ -63,6 +64,9 @@ Gestao.Metas = {
         lista.forEach(user => {
             const valorMeta = user.meta_definida !== null ? user.meta_definida : '';
             const inputClass = valorMeta ? 'font-bold text-blue-700' : 'text-slate-500';
+
+            // Tag de novato (Só aparece se data_inicio vier preenchida no futuro)
+            const tagNovato = this.isNovato(user.data_inicio) ? '<span class="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] rounded-full uppercase">Novo</span>' : '';
 
             html += `
             <tr class="hover:bg-slate-50 transition group border-b border-slate-50">
@@ -73,7 +77,7 @@ Gestao.Metas = {
                 <td class="px-6 py-4 font-mono text-slate-500">#${user.usuario_id}</td>
                 <td class="px-6 py-4 font-bold text-slate-700">
                     ${user.nome}
-                    ${this.isNovato(user.data_inicio) ? '<span class="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] rounded-full uppercase">Novo</span>' : ''}
+                    ${tagNovato}
                 </td>
                 <td class="px-6 py-4 text-slate-600 text-xs uppercase font-bold tracking-wider">${user.contrato || '-'}</td>
                 
@@ -102,8 +106,8 @@ Gestao.Metas = {
     atualizarResumo: function() {
         let totalMeta = 0;
         this.dadosAtuais.forEach(u => {
-            // Tenta pegar o valor visual do input se existir, senão usa o do banco
             const input = document.getElementById(`meta-input-${u.usuario_id}`);
+            // Pega o valor visual se existir, senão pega o do banco
             if(input && input.value) totalMeta += parseInt(input.value);
             else if(u.meta_definida) totalMeta += u.meta_definida;
         });
@@ -140,17 +144,14 @@ Gestao.Metas = {
             }
         });
 
-        // Atualiza resumo visual
         this.atualizarResumo();
         
-        // Feedback visual simples
+        // Feedback botão
         const btn = document.querySelector('button[onclick="Gestao.Metas.aplicarEmMassa()"]');
         const htmlOrig = btn.innerHTML;
         btn.innerHTML = `<i class="fas fa-check"></i> Aplicado (${count})`;
         setTimeout(() => btn.innerHTML = htmlOrig, 2000);
     },
-
-    // --- LÓGICA DE SALVAMENTO ---
 
     marcarAlterado: function(id) {
         const input = document.getElementById(`meta-input-${id}`);
@@ -178,6 +179,7 @@ Gestao.Metas = {
             const input = document.getElementById(`meta-input-${user.usuario_id}`);
             if (input) {
                 const valor = input.value.trim();
+                // Só salva se tiver valor
                 if (valor !== '') {
                     inserts.push({
                         usuario_id: user.usuario_id,
@@ -218,7 +220,6 @@ Gestao.Metas = {
         }
     },
 
-    // --- HISTÓRICO ---
     verHistorico: async function(userId, nomeUser) {
         const { data, error } = await Sistema.supabase
             .from('metas')
@@ -264,11 +265,8 @@ Gestao.Metas = {
 
     isNovato: function(dataInicio) {
         if (!dataInicio) return false;
-        const dInicio = new Date(dataInicio);
-        const agora = new Date();
-        const diffTime = Math.abs(agora - dInicio);
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        return diffDays <= 60; 
+        // Lógica de novato fica inativa enquanto não tivermos a data no banco
+        return false;
     }
 };
 
