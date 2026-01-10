@@ -1,95 +1,54 @@
-window.MenuGlobal = {
+// Namespace global para menus
+window.Menu = window.Menu || {};
+
+Menu.Global = {
     renderizar: function() {
-        // 1. Detecta o caminho atual para corrigir os links (Raiz vs Subpasta)
-        const path = window.location.pathname;
-        const isInGestao = path.includes('/gestao/');
-        
-        // Se estiver dentro de /gestao/, usamos '../' para voltar à raiz. 
-        // Se estiver na raiz, usamos './' para navegar normalmente.
-        const rootPath = isInGestao ? '../' : './';
-
-        // Verifica se a seção Gestão está ativa para destacar o botão
-        const isGestaoActive = isInGestao; 
-
-        // Classes de Estilo (Ativo vs Inativo)
-        const activeClass = "bg-slate-800 text-white border-l-4 border-blue-500 shadow-lg";
-        const inactiveClass = "text-slate-400 hover:bg-slate-800 hover:text-white transition-all";
-
-        // 2. Monta o HTML do Menu Preto Lateral (Fixo)
-        const menuHtml = `
-        <aside class="fixed left-0 top-0 h-full w-20 md:w-64 bg-slate-900 z-50 flex flex-col transition-all duration-300 shadow-2xl">
-            <div class="h-20 flex items-center justify-center border-b border-slate-800">
-                <div class="font-bold text-white text-xl tracking-wider flex items-center gap-2 cursor-pointer" onclick="window.location.href='${rootPath}index.html'">
-                    <i class="fas fa-chart-line text-blue-500"></i>
-                    <span class="hidden md:inline">PERFORMANCE</span>
-                </div>
-            </div>
-
-            <nav class="flex-1 py-6 flex flex-col gap-2 px-2 md:px-4 overflow-y-auto custom-scroll">
-                
-                <a href="${rootPath}index.html" class="flex items-center gap-4 px-4 py-3 rounded-lg font-medium ${!isGestaoActive ? activeClass : inactiveClass}">
-                    <i class="fas fa-home w-5 text-center text-lg"></i>
-                    <span class="hidden md:inline">Dashboard</span>
-                </a>
-
-                <a href="${rootPath}gestao/usuarios.html" class="flex items-center gap-4 px-4 py-3 rounded-lg font-medium ${isGestaoActive ? activeClass : inactiveClass}">
-                    <i class="fas fa-users-cog w-5 text-center text-lg"></i>
-                    <span class="hidden md:inline">Gestão</span>
-                </a>
-
-                <div class="my-2 border-t border-slate-800 mx-2"></div>
-
-                <a href="#" class="flex items-center gap-4 px-4 py-3 rounded-lg font-medium ${inactiveClass}">
-                    <i class="fas fa-cog w-5 text-center text-lg"></i>
-                    <span class="hidden md:inline">Configurações</span>
-                </a>
-            </nav>
-
-            <div class="p-4 border-t border-slate-800">
-                <button class="flex items-center justify-center md:justify-start gap-3 text-slate-400 hover:text-white w-full transition p-2 rounded hover:bg-slate-800">
-                    <i class="fas fa-sign-out-alt"></i>
-                    <span class="hidden md:inline">Sair</span>
-                </button>
-            </div>
-        </aside>
-
-        <aside id="sidebar-menu-content" class="fixed left-20 md:left-64 top-0 h-full w-64 bg-white border-r border-slate-200 z-40 hidden lg:hidden pt-24 animate-fade overflow-y-auto">
-            </aside>
-        `;
-
-        // 3. Injeta o Menu na Página
-        let container = document.getElementById('menu-global-container');
+        let container = document.getElementById('global-menu');
         if (!container) {
             container = document.createElement('div');
-            container.id = 'menu-global-container';
+            container.id = 'global-menu';
             document.body.prepend(container);
         }
-        container.innerHTML = menuHtml;
 
-        // 4. Ajustes de Layout (Padding do Body)
-        // Garante que o conteúdo não fique escondido atrás do menu fixo
-        document.body.classList.add('pl-20', 'md:pl-64');
+        const user = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
+        const isGestao = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
+        const currentPath = window.location.pathname;
 
-        // Se estiver na Gestão, mostramos o submenu branco lateral
-        if (isGestaoActive) {
-            const submenu = document.getElementById('sidebar-menu-content');
-            if (submenu) {
-                submenu.classList.remove('hidden', 'lg:hidden');
-                submenu.classList.add('lg:block'); // Mostra em telas grandes
-                
-                // Empurra o conteúdo mais para a direita para caber os 2 menus
-                // Mas precisamos verificar se o container principal existe para não quebrar layout
-                const mainContent = document.querySelector('.max-w-\\[1600px\\]');
-                if(mainContent) {
-                    // Adiciona margem extra à esquerda somente em telas grandes onde o submenu branco aparece
-                    mainContent.classList.add('lg:ml-64'); 
-                }
-            }
-        }
+        const links = [
+            { nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' },
+            { nome: 'Painel Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' },
+            { nome: 'Ferramentas', url: 'ferramentas.html', icon: 'fas fa-toolbox' }
+        ];
+
+        if (isGestao) links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
+
+        let html = `
+        <nav class="bg-slate-900 text-slate-300 shadow-md fixed top-0 left-0 w-full z-[60] h-12">
+            <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
+                <div class="flex items-center gap-6">
+                    <div class="font-black text-white tracking-wider text-sm flex items-center gap-2">
+                        <i class="fas fa-layer-group text-blue-500"></i> HUB
+                    </div>
+                    <div class="flex items-center gap-1">`;
+
+        links.forEach(link => {
+            const ativo = currentPath.includes(link.url);
+            const classe = ativo ? 'bg-slate-800 text-white font-bold' : 'hover:bg-slate-800 hover:text-white transition-colors';
+            html += `<a href="${link.url}" class="px-3 py-1.5 rounded text-xs flex items-center gap-2 ${classe}"><i class="${link.icon}"></i> ${link.nome}</a>`;
+        });
+
+        html += `   </div>
+                </div>
+                <div class="flex items-center gap-4 text-xs">
+                    <span class="hidden md:inline">Olá, <strong class="text-white">${user.nome || 'Visitante'}</strong></span>
+                    <button onclick="Sistema.sair()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition"><i class="fas fa-sign-out-alt"></i> Sair</button>
+                </div>
+            </div>
+        </nav>`;
+
+        container.innerHTML = html;
+        document.body.style.paddingTop = '0px'; 
     }
 };
 
-// Inicializa o menu assim que o DOM carregar
-document.addEventListener('DOMContentLoaded', () => {
-    window.MenuGlobal.renderizar();
-});
+document.addEventListener('DOMContentLoaded', Menu.Global.renderizar);
