@@ -1,96 +1,120 @@
 Gestao.Assertividade = {
-    listaCompleta: [],
+    timerBusca: null, 
 
+    // --- CARREGAMENTO INICIAL (Últimos 30 dias) ---
     carregar: async function() {
         const tbody = document.getElementById('lista-assertividade');
-        const contador = document.getElementById('contador-assert');
-        if (!tbody) return;
+        const searchInput = document.getElementById('search-assert');
+        
+        // Se já tiver busca, usa a busca
+        if (searchInput && searchInput.value.trim().length > 0) {
+            this.filtrar();
+            return;
+        }
 
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando dados recentes...</p></td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando auditorias recentes...</p></td></tr>';
 
         try {
-            // OTIMIZAÇÃO: Define limite de data (últimos 60 dias) para não travar o banco
             const dataLimite = new Date();
-            dataLimite.setDate(dataLimite.getDate() - 60);
+            dataLimite.setDate(dataLimite.getDate() - 30);
             const dataIso = dataLimite.toISOString().split('T')[0];
 
-            // Busca Otimizada
             const { data, error } = await Sistema.supabase
                 .from('producao')
-                .select('*, usuarios(nome)')
-                .gte('data_referencia', dataIso) // Filtra apenas dados recentes
+                .select('*, usuarios!inner(nome)')
+                .gte('data_referencia', dataIso)
                 .order('data_referencia', { ascending: false })
                 .order('hora', { ascending: false })
-                .limit(2000);
+                .limit(200);
 
             if (error) throw error;
 
-            this.listaCompleta = data || [];
-            this.filtrar();
+            this.renderizarTabela(data || [], "Recentes (30 dias)");
 
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-12 text-red-500"><i class="fas fa-exclamation-triangle text-2xl mb-2"></i><br>Erro ao carregar: ${e.message}<br><small class="text-slate-400">Tente recarregar a página.</small></td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
+    // --- BUSCA INTELIGENTE (Via RPC) ---
     filtrar: function() {
-        const inputBusca = document.getElementById('search-assert');
-        const termo = inputBusca ? inputBusca.value.toLowerCase().trim() : '';
+        const termo = document.getElementById('search-assert').value.trim();
+        
+        clearTimeout(this.timerBusca);
 
-        const filtrados = this.listaCompleta.filter(item => {
-            if (!termo) return true;
-            
-            // Monta string de busca
-            const dataBr = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '';
-            const nomeUser = item.usuarios?.nome || '';
-            
-            const searchStr = `
-                ${dataBr} 
-                ${item.hora || ''}
-                ${item.empresa || ''}
-                ${nomeUser}
-                ${item.nome_documento || ''}
-                ${item.status || ''}
-                ${item.observacao || ''}
-                ${item.auditora || ''}
-            `.toLowerCase();
+        if (termo.length === 0) {
+            this.carregar();
+            return;
+        }
 
-            return searchStr.includes(termo);
-        });
-
-        this.renderizarTabela(filtrados);
+        // Delay de 600ms para não sobrecarregar
+        this.timerBusca = setTimeout(() => {
+            this.executarBuscaRPC(termo);
+        }, 600);
     },
 
-    renderizarTabela: function(lista) {
+    executarBuscaRPC: async function(termo) {
+        const tbody = document.getElementById('lista-assertividade');
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Pesquisando no servidor...</p></td></tr>';
+
+        try {
+            // CHAMA A FUNÇÃO SQL CRIADA NO BANCO (MUITO RÁPIDA)
+            const { data, error } = await Sistema.supabase
+                .rpc('buscar_auditorias', { termo: termo });
+
+            if (error) throw error;
+
+            // Adapta o retorno do RPC para o formato esperado pelo renderizar
+            // A função SQL retorna 'usuario_nome', mas o renderizador espera um objeto usuarios: { nome: ... }
+            const dadosFormatados = (data || []).map(item => ({
+                ...item,
+                usuarios: { nome: item.usuario_nome }
+            }));
+
+            this.renderizarTabela(dadosFormatados, `Resultados para: "${termo}"`);
+
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">Erro na busca: ${e.message}</td></tr>`;
+        }
+    },
+
+    renderizarTabela: function(lista, mensagemRodape = "") {
         const tbody = document.getElementById('lista-assertividade');
         const contador = document.getElementById('contador-assert');
-        if (!tbody) return;
+        
+        if(contador) {
+             contador.innerHTML = `<strong>${lista.length}</strong> <span class="text-xs font-normal text-slate-400 ml-2">(${mensagemRodape})</span>`;
+        }
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro recente encontrado.</span></div></td></tr>';
-            if(contador) contador.innerText = '0';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
             return;
         }
 
         let html = '';
         lista.forEach(item => {
-            const dataFmt = item.data_referencia.split('-').reverse().slice(0,2).join('/');
-            const horaFmt = item.hora ? item.hora.substring(0, 5) : '-';
-            const nomeUser = item.usuarios?.nome || 'ID: ' + item.usuario_id;
+            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
+            const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
+            const nomeUser = item.usuarios?.nome || `ID: ${item.usuario_id}`;
             
             // Badge Status
-            let statusBadge = `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">${item.status}</span>`;
+            let statusBadge = `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">${item.status || '-'}</span>`;
             const stUpper = (item.status||'').toUpperCase();
-            if (stUpper === 'OK') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold">OK</span>`;
-            else if (stUpper.includes('NOK')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
+            if (stUpper === 'OK' || stUpper === 'VALIDO') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold">OK</span>`;
+            else if (stUpper.includes('NOK') || stUpper.includes('INV') || stUpper.includes('REP')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
             else if (stUpper.includes('JUST')) statusBadge = `<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold">JUST</span>`;
 
             // Cor Assertividade
-            const assertVal = parseFloat((item.assertividade || '0').replace('%','').replace(',','.'));
+            let assertVal = 0;
+            if(item.assertividade) {
+                assertVal = parseFloat(String(item.assertividade).replace('%','').replace(',','.'));
+            }
+            
             let assertColor = 'text-slate-600';
-            if (assertVal >= 100) assertColor = 'text-emerald-600 font-bold';
-            else if (assertVal < 90) assertColor = 'text-rose-600 font-bold';
+            if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
+            else if (assertVal > 0 && assertVal < 90) assertColor = 'text-rose-600 font-bold';
 
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
@@ -109,8 +133,5 @@ Gestao.Assertividade = {
         });
 
         tbody.innerHTML = html;
-        if(contador) contador.innerText = `${lista.length}`;
-    },
-
-    salvarMeta: function() { }
+    }
 };
