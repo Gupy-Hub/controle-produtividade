@@ -5,76 +5,108 @@ const MinhaArea = {
     init: async function() {
         console.log("Minha Área Iniciada");
         
-        // 1. Identificar Usuário (Auth Mock/Real)
-        const storedUser = localStorage.getItem('usuario_ativo');
-        this.usuario = storedUser ? JSON.parse(storedUser) : { id: 1, nome: "Usuário Teste" };
+        // 1. Identificar Usuário (Consistência com login.js)
+        // Login.js usa 'usuario_logado'. Vamos priorizar isso.
+        const storedUser = localStorage.getItem('usuario_logado');
+        
+        if (storedUser) {
+            this.usuario = JSON.parse(storedUser);
+        } else {
+            // Fallback apenas para dev/teste, em prod redirecionaria
+            this.usuario = { id: 0, nome: "Visitante" }; 
+        }
 
         const nomeEl = document.getElementById('user-name-display');
         if(nomeEl) nomeEl.innerText = this.usuario.nome;
 
         // 2. Data Inicial (Hoje)
         const dateInput = document.getElementById('global-date');
-        if (dateInput) {
+        if (dateInput && !dateInput.value) {
             dateInput.value = new Date().toISOString().split('T')[0];
         }
 
-        // 3. Inicia
+        // 3. Inicia na aba padrão ou recuperada
+        // Poderíamos salvar a última aba no localStorage também (Pattern CEO/CTO)
         this.mudarAba('diario');
     },
 
     mudarPeriodo: function(tipo) {
         this.filtroPeriodo = tipo;
         
-        // Atualiza botões visuais
-        ['mes', 'semana', 'ano'].forEach(t => {
-            const btn = document.getElementById(`btn-periodo-${t}`);
+        // Atualiza botões visuais (Agora manipulando classes Tailwind diretamente no novo Menu)
+        const botoes = {
+            'mes': document.getElementById('btn-periodo-mes'),
+            'semana': document.getElementById('btn-periodo-semana'),
+            'ano': document.getElementById('btn-periodo-ano')
+        };
+
+        // Reset geral
+        Object.values(botoes).forEach(btn => {
             if(btn) {
-                if(t === tipo) {
-                    btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
-                } else {
-                    btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
-                }
+                btn.className = "px-3 py-1 text-[10px] font-bold rounded transition text-slate-500 hover:bg-white/50";
             }
         });
+
+        // Ativa o selecionado
+        if(botoes[tipo]) {
+            botoes[tipo].className = "px-3 py-1 text-[10px] font-bold rounded transition text-blue-600 bg-white shadow-sm";
+        }
 
         this.atualizarTudo();
     },
 
     atualizarTudo: function() {
-        // Recarrega a aba ativa com os novos filtros
-        const abaAtiva = document.querySelector('.tab-btn.active');
-        if (abaAtiva) {
-            const id = abaAtiva.id.replace('btn-ma-', '');
-            // Chama a função correta
-            if (id === 'diario' && this.Diario) this.Diario.carregar();
-            if (id === 'metas' && this.Metas) this.Metas.carregar();
-            if (id === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
+        // Verifica qual aba está visível (não pelo botão, mas pela classe 'hidden' da view)
+        // Isso é mais seguro se o botão perder estado
+        if (!document.getElementById('ma-tab-diario').classList.contains('hidden')) {
+            if (this.Geral) this.Geral.carregar();
+        }
+        else if (!document.getElementById('ma-tab-metas').classList.contains('hidden')) {
+            if (this.Metas) this.Metas.carregar();
+        }
+        else if (!document.getElementById('ma-tab-comparativo').classList.contains('hidden')) {
+            if (this.Comparativo) this.Comparativo.carregar();
         }
     },
 
     mudarAba: function(abaId) {
+        // Esconde todas as views
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
-        const aba = document.getElementById(`ma-tab-${abaId}`);
-        const btn = document.getElementById(`btn-ma-${abaId}`);
         
-        if(aba) aba.classList.remove('hidden');
-        if(btn) btn.classList.add('active');
+        // Remove estado ativo de todos os botões de aba
+        document.querySelectorAll('.tab-btn').forEach(el => {
+            el.classList.remove('bg-blue-50', 'text-blue-700'); // Remove estilo ativo
+            el.classList.add('text-slate-600'); // Adiciona estilo inativo
+        });
 
-        // Dispara carregamento
-        if (abaId === 'diario' && this.Diario) this.Diario.carregar();
+        // Mostra a view alvo
+        const aba = document.getElementById(`ma-tab-${abaId}`);
+        if(aba) {
+            aba.classList.remove('hidden');
+            aba.classList.add('animate-enter'); // Reaplica animação
+        }
+
+        // Ativa o botão alvo
+        const btn = document.getElementById(`btn-ma-${abaId}`);
+        if(btn) {
+            btn.classList.remove('text-slate-600');
+            btn.classList.add('bg-blue-50', 'text-blue-700');
+        }
+
+        // Carrega dados específicos
+        if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
         if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
     },
 
-    // Helper para calcular datas basedo no filtro
     getDatasFiltro: function() {
         const dateInput = document.getElementById('global-date');
-        let dataRef = dateInput ? new Date(dateInput.value) : new Date();
+        let dataRef = dateInput && dateInput.value ? new Date(dateInput.value) : new Date();
+        // Ajuste de fuso horário simples (considerando meio-dia para evitar problemas de UTC)
+        dataRef.setHours(12,0,0,0);
+        
         const ano = dataRef.getFullYear();
         const mes = dataRef.getMonth();
-        const dia = dataRef.getDate();
 
         let inicio, fim;
 
@@ -85,12 +117,15 @@ const MinhaArea = {
             inicio = `${ano}-01-01`;
             fim = `${ano}-12-31`;
         } else if (this.filtroPeriodo === 'semana') {
-            // Calcula início e fim da semana (Dom-Sab)
             const curr = new Date(dataRef);
-            const first = curr.getDate() - curr.getDay(); 
-            const last = first + 6;
-            inicio = new Date(curr.setDate(first)).toISOString().split('T')[0];
-            fim = new Date(curr.setDate(last)).toISOString().split('T')[0];
+            const first = curr.getDate() - curr.getDay(); // Domingo
+            const last = first + 6; // Sábado
+            
+            const dtInicio = new Date(curr); dtInicio.setDate(first);
+            const dtFim = new Date(curr); dtFim.setDate(last);
+            
+            inicio = dtInicio.toISOString().split('T')[0];
+            fim = dtFim.toISOString().split('T')[0];
         }
 
         return { inicio, fim };
@@ -98,5 +133,8 @@ const MinhaArea = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
+    // Timeout pequeno para garantir que menus renderizaram e supabase carregou
+    setTimeout(() => { 
+        if(typeof MinhaArea !== 'undefined') MinhaArea.init(); 
+    }, 100);
 });
