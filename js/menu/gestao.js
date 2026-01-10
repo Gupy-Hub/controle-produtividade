@@ -1,14 +1,13 @@
+// js/menu/gestao.js
 window.MenuGestao = {
     renderizar: function() {
         const path = window.location.pathname;
-        // Pega o nome do arquivo atual (ex: usuarios.html)
-        const page = path.split("/").pop(); 
+        const page = path.split("/").pop(); // Pega o nome do arquivo (ex: usuarios.html)
 
-        // Estilos
+        // Mapeamento: Nome do arquivo -> ID do botão para ativar
         const activeClass = "bg-slate-800 text-white shadow-lg border-l-4 border-blue-500";
         const inactiveClass = "text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all";
 
-        // Links diretos para os arquivos na mesma pasta (gestao/)
         const menuHtml = `
         <div class="flex flex-col gap-2 p-4">
             <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-3">Gestão</div>
@@ -30,7 +29,7 @@ window.MenuGestao = {
             </a>
         </div>`;
 
-        // Injeta no container do menu lateral
+        // Injeta no container do menu lateral (supondo que seu layout base tenha um id="sidebar-menu")
         const sidebar = document.getElementById('sidebar-menu-content'); 
         if(sidebar) sidebar.innerHTML = menuHtml;
     }
