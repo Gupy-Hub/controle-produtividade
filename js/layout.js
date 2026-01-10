@@ -11,7 +11,7 @@ const Layout = {
         const primeiroNome = usuario.nome.split(' ')[0];
         const isGestao = ['Gestora', 'Auditora', 'Admin'].includes(usuario.funcao);
 
-        // HTML do Menu Superior (Estilo ORIGINAL mantido)
+        // HTML do Menu Superior (Estilo atualizado)
         const navHtml = `
         <nav class="bg-slate-900 text-white shadow-lg mb-0">
             <div class="max-w-[1400px] mx-auto px-4">
@@ -35,7 +35,7 @@ const Layout = {
                         </a>
 
                         ${isGestao ? `
-                        <a href="gestao/usuarios.html" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 transition ${this.isActive('gestao')}">
+                        <a href="gestao.html" class="nav-link px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-800 transition ${this.isActive('gestao')}">
                             <i class="fas fa-cogs mr-2"></i>Gestão
                         </a>` : ''}
                     </div>
