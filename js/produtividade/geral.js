@@ -9,18 +9,35 @@ Produtividade.Geral = {
     init: function() { 
         const lastViewMode = localStorage.getItem('lastViewMode');
         if (lastViewMode) {
-            document.getElementById('view-mode').value = lastViewMode;
+            const el = document.getElementById('view-mode');
+            if(el) el.value = lastViewMode;
         }
         this.toggleSemana(); 
         this.carregarTela(); 
         this.initialized = true; 
     },
     
+    // --- FUNÇÃO DE SEGURANÇA PARA EVITAR CRASH NO DOM ---
+    setTxt: function(id, valor) {
+        const el = document.getElementById(id);
+        if (el) {
+            el.innerText = valor;
+        } else {
+            // Opcional: console.warn(`Elemento KPI não encontrado: ${id}`);
+        }
+    },
+
     toggleSemana: function() {
-        const mode = document.getElementById('view-mode').value;
+        const viewEl = document.getElementById('view-mode');
+        if(!viewEl) return;
+
+        const mode = viewEl.value;
         localStorage.setItem('lastViewMode', mode);
         const sem = document.getElementById('select-semana');
-        if(mode === 'semana') sem.classList.remove('hidden'); else sem.classList.add('hidden');
+        
+        if(sem) {
+            if(mode === 'semana') sem.classList.remove('hidden'); else sem.classList.add('hidden');
+        }
         if(this.initialized) this.carregarTela();
     },
 
@@ -59,7 +76,12 @@ Produtividade.Geral = {
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         const dateInput = document.getElementById('global-date');
-        const viewMode = document.getElementById('view-mode').value;
+        const viewEl = document.getElementById('view-mode');
+        const semEl = document.getElementById('select-semana');
+
+        if(!tbody || !dateInput || !viewEl) return; // Proteção básica
+
+        const viewMode = viewEl.value;
         
         let dataSel = dateInput.value;
         if(!dataSel) { 
@@ -79,7 +101,7 @@ Produtividade.Geral = {
             dataInicio = `${ano}-01-01`;
             dataFim = `${ano}-12-31`;
         } else if (viewMode === 'semana') {
-            const semanaSel = parseInt(document.getElementById('select-semana').value) - 1;
+            const semanaSel = semEl ? (parseInt(semEl.value) - 1) : 0;
             const semanas = this.getSemanasDoMes(parseInt(ano), parseInt(mes));
             if (semanas[semanaSel]) {
                 dataInicio = semanas[semanaSel].inicio;
@@ -140,7 +162,9 @@ Produtividade.Geral = {
             this.dadosOriginais = Object.values(dadosAgrupados);
             
             if (this.usuarioSelecionado) {
-                this.filtrarUsuario(this.usuarioSelecionado, document.getElementById('selected-name').textContent);
+                const elName = document.getElementById('selected-name');
+                const name = elName ? elName.textContent : '';
+                this.filtrarUsuario(this.usuarioSelecionado, name);
             } else {
                 this.renderizarTabela();
                 this.atualizarKPIs(data, dataInicio, dataFim);
@@ -154,19 +178,23 @@ Produtividade.Geral = {
 
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
+        if(!tbody) return;
+
         const footer = document.getElementById('total-registros-footer');
-        const viewMode = document.getElementById('view-mode').value;
-        const mostrarDetalhes = (viewMode === 'dia' || this.usuarioSelecionado !== null);
+        const viewEl = document.getElementById('view-mode');
+        const viewMode = viewEl ? viewEl.value : 'dia';
         
-        // NOVO: Checkbox para mostrar/ocultar gestão
+        // --- NOVO: Lógica do Checkbox de Gestão ---
         const checkGestao = document.getElementById('check-gestao');
         const mostrarGestao = checkGestao ? checkGestao.checked : false;
+
+        const mostrarDetalhes = (viewMode === 'dia' || this.usuarioSelecionado !== null);
 
         let lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado)
             : this.dadosOriginais;
 
-        // FILTRO DE GESTÃO (Visual Apenas)
+        // Filtro Visual de Gestão
         if (!mostrarGestao && !this.usuarioSelecionado) {
             lista = lista.filter(d => {
                 const funcao = (d.usuario.funcao || '').toUpperCase();
@@ -175,7 +203,6 @@ Produtividade.Geral = {
         }
 
         tbody.innerHTML = '';
-        
         lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
 
         let totalLinhas = 0;
@@ -256,12 +283,11 @@ Produtividade.Geral = {
                             </div>
                         </td>
                         <td class="${commonCellClass}">${r.fator}</td>
+                        <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
                         <td class="${commonCellClass}">${r.fifo || 0}</td>
                         <td class="${commonCellClass}">${r.gradual_total || 0}</td>
                         <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
-                        <td class="${commonCellClass} text-slate-400">${metaBase}</td>
-                        <td class="${commonCellClass} bg-slate-50">${Math.round(metaCalc)}</td>
-                        <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
+                        <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaCalc)}</td>
                         <td class="px-2 py-2 text-center">
                              <div class="flex items-center justify-center gap-1">
                                  <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
@@ -293,12 +319,11 @@ Produtividade.Geral = {
                     <td class="${commonCellClass} font-bold text-slate-700">
                         ${d.totais.diasUteis}
                     </td>
+                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
                     <td class="${commonCellClass}">${d.totais.fifo}</td>
                     <td class="${commonCellClass}">${d.totais.gt}</td>
                     <td class="${commonCellClass}">${d.totais.gp}</td>
-                    <td class="${commonCellClass} text-slate-400">${metaBase}</td>
-                    <td class="${commonCellClass} bg-slate-50">${Math.round(metaTotal)}</td>
-                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
+                    <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaTotal)}</td>
                     <td class="px-2 py-2 text-center">
                          <div class="flex items-center justify-center gap-1">
                              <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
@@ -314,14 +339,18 @@ Produtividade.Geral = {
         if(footer) footer.innerText = totalLinhas;
         
         if(lista.length === 0) {
-             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado para este período.</td></tr>';
+             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
         }
     },
     
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
-        document.getElementById('selection-header').classList.remove('hidden');
-        document.getElementById('selected-name').textContent = nome;
+        const selHeader = document.getElementById('selection-header');
+        const selName = document.getElementById('selected-name');
+        
+        if(selHeader) selHeader.classList.remove('hidden');
+        if(selName) selName.textContent = nome;
+        
         this.renderizarTabela();
         const dadosFiltrados = this.cacheData.filter(r => r.usuario.id == id);
         this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
@@ -329,7 +358,9 @@ Produtividade.Geral = {
 
     limparSelecao: function() {
         this.usuarioSelecionado = null;
-        document.getElementById('selection-header').classList.add('hidden');
+        const selHeader = document.getElementById('selection-header');
+        if(selHeader) selHeader.classList.add('hidden');
+        
         this.renderizarTabela();
         this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
@@ -338,7 +369,9 @@ Produtividade.Geral = {
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        let totalDiasTrabalhadosPonderados = 0; 
+        
+        let totalProdOperacional = 0; // Apenas assistentes
+        let totalDiasOperacionaisPonderados = 0; 
         
         let usersCLT = new Set();
         let usersPJ = new Set();
@@ -352,6 +385,7 @@ Produtividade.Geral = {
             const fator = Number(r.fator) || 0;
             const metaCalc = metaUser * fator;
             
+            // 1. Produção Geral (Inclui tudo)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
@@ -361,78 +395,63 @@ Produtividade.Geral = {
 
             const isLideranca = ['AUDITORA', 'GESTORA'].includes(cargo);
 
-            // Se for liderança, SÓ conta para produção geral e meta geral
+            // 2. Filtro Operacional (Exclui Liderança dos cálculos de média e equipe)
             if (!isLideranca) {
-                // Assistentes contam para tudo
-                if (fator > 0) totalDiasTrabalhadosPonderados += fator;
+                // Soma para média operacional
+                totalProdOperacional += qtd;
+                if (fator > 0) totalDiasOperacionaisPonderados += fator;
 
+                // Contagem de Equipe
                 if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
+
+                // Headcount
                 countAssistentesAtivos.add(r.usuario.id);
                 
+                // Ranking
                 if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
                 ranking[r.usuario.id].total += qtd;
-            } else {
-                // Liderança: Já foi somado no totalProdGeral lá em cima
-                // Não faz nada aqui (não entra em média, equipe, ranking)
             }
         });
 
         this.cacheRanking = Object.values(ranking).sort((a, b) => b.total - a.total);
 
-        // 1. KPI PRODUÇÃO (Geral - Inclui Gestão)
-        document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
-        document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
-        
-        // 1.1 KPI ASSISTENTES (Apenas Operacional)
-        document.getElementById('kpi-assistentes-val').innerText = `${countAssistentesAtivos.size} / 17`;
+        // --- USO DE setTxt PARA EVITAR CRASH ---
+        this.setTxt('kpi-total', totalProdGeral.toLocaleString('pt-BR'));
+        this.setTxt('kpi-meta-total', Math.round(metaTotalGeral).toLocaleString('pt-BR'));
+        this.setTxt('kpi-assistentes-val', `${countAssistentesAtivos.size} / 17`);
 
-        // 2. KPI ATINGIMENTO (Geral)
         const pctProd = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
-        document.getElementById('kpi-pct').innerText = Math.round(pctProd) + '%';
+        this.setTxt('kpi-pct', Math.round(pctProd) + '%');
+        
         const barPct = document.getElementById('kpi-pct-bar');
         if(barPct) {
             barPct.style.width = Math.min(pctProd, 100) + '%';
             barPct.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-slate-300 rounded-full";
         }
 
-        // 3. KPI EQUIPE (Apenas Operacional)
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalEquipe = clt + pj;
         const pctClt = totalEquipe > 0 ? Math.round((clt / totalEquipe) * 100) : 0;
         const pctPj = totalEquipe > 0 ? Math.round((pj / totalEquipe) * 100) : 0;
 
-        document.getElementById('kpi-clt-val').innerText = `${clt} (${pctClt}%)`;
-        document.getElementById('kpi-pj-val').innerText = `${pj} (${pctPj}%)`;
+        this.setTxt('kpi-clt-val', `${clt} (${pctClt}%)`);
+        this.setTxt('kpi-pj-val', `${pj} (${pctPj}%)`);
         
         const barClt = document.getElementById('kpi-clt-bar');
         if(barClt) barClt.style.width = pctClt + '%';
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = pctPj + '%';
         
-        // 4. KPI DIAS e MÉDIA (Apenas Operacional - AQUI ESTAVA O SEGREDO DA MÉDIA ALTA)
         const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
         const diasTrabalhadosReal = diasComProd.size; 
-        document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
+        this.setTxt('kpi-dias-val', `${diasTrabalhadosReal} / ${diasUteisCalendario}`);
         
-        // Recalcular produção APENAS operacional para a média
-        // O totalProdGeral inclui gestão. Precisamos subtrair ou somar separado.
-        // Vou refazer a soma no loop acima para garantir (feito: separei logicamente)
-        
-        // Oops, no loop acima eu usei totalProdGeral para tudo. 
-        // Preciso de uma variavel `totalProdOperacional` para a média ser justa.
-        let totalProdOperacional = 0;
-        data.forEach(r => {
-             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-             if (!['AUDITORA', 'GESTORA'].includes(cargo)) {
-                 totalProdOperacional += (Number(r.quantidade) || 0);
-             }
-        });
+        // Média Operacional Real
+        const media = totalDiasOperacionaisPonderados > 0 ? Math.round(totalProdOperacional / totalDiasOperacionaisPonderados) : 0;
+        this.setTxt('kpi-media-todas', media);
 
-        const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdOperacional / totalDiasTrabalhadosPonderados) : 0;
-        document.getElementById('kpi-media-todas').innerText = media;
-
-        // 5. KPI TOP PERFORMANCE
+        // Top 3
         const listaRanking = this.cacheRanking.slice(0, 3);
         const containerTop3 = document.getElementById('kpi-top3-list');
         if(containerTop3) {
@@ -579,7 +598,10 @@ Produtividade.Geral = {
     excluirDadosDia: async function() {
         if(!confirm("Excluir dados do período selecionado?")) return;
         const dateInput = document.getElementById('global-date');
-        const viewMode = document.getElementById('view-mode').value;
+        const viewEl = document.getElementById('view-mode');
+        if(!dateInput || !viewEl) return;
+
+        const viewMode = viewEl.value;
         let s, e, [ano, mes] = dateInput.value.split('-');
 
         if (viewMode === 'dia') { s = dateInput.value; e = dateInput.value; }
