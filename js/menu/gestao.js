@@ -1,86 +1,41 @@
-window.Menu = window.Menu || {};
-
-Menu.Gestao = {
+// js/menu/gestao.js
+window.MenuGestao = {
     renderizar: function() {
-        let container = document.getElementById('submenu-gestao');
-        if (!container) {
-            // Cria container logo após o menu global se não existir no HTML
-            container = document.createElement('div');
-            container.id = 'submenu-gestao';
-            const globalMenu = document.getElementById('global-menu');
-            if(globalMenu) globalMenu.after(container);
-            else document.body.prepend(container);
-        }
+        const path = window.location.pathname;
+        const page = path.split("/").pop(); // Pega o nome do arquivo (ex: usuarios.html)
 
-        const html = `
-        <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center">
-            <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
-                
-                <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                    <button onclick="Gestao.mudarAba('usuarios')" id="btn-g-usuarios" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-users"></i> Usuários
-                    </button>
-                    <button onclick="Gestao.mudarAba('empresas')" id="btn-g-empresas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-building"></i> Empresas
-                    </button>
-                    <button onclick="Gestao.mudarAba('assertividade')" id="btn-g-assertividade" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-check-double"></i> Assertividade
-                    </button>
-                    <button onclick="Gestao.mudarAba('metas')" id="btn-g-metas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 text-slate-600 hover:bg-slate-50 transition">
-                        <i class="fas fa-bullseye"></i> Metas
-                    </button>
-                </div>
+        // Mapeamento: Nome do arquivo -> ID do botão para ativar
+        const activeClass = "bg-slate-800 text-white shadow-lg border-l-4 border-blue-500";
+        const inactiveClass = "text-slate-400 hover:bg-slate-800/50 hover:text-white transition-all";
 
-                <div id="gestao-actions" class="flex items-center gap-2">
-                    </div>
-            </div>
+        const menuHtml = `
+        <div class="flex flex-col gap-2 p-4">
+            <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 px-3">Gestão</div>
+            
+            <a href="usuarios.html" class="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${page.includes('usuarios') ? activeClass : inactiveClass}">
+                <i class="fas fa-users w-5"></i> Usuários
+            </a>
+
+            <a href="empresas.html" class="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${page.includes('empresas') ? activeClass : inactiveClass}">
+                <i class="fas fa-building w-5"></i> Empresas
+            </a>
+
+            <a href="assertividade.html" class="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${page.includes('assertividade') ? activeClass : inactiveClass}">
+                <i class="fas fa-check-circle w-5"></i> Assertividade
+            </a>
+
+            <a href="metas.html" class="flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium ${page.includes('metas') ? activeClass : inactiveClass}">
+                <i class="fas fa-bullseye w-5"></i> Metas
+            </a>
         </div>`;
 
-        container.innerHTML = html;
-    },
-
-    // Configura o botão de ação baseado na aba ativa
-    atualizarAcao: function(aba) {
-        const container = document.getElementById('gestao-actions');
-        if (!container) return;
-
-        let btnHtml = '';
-        
-        if (aba === 'usuarios') {
-            btnHtml = `
-            <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-blue-700">
-                <i class="fas fa-upload"></i> Importar Usuários
-                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Usuarios.importar(this)">
-            </label>`;
-        } 
-        else if (aba === 'empresas') {
-            btnHtml = `
-            <label class="cursor-pointer bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-blue-700">
-                <i class="fas fa-upload"></i> Importar Empresas
-                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Empresas.importar(this)">
-            </label>`;
-        }
-        else if (aba === 'metas') {
-            btnHtml = `
-            <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition shadow-sm border border-emerald-700">
-                <i class="fas fa-file-excel"></i> Importar Metas
-                <input type="file" class="hidden" accept=".csv, .xlsx" onchange="Gestao.Metas.importar(this)">
-            </label>`;
-        }
-        // Assertividade não tem importação, então fica vazio ou botão de "Novo"
-        
-        container.innerHTML = btnHtml;
-        
-        // Atualiza estilo das abas
-        document.querySelectorAll('.tab-btn').forEach(b => {
-            b.classList.remove('bg-blue-50', 'text-blue-700', 'border-b-2', 'border-blue-600');
-            b.classList.add('text-slate-600');
-        });
-        
-        const activeBtn = document.getElementById(`btn-g-${aba}`);
-        if(activeBtn) {
-            activeBtn.classList.remove('text-slate-600');
-            activeBtn.classList.add('bg-blue-50', 'text-blue-700'); 
-        }
+        // Injeta no container do menu lateral (supondo que seu layout base tenha um id="sidebar-menu")
+        const sidebar = document.getElementById('sidebar-menu-content'); 
+        if(sidebar) sidebar.innerHTML = menuHtml;
     }
 };
+
+// Auto-renderiza ao carregar
+document.addEventListener('DOMContentLoaded', () => {
+    if(window.MenuGestao) window.MenuGestao.renderizar();
+});
