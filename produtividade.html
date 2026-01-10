@@ -79,7 +79,7 @@
                         <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
                             <option value="dia">Apenas o Dia</option>
                             <option value="mes">Mês da Data</option>
-                            <option value="semana">Semana Específica</option>
+                            <option value="ano">Ano Inteiro</option> <option value="semana">Semana Específica</option>
                         </select>
                         <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
                             <option value="1">Semana 1</option>
@@ -88,6 +88,48 @@
                             <option value="4">Semana 4</option>
                             <option value="5">Semana 5</option>
                             <option value="6">Semana 6</option>
+                        </select>
+                    </div>
+
+                    <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
+                         <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
+                            <option value="dia">Diária</option>
+                            <option value="mes">Mensal</option>
+                            <option value="trimestre">Trimestral</option>
+                            <option value="semestre">Semestral</option>
+                            <option value="ano">Anual</option>
+                        </select>
+                        <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option>
+                            <option value="2">2º Trimestre</option>
+                            <option value="3">3º Trimestre</option>
+                            <option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option>
+                            <option value="2">2º Semestre</option>
+                        </select>
+                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95">
+                            <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
+                        </button>
+                    </div>
+
+                    <div id="ctrl-performance" class="hidden flex items-center gap-2">
+                        <select id="perf-period-type" onchange="Produtividade.Performance.togglePeriodo()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
+                            <option value="mes">Mensal</option>
+                            <option value="trimestre">Trimestral</option>
+                            <option value="semestre">Semestral</option>
+                            <option value="ano">Anual</option>
+                        </select>
+                        <select id="perf-select-quarter" onchange="Produtividade.Performance.carregarRanking()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option>
+                            <option value="2">2º Trimestre</option>
+                            <option value="3">3º Trimestre</option>
+                            <option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="perf-select-semester" onchange="Produtividade.Performance.carregarRanking()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option>
+                            <option value="2">2º Semestre</option>
                         </select>
                     </div>
                 </div>

@@ -74,6 +74,9 @@ Produtividade.Geral = {
         } else if (viewMode === 'mes') {
             dataInicio = `${ano}-${mes}-01`;
             dataFim = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`;
+        } else if (viewMode === 'ano') { // LOGICA DE ANO INTEIRO
+            dataInicio = `${ano}-01-01`;
+            dataFim = `${ano}-12-31`;
         } else if (viewMode === 'semana') {
             const semanaSel = parseInt(document.getElementById('select-semana').value) - 1;
             const semanas = this.getSemanasDoMes(parseInt(ano), parseInt(mes));
@@ -319,17 +322,15 @@ Produtividade.Geral = {
         this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
 
-    // --- NOVA LÓGICA DE KPIS ---
     atualizarKPIs: function(data, dataInicio, dataFim) {
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        let totalDiasTrabalhadosPonderados = 0; // Para calcular média diária
+        let totalDiasTrabalhadosPonderados = 0; 
         
-        // Estruturas para Equipe e Top Performance
         let usersCLT = new Set();
         let usersPJ = new Set();
-        let ranking = {}; // Mapa para agrupar produção por usuário
+        let ranking = {}; 
         
         const isSingleUser = this.usuarioSelecionado !== null;
 
@@ -343,13 +344,11 @@ Produtividade.Geral = {
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
-            // Só soma para média se não for abono total (fator > 0)
             if (fator > 0) totalDiasTrabalhadosPonderados += fator;
 
             const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
             if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
 
-            // Monta Ranking (Ignora Gestão/Auditoria para o Top 3 se quiser focar na operação)
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                 if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
@@ -357,11 +356,10 @@ Produtividade.Geral = {
             }
         });
 
-        // 1. KPI PRODUÇÃO (Atingido vs Esperado)
+        // KPI PRODUÇÃO
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
         
-        // Barra de progresso da Produção (Opcional, usando a mesma lógica do atingimento)
         const pctProd = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         const barProd = document.getElementById('kpi-prod-bar');
         if(barProd) {
@@ -369,7 +367,7 @@ Produtividade.Geral = {
              barProd.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
         }
 
-        // 2. KPI ATINGIMENTO (% vs 100%)
+        // KPI ATINGIMENTO
         document.getElementById('kpi-pct').innerText = Math.round(pctProd) + '%';
         const barPct = document.getElementById('kpi-pct-bar');
         if(barPct) {
@@ -377,7 +375,7 @@ Produtividade.Geral = {
             barPct.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-slate-300 rounded-full";
         }
 
-        // 3. KPI EQUIPE (% de cada)
+        // KPI EQUIPE
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalEquipe = clt + pj;
@@ -389,20 +387,18 @@ Produtividade.Geral = {
         
         const barClt = document.getElementById('kpi-clt-bar');
         if(barClt) barClt.style.width = pctClt + '%';
-        
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = pctPj + '%';
         
-        // 4. KPI DIAS ÚTEIS e MÉDIA (Dividido)
+        // KPI DIAS E MÉDIA
         const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
         const diasTrabalhadosReal = diasComProd.size; 
         document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
-        // Média: Produção Total / Total de Dias-Pessoa Trabalhados
         const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdGeral / totalDiasTrabalhadosPonderados) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
 
-        // 5. KPI TOP PERFORMANCE (Top 3)
+        // KPI TOP PERFORMANCE
         const listaRanking = Object.values(ranking).sort((a, b) => b.total - a.total).slice(0, 3);
         const containerTop3 = document.getElementById('kpi-top3-list');
         if(containerTop3) {
