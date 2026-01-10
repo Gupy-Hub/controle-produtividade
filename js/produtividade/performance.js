@@ -1,7 +1,7 @@
 Produtividade.Performance = {
     initialized: false,
     chartInstance: null,
-    dadosCache: [], // Guarda os dados brutos para não re-buscar ao clicar
+    dadosCache: [], 
     
     init: function() {
         if (!this.initialized) {
@@ -36,12 +36,10 @@ Produtividade.Performance = {
         this.carregar(); 
     },
 
-    // Buscar dados e montar a estrutura inicial
     carregar: async function() {
         const listContainer = document.getElementById('ranking-list-container');
         listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
         
-        // 1. Definição de Datas (Padrão das outras abas)
         const t = document.getElementById('perf-period-type').value; 
         const dateInput = document.getElementById('global-date');
         let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
@@ -75,7 +73,7 @@ Produtividade.Performance = {
 
             if (error) throw error;
 
-            this.dadosCache = data; // Salva para uso local
+            this.dadosCache = data;
             this.renderizarVisaoGeral();
 
         } catch (err) {
@@ -84,9 +82,7 @@ Produtividade.Performance = {
         }
     },
 
-    // Processa os dados para a visão de Time (Default)
     renderizarVisaoGeral: function() {
-        // Reset da UI
         document.getElementById('btn-reset-chart').classList.add('hidden');
         document.getElementById('chart-title').innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
         document.getElementById('chart-subtitle').innerText = 'Soma da produção diária de toda a equipe';
@@ -98,43 +94,35 @@ Produtividade.Performance = {
             return;
         }
 
-        // 1. Agregação por Data (Eixo X)
         const producaoPorDia = {};
         const diasSet = new Set();
-        
-        // 2. Agregação por Usuário (Ranking Lateral)
         const producaoPorUser = {};
 
         data.forEach(r => {
-            const date = r.data_referencia; // YYYY-MM-DD
+            const date = r.data_referencia;
             const qtd = Number(r.quantidade) || 0;
             const uid = r.usuario.id;
             
-            // Filtro de Gestão
             const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
 
             diasSet.add(date);
 
-            // Time
             if (!producaoPorDia[date]) producaoPorDia[date] = 0;
             producaoPorDia[date] += qtd;
 
-            // Individual
             if (!producaoPorUser[uid]) producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid };
             producaoPorUser[uid].total += qtd;
         });
 
-        // Monta Arrays Ordenados para o Gráfico
         const labels = Array.from(diasSet).sort();
         const values = labels.map(d => producaoPorDia[d]);
 
-        // Renderiza Gráfico
         this.renderChart(labels, [
             {
                 label: 'Produção Total do Time',
                 data: values,
-                borderColor: '#3b82f6', // Blue-500
+                borderColor: '#3b82f6',
                 backgroundColor: 'rgba(59, 130, 246, 0.1)',
                 borderWidth: 2,
                 tension: 0.3,
@@ -144,23 +132,22 @@ Produtividade.Performance = {
             }
         ]);
 
-        // Renderiza Lista Lateral
         this.renderRankingList(Object.values(producaoPorUser));
     },
 
-    // Processa os dados para a visão Individual (Drill Down)
-    renderizarVisaoIndividual: function(userId, userName) {
+    renderizarVisaoIndividual: function(userId, userNameRaw) {
+        // Escapa aspas no nome para evitar bugs visuais
+        const userName = userNameRaw.replace(/'/g, ""); 
+        
         document.getElementById('btn-reset-chart').classList.remove('hidden');
         document.getElementById('chart-title').innerHTML = `<i class="fas fa-user text-emerald-500 mr-2"></i> ${userName}`;
         document.getElementById('chart-subtitle').innerText = 'Comparativo: Individual vs Média do Time';
 
         const data = this.dadosCache;
-        
-        // 1. Prepara dados
         const diasSet = new Set();
         const userProd = {};
         const teamProd = {};
-        const teamCount = {}; // Para calcular a média
+        const teamCount = {}; 
 
         data.forEach(r => {
             const date = r.data_referencia;
@@ -171,12 +158,10 @@ Produtividade.Performance = {
 
             diasSet.add(date);
 
-            // Soma Time (para média)
             if (!teamProd[date]) { teamProd[date] = 0; teamCount[date] = new Set(); }
             teamProd[date] += qtd;
             teamCount[date].add(r.usuario.id);
 
-            // Soma User Específico
             if (r.usuario.id === userId) {
                 if (!userProd[date]) userProd[date] = 0;
                 userProd[date] += qtd;
@@ -184,11 +169,7 @@ Produtividade.Performance = {
         });
 
         const labels = Array.from(diasSet).sort();
-        
-        // Linha do Usuário
         const userValues = labels.map(d => userProd[d] || 0);
-        
-        // Linha da Média do Time
         const avgValues = labels.map(d => {
             const total = teamProd[d] || 0;
             const count = teamCount[d] ? teamCount[d].size : 1;
@@ -199,7 +180,7 @@ Produtividade.Performance = {
             {
                 label: 'Produção de ' + userName.split(' ')[0],
                 data: userValues,
-                borderColor: '#10b981', // Emerald-500
+                borderColor: '#10b981',
                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
                 borderWidth: 3,
                 tension: 0.3,
@@ -208,19 +189,19 @@ Produtividade.Performance = {
             {
                 label: 'Média do Time',
                 data: avgValues,
-                borderColor: '#94a3b8', // Slate-400
-                borderDash: [5, 5], // Linha tracejada
+                borderColor: '#94a3b8',
+                borderDash: [5, 5],
                 borderWidth: 2,
                 tension: 0.3,
                 fill: false,
-                pointRadius: 0 // Sem bolinhas na média para limpar visual
+                pointRadius: 0
             }
         ]);
     },
 
     renderRankingList: function(usersArray) {
         const container = document.getElementById('ranking-list-container');
-        usersArray.sort((a, b) => b.total - a.total); // Ordena por produção
+        usersArray.sort((a, b) => b.total - a.total);
 
         let html = '';
         usersArray.forEach((u, index) => {
@@ -229,8 +210,11 @@ Produtividade.Performance = {
             if (index === 1) medal = `<i class="fas fa-medal text-slate-400 w-6 text-center"></i>`;
             if (index === 2) medal = `<i class="fas fa-medal text-amber-700 w-6 text-center"></i>`;
 
+            // Escapar aspas simples no nome para o onclick
+            const safeName = u.nome.replace(/'/g, "\\'");
+
             html += `
-                <div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${u.nome}')" 
+                <div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${safeName}')" 
                      class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 group transition">
                     <div class="flex items-center gap-2">
                         ${medal}
@@ -265,6 +249,7 @@ Produtividade.Performance = {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                animation: { duration: 500 }, // Otimização de Performance
                 interaction: {
                     mode: 'index',
                     intersect: false,
@@ -279,18 +264,24 @@ Produtividade.Performance = {
                         titleFont: { size: 13 },
                         bodyFont: { size: 12 },
                         padding: 10,
-                        displayColors: true
+                        displayColors: true,
+                        mode: 'index',
+                        intersect: false
                     }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        grid: { color: '#f1f5f9' }, // Grid bem suave
+                        grid: { color: '#f1f5f9' },
                         ticks: { font: { size: 10 } }
                     },
                     x: {
-                        grid: { display: false }, // Sem grid vertical
-                        ticks: { font: { size: 10 } }
+                        grid: { display: false },
+                        ticks: { 
+                            font: { size: 10 },
+                            maxTicksLimit: 15, // EVITA SOBREPOSIÇÃO DE LABELS
+                            maxRotation: 0
+                        }
                     }
                 }
             }
