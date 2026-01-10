@@ -3,12 +3,15 @@ MinhaArea.Geral = {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
+        // 1. Pega datas do filtro global
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        const tbody = document.getElementById('tabela-diario');
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin"></i> Carregando...</td></tr>';
+        
+        // 2. Elementos de UI
+        const tbody = document.getElementById('tabela-extrato');
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin"></i> Carregando dados...</td></tr>';
 
         try {
-            // 1. Busca Produção do Usuário
+            // 3. Busca Produção no Supabase
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -19,82 +22,93 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca Média do Time (para KPI)
-            // Otimização: Fazer em paralelo se necessário
-            const { data: timeData } = await Sistema.supabase
-                .from('producao')
-                .select('quantidade')
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim);
+            // 4. Busca Meta do Mês (Opcional: se não achar, usa padrão)
+            const mesAtual = new Date(inicio).getMonth() + 1;
+            const anoAtual = new Date(inicio).getFullYear();
+            
+            const { data: metaData } = await Sistema.supabase
+                .from('metas')
+                .select('valor')
+                .eq('usuario_id', uid)
+                .eq('mes', mesAtual)
+                .eq('ano', anoAtual)
+                .maybeSingle();
 
-            // PROCESSAMENTO
+            const metaDiariaPadrao = metaData ? Math.round(metaData.valor / 22) : 650; // Divide por 22 dias úteis ou usa 650
+
+            // 5. Processa Dados
             let totalProd = 0;
-            let diasTrabalhados = 0;
-            let metaAcumulada = 0;
-            const metaDiariaBase = 650;
+            let diasUteis = 0;
+            let totalMeta = 0;
+            let somaFator = 0;
 
             tbody.innerHTML = '';
 
-            data.forEach(r => {
-                const qtd = Number(r.quantidade) || 0;
-                const fator = Number(r.fator) || 0;
+            // Renderiza Linhas
+            data.forEach(item => {
+                const qtd = Number(item.quantidade || 0);
+                const fator = Number(item.fator); // Pode ser 0, 0.5 ou 1
+                const metaDia = Math.round(metaDiariaPadrao * fator);
                 
                 totalProd += qtd;
-                metaAcumulada += (metaDiariaBase * fator);
-                if (fator > 0) diasTrabalhados++;
+                somaFator += fator;
+                totalMeta += metaDia;
+                if (fator > 0) diasUteis++;
 
-                // Renderiza Linha Tabela
-                const [ano, mes, dia] = r.data_referencia.split('-');
-                const pctDia = (metaDiariaBase * fator) > 0 ? (qtd / (metaDiariaBase * fator)) * 100 : 0;
+                const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
+                let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
                 
-                let statusBadge = `<span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded font-bold">N/A</span>`;
-                if (fator > 0) {
-                    if (pctDia >= 100) statusBadge = `<span class="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold">Meta Batida</span>`;
-                    else if (pctDia >= 80) statusBadge = `<span class="bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded font-bold">Atenção</span>`;
-                    else statusBadge = `<span class="bg-rose-100 text-rose-700 text-[10px] px-2 py-1 rounded font-bold">Baixo</span>`;
-                }
+                // Formata Data
+                const [ano, mes, dia] = item.data_referencia.split('-');
 
                 const tr = `
-                    <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0">
-                        <td class="px-6 py-3 font-bold text-slate-600 text-xs">${dia}/${mes}/${ano}</td>
-                        <td class="px-6 py-3 text-center font-black text-blue-600">${qtd}</td>
-                        <td class="px-6 py-3 text-center text-xs text-slate-500">${fator}</td>
-                        <td class="px-6 py-3 text-center text-xs text-slate-400">${Math.round(metaDiariaBase * fator)}</td>
-                        <td class="px-6 py-3 text-center">${statusBadge}</td>
-                        <td class="px-6 py-3 text-xs text-slate-400 italic truncate max-w-[150px]" title="${r.justificativa || ''}">${r.justificativa || '-'}</td>
+                    <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0 text-xs text-slate-600">
+                        <td class="px-6 py-3 font-bold">${dia}/${mes}/${ano}</td>
+                        <td class="px-6 py-3 text-center">${fator}</td>
+                        <td class="px-6 py-3 text-center text-slate-400">-</td> <td class="px-6 py-3 text-center text-slate-400">-</td> <td class="px-6 py-3 text-center text-slate-400">-</td> <td class="px-6 py-3 text-center font-black text-blue-700 bg-blue-50/30">${qtd}</td>
+                        <td class="px-6 py-3 text-center">${metaDia}</td>
+                        <td class="px-6 py-3 text-center font-bold ${corPct}">${Math.round(pct)}%</td>
+                        <td class="px-6 py-3 truncate max-w-[200px]" title="${item.justificativa || ''}">${item.justificativa || '-'}</td>
                     </tr>
                 `;
                 tbody.innerHTML += tr;
             });
 
-            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400 italic text-xs">Sem registros no período.</td></tr>';
-
-            // ATUALIZA KPIS
-            const pctTotal = metaAcumulada > 0 ? Math.round((totalProd / metaAcumulada) * 100) : 0;
-            const mediaMinha = diasTrabalhados > 0 ? Math.round(totalProd / diasTrabalhados) : 0;
-            
-            // Média Time (Simplificada: Total Produção / Total Registros do Time)
-            // Para maior precisão, deveria dividir por dias únicos x pessoas, mas isso serve para estimativa
-            const mediaTime = timeData.length > 0 ? Math.round(timeData.reduce((acc, curr) => acc + curr.quantidade, 0) / timeData.length) : 0;
-
-            this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-            this.setTxt('kpi-meta-total', metaAcumulada.toLocaleString('pt-BR'));
-            this.setTxt('kpi-pct', pctTotal + '%');
-            this.setTxt('kpi-dias', diasTrabalhados);
-            this.setTxt('kpi-media-real', mediaMinha.toLocaleString('pt-BR'));
-            this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
-
-            const bar = document.getElementById('bar-progress');
-            if (bar) {
-                bar.style.width = `${Math.min(pctTotal, 100)}%`;
-                bar.className = pctTotal >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-8 text-slate-400 italic">Nenhum registro encontrado neste período.</td></tr>';
             }
 
+            // 6. Atualiza KPIs e Rodapé
+            const atingimentoGeral = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
+            const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
+
+            // Atualiza Cards do Topo
+            this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
+            this.setTxt('kpi-pct', atingimentoGeral + '%');
+            this.setTxt('kpi-dias', diasUteis);
+            this.setTxt('kpi-media', mediaDiaria);
+
+            // Barra de Progresso
+            const bar = document.getElementById('bar-progress');
+            if(bar) {
+                bar.style.width = `${Math.min(atingimentoGeral, 100)}%`;
+                bar.className = atingimentoGeral >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
+            }
+
+            // Atualiza Rodapé da Tabela
+            this.setTxt('footer-fator', somaFator.toFixed(1));
+            this.setTxt('footer-prod', totalProd.toLocaleString('pt-BR'));
+            this.setTxt('footer-meta', totalMeta.toLocaleString('pt-BR'));
+            this.setTxt('footer-pct', atingimentoGeral + '%');
+
         } catch (err) {
-            console.error(err);
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-400 text-xs">Erro ao carregar dados.</td></tr>';
+            console.error("Erro ao carregar geral:", err);
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao carregar dados. Tente recarregar.</td></tr>';
         }
     },
 
-    setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
+    setTxt: function(id, val) { 
+        const el = document.getElementById(id); 
+        if(el) el.innerText = val; 
+    }
 };

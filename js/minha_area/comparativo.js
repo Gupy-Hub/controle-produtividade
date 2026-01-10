@@ -1,6 +1,6 @@
 MinhaArea.Comparativo = {
     chart: null,
-    init: function() { this.carregar(); },
+
     carregar: async function() {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
@@ -8,51 +8,76 @@ MinhaArea.Comparativo = {
         const { inicio, fim } = MinhaArea.getDatasFiltro();
 
         try {
-            const { data, error } = await Sistema.supabase
+            // 1. Minha Produção no Período
+            const { data: meusDados } = await Sistema.supabase
                 .from('producao')
-                .select('data_referencia, quantidade, usuario_id')
+                .select('quantidade')
+                .eq('usuario_id', uid)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim);
 
-            if (error) throw error;
-            this.processar(data, uid);
-        } catch(e) { console.error(e); }
+            const meuTotal = meusDados ? meusDados.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0) : 0;
+
+            // 2. Produção do Time Inteiro no Período
+            // Nota: Em produção real com muitos dados, use uma RPC (função SQL). Aqui faremos via JS.
+            const { data: timeDados } = await Sistema.supabase
+                .from('producao')
+                .select('usuario_id, quantidade')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
+
+            // Calcula Média do Time
+            // Primeiro agrupa por usuário para saber o total de cada um
+            const producaoPorUsuario = {};
+            timeDados.forEach(d => {
+                if(!producaoPorUsuario[d.usuario_id]) producaoPorUsuario[d.usuario_id] = 0;
+                producaoPorUsuario[d.usuario_id] += (Number(d.quantidade) || 0);
+            });
+
+            const usuariosIds = Object.keys(producaoPorUsuario);
+            const somaTime = Object.values(producaoPorUsuario).reduce((a, b) => a + b, 0);
+            const mediaTime = usuariosIds.length > 0 ? Math.round(somaTime / usuariosIds.length) : 0;
+
+            // Calcula Melhor do Time (Top Performer)
+            const melhorDoTime = usuariosIds.length > 0 ? Math.max(...Object.values(producaoPorUsuario)) : 0;
+
+            this.renderizarGrafico(meuTotal, mediaTime, melhorDoTime);
+
+        } catch (err) {
+            console.error("Erro comparativo:", err);
+        }
     },
-    processar: function(data, meuId) {
-        const dias = {};
-        data.forEach(r => {
-            const dt = r.data_referencia;
-            if(!dias[dt]) dias[dt] = { meu: 0, timeSoma: 0, count: 0 };
-            dias[dt].timeSoma += r.quantidade; 
-            // Para média precisa, o ideal é contar quantos usuários únicos produziram no dia
-            // Aqui simplificamos incrementando count a cada registro (funciona se 1 reg por pessoa/dia)
-            dias[dt].count++; 
-            if(String(r.usuario_id) === String(meuId)) dias[dt].meu += r.quantidade;
-        });
-        const labels = Object.keys(dias).sort();
-        const meuData = [], timeData = [];
-        labels.forEach(dt => {
-            const d = dias[dt];
-            meuData.push(d.meu);
-            timeData.push(d.count > 0 ? Math.round(d.timeSoma/d.count) : 0);
-        });
-        const labelsFmt = labels.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
-        this.renderizar(labelsFmt, meuData, timeData);
-    },
-    renderizar: function(labels, meuData, timeData) {
+
+    renderizarGrafico: function(eu, media, melhor) {
         const ctx = document.getElementById('graficoComparativo');
-        if(!ctx) return;
-        if(this.chart) this.chart.destroy();
+        if (!ctx) return;
+
+        if (this.chart) this.chart.destroy();
+
         this.chart = new Chart(ctx, {
-            type: 'bar',
+            type: 'doughnut',
             data: {
-                labels: labels,
-                datasets: [
-                    { label: 'Você', data: meuData, backgroundColor: '#2563eb' },
-                    { label: 'Média Time', data: timeData, backgroundColor: '#94a3b8' }
-                ]
+                labels: ['Minha Produção', 'Média da Equipe', 'Gap para o Topo'],
+                datasets: [{
+                    data: [eu, media, Math.max(0, melhor - eu)],
+                    backgroundColor: [
+                        '#2563eb', // Eu (Azul)
+                        '#94a3b8', // Média (Cinza)
+                        '#f1f5f9'  // Gap (Claro)
+                    ],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
             },
-            options: { responsive: true, maintainAspectRatio: false }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: { position: 'bottom' },
+                    title: { display: true, text: 'Posicionamento no Período' }
+                }
+            }
         });
     }
 };
