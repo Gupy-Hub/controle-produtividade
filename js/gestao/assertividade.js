@@ -4,7 +4,7 @@ Gestao.Assertividade = {
     // Estado Centralizado da Tela
     estado: {
         pagina: 0,
-        limite: 50, // 50 itens por página (padrão ideal de performance)
+        limite: 50,
         total: 0,
         termo: '',
         filtros: {
@@ -22,7 +22,7 @@ Gestao.Assertividade = {
     carregar: async function() {
         this.estado.pagina = 0;
         this.limparCamposUI();
-        this.buscarDados(); // Busca inicial (Tudo)
+        this.buscarDados(); 
     },
 
     limparCamposUI: function() {
@@ -33,9 +33,8 @@ Gestao.Assertividade = {
     },
 
     // --- GATILHO DE BUSCA UNIFICADO ---
-    // Chamado por QUALQUER input da tela (Busca Global ou Filtros de Coluna)
     atualizarFiltrosEBuscar: function() {
-        // 1. Coleta dados da interface
+        // 1. Coleta dados
         this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
         
         this.estado.filtros.data = document.getElementById('filtro-data')?.value || '';
@@ -46,16 +45,15 @@ Gestao.Assertividade = {
         this.estado.filtros.obs = document.getElementById('filtro-obs')?.value.trim() || '';
         this.estado.filtros.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
 
-        // 2. Reseta para página 0 (sempre que muda filtro, volta pro começo)
+        // 2. Reseta paginação
         this.estado.pagina = 0;
 
-        // 3. Debounce (Espera parar de digitar)
+        // 3. Debounce
         clearTimeout(this.timerBusca);
         
         const tbody = document.getElementById('lista-assertividade');
         if(tbody && tbody.rows.length === 0) {
-            // Feedback imediato se estiver vazio
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Atualizando...</p></td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Processando...</p></td></tr>`;
         }
 
         this.timerBusca = setTimeout(() => {
@@ -69,7 +67,7 @@ Gestao.Assertividade = {
 
         if (novaPagina >= 0 && (this.estado.total === 0 || novaPagina < maxPaginas)) {
             this.estado.pagina = novaPagina;
-            this.buscarDados(); // Busca nova página com os MESMOS filtros
+            this.buscarDados(); 
         }
     },
 
@@ -80,17 +78,14 @@ Gestao.Assertividade = {
         const btnAnt = document.getElementById('btn-ant');
         const btnProx = document.getElementById('btn-prox');
 
-        // Feedback Visual Sutil (para não piscar a tela toda hora)
-        if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-sync fa-spin"></i> Sincronizando...</span>`;
+        if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-sync fa-spin"></i> Buscando...</span>`;
         if(btnAnt) btnAnt.disabled = true;
         if(btnProx) btnProx.disabled = true;
 
         try {
-            // ENVIA TODOS OS FILTROS PARA O SQL V3
-            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v3', {
+            // CHAMADA V4 (OTIMIZADA)
+            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v4', {
                 p_termo: this.estado.termo,
-                
-                // Filtros Específicos
                 p_data: this.estado.filtros.data,
                 p_status: this.estado.filtros.status,
                 p_auditora: this.estado.filtros.auditora,
@@ -98,8 +93,6 @@ Gestao.Assertividade = {
                 p_assistente: this.estado.filtros.assistente,
                 p_doc: this.estado.filtros.doc,
                 p_obs: this.estado.filtros.obs,
-                
-                // Paginação
                 p_page: this.estado.pagina,
                 p_limit: this.estado.limite
             });
@@ -108,18 +101,24 @@ Gestao.Assertividade = {
 
             const lista = data || [];
             
-            // O Total vem na propriedade 'total_registros' da primeira linha
+            // Pega total da primeira linha
             this.estado.total = lista.length > 0 ? lista[0].total_registros : 0;
-            // Se a lista veio vazia mas estamos na página 0, total é 0.
             if(lista.length === 0 && this.estado.pagina === 0) this.estado.total = 0;
 
             this.renderizarTabela(lista);
             this.atualizarControlesPaginacao();
-            this.popularSelectsDinamicamente(lista); // Opcional: atualiza selects baseado na vista atual ou mantém estático
 
         } catch (e) {
             console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold">Erro ao buscar dados: ${e.message}</td></tr>`;
+            let msgErro = e.message;
+            
+            // Tratamento amigável para Timeout
+            if (msgErro.includes("timeout")) {
+                msgErro = "A busca demorou muito. Tente ser mais específico nos filtros (ex: selecione uma data ou status).";
+            }
+
+            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i> ${msgErro}</td></tr>`;
+            if(infoPag) infoPag.innerHTML = "Erro na busca.";
         }
     },
 
@@ -135,7 +134,6 @@ Gestao.Assertividade = {
         let fim = (this.estado.pagina + 1) * this.estado.limite;
         if (fim > total) fim = total;
 
-        // Atualiza Contador Global no Topo
         if(contador) contador.innerText = total.toLocaleString('pt-BR');
 
         if (total === 0) {
@@ -143,7 +141,7 @@ Gestao.Assertividade = {
             if(btnAnt) btnAnt.disabled = true;
             if(btnProx) btnProx.disabled = true;
         } else {
-            if(infoPag) infoPag.innerHTML = `Exibindo <b>${inicio}</b> a <b>${fim}</b> de <b>${total.toLocaleString('pt-BR')}</b> registros encontrados no banco.`;
+            if(infoPag) infoPag.innerHTML = `Exibindo <b>${inicio}</b> a <b>${fim}</b> de <b>${total.toLocaleString('pt-BR')}</b> registros.`;
             if(btnAnt) btnAnt.disabled = this.estado.pagina === 0;
             if(btnProx) btnProx.disabled = fim >= total;
         }
@@ -153,7 +151,7 @@ Gestao.Assertividade = {
         const tbody = document.getElementById('lista-assertividade');
         
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado para esses filtros.</span></div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-filter text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
             return;
         }
 
@@ -162,7 +160,7 @@ Gestao.Assertividade = {
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
             const nomeUser = item.u_nome || `ID: ${item.usuario_id}`;
-            const empIdDisplay = item.e_id ? `#${item.e_id}` : '<span class="text-slate-200">-</span>';
+            const empIdDisplay = item.empresa_id ? `#${item.empresa_id}` : '<span class="text-slate-200">-</span>';
 
             // Status Badge
             const stRaw = item.status || '-';     
@@ -207,12 +205,6 @@ Gestao.Assertividade = {
         });
 
         tbody.innerHTML = html;
-    },
-
-    // (Opcional) Poderíamos popular o select de auditoras aqui, 
-    // mas para performance máxima, melhor deixar estático ou carregar uma vez no inicio.
-    popularSelectsDinamicamente: function(lista) {
-        // Implementação futura se necessário carregar lista de auditoras do banco
     },
 
     salvarMeta: function() { }
