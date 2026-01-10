@@ -9,19 +9,25 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        
+        /* Animação suave entre abas */
         .animate-fade { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Scrollbar personalizada */
         .custom-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scroll::-webkit-scrollbar-track { background: transparent; }
         .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
     </style>
 </head>
 <body class="bg-slate-50">
+    
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     
@@ -31,39 +37,94 @@
     <div class="max-w-[1600px] mx-auto px-4 py-8 pt-32">
         
         <div id="view-usuarios" class="gestao-view animate-fade space-y-4">
+            
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+                
                 <div class="relative w-full md:w-96 group">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
-                    <input type="text" id="search-usuarios" onkeyup="Gestao.Usuarios.filtrar()" placeholder="Buscar..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
+                    <input type="text" 
+                           id="search-usuarios" 
+                           onkeyup="Gestao.Usuarios.filtrar()" 
+                           placeholder="Buscar por ID, Nome, Contrato..." 
+                           class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition shadow-sm">
                 </div>
+
                 <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-                    <label class="flex items-center gap-3 cursor-pointer select-none group"><div class="relative"><input type="checkbox" id="toggle-inativos" onchange="Gestao.Usuarios.filtrar()" class="sr-only peer"><div class="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div></div><span class="text-sm font-bold text-slate-500 group-hover:text-blue-600 transition">Exibir Inativos</span></label>
-                    <button onclick="Gestao.Usuarios.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition transform active:scale-95"><i class="fas fa-user-plus"></i> Novo</button>
+                    <label class="flex items-center gap-3 cursor-pointer select-none group">
+                        <div class="relative">
+                            <input type="checkbox" id="toggle-inativos" onchange="Gestao.Usuarios.filtrar()" class="sr-only peer">
+                            <div class="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div>
+                        </div>
+                        <span class="text-sm font-bold text-slate-500 group-hover:text-blue-600 transition">Exibir Inativos</span>
+                    </label>
+
+                    <button onclick="Gestao.Usuarios.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 transform active:scale-95">
+                        <i class="fas fa-user-plus"></i> <span class="hidden sm:inline">Novo</span>
+                    </button>
                 </div>
             </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto custom-scroll">
-                    <table class="w-full min-w-[1000px] text-sm text-left"><thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100"><tr><th class="px-4 py-4 w-[10%]">ID</th><th class="px-4 py-4 w-[35%]">Nome</th><th class="px-4 py-4 w-[20%]">Contrato</th><th class="px-4 py-4 w-[20%] text-center">Status</th><th class="px-4 py-4 w-[15%] text-right">Ações</th></tr></thead><tbody id="lista-usuarios" class="divide-y divide-slate-100 bg-white"></tbody></table>
+                    <table class="w-full min-w-[1000px] text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100">
+                            <tr>
+                                <th class="px-4 py-4 w-[10%]">ID</th>
+                                <th class="px-4 py-4 w-[35%]">Nome do Assistente</th>
+                                <th class="px-4 py-4 w-[20%]">Contrato</th>
+                                <th class="px-4 py-4 w-[20%] text-center">Status</th>
+                                <th class="px-4 py-4 w-[15%] text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-usuarios" class="divide-y divide-slate-100 bg-white">
+                            </tbody>
+                    </table>
                 </div>
-                <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide"><span id="contador-usuarios">Carregando...</span></div>
+                <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide">
+                    <span id="contador-usuarios">Carregando...</span>
+                    <span><i class="fas fa-info-circle mr-1"></i> ID é único</span>
+                </div>
             </div>
         </div>
 
         <div id="view-empresas" class="gestao-view hidden animate-fade space-y-4">
+            
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
                 <div class="relative w-full md:w-96 group">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
-                    <input type="text" id="search-empresas" onkeyup="Gestao.Empresas.filtrar()" placeholder="Buscar empresas..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
+                    <input type="text" 
+                           id="search-empresas" 
+                           onkeyup="Gestao.Empresas.filtrar()" 
+                           placeholder="Buscar por ID, Nome, Subdomínio..." 
+                           class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition shadow-sm">
                 </div>
                 <div class="flex justify-end w-full md:w-auto">
-                    <button onclick="Gestao.Empresas.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md transition transform active:scale-95"><i class="fas fa-plus-circle"></i> Nova Empresa</button>
+                    <button onclick="Gestao.Empresas.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 transform active:scale-95">
+                        <i class="fas fa-plus-circle"></i> <span class="hidden sm:inline">Nova Empresa</span>
+                    </button>
                 </div>
             </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="overflow-x-auto custom-scroll">
-                    <table class="w-full min-w-[1000px] text-sm text-left"><thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100"><tr><th class="px-4 py-4 w-[10%]">ID</th><th class="px-4 py-4 w-[30%]">Nome</th><th class="px-4 py-4 w-[15%]">Subdomínio</th><th class="px-4 py-4 w-[15%]">Entrou em</th><th class="px-4 py-4 w-[20%]">Obs</th><th class="px-4 py-4 w-[10%] text-right">Ações</th></tr></thead><tbody id="lista-empresas" class="divide-y divide-slate-100 bg-white"></tbody></table>
+                    <table class="w-full min-w-[1000px] text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100">
+                            <tr>
+                                <th class="px-4 py-4 w-[10%]">ID</th>
+                                <th class="px-4 py-4 w-[30%]">Nome da Empresa</th>
+                                <th class="px-4 py-4 w-[15%]">Subdomínio</th>
+                                <th class="px-4 py-4 w-[15%]">Entrou em</th>
+                                <th class="px-4 py-4 w-[20%]">Observações</th>
+                                <th class="px-4 py-4 w-[10%] text-right">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-empresas" class="divide-y divide-slate-100 bg-white">
+                            </tbody>
+                    </table>
                 </div>
-                <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide"><span id="contador-empresas">Carregando...</span></div>
+                <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide">
+                    <span id="contador-empresas">Carregando...</span>
+                </div>
             </div>
         </div>
 
@@ -72,7 +133,11 @@
              <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
                 <div class="relative w-full md:w-96 group">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
-                    <input type="text" id="search-assert" onkeyup="Gestao.Assertividade.filtrar()" placeholder="Buscar por Assistente, Empresa, Status..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
+                    <input type="text" 
+                           id="search-assert" 
+                           onkeyup="Gestao.Assertividade.filtrar()" 
+                           placeholder="Digite Nome, ID ou Empresa para buscar no histórico..." 
+                           class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition shadow-sm">
                 </div>
                 </div>
 
@@ -94,19 +159,23 @@
                                 <th class="px-3 py-3 w-[10%]">Auditora</th>
                             </tr>
                         </thead>
-                        <tbody id="lista-assertividade" class="divide-y divide-slate-100 bg-white"></tbody>
+                        <tbody id="lista-assertividade" class="divide-y divide-slate-100 bg-white">
+                            </tbody>
                      </table>
                  </div>
                  <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide">
                      <span>Total de Registros: <span id="contador-assert">0</span></span>
-                     <span class="text-xs text-slate-400 normal-case"><i class="fas fa-info-circle mr-1"></i> Importação mensal via planilha "Dezembro.xlsx"</span>
+                     <span class="text-xs text-slate-400 normal-case"><i class="fas fa-info-circle mr-1"></i> Dados importados da planilha mensal</span>
                  </div>
              </div>
         </div>
 
         <div id="view-metas" class="gestao-view hidden animate-fade space-y-4">
             <div id="container-metas-lista" class="bg-white rounded-xl shadow-sm border border-slate-200 min-h-[200px]">
-                <div class="flex flex-col items-center justify-center h-64 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-3"></i><p>Carregando...</p></div>
+                <div class="flex flex-col items-center justify-center h-64 text-slate-400">
+                    <i class="fas fa-spinner fa-spin text-2xl mb-3"></i>
+                    <p>Carregando histórico...</p>
+                </div>
             </div>
         </div>
 
@@ -115,9 +184,12 @@
     <script src="js/gestao/main.js"></script>
     <script src="js/gestao/usuarios.js"></script>
     <script src="js/gestao/empresas.js"></script>
-    <script src="js/gestao/assertividade.js"></script> <script src="js/gestao/metas.js"></script>
+    <script src="js/gestao/assertividade.js"></script>
+    <script src="js/gestao/metas.js"></script>
 
     <script src="js/gestao/importacao/usuarios.js"></script>
     <script src="js/gestao/importacao/empresas.js"></script>
-    <script src="js/gestao/importacao/assertividade.js"></script> </body>
+    <script src="js/gestao/importacao/assertividade.js"></script>
+
+</body>
 </html>
