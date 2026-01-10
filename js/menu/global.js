@@ -20,6 +20,7 @@ Menu.Global = {
             { nome: 'Ferramentas', url: 'ferramentas.html', icon: 'fas fa-toolbox' }
         ];
 
+        // CORREÇÃO: Garante que o link seja gestao.html (raiz) e não subpasta
         if (isGestao) links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
 
         let html = `

@@ -9,9 +9,10 @@ const Layout = {
         if (!usuario) return; // Sistema.js vai redirecionar
 
         const primeiroNome = usuario.nome.split(' ')[0];
-        const isGestao = ['Gestora', 'Auditora', 'Admin'].includes(usuario.funcao);
+        // Permissões atualizadas para incluir Gestora, Auditora, Admin e ID 1
+        const isGestao = ['Gestora', 'Auditora', 'Admin'].includes(usuario.funcao) || usuario.perfil === 'admin' || usuario.id == 1;
 
-        // HTML do Menu Superior (Estilo atualizado)
+        // HTML do Menu Superior
         const navHtml = `
         <nav class="bg-slate-900 text-white shadow-lg mb-0">
             <div class="max-w-[1400px] mx-auto px-4">
@@ -59,6 +60,7 @@ const Layout = {
     },
 
     isActive: function(pagina) {
+        // Verifica se a URL contém o nome da página para marcar o botão como ativo
         return window.location.pathname.includes(pagina) ? 'bg-blue-700 text-white shadow-inner' : 'text-slate-300';
     }
 };
