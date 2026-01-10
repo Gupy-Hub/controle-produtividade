@@ -1,32 +1,38 @@
 MinhaArea.Geral = {
     carregar: async function() {
-        // CORREÇÃO: Pega o ID alvo (pode ser eu ou outro selecionado)
         const uid = MinhaArea.getUsuarioAlvo();
-        if (!uid) return;
+        const tbody = document.getElementById('tabela-extrato');
+        
+        // Se não tiver usuário alvo (caso do admin que acabou de entrar), mostra aviso
+        if (!uid) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
+            this.zerarKPIs();
+            return;
+        }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        
-        const tbody = document.getElementById('tabela-extrato');
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
 
         try {
+            // 1. Busca Produção
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select('*')
-                .eq('usuario_id', uid) // Usa o UID dinâmico
+                .eq('usuario_id', uid)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .order('data_referencia', { ascending: false });
 
             if (error) throw error;
 
+            // 2. Busca Meta
             const mesAtual = new Date(inicio).getMonth() + 1;
             const anoAtual = new Date(inicio).getFullYear();
             
             const { data: metaData } = await Sistema.supabase
                 .from('metas')
-                .select('meta')
-                .eq('usuario_id', uid) // Usa o UID dinâmico
+                .select('meta') 
+                .eq('usuario_id', uid)
                 .eq('mes', mesAtual)
                 .eq('ano', anoAtual)
                 .maybeSingle();
@@ -67,6 +73,8 @@ MinhaArea.Geral = {
                 const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const ano = dateObj.getFullYear();
                 const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase().replace('.', '');
+                
+                // Helper para zeros ficarem discretos
                 const fmtZero = (val) => val === 0 ? '<span class="text-slate-300">0</span>' : val;
 
                 const tr = `
@@ -91,8 +99,21 @@ MinhaArea.Geral = {
             });
 
             this.setTxt('total-registros-footer', data.length);
+            this.setTxt('footer-fator', somaFator.toFixed(1));
+            this.setTxt('footer-fifo', totalFifo.toLocaleString('pt-BR'));
+            this.setTxt('footer-gt', totalGT.toLocaleString('pt-BR'));
+            this.setTxt('footer-gp', totalGP.toLocaleString('pt-BR'));
+            this.setTxt('footer-prod', totalProd.toLocaleString('pt-BR'));
+            this.setTxt('footer-meta', totalMeta.toLocaleString('pt-BR'));
             
             const atingimentoGeral = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
+            this.setTxt('footer-pct', atingimentoGeral + '%');
+
+            if (data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado neste período.</td></tr>';
+            }
+
+            // KPIs
             const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
@@ -107,14 +128,20 @@ MinhaArea.Geral = {
                 bar.className = atingimentoGeral >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
             }
 
-            if (data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
-            }
-
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao carregar.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
+    },
+
+    zerarKPIs: function() {
+        this.setTxt('kpi-total', '--');
+        this.setTxt('kpi-pct', '--%');
+        this.setTxt('kpi-dias', '--');
+        this.setTxt('kpi-media', '--');
+        this.setTxt('kpi-meta-acumulada', '--');
+        const bar = document.getElementById('bar-progress');
+        if(bar) bar.style.width = '0%';
     },
 
     setTxt: function(id, val) { 
