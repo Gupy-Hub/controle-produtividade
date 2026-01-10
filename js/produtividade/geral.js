@@ -156,12 +156,23 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         const footer = document.getElementById('total-registros-footer');
         const viewMode = document.getElementById('view-mode').value;
-        
         const mostrarDetalhes = (viewMode === 'dia' || this.usuarioSelecionado !== null);
+        
+        // NOVO: Checkbox para mostrar/ocultar gestão
+        const checkGestao = document.getElementById('check-gestao');
+        const mostrarGestao = checkGestao ? checkGestao.checked : false;
 
-        const lista = this.usuarioSelecionado 
+        let lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado)
             : this.dadosOriginais;
+
+        // FILTRO DE GESTÃO (Visual Apenas)
+        if (!mostrarGestao && !this.usuarioSelecionado) {
+            lista = lista.filter(d => {
+                const funcao = (d.usuario.funcao || '').toUpperCase();
+                return !['AUDITORA', 'GESTORA'].includes(funcao);
+            });
+        }
 
         tbody.innerHTML = '';
         
@@ -279,7 +290,9 @@ Produtividade.Geral = {
                             <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${contratoExibicao}</span>
                         </div>
                     </td>
-                    <td class="${commonCellClass} font-bold text-slate-700">${d.totais.diasUteis}</td>
+                    <td class="${commonCellClass} font-bold text-slate-700">
+                        ${d.totais.diasUteis}
+                    </td>
                     <td class="${commonCellClass}">${d.totais.fifo}</td>
                     <td class="${commonCellClass}">${d.totais.gt}</td>
                     <td class="${commonCellClass}">${d.totais.gp}</td>
@@ -322,14 +335,10 @@ Produtividade.Geral = {
     },
 
     atualizarKPIs: function(data, dataInicio, dataFim) {
-        // Acumuladores Gerais (Para TODOS, incluindo gestão)
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        
-        // Acumuladores Operacionais (Apenas Assistentes)
-        let totalProdOperacional = 0;
-        let totalDiasOperacionaisPonderados = 0; 
+        let totalDiasTrabalhadosPonderados = 0; 
         
         let usersCLT = new Set();
         let usersPJ = new Set();
@@ -343,7 +352,6 @@ Produtividade.Geral = {
             const fator = Number(r.fator) || 0;
             const metaCalc = metaUser * fator;
             
-            // 1. Produção Geral: Soma TUDO (Gestão e Assistentes)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
@@ -351,36 +359,31 @@ Produtividade.Geral = {
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
 
-            // 2. Filtro de Liderança (Auditora/Gestora)
             const isLideranca = ['AUDITORA', 'GESTORA'].includes(cargo);
 
+            // Se for liderança, SÓ conta para produção geral e meta geral
             if (!isLideranca) {
-                // AQUI SÓ ENTRA ASSISTENTE
-                
-                // Soma para cálculo de média
-                totalProdOperacional += qtd;
-                if (fator > 0) totalDiasOperacionaisPonderados += fator;
+                // Assistentes contam para tudo
+                if (fator > 0) totalDiasTrabalhadosPonderados += fator;
 
-                // Contagem de Equipe (CLT/PJ) - Liderança NÃO entra
                 if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
-
-                // Headcount
                 countAssistentesAtivos.add(r.usuario.id);
                 
-                // Ranking
                 if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
                 ranking[r.usuario.id].total += qtd;
+            } else {
+                // Liderança: Já foi somado no totalProdGeral lá em cima
+                // Não faz nada aqui (não entra em média, equipe, ranking)
             }
         });
 
-        // Prepara Cache Ranking (Apenas Assistentes)
         this.cacheRanking = Object.values(ranking).sort((a, b) => b.total - a.total);
 
-        // 1. KPI PRODUÇÃO (Geral)
+        // 1. KPI PRODUÇÃO (Geral - Inclui Gestão)
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
         
-        // 1.1 KPI ASSISTENTES (Headcount Operacional)
+        // 1.1 KPI ASSISTENTES (Apenas Operacional)
         document.getElementById('kpi-assistentes-val').innerText = `${countAssistentesAtivos.size} / 17`;
 
         // 2. KPI ATINGIMENTO (Geral)
@@ -407,16 +410,29 @@ Produtividade.Geral = {
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = pctPj + '%';
         
-        // 4. KPI DIAS e MÉDIA
+        // 4. KPI DIAS e MÉDIA (Apenas Operacional - AQUI ESTAVA O SEGREDO DA MÉDIA ALTA)
         const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
         const diasTrabalhadosReal = diasComProd.size; 
         document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
-        // Média: (Produção Operacional / Dias Operacionais)
-        const media = totalDiasOperacionaisPonderados > 0 ? Math.round(totalProdOperacional / totalDiasOperacionaisPonderados) : 0;
+        // Recalcular produção APENAS operacional para a média
+        // O totalProdGeral inclui gestão. Precisamos subtrair ou somar separado.
+        // Vou refazer a soma no loop acima para garantir (feito: separei logicamente)
+        
+        // Oops, no loop acima eu usei totalProdGeral para tudo. 
+        // Preciso de uma variavel `totalProdOperacional` para a média ser justa.
+        let totalProdOperacional = 0;
+        data.forEach(r => {
+             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+             if (!['AUDITORA', 'GESTORA'].includes(cargo)) {
+                 totalProdOperacional += (Number(r.quantidade) || 0);
+             }
+        });
+
+        const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdOperacional / totalDiasTrabalhadosPonderados) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
 
-        // 5. KPI TOP PERFORMANCE (Top 3 Operacional)
+        // 5. KPI TOP PERFORMANCE
         const listaRanking = this.cacheRanking.slice(0, 3);
         const containerTop3 = document.getElementById('kpi-top3-list');
         if(containerTop3) {

@@ -75,13 +75,15 @@
                 </div>
 
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4" id="top-bar-controls">
-                    <div id="ctrl-geral" class="flex items-center gap-2">
+                    
+                    <div id="ctrl-geral" class="flex items-center gap-3">
                         <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
                             <option value="dia">Apenas o Dia</option>
                             <option value="mes">Mês da Data</option>
                             <option value="ano">Ano Inteiro</option>
                             <option value="semana">Semana Específica</option>
                         </select>
+                        
                         <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
                             <option value="1">Semana 1</option>
                             <option value="2">Semana 2</option>
@@ -90,6 +92,12 @@
                             <option value="5">Semana 5</option>
                             <option value="6">Semana 6</option>
                         </select>
+
+                        <label class="inline-flex items-center cursor-pointer border-l border-slate-200 pl-3" title="Exibir Auditoras e Gestoras na tabela">
+                            <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.Geral.renderizarTabela()">
+                            <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
+                            <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Ver Gestão</span>
+                        </label>
                     </div>
 
                     <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
