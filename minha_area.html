@@ -15,238 +15,146 @@
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        
-        /* Abas Padrão */
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
-        .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
-        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        
-        /* Animações */
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Scrollbars */
-        .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; opacity: 0.7; }
+        .tab-btn:hover { opacity: 1; background-color: #f1f5f9; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; opacity: 1; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .animate-enter { animation: enter 0.3s ease-out; }
+        @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        /* Inputs sem setas */
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-slate-50">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
     
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
-        <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
-            
-            <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                <button onclick="MinhaArea.mudarAba('diario')" id="btn-diario" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-calendar-day"></i> Produção Diária
-                </button>
-                <button onclick="MinhaArea.mudarAba('metas')" id="btn-metas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-bullseye"></i> Metas / OKR
-                </button>
-                <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-comparativo" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-chart-line"></i> Comparativo
-                </button>
-                <button onclick="MinhaArea.mudarAba('auditoria')" id="btn-auditoria" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-clipboard-check"></i> Auditoria
-                </button>
-                <button onclick="MinhaArea.mudarAba('feedback')" id="btn-feedback" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-comments"></i> Feedback
-                </button>
-            </div>
-
-            <div class="flex items-center gap-4">
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40">
+        <div class="max-w-[1600px] mx-auto px-4">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-16 gap-3 py-2 md:py-0">
                 
-                <div class="hidden md:flex items-center gap-3 border-r border-slate-200 pr-4">
-                    <div class="text-right leading-tight">
-                        <p class="text-[10px] font-bold text-slate-400 uppercase">Colaborador</p>
-                        <p class="text-xs font-black text-slate-700 truncate max-w-[150px]" id="user-name-display">Carregando...</p>
+                <div class="flex items-center gap-3">
+                    <div class="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 border border-blue-200 shadow-sm">
+                        <i class="fas fa-user-circle"></i>
                     </div>
-                    <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border border-blue-200 shadow-sm">
-                        <i class="fas fa-user"></i>
+                    <div class="flex flex-col">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Colaborador</span>
+                        <h1 class="text-sm font-black text-slate-700 truncate max-w-[200px]" id="user-name-display">Carregando...</h1>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer shadow-sm">
-                    <i class="fas fa-calendar-alt text-blue-500"></i>
-                    <input type="date" id="global-date" onchange="MinhaArea.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
+                <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-inner">
+                    <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-blue-600 bg-white shadow-sm">Mês</button>
+                    <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500">Semana</button>
+                    <button onclick="MinhaArea.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500">Ano</button>
+                    <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                    <input type="date" id="global-date" onchange="MinhaArea.atualizarTudo()" class="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer">
+                </div>
+
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end">
+                    <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-list-alt"></i> Extrato de Produção
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('metas')" id="btn-ma-metas" class="tab-btn px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-bullseye"></i> Metas / OKR
+                    </button>
+                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-4 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
+                        <i class="fas fa-chart-line"></i> Comparativo
+                    </button>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
+    <div class="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-8">
         
-        <div id="tab-diario" class="view-section animate-fade-in space-y-6">
+        <div id="ma-tab-diario" class="ma-view animate-enter space-y-6">
             
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28 relative overflow-hidden">
-                    <div class="flex justify-between items-center z-10">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Eficiência (Mês)</span>
-                        <i class="fas fa-percent text-slate-100 text-2xl absolute -right-2 -top-2 rotate-12"></i>
-                    </div>
-                    <div class="z-10">
-                        <h3 class="text-3xl font-black text-blue-600 leading-none" id="kpi-pct">--%</h3>
-                        <p class="text-[10px] text-slate-400 mt-1">Meta: 100%</p>
-                    </div>
-                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-2">
-                        <div id="bar-progress" class="h-full bg-blue-500 rounded-full transition-all" style="width: 0%"></div>
-                    </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Produzido</p>
+                    <h3 class="text-2xl font-black text-blue-600" id="kpi-total">--</h3>
+                    <p class="text-[10px] text-slate-400 mt-1">Documentos validados</p>
                 </div>
-
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28">
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção Acumulada</span>
-                    <div>
-                        <h3 class="text-3xl font-black text-slate-800 leading-none" id="kpi-total">--</h3>
-                        <p class="text-[10px] text-slate-500 mt-1 font-bold">Meta Esperada: <span class="text-blue-600" id="kpi-meta-total">--</span></p>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Atingimento</p>
+                    <div class="flex items-baseline gap-1">
+                        <h3 class="text-2xl font-black text-emerald-600" id="kpi-pct">--%</h3>
                     </div>
+                    <div class="w-full bg-slate-100 h-1 rounded-full mt-2"><div id="bar-progress" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div>
                 </div>
-
-                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-28">
-                    <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sua Média Diária</span>
-                    <div>
-                        <h3 class="text-3xl font-black text-slate-700 leading-none" id="kpi-media">--</h3>
-                        <p class="text-[10px] text-slate-400 mt-1">Docs / Dia Trabalhado</p>
-                    </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Dias Produtivos</p>
+                    <h3 class="text-2xl font-black text-slate-700" id="kpi-dias">--</h3>
+                    <p class="text-[10px] text-slate-400 mt-1">Considerando Fator > 0</p>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Sua Média Diária</p>
+                    <h3 class="text-2xl font-black text-indigo-600" id="kpi-media">--</h3>
+                    <p class="text-[10px] text-slate-400 mt-1">Meta Base: 650</p>
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div class="lg:col-span-1 bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col">
-                    <div class="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
-                            <i class="fas fa-pen-nib text-blue-500"></i> Registro de Produção
-                        </h3>
-                        <div id="status-lancamento" class="text-[10px] font-bold text-slate-400 bg-slate-200 px-2 py-0.5 rounded-full uppercase">Novo</div>
-                    </div>
-                    
-                    <div class="p-5 flex-1 flex flex-col gap-4">
-                        <div>
-                            <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Quantidade Total (Dia)</label>
-                            <div class="relative">
-                                <i class="fas fa-layer-group absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                                <input type="number" id="input-quantidade" placeholder="0" class="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 font-black text-2xl text-slate-800 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition">
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">FIFO</label>
-                                <input type="number" id="input-fifo" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition bg-slate-50 focus:bg-white">
-                            </div>
-                            <div>
-                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Perfil FC</label>
-                                <input type="number" id="input-fc" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition bg-slate-50 focus:bg-white">
-                            </div>
-                            <div>
-                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Gradual Total</label>
-                                <input type="number" id="input-gt" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition bg-slate-50 focus:bg-white">
-                            </div>
-                            <div>
-                                <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Gradual Parcial</label>
-                                <input type="number" id="input-gp" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold outline-none focus:border-blue-400 transition bg-slate-50 focus:bg-white">
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-[9px] font-bold text-slate-400 uppercase mb-1">Observação / Justificativa</label>
-                            <textarea id="input-obs" rows="3" class="w-full px-3 py-2 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 outline-none focus:border-blue-400 transition resize-none bg-slate-50 focus:bg-white" placeholder="Opcional..."></textarea>
-                        </div>
-                    </div>
-
-                    <div class="bg-slate-50 px-5 py-4 border-t border-slate-200">
-                        <button onclick="MinhaArea.Diario.salvar()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-sm shadow-md transition transform active:scale-95 flex items-center justify-center gap-2">
-                            <i class="fas fa-save"></i> Salvar Lançamento
-                        </button>
-                    </div>
-                </div>
-
-                <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[580px]">
-                    <div class="bg-slate-50 px-5 py-3 border-b border-slate-200 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-history text-slate-400 mr-2"></i> Histórico Recente</h3>
-                    </div>
-                    <div class="overflow-auto custom-scrollbar flex-1">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] sticky top-0 z-10 shadow-sm">
-                                <tr>
-                                    <th class="px-4 py-3 border-b border-slate-200">Data</th>
-                                    <th class="px-4 py-3 border-b border-slate-200 text-center">Produção</th>
-                                    <th class="px-4 py-3 border-b border-slate-200 text-center">Fator</th>
-                                    <th class="px-4 py-3 border-b border-slate-200 text-center">Status</th>
-                                    <th class="px-4 py-3 border-b border-slate-200">Obs</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabela-historico-body" class="divide-y divide-slate-100 text-xs text-slate-600 bg-white">
-                                </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-metas" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-300 h-[500px]">
-                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                    <i class="fas fa-chart-line text-blue-500"></i> Evolução Mensal vs Meta
-                </h3>
-                <div class="h-[400px] w-full">
-                    <canvas id="graficoEvolucao"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-comparativo" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-300 h-[500px]">
-                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
-                    <i class="fas fa-users text-blue-500"></i> Comparativo: Você vs Média da Equipe
-                </h3>
-                <div class="h-[400px] w-full">
-                    <canvas id="graficoComparativo"></canvas>
-                </div>
-            </div>
-        </div>
-
-        <div id="tab-auditoria" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 p-10 flex flex-col items-center justify-center text-center h-[400px]">
-                <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                    <i class="fas fa-clipboard-check text-2xl text-slate-400"></i>
-                </div>
-                <h3 class="text-lg font-bold text-slate-700">Módulo de Auditoria</h3>
-                <p class="text-slate-400 text-sm mt-2 max-w-md">
-                    Aqui você verá os apontamentos de qualidade, erros identificados e feedback técnico da equipe de auditoria.
-                </p>
-                <span class="mt-4 px-3 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full border border-blue-100">Em Breve</span>
-            </div>
-        </div>
-
-        <div id="tab-feedback" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 h-[600px] flex flex-col overflow-hidden">
-                <div class="px-6 py-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
-                        <i class="fas fa-comments text-blue-500"></i> Canal de Feedback
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
+                        <i class="fas fa-list-alt text-blue-500"></i> Detalhamento do Período
                     </h3>
+                    <span class="text-[10px] text-slate-400 font-bold uppercase">Dados importados pela gestão</span>
                 </div>
-                <div class="flex-1 p-6 flex flex-col items-center justify-center text-slate-400 bg-slate-50/30">
-                    <i class="far fa-comments text-6xl mb-4 text-slate-200"></i>
-                    <p class="text-sm">Nenhum feedback registrado ainda.</p>
-                    <p class="text-xs mt-1">As conversas com sua gestão aparecerão aqui.</p>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
+                            <tr>
+                                <th class="px-6 py-3 border-b border-slate-200">Data</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">Fator</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">FIFO</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">G. Total</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">G. Parcial</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center bg-blue-50/50 text-blue-700">Produção Total</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">Meta Dia</th>
+                                <th class="px-6 py-3 border-b border-slate-200 text-center">% Ating.</th>
+                                <th class="px-6 py-3 border-b border-slate-200">Justificativa / Obs</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-extrato" class="divide-y divide-slate-100 text-slate-600 text-xs">
+                            </tbody>
+                        <tfoot class="bg-slate-50 font-bold text-slate-700 text-xs">
+                            <tr>
+                                <td class="px-6 py-3">TOTAIS</td>
+                                <td class="px-6 py-3 text-center" id="footer-fator">--</td>
+                                <td class="px-6 py-3 text-center" id="footer-fifo">--</td>
+                                <td class="px-6 py-3 text-center" id="footer-gt">--</td>
+                                <td class="px-6 py-3 text-center" id="footer-gp">--</td>
+                                <td class="px-6 py-3 text-center text-blue-700 bg-blue-50/50" id="footer-prod">--</td>
+                                <td class="px-6 py-3 text-center" id="footer-meta">--</td>
+                                <td class="px-6 py-3 text-center" id="footer-pct">--</td>
+                                <td class="px-6 py-3"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
-                <div class="p-4 border-t border-slate-200 bg-white flex gap-3">
-                    <input type="text" placeholder="Digite uma mensagem para sua gestão..." class="flex-1 px-4 py-3 rounded-xl border border-slate-200 outline-none focus:border-blue-400 text-sm bg-slate-50 focus:bg-white transition">
-                    <button class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl font-bold text-sm shadow-sm transition active:scale-95">
-                        <i class="fas fa-paper-plane"></i>
-                    </button>
-                </div>
+            </div>
+        </div>
+
+        <div id="ma-tab-metas" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]">
+                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Anual</h3>
+                <div class="h-[400px] w-full"><canvas id="graficoEvolucao"></canvas></div>
+            </div>
+        </div>
+
+        <div id="ma-tab-comparativo" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]">
+                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-users text-blue-500"></i> Comparativo no Período</h3>
+                <div class="h-[400px] w-full"><canvas id="graficoComparativo"></canvas></div>
             </div>
         </div>
 
@@ -256,8 +164,8 @@
     <script src="js/minha_area/diario.js"></script>
     <script src="js/minha_area/metas.js"></script>
     <script src="js/minha_area/comparativo.js"></script>
-    
     <script>
+        // Placeholders para abas futuras
         MinhaArea.Auditoria = { init: function(){} };
         MinhaArea.Feedback = { init: function(){} };
     </script>

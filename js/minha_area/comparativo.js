@@ -1,19 +1,11 @@
 MinhaArea.Comparativo = {
     chart: null,
-
-    init: function() {
-        this.carregar();
-    },
-
+    init: function() { this.carregar(); },
     carregar: async function() {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
-        const dateInput = document.getElementById('global-date');
-        let dataRef = dateInput ? new Date(dateInput.value) : new Date();
-        
-        const inicio = new Date(dataRef.getFullYear(), dataRef.getMonth(), 1).toISOString().split('T')[0];
-        const fim = new Date(dataRef.getFullYear(), dataRef.getMonth() + 1, 0).toISOString().split('T')[0];
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
 
         try {
             const { data, error } = await Sistema.supabase
@@ -23,66 +15,44 @@ MinhaArea.Comparativo = {
                 .lte('data_referencia', fim);
 
             if (error) throw error;
-            this.processarDados(data, uid);
-        } catch (err) {
-            console.error(err);
-        }
+            this.processar(data, uid);
+        } catch(e) { console.error(e); }
     },
-
-    processarDados: function(data, meuId) {
+    processar: function(data, meuId) {
         const dias = {};
-        
         data.forEach(r => {
             const dt = r.data_referencia;
-            if (!dias[dt]) dias[dt] = { meu: 0, timeSoma: 0, count: 0, users: new Set() };
-            
-            dias[dt].timeSoma += r.quantidade;
-            dias[dt].users.add(r.usuario_id);
-
-            if (String(r.usuario_id) === String(meuId)) {
-                dias[dt].meu += r.quantidade;
-            }
+            if(!dias[dt]) dias[dt] = { meu: 0, timeSoma: 0, count: 0 };
+            dias[dt].timeSoma += r.quantidade; 
+            // Para média precisa, o ideal é contar quantos usuários únicos produziram no dia
+            // Aqui simplificamos incrementando count a cada registro (funciona se 1 reg por pessoa/dia)
+            dias[dt].count++; 
+            if(String(r.usuario_id) === String(meuId)) dias[dt].meu += r.quantidade;
         });
-
-        const labelsRaw = Object.keys(dias).sort();
-        const labels = labelsRaw.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
-        const meuData = [];
-        const timeData = [];
-
-        labelsRaw.forEach(dt => {
+        const labels = Object.keys(dias).sort();
+        const meuData = [], timeData = [];
+        labels.forEach(dt => {
             const d = dias[dt];
             meuData.push(d.meu);
-            const count = d.users.size;
-            timeData.push(count > 0 ? Math.round(d.timeSoma / count) : 0);
+            timeData.push(d.count > 0 ? Math.round(d.timeSoma/d.count) : 0);
         });
-
-        this.renderizarGrafico(labels, meuData, timeData);
+        const labelsFmt = labels.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
+        this.renderizar(labelsFmt, meuData, timeData);
     },
-
-    renderizarGrafico: function(labels, meuData, timeData) {
-        const canvas = document.getElementById('graficoComparativo');
-        if (!canvas) return;
-        
-        if (this.chart) this.chart.destroy();
-
-        const ctx = canvas.getContext('2d');
+    renderizar: function(labels, meuData, timeData) {
+        const ctx = document.getElementById('graficoComparativo');
+        if(!ctx) return;
+        if(this.chart) this.chart.destroy();
         this.chart = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: labels,
                 datasets: [
-                    { label: 'Você', data: meuData, backgroundColor: '#2563eb', borderRadius: 4 },
-                    { label: 'Média Time', data: timeData, backgroundColor: '#94a3b8', borderRadius: 4 }
+                    { label: 'Você', data: meuData, backgroundColor: '#2563eb' },
+                    { label: 'Média Time', data: timeData, backgroundColor: '#94a3b8' }
                 ]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
-                    x: { grid: { display: false } }
-                }
-            }
+            options: { responsive: true, maintainAspectRatio: false }
         });
     }
 };

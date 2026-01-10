@@ -1,18 +1,18 @@
 MinhaArea.Metas = {
     chart: null,
 
-    init: function() {
-        this.carregar();
-    },
+    init: function() { this.carregar(); },
 
     carregar: async function() {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
-        // Pega o ano da data global
+        // Na aba Metas/Evolução, geralmente queremos ver o ANO TODO para tendência,
+        // mas vamos respeitar o filtro para consistência ou forçar Ano se preferir.
+        // Aqui vou forçar ANO para mostrar a "Evolução" completa.
         const dateInput = document.getElementById('global-date');
         let ano = new Date().getFullYear();
-        if(dateInput && dateInput.value) ano = parseInt(dateInput.value.split('-')[0]);
+        if(dateInput) ano = parseInt(dateInput.value.split('-')[0]);
 
         const inicio = `${ano}-01-01`;
         const fim = `${ano}-12-31`;
@@ -27,7 +27,7 @@ MinhaArea.Metas = {
                 .order('data_referencia', { ascending: true });
 
             if (error) throw error;
-            
+
             // Agrega por Mês
             const meses = new Array(12).fill(0);
             data.forEach(r => {
@@ -36,45 +36,29 @@ MinhaArea.Metas = {
             });
 
             this.renderizarGrafico(meses);
-
-        } catch (err) {
-            console.error(err);
-        }
+        } catch (err) { console.error(err); }
     },
 
-    renderizarGrafico: function(valoresMeses) {
-        const canvas = document.getElementById('graficoEvolucao');
-        if (!canvas) return;
-        
-        if (this.chart) this.chart.destroy();
+    renderizarGrafico: function(dadosMes) {
+        const ctx = document.getElementById('graficoEvolucao');
+        if(!ctx) return;
+        if(this.chart) this.chart.destroy();
 
-        const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-
-        const ctx = canvas.getContext('2d');
         this.chart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: labels,
+                labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
                 datasets: [{
-                    label: 'Produção Mensal',
-                    data: valoresMeses,
+                    label: 'Minha Produção',
+                    data: dadosMes,
                     borderColor: '#2563eb',
                     backgroundColor: 'rgba(37, 99, 235, 0.1)',
                     borderWidth: 3,
-                    tension: 0.4,
                     fill: true,
-                    pointRadius: 4
+                    tension: 0.4
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
-                    x: { grid: { display: false } }
-                }
-            }
+            options: { responsive: true, maintainAspectRatio: false }
         });
     }
 };
