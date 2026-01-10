@@ -245,11 +245,12 @@ Produtividade.Geral = {
                             </div>
                         </td>
                         <td class="${commonCellClass}">${r.fator}</td>
-                        <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
                         <td class="${commonCellClass}">${r.fifo || 0}</td>
                         <td class="${commonCellClass}">${r.gradual_total || 0}</td>
                         <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
-                        <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaCalc)}</td>
+                        <td class="${commonCellClass} text-slate-400">${metaBase}</td>
+                        <td class="${commonCellClass} bg-slate-50">${Math.round(metaCalc)}</td>
+                        <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
                         <td class="px-2 py-2 text-center">
                              <div class="flex items-center justify-center gap-1">
                                  <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
@@ -278,14 +279,13 @@ Produtividade.Geral = {
                             <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${contratoExibicao}</span>
                         </div>
                     </td>
-                    <td class="${commonCellClass} font-bold text-slate-700">
-                        ${d.totais.diasUteis}
-                    </td>
-                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
+                    <td class="${commonCellClass} font-bold text-slate-700">${d.totais.diasUteis}</td>
                     <td class="${commonCellClass}">${d.totais.fifo}</td>
                     <td class="${commonCellClass}">${d.totais.gt}</td>
                     <td class="${commonCellClass}">${d.totais.gp}</td>
-                    <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaTotal)}</td>
+                    <td class="${commonCellClass} text-slate-400">${metaBase}</td>
+                    <td class="${commonCellClass} bg-slate-50">${Math.round(metaTotal)}</td>
+                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
                     <td class="px-2 py-2 text-center">
                          <div class="flex items-center justify-center gap-1">
                              <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
@@ -413,7 +413,6 @@ Produtividade.Geral = {
         document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
         // Média: (Produção Operacional / Dias Operacionais)
-        // Isso evita que a produção da gestão infle a média, ou que seus dias baixem a média
         const media = totalDiasOperacionaisPonderados > 0 ? Math.round(totalProdOperacional / totalDiasOperacionaisPonderados) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
 
