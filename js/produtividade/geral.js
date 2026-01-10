@@ -4,7 +4,7 @@ Produtividade.Geral = {
     cacheData: [],      
     cacheDatas: { start: null, end: null }, 
     usuarioSelecionado: null,
-    cacheRanking: [], // Armazena o ranking calculado nos KPIs
+    cacheRanking: [], 
     
     init: function() { 
         const lastViewMode = localStorage.getItem('lastViewMode');
@@ -322,10 +322,14 @@ Produtividade.Geral = {
     },
 
     atualizarKPIs: function(data, dataInicio, dataFim) {
+        // Acumuladores Gerais (Para TODOS, incluindo gestão)
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        let totalDiasTrabalhadosPonderados = 0; 
+        
+        // Acumuladores Operacionais (Apenas Assistentes)
+        let totalProdOperacional = 0;
+        let totalDiasOperacionaisPonderados = 0; 
         
         let usersCLT = new Set();
         let usersPJ = new Set();
@@ -339,34 +343,47 @@ Produtividade.Geral = {
             const fator = Number(r.fator) || 0;
             const metaCalc = metaUser * fator;
             
+            // 1. Produção Geral: Soma TUDO (Gestão e Assistentes)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
-            if (fator > 0) totalDiasTrabalhadosPonderados += fator;
-
-            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
-            if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
-
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
+
+            // 2. Filtro de Liderança (Auditora/Gestora)
+            const isLideranca = ['AUDITORA', 'GESTORA'].includes(cargo);
+
+            if (!isLideranca) {
+                // AQUI SÓ ENTRA ASSISTENTE
+                
+                // Soma para cálculo de média
+                totalProdOperacional += qtd;
+                if (fator > 0) totalDiasOperacionaisPonderados += fator;
+
+                // Contagem de Equipe (CLT/PJ) - Liderança NÃO entra
+                if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
+
+                // Headcount
                 countAssistentesAtivos.add(r.usuario.id);
+                
+                // Ranking
                 if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
                 ranking[r.usuario.id].total += qtd;
             }
         });
 
-        // Prepara Cache para o Modal de Ranking
+        // Prepara Cache Ranking (Apenas Assistentes)
         this.cacheRanking = Object.values(ranking).sort((a, b) => b.total - a.total);
 
-        // 1. KPI PRODUÇÃO
+        // 1. KPI PRODUÇÃO (Geral)
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
         
-        // 1.1 KPI ASSISTENTES
+        // 1.1 KPI ASSISTENTES (Headcount Operacional)
         document.getElementById('kpi-assistentes-val').innerText = `${countAssistentesAtivos.size} / 17`;
 
-        // 2. KPI ATINGIMENTO
+        // 2. KPI ATINGIMENTO (Geral)
         const pctProd = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-pct').innerText = Math.round(pctProd) + '%';
         const barPct = document.getElementById('kpi-pct-bar');
@@ -375,7 +392,7 @@ Produtividade.Geral = {
             barPct.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-slate-300 rounded-full";
         }
 
-        // 3. KPI EQUIPE
+        // 3. KPI EQUIPE (Apenas Operacional)
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalEquipe = clt + pj;
@@ -395,10 +412,12 @@ Produtividade.Geral = {
         const diasTrabalhadosReal = diasComProd.size; 
         document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
-        const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdGeral / totalDiasTrabalhadosPonderados) : 0;
+        // Média: (Produção Operacional / Dias Operacionais)
+        // Isso evita que a produção da gestão infle a média, ou que seus dias baixem a média
+        const media = totalDiasOperacionaisPonderados > 0 ? Math.round(totalProdOperacional / totalDiasOperacionaisPonderados) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
 
-        // 5. KPI TOP PERFORMANCE (Card Resumido Top 3)
+        // 5. KPI TOP PERFORMANCE (Top 3 Operacional)
         const listaRanking = this.cacheRanking.slice(0, 3);
         const containerTop3 = document.getElementById('kpi-top3-list');
         if(containerTop3) {
@@ -422,7 +441,6 @@ Produtividade.Geral = {
         }
     },
 
-    // --- NOVA FUNÇÃO: Modal Ranking Completo ---
     abrirRankingDetalhado: function() {
         if (!this.cacheRanking || this.cacheRanking.length === 0) {
             alert("Não há dados de produção para exibir o ranking.");
@@ -443,7 +461,6 @@ Produtividade.Geral = {
             let icon = `<span class="text-slate-400 w-6 text-center">${pos}º</span>`;
             let borderClass = "border-slate-100";
 
-            // Lógica de Destaque: Top 5 (Verde) e Bottom 5 (Vermelho)
             if (index < 5) {
                 bgClass = "bg-emerald-50/50";
                 borderClass = "border-emerald-100";
@@ -478,13 +495,11 @@ Produtividade.Geral = {
                     <h3 class="text-lg font-black text-slate-800 tracking-tight"><i class="fas fa-list-ol text-blue-600 mr-2"></i> Ranking de Produção</h3>
                     <button onclick="document.getElementById('modal-ranking').remove()" class="text-slate-400 hover:text-red-500 transition"><i class="fas fa-times text-xl"></i></button>
                 </div>
-                
                 <div class="p-4 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/30">
                     ${htmlLista}
                 </div>
-
                 <div class="bg-white px-6 py-3 border-t border-slate-100 text-center text-xs text-slate-400 font-bold">
-                    Total de ${totalUsers} Assistentes no Ranking
+                    Total de ${totalUsers} Assistentes no Ranking (Excluindo Gestão)
                 </div>
             </div>
         </div>
