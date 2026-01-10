@@ -2,9 +2,8 @@
 
 MinhaArea.Geral = {
     carregar: async function() {
-        console.log("Carregando Dia a Dia (Extrato)...");
+        console.log("Carregando Dia a Dia (Tabela Producao)...");
         
-        // 1. Obter Contexto
         const datas = MinhaArea.getDatasFiltro();
         const usuario = MinhaArea.usuario;
         
@@ -13,73 +12,79 @@ MinhaArea.Geral = {
             return;
         }
 
-        // Indicador de Carregamento
         this.setLoading(true);
 
         try {
-            // 2. Buscar Dados no Supabase
-            // Buscamos na tabela principal de produção
-            const { data, error } = await supabase
-                .from('relatorio_producao')
+            // 1. BUSCAR PRODUÇÃO (Tabela 'producao')
+            // Ajustado para os campos corretos vistos no validacao.js
+            const { data: dadosProducao, error: erroProd } = await window.supabase
+                .from('producao')
                 .select('*')
-                .eq('func_id', usuario.id) // Apenas dados deste usuário
-                .gte('data', datas.inicio)
-                .lte('data', datas.fim)
-                .order('data', { ascending: false });
+                .eq('usuario_id', usuario.id)
+                .gte('data_referencia', datas.inicio)
+                .lte('data_referencia', datas.fim)
+                .order('data_referencia', { ascending: false });
 
-            if (error) throw error;
+            if (erroProd) throw new Error("Erro ao buscar produção: " + erroProd.message);
 
-            // 3. Processar e Agrupar Dados por Dia
-            // O banco pode ter várias linhas por dia. Vamos consolidar.
-            const dadosAgrupados = this.agruparPorDia(data);
+            // 2. BUSCAR METAS (Tabela 'metas')
+            // Precisamos do histórico de metas para saber qual era a meta valendo no dia
+            const { data: dadosMetas, error: erroMetas } = await window.supabase
+                .from('metas')
+                .select('*')
+                .eq('usuario_id', usuario.id)
+                .lte('data_inicio', datas.fim) // Metas que começaram antes do fim do período
+                .order('data_inicio', { ascending: false }); // As mais recentes primeiro
+
+            if (erroMetas) throw new Error("Erro ao buscar metas: " + erroMetas.message);
+
+            // 3. Processar e Cruzar Dados
+            const dadosConsolidados = this.processarDados(dadosProducao || [], dadosMetas || []);
             
-            // 4. Renderizar Interface
-            this.renderizarKPIs(dadosAgrupados);
-            this.renderizarTabela(dadosAgrupados);
+            // 4. Renderizar
+            this.renderizarKPIs(dadosConsolidados);
+            this.renderizarTabela(dadosConsolidados);
 
         } catch (erro) {
-            console.error("Erro ao carregar dia a dia:", erro);
-            alert("Erro ao carregar dados do período.");
+            console.error("Erro Geral:", erro);
+            // Mostra erro na tabela para feedback visual
+            const tbody = document.getElementById('tabela-diario');
+            if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-400">Erro: ${erro.message}</td></tr>`;
         } finally {
             this.setLoading(false);
         }
     },
 
-    agruparPorDia: function(registros) {
-        const dias = {};
+    // Função para cruzar Produção com a Meta vigente na data
+    processarDados: function(listaProducao, listaMetas) {
+        // Agrupa producao por dia (caso haja duplicidade, embora o validacao.js limpe antes)
+        const mapaDias = {};
 
-        registros.forEach(reg => {
-            const dataChave = reg.data; // YYYY-MM-DD
+        listaProducao.forEach(reg => {
+            const data = reg.data_referencia;
             
-            if (!dias[dataChave]) {
-                dias[dataChave] = {
-                    data: dataChave,
+            if (!mapaDias[data]) {
+                // Encontrar a meta que estava valendo nesta data
+                // Como a listaMetas está ordenada da mais recente para a antiga,
+                // pegamos a primeira cuja data_inicio seja <= data da produção
+                const metaVigente = listaMetas.find(m => m.data_inicio <= data);
+                const valorMeta = metaVigente ? Number(metaVigente.valor_meta) : 0;
+
+                mapaDias[data] = {
+                    data: data,
                     producao: 0,
-                    meta: 0,
-                    fator: 0,
-                    obs: []
+                    meta: valorMeta,
+                    fator: Number(reg.fator) || 1, // Default 1 se nulo
+                    detalhes: [] // Para debug ou tooltip
                 };
             }
 
-            // Somatórias
-            dias[dataChave].producao += Number(reg.qtd_produzida || 0);
-            
-            // Assumindo que a meta e fator são constantes por dia ou pegamos o maior registro
-            // Se houver lógica de meta variável, ajustamos aqui.
-            // Priorizamos valores que existem
-            if (reg.meta_diaria > dias[dataChave].meta) dias[dataChave].meta = Number(reg.meta_diaria);
-            if (reg.fator > dias[dataChave].fator) dias[dataChave].fator = Number(reg.fator);
-            
-            // Justificativas (concatenar se houver texto único)
-            if (reg.observacao) {
-                if (!dias[dataChave].obs.includes(reg.observacao)) {
-                    dias[dataChave].obs.push(reg.observacao);
-                }
-            }
+            // Somar producao (campo 'quantidade' do banco)
+            mapaDias[data].producao += Number(reg.quantidade || 0);
         });
 
-        // Transforma objeto em array ordenado por data (mais recente primeiro)
-        return Object.values(dias).sort((a, b) => new Date(b.data) - new Date(a.data));
+        // Retorna array ordenado (Data mais recente primeiro)
+        return Object.values(mapaDias).sort((a, b) => new Date(b.data) - new Date(a.data));
     },
 
     renderizarKPIs: function(dados) {
@@ -95,46 +100,52 @@ MinhaArea.Geral = {
             somaFatores += d.fator;
         });
 
-        // 1. Total Produzido
-        document.getElementById('kpi-total').innerText = totalProduzido.toLocaleString('pt-BR');
+        // 1. Total
+        const elTotal = document.getElementById('kpi-total');
+        if(elTotal) elTotal.innerText = totalProduzido.toLocaleString('pt-BR');
 
-        // 2. Atingimento (Total Produzido / Total Meta do período)
-        // Se meta for 0, evita divisão por zero
+        // 2. Atingimento
         let atingimento = totalMeta > 0 ? (totalProduzido / totalMeta) * 100 : 0;
-        
-        // Elementos visuais
+        if (totalMeta === 0 && totalProduzido > 0) atingimento = 100; // Se produziu sem meta, considera 100%
+
         const elPct = document.getElementById('kpi-pct');
         const elBar = document.getElementById('bar-progress');
         
-        elPct.innerText = atingimento.toFixed(1) + '%';
-        elBar.style.width = Math.min(atingimento, 100) + '%'; // Trava visual em 100% pra não quebrar layout
-        
-        // Cores dinâmicas para o atingimento
-        if(atingimento >= 100) {
-            elPct.className = "text-2xl font-black text-emerald-600";
-            elBar.className = "h-full bg-emerald-500 rounded-full";
-        } else if (atingimento >= 80) {
-            elPct.className = "text-2xl font-black text-yellow-600";
-            elBar.className = "h-full bg-yellow-500 rounded-full";
-        } else {
-            elPct.className = "text-2xl font-black text-red-600";
-            elBar.className = "h-full bg-red-500 rounded-full";
+        if(elPct) elPct.innerText = atingimento.toFixed(1) + '%';
+        if(elBar) {
+            elBar.style.width = Math.min(atingimento, 100) + '%';
+            
+            // Cores
+            if(atingimento >= 100) {
+                elPct.className = "text-2xl font-black text-emerald-600";
+                elBar.className = "h-full bg-emerald-500 rounded-full transition-all duration-500";
+            } else if (atingimento >= 80) {
+                elPct.className = "text-2xl font-black text-amber-500";
+                elBar.className = "h-full bg-amber-400 rounded-full transition-all duration-500";
+            } else {
+                elPct.className = "text-2xl font-black text-red-500";
+                elBar.className = "h-full bg-red-400 rounded-full transition-all duration-500";
+            }
         }
 
-        // 3. Dias Produtivos
-        document.getElementById('kpi-dias').innerText = diasProdutivos;
+        // 3. Dias
+        const elDias = document.getElementById('kpi-dias');
+        if(elDias) elDias.innerText = diasProdutivos;
 
-        // 4. Média Diária
+        // 4. Média
         const media = diasProdutivos > 0 ? (totalProduzido / diasProdutivos) : 0;
-        document.getElementById('kpi-media-real').innerText = media.toFixed(0);
+        const elMedia = document.getElementById('kpi-media-real');
+        if(elMedia) elMedia.innerText = media.toFixed(0);
         
-        // Opcional: Calcular média do Time (Hardcode ou fetch separado se necessário futuramente)
-        // Por enquanto deixamos um placeholder ou calculamos se tivermos acesso
-        document.getElementById('kpi-media-time').innerText = "-"; 
+        // Placeholder Time
+        const elMediaTime = document.getElementById('kpi-media-time');
+        if(elMediaTime) elMediaTime.innerText = "-"; 
     },
 
     renderizarTabela: function(dados) {
         const tbody = document.getElementById('tabela-diario');
+        if(!tbody) return;
+        
         tbody.innerHTML = '';
 
         if (dados.length === 0) {
@@ -143,28 +154,30 @@ MinhaArea.Geral = {
         }
 
         dados.forEach(dia => {
-            // Cálculos da linha
-            const atingimentoDia = dia.meta > 0 ? (dia.producao / dia.meta) * 100 : 0;
+            const pct = dia.meta > 0 ? (dia.producao / dia.meta) * 100 : 0;
             
-            // Definição de Status
-            let statusHtml = '';
-            if (dia.producao >= dia.meta && dia.meta > 0) {
+            let statusHtml;
+            if (dia.meta === 0) {
+                statusHtml = `<span class="bg-slate-100 text-slate-500 py-1 px-3 rounded-full text-[10px] font-bold">SEM META</span>`;
+            } else if (dia.producao >= dia.meta) {
                 statusHtml = `<span class="bg-emerald-100 text-emerald-700 py-1 px-3 rounded-full text-[10px] font-bold border border-emerald-200">META BATIDA</span>`;
             } else if (dia.producao > 0) {
-                statusHtml = `<span class="bg-yellow-100 text-yellow-700 py-1 px-3 rounded-full text-[10px] font-bold border border-yellow-200">PARCIAL (${atingimentoDia.toFixed(0)}%)</span>`;
+                statusHtml = `<span class="bg-amber-100 text-amber-700 py-1 px-3 rounded-full text-[10px] font-bold border border-amber-200">PARCIAL (${pct.toFixed(0)}%)</span>`;
             } else {
-                statusHtml = `<span class="bg-slate-100 text-slate-500 py-1 px-3 rounded-full text-[10px] font-bold border border-slate-200">AUSENTE/FOLGA</span>`;
+                statusHtml = `<span class="bg-red-50 text-red-500 py-1 px-3 rounded-full text-[10px] font-bold border border-red-100">ABAIXO</span>`;
             }
 
-            // Formatação Data
-            const dataFormatada = new Date(dia.data).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+            // Ajuste data UTC
+            const partesData = dia.data.split('-'); // YYYY-MM-DD
+            // Cria data localmente sem conversão de fuso forçada pelo construtor Date() string
+            const dataVisual = `${partesData[2]}/${partesData[1]}/${partesData[0]}`;
 
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
             
             tr.innerHTML = `
                 <td class="px-6 py-4 font-bold text-slate-700">
-                    ${dataFormatada}
+                    ${dataVisual}
                 </td>
                 <td class="px-6 py-4 text-center">
                     <span class="font-bold text-blue-600 text-sm">${dia.producao}</span>
@@ -178,10 +191,8 @@ MinhaArea.Geral = {
                 <td class="px-6 py-4 text-center">
                     ${statusHtml}
                 </td>
-                <td class="px-6 py-4">
-                    <span class="text-xs text-slate-500 italic truncate max-w-[200px] block" title="${dia.obs.join(', ')}">
-                        ${dia.obs.length > 0 ? dia.obs.join(', ') : '-'}
-                    </span>
+                <td class="px-6 py-4 text-center">
+                    <span class="text-xs text-slate-400">-</span>
                 </td>
             `;
             tbody.appendChild(tr);
@@ -190,8 +201,10 @@ MinhaArea.Geral = {
 
     setLoading: function(isLoading) {
         const tbody = document.getElementById('tabela-diario');
+        if(!tbody) return;
+        
         if (isLoading) {
-            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i><br>Carregando extrato...</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i><br>Carregando dados...</td></tr>`;
         }
     }
 };
