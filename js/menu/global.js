@@ -16,11 +16,11 @@ Menu.Global = {
 
         const links = [
             { nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' },
-            { nome: 'Painel Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' },
+            // ALTERADO DE 'Painel Produtividade' PARA 'Produtividade'
+            { nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' },
             { nome: 'Ferramentas', url: 'ferramentas.html', icon: 'fas fa-toolbox' }
         ];
 
-        // CORREÇÃO: Garante que o link seja gestao.html (raiz) e não subpasta
         if (isGestao) links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
 
         let html = `
