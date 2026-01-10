@@ -1,163 +1,123 @@
-// js/minha_area/main.js
-
 const MinhaArea = {
-    usuario: null, // O usuário cujos dados estão sendo exibidos na tela
-    abaAtual: 'geral', // Aba ativa no momento
+    usuario: null,
+    filtroPeriodo: 'mes',
 
     init: async function() {
-        console.log("Inicializando Minha Área...");
+        console.log("Minha Área Iniciada");
         
-        // 1. Identificar quem está logado
-        const usuarioLogado = Sistema.usuario;
+        // 1. Identificar Usuário (CORREÇÃO: Usar 'usuario_logado' e remover Mock)
+        const storedUser = localStorage.getItem('usuario_logado');
         
-        if (!usuarioLogado) {
+        if (!storedUser) {
+            // Se não houver usuário logado, expulsa para o login
             window.location.href = 'index.html';
             return;
         }
 
-        // 2. Definir regras de acesso (Personalize os nomes dos cargos conforme seu Banco de Dados)
-        // Ex: Se o cargo for um desses, tem visão de gestão.
-        const cargosGestao = ['Administrador', 'Gestor', 'Gestora', 'Auditor', 'Auditora', 'CEO', 'Diretor'];
+        this.usuario = JSON.parse(storedUser);
+
+        // Preenche o nome na interface
+        const nomeEl = document.getElementById('user-name-display');
+        if(nomeEl) nomeEl.innerText = this.usuario.nome;
+
+        // 2. Data Inicial (Hoje)
+        const dateInput = document.getElementById('global-date');
+        if (dateInput) {
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+
+        // 3. Carrega a aba padrão
+        this.mudarAba('diario');
+    },
+
+    mudarPeriodo: function(tipo) {
+        this.filtroPeriodo = tipo;
         
-        // Verifica se o cargo do usuário está na lista OU se o nível de acesso for alto (ex: > 1)
-        const temAcessoGestao = cargosGestao.includes(usuarioLogado.cargo) || (usuarioLogado.nivel && usuarioLogado.nivel >= 2);
-
-        // 3. Configurar Contexto Inicial
-        if (temAcessoGestao) {
-            // É Gestor: Mostra o seletor e carrega a lista
-            document.getElementById('container-selecao-view').classList.remove('hidden');
-            await this.carregarSeletorUsuarios(usuarioLogado.id);
-        } else {
-            // É Assistente: Esconde o seletor e trava no próprio ID
-            document.getElementById('container-selecao-view').classList.add('hidden');
-            this.usuario = usuarioLogado;
-            this.iniciarAbas(); // Inicia direto
-        }
-    },
-
-    carregarSeletorUsuarios: async function(idLogado) {
-        const select = document.getElementById('sel-usuario-view');
-        select.innerHTML = '<option value="">Carregando...</option>';
-
-        try {
-            // Busca apenas usuários ativos
-            const { data: usuarios, error } = await window.supabase
-                .from('usuarios')
-                .select('id, nome, cargo')
-                .eq('ativo', true)
-                .order('nome');
-
-            if (error) throw error;
-
-            select.innerHTML = '';
-
-            // Popula o Select
-            usuarios.forEach(u => {
-                const option = document.createElement('option');
-                option.value = u.id;
-                option.textContent = `${u.nome} (${u.cargo || 'Colaborador'})`;
-                select.appendChild(option);
-            });
-
-            // Define o valor inicial como o usuário logado (se ele estiver na lista)
-            // Ou o primeiro da lista se preferir
-            select.value = idLogado;
-            
-            // Define o contexto global da MinhaArea
-            this.usuario = usuarios.find(u => u.id === idLogado) || usuarios[0];
-
-            // Evento de Troca (O Pulo do Gato 🐈)
-            select.addEventListener('change', (e) => {
-                const novoId = parseInt(e.target.value);
-                const novoUsuario = usuarios.find(u => u.id === novoId);
-                
-                if (novoUsuario) {
-                    console.log(`Alterando visão para: ${novoUsuario.nome}`);
-                    this.usuario = novoUsuario; // Atualiza o contexto
-                    this.carregarAbaAtual();    // Recarrega apenas a aba visível
+        // Atualiza botões visuais
+        ['mes', 'semana', 'ano'].forEach(t => {
+            const btn = document.getElementById(`btn-periodo-${t}`);
+            if(btn) {
+                if(t === tipo) {
+                    btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
+                } else {
+                    btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
                 }
-            });
-
-            // Inicia as abas após carregar o seletor
-            this.iniciarAbas();
-
-        } catch (erro) {
-            console.error("Erro ao carregar lista de usuários:", erro);
-            alert("Erro ao carregar lista de equipe.");
-        }
-    },
-
-    iniciarAbas: function() {
-        // Inicializa os listeners dos botões de menu
-        const botoes = document.querySelectorAll('.tab-btn'); // Certifique-se que seus botões têm essa classe
-        botoes.forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                // Remove ativo dos outros
-                botoes.forEach(b => b.classList.remove('active', 'text-blue-600', 'border-b-2', 'border-blue-600'));
-                
-                // Ativa o atual
-                e.target.classList.add('active', 'text-blue-600', 'border-b-2', 'border-blue-600');
-                
-                // Define aba atual e carrega
-                const aba = e.target.getAttribute('data-aba'); // Ex: 'geral', 'metas'
-                this.mudarAba(aba);
-            });
+            }
         });
 
-        // Carrega a aba padrão (Geral/Dia a Dia)
-        this.mudarAba('geral');
+        this.atualizarTudo();
     },
 
-    mudarAba: function(nomeAba) {
-        this.abaAtual = nomeAba;
-        
-        // Esconde todas as seções
-        document.querySelectorAll('.aba-conteudo').forEach(div => div.classList.add('hidden'));
-        
-        // Mostra a seção selecionada
-        const section = document.getElementById(`aba-${nomeAba}`);
-        if(section) section.classList.remove('hidden');
-
-        this.carregarAbaAtual();
-    },
-
-    carregarAbaAtual: function() {
-        // Roteador simples para chamar a função de carregamento da aba correta
-        console.log(`Carregando dados de ${this.usuario.nome} na aba ${this.abaAtual}`);
-
-        switch(this.abaAtual) {
-            case 'geral':
-                if(MinhaArea.Geral) MinhaArea.Geral.carregar();
-                break;
-            case 'metas':
-                if(MinhaArea.Metas) MinhaArea.Metas.carregar();
-                break;
-            case 'assertividade':
-                if(MinhaArea.Assertividade) MinhaArea.Assertividade.carregar();
-                break;
-            case 'auditoria':
-                if(MinhaArea.Auditoria) MinhaArea.Auditoria.carregar();
-                break;
-            case 'comparativo':
-                if(MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
-                break;
-            case 'feedback':
-                if(MinhaArea.Feedback) MinhaArea.Feedback.carregar();
-                break;
+    atualizarTudo: function() {
+        // Recarrega a aba ativa com os novos filtros
+        const abaAtiva = document.querySelector('.tab-btn.active');
+        if (abaAtiva) {
+            const id = abaAtiva.id.replace('btn-ma-', '');
+            // Chama a função correta
+            if (id === 'diario' && this.Diario) this.Diario.carregar();
+            if (id === 'metas' && this.Metas) this.Metas.carregar();
+            if (id === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
         }
     },
 
-    // Funções utilitárias globais para as abas
+    mudarAba: function(abaId) {
+        document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+        const aba = document.getElementById(`ma-tab-${abaId}`);
+        const btn = document.getElementById(`btn-ma-${abaId}`);
+        
+        if(aba) aba.classList.remove('hidden');
+        if(btn) btn.classList.add('active');
+
+        // Dispara carregamento
+        if (abaId === 'diario' && this.Diario) this.Diario.carregar();
+        if (abaId === 'metas' && this.Metas) this.Metas.carregar();
+        if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
+    },
+
+    // Helper para calcular datas baseado no filtro
     getDatasFiltro: function() {
-        // Pega as datas dos inputs globais ou define padrão (Mês atual)
-        const inicio = document.getElementById('data-inicio')?.value || new Date().toISOString().slice(0, 8) + '01';
-        const fim = document.getElementById('data-fim')?.value || new Date().toISOString().slice(0, 10);
+        const dateInput = document.getElementById('global-date');
+        // Fallback para hoje se o input não existir ou estiver vazio
+        let dataRef = (dateInput && dateInput.value) ? new Date(dateInput.value) : new Date();
+        
+        const ano = dataRef.getFullYear();
+        const mes = dataRef.getMonth();
+
+        let inicio, fim;
+
+        if (this.filtroPeriodo === 'mes') {
+            // Primeiro e último dia do mês selecionado
+            inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
+            fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
+        } else if (this.filtroPeriodo === 'ano') {
+            inicio = `${ano}-01-01`;
+            fim = `${ano}-12-31`;
+        } else if (this.filtroPeriodo === 'semana') {
+            // Calcula início e fim da semana (Domingo a Sábado)
+            // Cria uma cópia da data para não alterar a original
+            const curr = new Date(dataRef);
+            const diaSemana = curr.getDay(); // 0 (Domingo) a 6 (Sábado)
+            
+            // Ajusta para o último domingo (início da semana)
+            const first = curr.getDate() - diaSemana;
+            const dataInicio = new Date(curr.setDate(first));
+            
+            // Ajusta para o próximo sábado (fim da semana)
+            const dataFim = new Date(curr.setDate(first + 6));
+
+            inicio = dataInicio.toISOString().split('T')[0];
+            fim = dataFim.toISOString().split('T')[0];
+        }
+
         return { inicio, fim };
     }
 };
 
-// Inicializa quando o documento estiver pronto
 document.addEventListener('DOMContentLoaded', () => {
-    // Pequeno delay para garantir que o Sistema.js já rodou a auth
-    setTimeout(() => MinhaArea.init(), 500);
+    // Aguarda um pouco para garantir que o sistema base carregou
+    setTimeout(() => { 
+        if(typeof MinhaArea !== 'undefined') MinhaArea.init(); 
+    }, 100);
 });
