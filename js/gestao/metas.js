@@ -14,16 +14,21 @@ Gestao.Metas = {
         
         // Atualiza Labels
         const nomeMes = this.dataAtual.toLocaleString('pt-BR', { month: 'long' });
-        document.getElementById('metas-periodo-label').innerText = `${nomeMes} ${ano}`;
+        if(document.getElementById('metas-periodo-label')) {
+            document.getElementById('metas-periodo-label').innerText = `${nomeMes} ${ano}`;
+        }
 
         const tbody = document.getElementById('lista-metas');
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando metas...</p></td></tr>';
+        if(tbody) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando metas...</p></td></tr>';
+        }
 
         try {
-            // Chama a função SQL que cruza usuários ativos com a tabela de metas
+            // Chama a função SQL
+            // IMPORTANTE: Força conversão para inteiro para evitar erro 400
             const { data, error } = await Sistema.supabase.rpc('buscar_metas_periodo', { 
-                p_mes: mes, 
-                p_ano: ano 
+                p_mes: parseInt(mes), 
+                p_ano: parseInt(ano) 
             });
 
             if (error) throw error;
@@ -34,7 +39,7 @@ Gestao.Metas = {
 
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
@@ -47,14 +52,16 @@ Gestao.Metas = {
         const tbody = document.getElementById('lista-metas');
         const lista = this.dadosAtuais;
 
+        if (!tbody) return;
+
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum usuário ativo encontrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum usuário ativo encontrado para este período.</td></tr>';
             return;
         }
 
         let html = '';
         lista.forEach(user => {
-            // Se meta_definida for null, deixa em branco ou sugere placeholder
+            // Se meta_definida for null, deixa em branco
             const valorMeta = user.meta_definida !== null ? user.meta_definida : '';
             
             // Estilo do Input: Se tiver valor, negrito. Se vazio, normal.
@@ -95,29 +102,34 @@ Gestao.Metas = {
         let totalMeta = 0;
         let qtdUsers = this.dadosAtuais.length;
         
-        // Calcula o total VISUAL (baseado no que veio do banco, não no input editado ainda)
+        // Calcula o total VISUAL (baseado no que veio do banco)
         this.dadosAtuais.forEach(u => {
             if(u.meta_definida) totalMeta += u.meta_definida;
         });
 
-        document.getElementById('resumo-usuarios').innerText = qtdUsers;
-        document.getElementById('resumo-total-meta').innerText = totalMeta.toLocaleString('pt-BR');
+        const elQtd = document.getElementById('resumo-usuarios');
+        const elTotal = document.getElementById('resumo-total-meta');
+        
+        if(elQtd) elQtd.innerText = qtdUsers;
+        if(elTotal) elTotal.innerText = totalMeta.toLocaleString('pt-BR');
     },
 
     // --- LÓGICA DE SALVAMENTO ---
 
-    // Marca visualmente que mudou (opcional, pode ser só interno)
     marcarAlterado: function(id) {
         const input = document.getElementById(`meta-input-${id}`);
-        input.classList.add('bg-yellow-50', 'border-yellow-300');
+        if(input) input.classList.add('bg-yellow-50', 'border-yellow-300');
     },
 
-    // Salva TUDO o que está na tela
     salvarTodas: async function() {
+        // Encontra botão para feedback
         const btnSalvar = document.querySelector('button[onclick="Gestao.Metas.salvarTodas()"]');
-        const originalHtml = btnSalvar.innerHTML;
-        btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
-        btnSalvar.disabled = true;
+        let originalHtml = '';
+        if(btnSalvar) {
+            originalHtml = btnSalvar.innerHTML;
+            btnSalvar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+            btnSalvar.disabled = true;
+        }
 
         const mes = this.dataAtual.getMonth() + 1;
         const ano = this.dataAtual.getFullYear();
@@ -132,8 +144,8 @@ Gestao.Metas = {
                 if (valor !== '') {
                     inserts.push({
                         usuario_id: user.usuario_id,
-                        mes: mes,
-                        ano: ano,
+                        mes: parseInt(mes),
+                        ano: parseInt(ano),
                         meta: parseInt(valor)
                     });
                 }
@@ -141,8 +153,10 @@ Gestao.Metas = {
         });
 
         if (inserts.length === 0) {
-            btnSalvar.innerHTML = originalHtml;
-            btnSalvar.disabled = false;
+            if(btnSalvar) {
+                btnSalvar.innerHTML = originalHtml;
+                btnSalvar.disabled = false;
+            }
             return alert("Nenhuma meta definida para salvar.");
         }
 
@@ -154,18 +168,17 @@ Gestao.Metas = {
 
             if (error) throw error;
 
-            // Feedback de sucesso
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
-            Toast.fire({ icon: 'success', title: 'Metas atualizadas com sucesso!' });
-            
+            alert('Metas atualizadas com sucesso!');
             this.carregar(); // Recarrega para limpar status de edição
 
         } catch (e) {
             console.error(e);
             alert("Erro ao salvar: " + e.message);
         } finally {
-            btnSalvar.innerHTML = originalHtml;
-            btnSalvar.disabled = false;
+            if(btnSalvar) {
+                btnSalvar.innerHTML = originalHtml;
+                btnSalvar.disabled = false;
+            }
         }
     },
 
@@ -196,7 +209,7 @@ Gestao.Metas = {
             .eq('usuario_id', userId)
             .order('ano', { ascending: false })
             .order('mes', { ascending: false })
-            .limit(12); // Últimos 12 registros
+            .limit(12); 
 
         if(error) return alert("Erro ao buscar histórico");
 
@@ -217,7 +230,6 @@ Gestao.Metas = {
             htmlLista += '</div>';
         }
 
-        // Modal Simples usando SweetAlert ou HTML injetado (Vou usar HTML injetado para manter padrão)
         const modalHtml = `
         <div id="modal-historico" class="fixed inset-0 bg-slate-900/40 z-[80] flex items-center justify-center backdrop-blur-sm animate-fade">
             <div class="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden">
@@ -240,9 +252,9 @@ Gestao.Metas = {
         const agora = new Date();
         const diffTime = Math.abs(agora - dInicio);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        return diffDays <= 60; // Considera novato quem tem menos de 60 dias
+        return diffDays <= 60; 
     }
 };
 
-// Inicializa
+// Inicializa automaticamente
 Gestao.Metas.init();
