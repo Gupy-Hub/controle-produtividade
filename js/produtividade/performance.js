@@ -35,13 +35,18 @@ Produtividade.Performance = {
         this.carregar(); 
     },
 
+    carregarRanking: async function() {
+        // Alias para manter compatibilidade com chamada do HTML
+        this.carregar();
+    },
+
     carregar: async function() {
-        const tbody = document.getElementById('ranking-body');
-        const podium = document.getElementById('podium-container');
+        const tbody = document.getElementById('perf-ranking-body');
+        const divTop5 = document.getElementById('perf-rank-content');
         
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando ranking...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando ranking...</td></tr>';
         
-        // 1. Definição de Datas (Igual Consolidado)
+        // 1. Definição de Datas
         const t = document.getElementById('perf-period-type').value; 
         const dateInput = document.getElementById('global-date');
         let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
@@ -70,7 +75,7 @@ Produtividade.Performance = {
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
-                    quantidade, fator,
+                    id, quantidade, fator, data_referencia,
                     usuario:usuarios ( id, nome, perfil, funcao )
                 `)
                 .gte('data_referencia', s)
@@ -78,126 +83,150 @@ Produtividade.Performance = {
 
             if (error) throw error;
 
-            // 3. Processar Ranking
-            let ranking = {};
-            
-            data.forEach(r => {
-                // REGRA: Excluir Gestão/Auditoria do Ranking
-                const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-                if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
+            // 3. Agregar Dados
+            const stats = {};
+            let totalTime = 0;
+            let totalProdAssistentes = 0;
+            let assistentesUnicas = new Set();
 
+            data.forEach(r => {
                 const uid = r.usuario.id;
-                if (!ranking[uid]) {
-                    ranking[uid] = {
-                        nome: r.usuario.nome,
+                const nome = r.usuario.nome || 'Desconhecido';
+                // Mapeia Funcao -> Cargo para compatibilidade com lógica antiga
+                const cargo = r.usuario.funcao ? r.usuario.funcao.toUpperCase() : 'ASSISTENTE';
+                const metaDiaria = 650; // Meta fixa
+                
+                if (!stats[uid]) {
+                    stats[uid] = {
+                        id: uid,
+                        nome: nome,
+                        cargo: cargo,
                         producao: 0,
-                        dias: 0
+                        dias: 0,
+                        diasUteis: 0, // Soma dos fatores
+                        metaTotal: 0
                     };
                 }
-                
-                ranking[uid].producao += (Number(r.quantidade) || 0);
-                ranking[uid].dias += (Number(r.fator) || 0);
+
+                const qtd = Number(r.quantidade) || 0;
+                const fator = Number(r.fator) || 0;
+
+                stats[uid].producao += qtd;
+                stats[uid].dias += 1;
+                stats[uid].diasUteis += fator;
+                stats[uid].metaTotal += (metaDiaria * fator);
+
+                totalTime += qtd;
+
+                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                    totalProdAssistentes += qtd;
+                    assistentesUnicas.add(uid);
+                }
             });
 
-            let lista = Object.values(ranking).map(u => {
-                const metaDiaria = 650;
-                const metaTotal = u.dias * metaDiaria;
-                const pct = metaTotal > 0 ? (u.producao / metaTotal) * 100 : 0;
-                const media = u.dias > 0 ? u.producao / u.dias : 0;
+            // 4. Transformar em Array e Ordenar
+            // A tabela principal ordena por Produção Total (Volume)
+            const rankingGeral = Object.values(stats).filter(u => !['AUDITORA','GESTORA'].includes(u.cargo));
+            rankingGeral.sort((a, b) => b.producao - a.producao);
+
+            // 5. Renderizar Tabela
+            if(tbody) {
+                tbody.innerHTML = '';
+                rankingGeral.forEach((u, index) => {
+                    const mediaDiaria = u.diasUteis > 0 ? u.producao / u.diasUteis : 0;
+                    const atingimento = u.metaTotal > 0 ? (u.producao / u.metaTotal) * 100 : 0;
+                    
+                    let corBadge = 'bg-slate-100 text-slate-600';
+                    if (index === 0) corBadge = 'bg-yellow-100 text-yellow-700 border-yellow-200';
+                    else if (index === 1) corBadge = 'bg-slate-200 text-slate-700';
+                    else if (index === 2) corBadge = 'bg-orange-100 text-orange-800';
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
+                    tr.innerHTML = `
+                        <td class="px-6 py-3">
+                            <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold border ${corBadge}">${index + 1}º</span>
+                        </td>
+                        <td class="px-6 py-3 font-bold text-slate-700">${u.nome}</td>
+                        <td class="px-6 py-3 text-center font-black text-blue-700">${Math.round(u.producao).toLocaleString('pt-BR')}</td>
+                        <td class="px-6 py-3 text-center text-slate-500 text-xs">${u.diasUteis}</td>
+                        <td class="px-6 py-3 text-center text-slate-600 font-bold">${Math.round(mediaDiaria)}</td>
+                        <td class="px-6 py-3 text-center text-slate-400 text-xs">${Math.round(u.metaTotal).toLocaleString('pt-BR')}</td>
+                        <td class="px-6 py-3 text-center">
+                            <span class="${atingimento >= 100 ? 'text-emerald-600 bg-emerald-50' : 'text-amber-600 bg-amber-50'} px-2 py-1 rounded text-xs font-black border border-opacity-50 ${atingimento >= 100 ? 'border-emerald-200' : 'border-amber-200'}">
+                                ${Math.round(atingimento)}%
+                            </span>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                if (rankingGeral.length === 0) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum dado encontrado.</td></tr>';
+            }
+
+            // 6. Atualizar KPIs Superiores
+            const campeao = rankingGeral[0]; // Como já filtramos gestão, o primeiro é o campeão operacional
+            const elCampNome = document.getElementById('perf-kpi-campeao');
+            const elCampVal = document.getElementById('perf-kpi-campeao-val');
+            
+            if (campeao) {
+                elCampNome.innerText = campeao.nome;
+                elCampVal.innerText = `${Math.round(campeao.producao).toLocaleString()} Docs`;
+            } else {
+                elCampNome.innerText = "--";
+                elCampVal.innerText = "";
+            }
+
+            document.getElementById('perf-kpi-total').innerText = totalTime.toLocaleString('pt-BR');
+            
+            const numAssistentes = assistentesUnicas.size;
+            const mediaGeral = numAssistentes > 0 ? Math.round(totalProdAssistentes / numAssistentes) : 0;
+            document.getElementById('perf-kpi-media').innerText = mediaGeral.toLocaleString('pt-BR');
+
+            // 7. Renderizar Top 5 (Ordenado por % de Atingimento)
+            if (divTop5) {
+                // Cria cópia para não estragar a ordenação da tabela principal
+                let listaEficiencia = [...rankingGeral];
                 
-                return { ...u, pct, media, metaTotal };
-            });
+                // Ordena por % (Eficiência)
+                listaEficiencia.sort((a, b) => {
+                    const pctA = a.metaTotal > 0 ? a.producao / a.metaTotal : 0;
+                    const pctB = b.metaTotal > 0 ? b.producao / b.metaTotal : 0;
+                    return pctB - pctA; 
+                });
 
-            // Ordenar por % de Atingimento (Performance)
-            lista.sort((a, b) => b.pct - a.pct);
-
-            this.renderizar(lista, tbody, podium);
+                const top5 = listaEficiencia.slice(0, 5);
+                
+                if (top5.length === 0) {
+                    divTop5.innerHTML = '<div class="text-center text-slate-400 py-4 italic text-xs">Sem dados</div>';
+                } else {
+                    let htmlTop = '';
+                    top5.forEach((u, i) => {
+                        const pct = u.metaTotal > 0 ? Math.round((u.producao / u.metaTotal) * 100) : 0;
+                        // Cores da barra
+                        const corBarra = pct >= 100 ? 'bg-emerald-500' : 'bg-blue-500';
+                        
+                        htmlTop += `
+                        <div class="flex items-center gap-2 mb-2 last:mb-0">
+                            <div class="w-4 text-[10px] font-bold text-slate-400">#${i + 1}</div>
+                            <div class="flex-1">
+                                <div class="flex justify-between text-[9px] mb-0.5">
+                                    <span class="font-bold text-slate-700 truncate w-24">${u.nome}</span>
+                                    <span class="font-bold text-slate-500">${pct}%</span>
+                                </div>
+                                <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                    <div class="${corBarra} h-full" style="width: ${Math.min(pct, 100)}%"></div>
+                                </div>
+                            </div>
+                        </div>`;
+                    });
+                    divTop5.innerHTML = htmlTop;
+                }
+            }
 
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
         }
-    },
-
-    renderizar: function(lista, tbody, podium) {
-        tbody.innerHTML = '';
-        podium.innerHTML = '';
-
-        if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-12 text-slate-400 italic">Sem dados de performance para este período.</td></tr>';
-            return;
-        }
-
-        // --- 1. RENDERIZAR PÓDIO (Top 3) ---
-        const top3 = lista.slice(0, 3);
-        const medals = [
-            { color: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-200', label: '1º Lugar', icon: 'fa-trophy' },
-            { color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', label: '2º Lugar', icon: 'fa-medal' },
-            { color: 'text-amber-700', bg: 'bg-orange-50', border: 'border-orange-200', label: '3º Lugar', icon: 'fa-medal' }
-        ];
-
-        top3.forEach((u, i) => {
-            const style = medals[i];
-            const html = `
-                <div class="rounded-xl border ${style.border} ${style.bg} p-4 flex items-center justify-between shadow-sm relative overflow-hidden">
-                    <div class="flex items-center gap-4 z-10">
-                        <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center border ${style.border} shadow-sm">
-                            <i class="fas ${style.icon} ${style.color} text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="text-[10px] uppercase font-bold ${style.color} tracking-wider block mb-0.5">${style.label}</span>
-                            <h4 class="font-bold text-slate-800 text-sm leading-tight truncate max-w-[120px]">${u.nome}</h4>
-                            <span class="text-xs font-bold text-slate-500">${Math.round(u.pct)}% Atingimento</span>
-                        </div>
-                    </div>
-                    <div class="text-right z-10">
-                        <span class="block text-2xl font-black ${style.color}">${u.producao.toLocaleString('pt-BR')}</span>
-                        <span class="text-[9px] text-slate-400 font-bold uppercase">Produção Total</span>
-                    </div>
-                    <i class="fas ${style.icon} absolute -right-4 -bottom-4 text-8xl opacity-10 ${style.color}"></i>
-                </div>
-            `;
-            podium.innerHTML += html;
-        });
-
-        // --- 2. RENDERIZAR TABELA ---
-        const commonCell = "px-4 py-3 text-center text-xs text-slate-600 border-b border-slate-100";
-        
-        lista.forEach((u, index) => {
-            const pos = index + 1;
-            let rankIcon = `<span class="font-bold text-slate-400">#${pos}</span>`;
-            
-            if(pos === 1) rankIcon = '<i class="fas fa-crown text-yellow-500"></i>';
-            if(pos === 2) rankIcon = '<i class="fas fa-medal text-slate-400"></i>';
-            if(pos === 3) rankIcon = '<i class="fas fa-medal text-amber-700"></i>';
-
-            // Cores da Barra de Progresso
-            let barColor = 'bg-emerald-500';
-            let txtColor = 'text-emerald-700';
-            if (u.pct < 90) { barColor = 'bg-amber-500'; txtColor = 'text-amber-700'; }
-            if (u.pct < 70) { barColor = 'bg-rose-500'; txtColor = 'text-rose-700'; }
-
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-slate-50 transition";
-            tr.innerHTML = `
-                <td class="${commonCell} font-bold">${rankIcon}</td>
-                <td class="px-4 py-3 text-left border-b border-slate-100">
-                    <span class="font-bold text-slate-700 text-sm">${u.nome}</span>
-                </td>
-                <td class="${commonCell} font-bold text-blue-700 bg-blue-50/30">${u.producao.toLocaleString('pt-BR')}</td>
-                <td class="${commonCell}">${u.dias}</td>
-                <td class="${commonCell}">${Math.round(u.media).toLocaleString('pt-BR')}</td>
-                <td class="${commonCell} bg-slate-50">${Math.round(u.metaTotal).toLocaleString('pt-BR')}</td>
-                <td class="px-4 py-3 border-b border-slate-100 w-[15%]">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs font-black ${txtColor} w-10 text-right">${Math.round(u.pct)}%</span>
-                        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div class="h-full ${barColor} rounded-full" style="width: ${Math.min(u.pct, 100)}%"></div>
-                        </div>
-                    </div>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
     }
 };
