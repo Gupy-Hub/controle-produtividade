@@ -1,215 +1,176 @@
-window.Gestao = window.Gestao || {};
-window.Gestao.Importacao = window.Gestao.Importacao || {};
+Gestao.Assertividade = {
+    timerBusca: null, // Controla o tempo de digitação
 
-Gestao.Importacao.Assertividade = {
-    executar: async function(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
-
-        // Feedback Visual
-        const btnLabel = input.parentElement;
-        const originalHtml = btnLabel.innerHTML;
-        const atualizarStatus = (texto) => {
-            btnLabel.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ${texto}`;
-        };
+    // --- CARREGAMENTO INICIAL (Últimos 30 dias para ser rápido) ---
+    carregar: async function() {
+        const tbody = document.getElementById('lista-assertividade');
+        const searchInput = document.getElementById('search-assert');
         
-        btnLabel.classList.add('opacity-50', 'cursor-not-allowed');
-        atualizarStatus("Lendo planilha...");
+        // Se já tiver algo digitado na busca, prioriza a busca em vez do carregamento padrão
+        if (searchInput && searchInput.value.trim().length > 0) {
+            this.buscar(searchInput.value);
+            return;
+        }
 
-        // Pequeno delay para a interface atualizar
-        await new Promise(r => setTimeout(r, 50));
+        if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando auditorias recentes...</p></td></tr>';
 
         try {
-            // 1. Carrega dados do Banco (Cache)
-            const { data: usersData } = await Sistema.supabase.from('usuarios').select('id, nome');
-            const { data: empData } = await Sistema.supabase.from('empresas').select('id, nome, subdominio');
+            // Pega data de 30 dias atrás
+            const dataLimite = new Date();
+            dataLimite.setDate(dataLimite.getDate() - 30);
+            const dataIso = dataLimite.toISOString().split('T')[0];
 
-            // Mapas de busca O(1)
-            const mapUsuariosID = new Map();
-            const mapUsuariosNome = new Map();
-            usersData.forEach(u => {
-                mapUsuariosID.set(u.id, u.id);
-                mapUsuariosNome.set(this.normalizar(u.nome), u.id);
-            });
+            // Traz apenas os mais recentes para a tela inicial abrir rápido
+            const { data, error } = await Sistema.supabase
+                .from('producao')
+                .select('*, usuarios!inner(nome)') // !inner garante que traga o nome
+                .gte('data_referencia', dataIso)
+                .order('data_referencia', { ascending: false })
+                .order('hora', { ascending: false })
+                .limit(500);
 
-            const mapEmpresas = new Map();
-            empData.forEach(e => {
-                const nomeOficial = e.nome;
-                mapEmpresas.set(this.normalizar(e.nome), nomeOficial);
-                if(e.subdominio) mapEmpresas.set(this.normalizar(e.subdominio), nomeOficial);
-            });
+            if (error) throw error;
 
-            // 2. Leitura do Arquivo
-            const linhas = await Gestao.lerArquivo(file);
-            
-            atualizarStatus(`Processando ${linhas.length} linhas...`);
-            await new Promise(r => setTimeout(r, 10));
-
-            const inserts = [];
-            
-            // Relatório de Execução
-            let stats = { total: linhas.length, sucesso: 0, ignorados: 0 };
-            const logNaoEncontrados = new Set(); 
-
-            // 3. Processamento Linha a Linha
-            for (const row of linhas) {
-                const c = {};
-                // Normaliza todas as chaves
-                for (const k in row) c[this.normalizarKey(k)] = row[k];
-
-                // --- IDENTIFICAÇÃO DO USUÁRIO ---
-                // Prioridade 1: ID da planilha (id_assistente)
-                let idPlanilha = parseInt(c['idassistente'] || c['id'] || c['idusuario'] || 0);
-                let nomePlanilha = c['assistente'] || c['usuario'] || c['nome'] || 'Sem Nome';
-                let usuarioId = null;
-
-                if (idPlanilha && mapUsuariosID.has(idPlanilha)) {
-                    usuarioId = idPlanilha;
-                } else {
-                    // Prioridade 2: Nome do Assistente
-                    if (nomePlanilha) usuarioId = mapUsuariosNome.get(this.normalizar(nomePlanilha));
-                }
-
-                if (!usuarioId) {
-                    stats.ignorados++;
-                    if(nomePlanilha !== 'Sem Nome') {
-                        logNaoEncontrados.add(`Assistente não cadastrado: "${nomePlanilha}" (ID CSV: ${idPlanilha || 'N/A'})`);
-                    }
-                    continue; 
-                }
-
-                // --- EMPRESA ---
-                const nomeEmpresaRaw = c['empresa'] || '';
-                const empresaOficial = mapEmpresas.get(this.normalizar(nomeEmpresaRaw)) || nomeEmpresaRaw;
-
-                // --- DATA ---
-                let dataRef = null;
-                let horaRef = null;
-                const rawDate = c['endtime'] || c['datadaauditoria'] || c['data'] || c['date'];
-                
-                if (rawDate) {
-                    if (typeof rawDate === 'object') {
-                        dataRef = rawDate.toISOString().split('T')[0];
-                        horaRef = rawDate.toLocaleTimeString('pt-BR');
-                    } else {
-                        try {
-                            const dObj = new Date(rawDate);
-                            if (!isNaN(dObj)) {
-                                dataRef = dObj.toISOString().split('T')[0];
-                                horaRef = dObj.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-                            }
-                        } catch(e) {}
-                    }
-                }
-
-                if (!dataRef) {
-                    stats.ignorados++;
-                    continue;
-                }
-
-                // --- PREPARAÇÃO DOS DADOS ---
-                inserts.push({
-                    usuario_id: usuarioId,
-                    data_referencia: dataRef,
-                    hora: horaRef,
-                    empresa: empresaOficial,
-                    
-                    nome_documento: c['docname'] || c['documento'] || '',
-                    status: c['status'] || '',
-                    observacao: c['apontamentosobs'] || c['obs'] || c['apontamentos'] || '',
-                    
-                    num_campos: parseInt(c['ncampos'] || c['numerocampos'] || 0),
-                    qtd_ok: parseInt(c['ok'] || 0),
-                    nok: parseInt(c['nok'] || 0),
-                    assertividade: c['assert'] || c['assertividade'] || c['%assert'] || '',
-                    
-                    auditora: c['auditora'] || '',
-                    quantidade: 1, 
-                    fator: 1
-                });
-            }
-
-            // 4. Envio ao Banco (Otimizado e Seguro)
-            if (inserts.length > 0) {
-                const totalRegistros = inserts.length;
-                const batchSize = 2000;
-                const lotes = [];
-
-                for (let i = 0; i < totalRegistros; i += batchSize) {
-                    lotes.push(inserts.slice(i, i + batchSize));
-                }
-
-                let processados = 0;
-                const limiteConcorrencia = 5;
-                
-                for (let i = 0; i < lotes.length; i += limiteConcorrencia) {
-                    const chunk = lotes.slice(i, i + limiteConcorrencia);
-                    
-                    // CORREÇÃO: Usar async/await explícito para garantir compatibilidade
-                    const promessas = chunk.map(async (lote) => {
-                        const { error } = await Sistema.supabase.from('producao').insert(lote);
-                        if (error) throw error;
-                    });
-                    
-                    // Espera o lote paralelo terminar
-                    await Promise.all(promessas);
-
-                    processados += chunk.reduce((acc, curr) => acc + curr.length, 0);
-                    const pct = Math.round((processados / totalRegistros) * 100);
-                    atualizarStatus(`Salvando... ${pct}%`);
-                }
-
-                stats.sucesso = processados;
-                
-                let msg = `Processo Finalizado!\n\n✅ Registros Importados: ${stats.sucesso}`;
-                
-                if (logNaoEncontrados.size > 0) {
-                    msg += `\n⚠️ Usuários não encontrados: ${logNaoEncontrados.size}.\nO log de erros será baixado.`;
-                    this.baixarLog(logNaoEncontrados);
-                } else if (stats.ignorados > 0) {
-                    msg += `\n⚠️ Linhas ignoradas (sem data): ${stats.ignorados}`;
-                }
-                
-                alert(msg);
-
-                if (Gestao.Assertividade) Gestao.Assertividade.carregar();
-            } else {
-                if (logNaoEncontrados.size > 0) {
-                    alert(`Nenhum registro importado.\n${logNaoEncontrados.size} assistentes não foram encontrados no banco.\nBaixando log...`);
-                    this.baixarLog(logNaoEncontrados);
-                } else {
-                    alert("A planilha parece estar vazia ou com colunas irreconhecíveis.");
-                }
-            }
+            this.renderizarTabela(data || [], "Exibindo registros dos últimos 30 dias");
 
         } catch (e) {
             console.error(e);
-            alert("Erro fatal: " + e.message);
-        } finally {
-            btnLabel.innerHTML = originalHtml;
-            btnLabel.classList.remove('opacity-50', 'cursor-not-allowed');
-            input.value = "";
+            if(tbody) tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">Erro de conexão: ${e.message}</td></tr>`;
         }
     },
 
-    baixarLog: function(setErros) {
-        const lista = Array.from(setErros).join('\n');
-        const conteudo = `ERROS DE IMPORTAÇÃO - ${new Date().toLocaleString()}\n\nOs assistentes abaixo constam na planilha mas NÃO estão cadastrados no sistema (Verifique ID e Nome):\n\n${lista}`;
-        const blob = new Blob([conteudo], { type: 'text/plain' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `erros_importacao_${new Date().toISOString().slice(0,10)}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+    // --- BUSCA INTELIGENTE NO SERVIDOR (Acionada ao digitar) ---
+    filtrar: function() {
+        const termo = document.getElementById('search-assert').value.trim();
+        
+        // Limpa o timer anterior para não buscar a cada letra (espera parar de digitar)
+        clearTimeout(this.timerBusca);
+
+        if (termo.length === 0) {
+            // Se limpou a busca, recarrega o padrão
+            this.carregar();
+            return;
+        }
+
+        // Aguarda 600ms após parar de digitar para ir ao banco
+        this.timerBusca = setTimeout(() => {
+            this.executarBuscaNoBanco(termo);
+        }, 600);
     },
 
-    normalizar: function(str) {
-        return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/ /g, '');
+    executarBuscaNoBanco: async function(termo) {
+        const tbody = document.getElementById('lista-assertividade');
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Buscando em todo o histórico...</p></td></tr>';
+
+        try {
+            let dadosFinais = [];
+
+            // ESTRATÉGIA DE BUSCA:
+            // 1. Primeiro buscamos IDs de usuários que tenham esse nome
+            const { data: users } = await Sistema.supabase
+                .from('usuarios')
+                .select('id')
+                .ilike('nome', `%${termo}%`);
+            
+            const userIds = users ? users.map(u => u.id) : [];
+
+            // 2. Monta a consulta principal
+            let query = Sistema.supabase
+                .from('producao')
+                .select('*, usuarios!inner(nome)')
+                .order('data_referencia', { ascending: false })
+                .limit(200); // Limite de resultados da busca
+
+            // 3. Aplica filtros (OR logic)
+            // Se encontrou usuários com esse nome, busca pelos IDs DELES OU pelo texto em outras colunas
+            if (userIds.length > 0) {
+                // Busca: (ID do usuário está na lista) OU (Empresa parece termo) OU (Obs parece termo)
+                // Sintaxe do Supabase para OR com IN é chata, vamos simplificar:
+                // Se achou user, foca neles. Se não, busca texto geral.
+                
+                // Opção Híbrida robusta:
+                const filtrosTexto = `empresa.ilike.%${termo}%,observacao.ilike.%${termo}%,nome_documento.ilike.%${termo}%`;
+                const filtroUser = `usuario_id.in.(${userIds.join(',')})`;
+                
+                query = query.or(`${filtroUser},${filtrosTexto}`);
+            } else {
+                // Se não achou usuário com esse nome, busca só nos campos de texto e ID direto
+                let filtros = `empresa.ilike.%${termo}%,observacao.ilike.%${termo}%,nome_documento.ilike.%${termo}%`;
+                
+                // Se o termo for um número, tenta buscar por ID do assistente ou ID da produção
+                if (!isNaN(termo)) {
+                    filtros += `,usuario_id.eq.${termo}`;
+                }
+                
+                query = query.or(filtros);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+
+            this.renderizarTabela(data || [], `Resultados para: "${termo}"`);
+
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">Erro na busca: ${e.message}</td></tr>`;
+        }
     },
 
-    normalizarKey: function(k) {
-        return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    renderizarTabela: function(lista, mensagemRodape = "") {
+        const tbody = document.getElementById('lista-assertividade');
+        const contador = document.getElementById('contador-assert');
+        
+        // Atualiza a mensagem de rodapé (ao lado do contador) se existir um elemento para isso
+        // Se não tiver, criamos um span dinâmico no contador
+        if(contador) {
+             contador.innerHTML = `<strong>${lista.length}</strong> <span class="text-xs font-normal text-slate-400 ml-2">(${mensagemRodape})</span>`;
+        }
+
+        if (lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado no histórico.</span></div></td></tr>';
+            return;
+        }
+
+        let html = '';
+        lista.forEach(item => {
+            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
+            const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
+            const nomeUser = item.usuarios?.nome || `ID: ${item.usuario_id}`;
+            
+            // Badge Status
+            let statusBadge = `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">${item.status || '-'}</span>`;
+            const stUpper = (item.status||'').toUpperCase();
+            if (stUpper === 'OK' || stUpper === 'VALIDO') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold">OK</span>`;
+            else if (stUpper.includes('NOK') || stUpper.includes('INV')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
+            else if (stUpper.includes('JUST')) statusBadge = `<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold">JUST</span>`;
+
+            // Cor Assertividade
+            // Tenta limpar a string para pegar número (ex: "97.5%" -> 97.5)
+            let assertVal = 0;
+            if(item.assertividade) {
+                assertVal = parseFloat(String(item.assertividade).replace('%','').replace(',','.'));
+            }
+            
+            let assertColor = 'text-slate-600';
+            if (assertVal >= 100) assertColor = 'text-emerald-600 font-bold';
+            else if (assertVal > 0 && assertVal < 90) assertColor = 'text-rose-600 font-bold';
+
+            html += `
+            <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
+                <td class="px-3 py-2 text-slate-500 font-mono">${dataFmt} <span class="text-[10px] text-slate-300 ml-1">${horaFmt}</span></td>
+                <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${item.empresa}">${item.empresa || '-'}</td>
+                <td class="px-3 py-2 text-slate-600 max-w-[150px] truncate" title="${nomeUser}">${nomeUser}</td>
+                <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${item.nome_documento}">${item.nome_documento || '-'}</td>
+                <td class="px-3 py-2 text-center text-[10px]">${statusBadge}</td>
+                <td class="px-3 py-2 text-slate-500 max-w-[200px] truncate cursor-help" title="${item.observacao}">${item.observacao || '-'}</td>
+                <td class="px-3 py-2 text-center text-slate-400">${item.num_campos || 0}</td>
+                <td class="px-3 py-2 text-center text-emerald-600 font-bold">${item.qtd_ok || 0}</td>
+                <td class="px-3 py-2 text-center text-rose-600 font-bold">${item.nok || 0}</td>
+                <td class="px-3 py-2 text-center ${assertColor}">${item.assertividade || '-'}</td>
+                <td class="px-3 py-2 text-slate-500 italic text-[10px]">${item.auditora || '-'}</td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
     }
 };
