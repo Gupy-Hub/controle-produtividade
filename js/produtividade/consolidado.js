@@ -1,8 +1,8 @@
 Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
-    baseManualHC: 0, // Fallback global
-    overridesHC: {}, // Armazena ajustes manuais por coluna { 1: 15, 2: 17 }
+    baseManualHC: 0, 
+    overridesHC: {}, // Agora armazena objetos: { valor: 15, motivo: "Férias" }
     dadosCalculados: null, 
 
     init: async function() { 
@@ -12,15 +12,42 @@ Produtividade.Consolidado = {
         this.togglePeriodo();
     },
 
-    // Função chamada quando o usuário altera o input no cabeçalho
-    atualizarHC: function(colIndex, novoValor) {
+    // --- NOVA LÓGICA DE ATUALIZAÇÃO COM JUSTIFICATIVA ---
+    atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
+        
+        // 1. Validação básica
         if (isNaN(val) || val <= 0) {
-            delete this.overridesHC[colIndex]; // Remove override se vazio/invalido
-        } else {
-            this.overridesHC[colIndex] = val;
+            // Se apagar o valor, removemos a customização sem perguntar (reset)
+            delete this.overridesHC[colIndex];
+            this.renderizar(this.dadosCalculados);
+            return;
         }
-        // Redesenha a tabela com os novos cálculos, sem ir ao banco
+
+        // 2. Verifica se o valor realmente mudou em relação ao que já estava salvo
+        const valorAtual = this.overridesHC[colIndex]?.valor;
+        if (valorAtual === val) return;
+
+        // 3. Pequeno delay para garantir que a UI não trave antes do prompt
+        await new Promise(r => setTimeout(r, 50));
+
+        // 4. Pergunta o Motivo (Obrigatório)
+        const motivo = prompt(`Você alterou a base de cálculo para ${val}.\n\nPor favor, informe o motivo desta alteração (Ex: Férias, Atestado, Desligamento):`);
+
+        if (motivo === null || motivo.trim() === "") {
+            alert("Alteração cancelada: A justificativa é obrigatória para alterar a base de cálculo.");
+            // Força a renderização novamente para voltar o valor antigo no input visualmente
+            this.renderizar(this.dadosCalculados); 
+            return;
+        }
+
+        // 5. Salva Valor + Motivo
+        this.overridesHC[colIndex] = {
+            valor: val,
+            motivo: motivo.trim()
+        };
+
+        // 6. Recalcula tudo
         if (this.dadosCalculados) {
             this.renderizar(this.dadosCalculados);
         }
@@ -50,7 +77,7 @@ Produtividade.Consolidado = {
             }
         }
         
-        // Limpa overrides ao mudar de período para evitar confusão visual
+        // Limpa overrides ao mudar de período para evitar confusão de dados de um mês pro outro
         this.overridesHC = {};
         this.carregar(false); 
     },
@@ -114,9 +141,8 @@ Produtividade.Consolidado = {
                 
             if(error) throw error;
             
-            // Define base padrão como Fallback
             const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
-            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 17; // Default 17 se 0
+            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 17;
             
             this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
             this.processarEExibir(rawData, t, mes, ano);
@@ -239,7 +265,6 @@ Produtividade.Consolidado = {
         const tbody = document.getElementById('cons-table-body');
         const hRow = document.getElementById('cons-table-header');
         
-        // GERAÇÃO DINÂMICA DO HEADER COM INPUTS
         if(hRow) {
             let headerHTML = `
             <tr class="bg-slate-50 border-b border-slate-200">
@@ -247,46 +272,63 @@ Produtividade.Consolidado = {
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
                 </th>`;
             
-            // Colunas de Período (com Input)
+            // Colunas Temporais
             cols.forEach((c, index) => {
                 const colIdx = index + 1;
-                // Busca se tem override salvo
-                const valOverride = this.overridesHC[colIdx] || '';
-                // Busca o valor automático para placeholder
+                
+                // Lógica de Override
+                const overrideObj = this.overridesHC[colIdx];
+                const valOverride = overrideObj ? overrideObj.valor : '';
+                const motivoOverride = overrideObj ? overrideObj.motivo : '';
+                
+                // Valor Automático (Cálculo real do sistema)
                 const autoCount = st[colIdx].users.size || 17;
+
+                // Estilo condicional se houver alteração
+                const inputClass = valOverride 
+                    ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" 
+                    : "bg-white border-slate-200 text-blue-600 font-bold focus:border-blue-400";
 
                 headerHTML += `
                 <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[100px] group">
                     <div class="flex flex-col items-center gap-1">
                         <span class="text-xs font-bold text-slate-600 uppercase">${c}</span>
-                        <div class="relative w-full max-w-[60px]">
+                        <div class="relative w-full max-w-[60px] custom-tooltip" ${valOverride ? `data-tooltip="Motivo: ${motivoOverride}"` : ''}>
                             <input 
                                 type="number" 
                                 value="${valOverride}" 
                                 placeholder="(${autoCount})" 
                                 onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)"
-                                class="w-full text-[10px] text-center bg-white border border-slate-200 rounded py-0.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition text-blue-600 font-bold placeholder-slate-300" 
-                                title="Ajustar HC Manualmente"
+                                class="w-full text-[10px] text-center rounded py-0.5 outline-none border transition placeholder-slate-300 ${inputClass}" 
+                                title="${valOverride ? 'Motivo: ' + motivoOverride : 'Ajustar HC Manualmente'}"
                             >
                         </div>
                     </div>
                 </th>`;
             });
 
-            // Coluna Total (Também com Input para ajuste global da média anual)
-            const valTotal = this.overridesHC[99] || '';
+            // Coluna Total
+            const overrideTotal = this.overridesHC[99];
+            const valTotal = overrideTotal ? overrideTotal.valor : '';
+            const motivoTotal = overrideTotal ? overrideTotal.motivo : '';
             const autoTotal = st[99].users.size || 17;
+            
+            const inputClassTotal = valTotal 
+                ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" 
+                : "bg-white border-blue-200 text-blue-700 font-bold focus:border-blue-500";
+
             headerHTML += `
             <th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[120px]">
                 <div class="flex flex-col items-center gap-1">
                     <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
-                    <div class="relative w-full max-w-[60px]">
+                    <div class="relative w-full max-w-[60px] custom-tooltip" ${valTotal ? `data-tooltip="Motivo: ${motivoTotal}"` : ''}>
                         <input 
                             type="number" 
                             value="${valTotal}" 
                             placeholder="(${autoTotal})" 
                             onchange="Produtividade.Consolidado.atualizarHC(99, this.value)"
-                            class="w-full text-[10px] text-center bg-white border border-blue-200 rounded py-0.5 outline-none focus:border-blue-500 text-blue-700 font-bold placeholder-blue-200"
+                            class="w-full text-[10px] text-center rounded py-0.5 outline-none border transition placeholder-blue-200 ${inputClassTotal}"
+                            title="${valTotal ? 'Motivo: ' + motivoTotal : 'Ajustar Média Anual'}"
                         >
                     </div>
                 </div>
@@ -316,10 +358,12 @@ Produtividade.Consolidado = {
             idxs.forEach(i => {
                 const s = st[i]; 
                 
-                // LÓGICA DE OVERRIDE: Se tiver manual no overridesHC usa, senão usa automático, senão 17
-                const countManual = this.overridesHC[i];
+                // LÓGICA DE OVERRIDE NO CÁLCULO
+                // 1. Checa se tem override manual (Objeto {valor, motivo})
+                const overrideObj = this.overridesHC[i];
+                // 2. Se tiver, usa o valor manual. Se não, usa o automático. Se falhar, usa 17.
                 const countAuto = s.users.size || 17;
-                const HF = countManual ? parseInt(countManual) : countAuto;
+                const HF = overrideObj ? overrideObj.valor : countAuto;
 
                 let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
@@ -330,12 +374,14 @@ Produtividade.Consolidado = {
                 if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`;
                 else cellClass += `text-slate-500 font-medium`;
 
+                // Se houver override, destaca levemente as células afetadas da coluna para indicar que é um dado manipulado
+                if (overrideObj) cellClass += " bg-amber-50/30";
+
                 tr += `<td class="${cellClass}">${txt}</td>`;
             });
             return tr + '</tr>';
         };
 
-        // Linhas de Dados
         h += mkRow('HC Utilizado', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
         h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
