@@ -16,18 +16,22 @@
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
         
+        /* Abas - Estilo Unificado Gestão */
         .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
         .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         
+        /* Animações */
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         
+        /* Scrollbars Customizadas (Estilo Excel) */
         .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
+        /* Tooltip */
         .custom-tooltip { position: relative; display: inline-block; cursor: help; }
         .custom-tooltip:hover::after {
             content: attr(data-tooltip);
@@ -41,6 +45,7 @@
 <body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
+    
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
@@ -85,16 +90,58 @@
                             <option value="6">Semana 6</option>
                         </select>
                     </div>
-                     </div>
+
+                    <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
+                         <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
+                            <option value="dia">Diária</option>
+                            <option value="mes">Mensal</option>
+                            <option value="trimestre">Trimestral</option>
+                            <option value="semestre">Semestral</option>
+                            <option value="ano">Anual</option>
+                        </select>
+                        <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option>
+                            <option value="2">2º Trimestre</option>
+                            <option value="3">3º Trimestre</option>
+                            <option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option>
+                            <option value="2">2º Semestre</option>
+                        </select>
+                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95">
+                            <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
+                        </button>
+                    </div>
+
+                    <div id="ctrl-performance" class="hidden flex items-center gap-2">
+                        <select id="perf-period-type" onchange="Produtividade.Performance.togglePeriodo()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
+                            <option value="mes">Mensal</option>
+                            <option value="trimestre">Trimestral</option>
+                            <option value="semestre">Semestral</option>
+                            <option value="ano">Anual</option>
+                        </select>
+                        <select id="perf-select-quarter" onchange="Produtividade.Performance.carregarRanking()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option>
+                            <option value="2">2º Trimestre</option>
+                            <option value="3">3º Trimestre</option>
+                            <option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="perf-select-semester" onchange="Produtividade.Performance.carregarRanking()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option>
+                            <option value="2">2º Semestre</option>
+                        </select>
+                    </div>
+                </div>
 
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4">
-                    <input type="file" id="input-excel" accept=".csv" class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
+                    <input type="file" id="input-excel" accept=".csv" multiple class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
                     
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar CSV (ddmmaaaa.csv)">
+                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar em Massa (Ex: 01122025.csv, 02122025.csv)">
                         <i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span>
                     </button>
                     
-                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir dados do dia">
+                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir dados do período selecionado">
                         <i class="fas fa-trash-alt"></i>
                     </button>
                 </div>
@@ -104,6 +151,7 @@
     </div>
 
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
+        
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
             <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                 <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20">
@@ -137,7 +185,7 @@
                          <span class="text-[9px] text-slate-400 font-bold" id="kpi-dias-total"></span>
                     </div>
                 </div>
-                 <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20">
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20">
                     <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Prod. Média</p>
                     <div class="flex justify-between items-end">
                         <h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-media-todas">--</h3>
@@ -188,13 +236,71 @@
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-6">
-             <div class="p-8 text-center text-slate-400">Conteúdo do Consolidado...</div>
+            <div id="cons-table-wrapper" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto custom-scrollbar pb-2">
+                <table class="w-full text-sm text-left border-collapse">
+                    <thead id="cons-table-header"></thead>
+                    <tbody id="cons-table-body"></tbody>
+                </table>
+            </div>
+             <div class="text-right text-xs text-slate-400 italic">* Você pode alterar o número de assistentes (HC) no cabeçalho.</div>
         </div>
+
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-             <div class="p-8 text-center text-slate-400">Conteúdo de Performance...</div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700">Ranking Detalhado</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left text-slate-600">
+                        <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <th class="px-6 py-3">#</th>
+                                <th class="px-6 py-3">Assistente</th>
+                                <th class="px-6 py-3 text-center text-blue-700 font-bold">Total</th>
+                                <th class="px-6 py-3 text-center">Dias</th>
+                                <th class="px-6 py-3 text-center">Média</th>
+                                <th class="px-6 py-3 text-center">Meta Total</th>
+                                <th class="px-6 py-3 text-center">% Meta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perf-ranking-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
+
         <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
-             <div class="p-8 text-center text-slate-400">Conteúdo de Matriz...</div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-xs tracking-wider text-center border-b-2 border-slate-200">
+                            <tr>
+                                <th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[150px]">Assistente</th>
+                                <th class="px-3 py-4">Jan</th>
+                                <th class="px-3 py-4">Fev</th>
+                                <th class="px-3 py-4">Mar</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">1º Tri</th>
+                                <th class="px-3 py-4">Abr</th>
+                                <th class="px-3 py-4">Mai</th>
+                                <th class="px-3 py-4">Jun</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">2º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100">1º Sem</th>
+                                <th class="px-3 py-4">Jul</th>
+                                <th class="px-3 py-4">Ago</th>
+                                <th class="px-3 py-4">Set</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">3º Tri</th>
+                                <th class="px-3 py-4">Out</th>
+                                <th class="px-3 py-4">Nov</th>
+                                <th class="px-3 py-4">Dez</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100">4º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100">2º Sem</th>
+                                <th class="px-4 py-4 bg-slate-100 text-slate-800">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matriz-body" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
