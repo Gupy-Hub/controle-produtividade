@@ -5,28 +5,25 @@ Produtividade.Matriz = {
         if (!this.initialized) {
             this.initialized = true;
         }
-        // A matriz sempre carrega o ano todo baseada no input global
+        // Garante que carrega ao iniciar
         this.carregar();
     },
 
     carregar: async function() {
         const tbody = document.getElementById('matriz-body');
         
-        // --- PROTEÇÃO CONTRA ERRO (CORREÇÃO) ---
-        if (!tbody) {
-            console.warn("Elemento 'matriz-body' não encontrado. Verifique o HTML.");
-            return;
-        }
+        // Proteção: Se a tabela não existir no HTML, para aqui.
+        if (!tbody) return;
 
         const dateInput = document.getElementById('global-date');
         
-        // Pega o ano do filtro global
+        // Pega o ano do filtro global (ou ano atual se vazio)
         let ano = new Date().getFullYear();
         if(dateInput && dateInput.value) {
             ano = parseInt(dateInput.value.split('-')[0]);
         }
 
-        tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando matriz anual...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         const dataInicio = `${ano}-01-01`;
         const dataFim = `${ano}-12-31`;
@@ -43,33 +40,38 @@ Produtividade.Matriz = {
 
             if (error) throw error;
 
-            // Lógica de Filtro de Gestão (Igual Validação e Consolidado)
+            // --- CORREÇÃO AQUI ---
+            // Verifica se o checkbox existe. Se não existir, assume false (não mostrar).
             const checkGestao = document.getElementById('check-gestao');
             const mostrarGestao = checkGestao ? checkGestao.checked : false;
 
-            // Estrutura: users[id] = { nome: '...', months: [0,0,0...] }
             const users = {};
 
             data.forEach(r => {
+                // 1. Proteção contra Usuário Deletado (Null)
+                // Se r.usuario for null, pula esse registro para não travar a tela
+                if (!r.usuario) return;
+
                 const uid = r.usuario.id;
-                const nome = r.usuario.nome;
+                const nome = r.usuario.nome || 'Sem Nome'; // Fallback para nome
                 const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
                 
-                // Filtro
-                if (!mostrarGestao && ['AUDITORA', 'GESTORA'].includes(cargo)) return;
+                // 2. Filtro de Gestão (Blindado)
+                if (!mostrarGestao) {
+                    if (['AUDITORA', 'GESTORA', 'COORDENADORA'].includes(cargo)) return;
+                }
 
                 if (!users[uid]) {
                     users[uid] = {
                         nome: nome,
                         cargo: cargo,
                         contrato: r.usuario.contrato || 'PJ',
-                        months: new Array(12).fill(0) // 0=Jan, 11=Dez
+                        months: new Array(12).fill(0)
                     };
                 }
 
-                // Identifica o mês (0-11) da data 'YYYY-MM-DD'
                 const partes = r.data_referencia.split('-');
-                const mesIndex = parseInt(partes[1]) - 1; // Mês 1 vira Index 0
+                const mesIndex = parseInt(partes[1]) - 1; 
 
                 if (mesIndex >= 0 && mesIndex <= 11) {
                     users[uid].months[mesIndex] += (Number(r.quantidade) || 0);
@@ -80,21 +82,21 @@ Produtividade.Matriz = {
             this.renderizar(listaUsers, tbody);
 
         } catch (err) {
-            console.error(err);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="20" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
+            console.error("Erro na Matriz:", err);
+            tbody.innerHTML = `<tr><td colspan="20" class="text-center py-4 text-red-500">Erro ao carregar: ${err.message}</td></tr>`;
         }
     },
 
     renderizar: function(lista, tbody) {
-        if(!tbody) return; // Proteção extra
+        if(!tbody) return;
         tbody.innerHTML = '';
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400 italic">Sem dados para este ano (ou filtro ocultou tudo).</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400 italic">Nenhum dado encontrado para os filtros atuais.</td></tr>';
             return;
         }
 
-        const format = (n) => n === 0 ? '-' : n.toLocaleString('pt-BR');
+        const format = (n) => n === 0 ? '-' : Math.round(n).toLocaleString('pt-BR');
         
         lista.forEach(u => {
             const m = u.months;
@@ -123,7 +125,7 @@ Produtividade.Matriz = {
             tr.innerHTML = `
                 <td class="${tdNome}">
                     <div class="flex flex-col">
-                        <span class="font-bold text-slate-700 text-xs truncate">${u.nome}</span>
+                        <span class="font-bold text-slate-700 text-xs truncate max-w-[180px]" title="${u.nome}">${u.nome}</span>
                         <span class="text-[9px] text-slate-400 uppercase tracking-tight">${u.cargo} • ${u.contrato}</span>
                     </div>
                 </td>
