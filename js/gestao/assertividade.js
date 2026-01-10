@@ -1,7 +1,7 @@
 Gestao.Assertividade = {
     timerBusca: null, 
 
-    // --- CARREGAMENTO INICIAL (Últimos 30 dias) ---
+    // --- CARREGAMENTO INICIAL ---
     carregar: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const searchInput = document.getElementById('search-assert');
@@ -11,40 +11,15 @@ Gestao.Assertividade = {
             return;
         }
 
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando auditorias recentes...</p></td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando dados...</p></td></tr>';
 
         try {
             const dataLimite = new Date();
             dataLimite.setDate(dataLimite.getDate() - 30);
             const dataIso = dataLimite.toISOString().split('T')[0];
 
-            // Busca produção + nome usuário + dados da empresa (para pegar o ID)
-            const { data, error } = await Sistema.supabase
-                .from('producao')
-                .select('*, usuarios!inner(nome), empresas(id)') // JOIN com empresas para pegar ID
-                .gte('data_referencia', dataIso)
-                .order('data_referencia', { ascending: false })
-                .order('hora', { ascending: false })
-                .limit(200);
-
-            if (error) throw error;
-
-            // Mapeia para o formato padrão (trazendo o id da empresa para a raiz do objeto)
-            const dadosFormatados = (data || []).map(item => {
-                // Tenta pegar o ID da empresa via relacionamento, se falhar (nome diferente), fica null
-                // Nota: O relacionamento empresas(id) depende de haver FK. 
-                // Como não temos FK física, o Supabase pode não trazer se não configuramos.
-                // Mas vamos tratar no renderizador.
-                
-                // AJUSTE IMPORTANTE: Como não temos Foreign Key, o select acima 'empresas(id)' pode falhar se não houver relação.
-                // Para garantir que funcione sem mexer na estrutura do banco agora,
-                // vamos confiar mais na BUSCA RPC. Para a carga inicial, se não vier ID, ok.
-                return item;
-            });
-
-            // Para a carga inicial ser perfeita sem FK, teríamos que fazer um mapa manual ou usar RPC também.
-            // Vamos usar a RPC para a carga inicial também? É mais seguro e garante o ID.
-            this.executarBuscaRPC(''); 
+            // Busca inicial usando RPC para garantir que traga o ID da empresa corretamente
+            this.executarBuscaRPC('');
 
         } catch (e) {
             console.error(e);
@@ -52,11 +27,10 @@ Gestao.Assertividade = {
         }
     },
 
-    // --- BUSCA INTELIGENTE (Via RPC) ---
+    // --- BUSCA ---
     filtrar: function() {
         const termo = document.getElementById('search-assert').value.trim();
         clearTimeout(this.timerBusca);
-        // Delay de 600ms
         this.timerBusca = setTimeout(() => {
             this.executarBuscaRPC(termo);
         }, 600);
@@ -64,18 +38,12 @@ Gestao.Assertividade = {
 
     executarBuscaRPC: async function(termo) {
         const tbody = document.getElementById('lista-assertividade');
-        // Se for carga inicial (vazio), muda mensagem
         const msg = termo ? "Pesquisando..." : "Carregando recentes...";
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">${msg}</p></td></tr>`;
 
         try {
-            // CHAMA A FUNÇÃO SQL (que agora retorna empresa_id)
-            // Se termo for vazio, a função SQL precisa lidar com isso.
-            // Vamos ajustar a chamada: se vazio, busca '%' (tudo) limit 100
             const termoBusca = termo || '';
-            
-            const { data, error } = await Sistema.supabase
-                .rpc('buscar_auditorias', { termo: termoBusca });
+            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias', { termo: termoBusca });
 
             if (error) throw error;
 
@@ -112,7 +80,8 @@ Gestao.Assertividade = {
             const nomeUser = item.usuarios?.nome || `ID: ${item.usuario_id}`;
             
             // Tratamento do ID da Empresa
-            const empId = item.empresa_id ? `<span class="text-[10px] text-slate-400 mr-1">#${item.empresa_id}</span>` : '';
+            // Se o ID vier null do banco, mostramos um traço
+            const empIdDisplay = item.empresa_id ? `#${item.empresa_id}` : '<span class="text-slate-200">-</span>';
 
             // Badge Status
             let statusBadge = `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">${item.status || '-'}</span>`;
@@ -126,7 +95,6 @@ Gestao.Assertividade = {
             if(item.assertividade) {
                 assertVal = parseFloat(String(item.assertividade).replace('%','').replace(',','.'));
             }
-            
             let assertColor = 'text-slate-600';
             if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
             else if (assertVal > 0 && assertVal < 90) assertColor = 'text-rose-600 font-bold';
@@ -134,9 +102,15 @@ Gestao.Assertividade = {
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
                 <td class="px-3 py-2 text-slate-500 font-mono">${dataFmt} <span class="text-[10px] text-slate-300 ml-1">${horaFmt}</span></td>
-                <td class="px-3 py-2 font-bold text-slate-700 max-w-[180px] truncate" title="${item.empresa}">
-                    ${empId} ${item.empresa || '-'}
+                
+                <td class="px-3 py-2 text-center font-mono text-slate-400 font-bold bg-slate-50/50">
+                    ${empIdDisplay}
                 </td>
+                
+                <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${item.empresa}">
+                    ${item.empresa || '-'}
+                </td>
+                
                 <td class="px-3 py-2 text-slate-600 max-w-[150px] truncate" title="${nomeUser}">${nomeUser}</td>
                 <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${item.nome_documento}">${item.nome_documento || '-'}</td>
                 <td class="px-3 py-2 text-center text-[10px]">${statusBadge}</td>
