@@ -1,8 +1,8 @@
 Produtividade.Geral = {
     initialized: false,
-    dadosOriginais: [], // Dados agrupados para a tabela
-    cacheData: [],      // Dados brutos para os KPIs
-    cacheDatas: { start: null, end: null }, // Datas selecionadas
+    dadosOriginais: [], 
+    cacheData: [],      
+    cacheDatas: { start: null, end: null }, 
     usuarioSelecionado: null,
     
     init: function() { 
@@ -10,7 +10,6 @@ Produtividade.Geral = {
         if (lastViewMode) {
             document.getElementById('view-mode').value = lastViewMode;
         }
-
         this.toggleSemana(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -19,7 +18,6 @@ Produtividade.Geral = {
     toggleSemana: function() {
         const mode = document.getElementById('view-mode').value;
         localStorage.setItem('lastViewMode', mode);
-
         const sem = document.getElementById('select-semana');
         if(mode === 'semana') sem.classList.remove('hidden'); else sem.classList.add('hidden');
         if(this.initialized) this.carregarTela();
@@ -29,7 +27,6 @@ Produtividade.Geral = {
         let semanas = [];
         let dataAtual = new Date(ano, mes - 1, 1);
         const ultimoDiaMes = new Date(ano, mes, 0);
-
         while (dataAtual <= ultimoDiaMes) {
             let inicio = new Date(dataAtual);
             let fim = new Date(dataAtual);
@@ -50,12 +47,9 @@ Produtividade.Geral = {
         let count = 0;
         let cur = new Date(inicio + 'T12:00:00'); 
         const end = new Date(fim + 'T12:00:00');
-        
         while(cur <= end) {
             const day = cur.getDay();
-            if(day !== 0 && day !== 6) { 
-                count++;
-            }
+            if(day !== 0 && day !== 6) count++;
             cur.setDate(cur.getDate() + 1);
         }
         return count;
@@ -95,7 +89,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // CORREÇÃO: 'cargo' alterado para 'funcao' e removido 'meta_diaria'
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
@@ -108,20 +101,15 @@ Produtividade.Geral = {
 
             if (error) throw error;
             
-            // --- CACHE DE DADOS PARA FILTRO ---
             this.cacheData = data;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
             let dadosAgrupados = {};
             data.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
-                
                 if(!dadosAgrupados[uid]) {
-                    // Fallback de meta (já que removemos do select)
                     const metaBanco = 650;
-                    
                     dadosAgrupados[uid] = {
-                        // Ajustado fallback para usar funcao
                         usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', funcao: 'Assistente' },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
@@ -129,7 +117,6 @@ Produtividade.Geral = {
                     };
                 }
                 dadosAgrupados[uid].registros.push(item);
-                
                 const d = dadosAgrupados[uid].totais;
                 const f = Number(item.fator);
                 d.qty += (Number(item.quantidade) || 0);
@@ -152,55 +139,56 @@ Produtividade.Geral = {
 
         } catch (error) {
             console.error("Erro ao carregar:", error);
-            // Exibe o erro detalhado na tabela para facilitar debug
             tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${error.message || JSON.stringify(error)}</td></tr>`;
         }
     },
 
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
+        const footer = document.getElementById('total-registros-footer');
+        
         const lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id === this.usuarioSelecionado)
             : this.dadosOriginais;
 
         tbody.innerHTML = '';
+        if(footer) footer.innerText = lista.length;
         
         lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
 
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
-            // CORREÇÃO: Usando 'funcao' em vez de 'cargo'
             const cargoExibicao = (d.usuario.funcao || 'Assistente').toUpperCase();
-            
             let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
             if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
             const perfilExibicao = perfilRaw;
-
             const metaBase = d.meta_real;
+
+            const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium";
 
             if (isDia && d.registros.length === 1) {
                 const r = d.registros[0];
                 const metaCalc = metaBase * r.fator;
                 const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
                 
-                let corFator = 'bg-green-50 text-green-700 border-green-200';
-                if(r.fator == 0.5) corFator = 'bg-yellow-50 text-yellow-700 border-yellow-200';
-                if(r.fator == 0) corFator = 'bg-red-50 text-red-700 border-red-200';
+                let corFator = 'bg-emerald-50 text-emerald-700';
+                if(r.fator == 0.5) corFator = 'bg-amber-50 text-amber-700';
+                if(r.fator == 0) corFator = 'bg-rose-50 text-rose-700';
 
                 let iconJustificativa = '';
                 if(r.justificativa && r.justificativa.trim() !== "") {
                     const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
-                    iconJustificativa = `<i class="fas fa-question-circle text-blue-500 ml-2 custom-tooltip" data-tooltip="${textoSeguro}"></i>`;
+                    iconJustificativa = `<i class="fas fa-comment-alt text-blue-400 ml-1.5 custom-tooltip cursor-help text-[10px]" data-tooltip="${textoSeguro}"></i>`;
                 }
 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
+                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30";
                 
                 tr.innerHTML = `
-                    <td class="px-4 py-3 text-center border-r border-slate-100 w-28">
-                        <div class="flex items-center justify-center relative">
+                    <td class="px-2 py-2 text-center border-r border-slate-200">
+                        <div class="flex items-center justify-center">
                             <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" 
-                                class="${corFator} text-[10px] font-bold border rounded px-1 py-1 outline-none cursor-pointer w-20 appearance-none text-center">
+                                class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none cursor-pointer w-full text-center">
                                 <option value="1" ${String(r.fator) === '1' ? 'selected' : ''}>100%</option>
                                 <option value="0.5" ${String(r.fator) === '0.5' ? 'selected' : ''}>50%</option>
                                 <option value="0" ${String(r.fator) === '0' ? 'selected' : ''}>Abonar</option>
@@ -208,70 +196,58 @@ Produtividade.Geral = {
                             ${iconJustificativa}
                         </div>
                     </td>
-                    <td class="px-6 py-3 font-bold text-slate-700">
-                        <div class="flex items-center gap-2 cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
-                             <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs">
-                                ${(d.usuario.nome || 'U').substring(0,2).toUpperCase()}
-                            </div>
-                            <div class="flex flex-col">
-                                <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-bold text-blue-600 uppercase tracking-wider">
-                                    ${cargoExibicao} <span class="text-slate-300 mx-1">•</span> ${perfilExibicao}
-                                </span>
-                            </div>
+                    <td class="px-3 py-2 border-r border-slate-200">
+                        <div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
+                            <span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span>
+                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${perfilExibicao}</span>
                         </div>
                     </td>
-                    <td class="px-6 py-3 text-center font-bold text-slate-500 text-xs">${r.fator}</td>
-                    <td class="px-6 py-3 text-center">
-                         <input type="number" value="${r.quantidade}" disabled
-                            class="w-16 text-center bg-slate-100 cursor-not-allowed border border-slate-200 rounded px-1 py-0.5 text-slate-500 font-bold outline-none">
-                    </td>
-                    <td class="px-6 py-3 text-center text-slate-500">${r.fifo || 0}</td>
-                    <td class="px-6 py-3 text-center text-slate-500">${r.gradual_total || 0}</td>
-                    <td class="px-6 py-3 text-center text-slate-500">${r.gradual_parcial || 0}</td>
-                    <td class="px-6 py-3 text-center font-bold text-slate-400 text-xs">${Math.round(metaCalc)}</td>
-                    <td class="px-6 py-3 text-center">
-                         <span class="${pct >= 100 ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-amber-600 bg-amber-50 border-amber-100'} px-2 py-1 rounded text-xs font-black border">
-                            ${Math.round(pct)}%
-                        </span>
+                    <td class="${commonCellClass}">${r.fator}</td>
+                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
+                    <td class="${commonCellClass}">${r.fifo || 0}</td>
+                    <td class="${commonCellClass}">${r.gradual_total || 0}</td>
+                    <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
+                    <td class="${commonCellClass} bg-slate-50 text-xs">${Math.round(metaCalc)}</td>
+                    <td class="px-2 py-2 text-center">
+                         <div class="flex items-center justify-center gap-1">
+                             <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
+                                ${Math.round(pct)}%
+                            </span>
+                         </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
             } else {
+                // VISÃO AGRUPADA (SEMANA/MÊS)
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
                 const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
+                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30";
                 tr.innerHTML = `
-                     <td class="px-4 py-3 text-center border-r border-slate-100 w-28 text-xs text-slate-400 italic">
-                        Agrupado
+                     <td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">
+                        --
                     </td>
-                    <td class="px-6 py-3 font-bold text-slate-700">
-                        <div class="flex items-center gap-2 cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
-                             <div class="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold text-xs">
-                                ${(d.usuario.nome || 'U').substring(0,2).toUpperCase()}
-                            </div>
-                             <div class="flex flex-col">
-                                <span>${d.usuario.nome}</span>
-                                <span class="text-[9px] text-slate-400 font-bold text-blue-600 uppercase tracking-wider">
-                                    ${cargoExibicao} <span class="text-slate-300 mx-1">•</span> ${perfilExibicao}
-                                </span>
-                            </div>
+                    <td class="px-3 py-2 border-r border-slate-200">
+                         <div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
+                            <span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span>
+                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${perfilExibicao}</span>
                         </div>
                     </td>
-                    <td class="px-6 py-3 text-center font-bold text-slate-600 text-xs">
+                    <td class="${commonCellClass} font-bold text-slate-700">
                         ${d.totais.diasUteis}
                     </td>
-                    <td class="px-6 py-3 text-center font-bold text-blue-700">${d.totais.qty}</td>
-                    <td class="px-6 py-3 text-center text-slate-500">${d.totais.fifo}</td>
-                    <td class="px-6 py-3 text-center text-slate-500">${d.totais.gt}</td>
-                    <td class="px-6 py-3 text-center text-slate-500">${d.totais.gp}</td>
-                    <td class="px-6 py-3 text-center font-bold text-slate-400 text-xs">${Math.round(metaTotal)}</td>
-                    <td class="px-6 py-3 text-center">
-                         <span class="${pct >= 100 ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-amber-600 bg-amber-50 border-amber-100'} px-2 py-1 rounded text-xs font-black border">
-                            ${Math.round(pct)}%
-                        </span>
+                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
+                    <td class="${commonCellClass}">${d.totais.fifo}</td>
+                    <td class="${commonCellClass}">${d.totais.gt}</td>
+                    <td class="${commonCellClass}">${d.totais.gp}</td>
+                    <td class="${commonCellClass} bg-slate-50 text-xs">${Math.round(metaTotal)}</td>
+                    <td class="px-2 py-2 text-center">
+                         <div class="flex items-center justify-center gap-1">
+                             <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
+                                ${Math.round(pct)}%
+                            </span>
+                         </div>
                     </td>
                 `;
                 tbody.appendChild(tr);
@@ -279,7 +255,7 @@ Produtividade.Geral = {
         });
         
         if(lista.length === 0) {
-             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400">Nenhum registro encontrado para este período.</td></tr>';
+             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado para este período.</td></tr>';
         }
     },
     
@@ -403,17 +379,11 @@ Produtividade.Geral = {
         }
     },
 
-    // --- FUNÇÕES DE FILTRO E SELEÇÃO ---
-
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
         document.getElementById('selected-name').textContent = nome;
-        
-        // 1. Filtra a tabela (visual)
         this.renderizarTabela();
-
-        // 2. Filtra os KPIs (cards)
         const dadosFiltrados = this.cacheData.filter(r => r.usuario.id === id);
         this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
     },
@@ -421,11 +391,7 @@ Produtividade.Geral = {
     limparSelecao: function() {
         this.usuarioSelecionado = null;
         document.getElementById('selection-header').classList.add('hidden');
-        
-        // 1. Restaura a tabela completa
         this.renderizarTabela();
-
-        // 2. Restaura os KPIs completos
         this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
 
@@ -433,10 +399,8 @@ Produtividade.Geral = {
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        
         let totalProdAssistentes = 0;
         let countAssistentes = new Set(); 
-
         let usersCLT = new Set();
         let usersPJ = new Set();
         
@@ -444,14 +408,13 @@ Produtividade.Geral = {
 
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
-            const metaUser = 650; // Fallback fixo por segurança
+            const metaUser = 650;
             const metaCalc = metaUser * r.fator;
             
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
-            // CORREÇÃO: Usando 'funcao' em vez de 'cargo'
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
             if(perfil === 'USER') perfil = 'PJ';
@@ -459,7 +422,6 @@ Produtividade.Geral = {
             if(perfil === 'CLT') usersCLT.add(r.usuario.id);
             else usersPJ.add(r.usuario.id);
 
-            // Se tiver filtrado, considera todos. Se não, exclui gestão.
             if (isSingleUser) {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
@@ -473,41 +435,27 @@ Produtividade.Geral = {
 
         const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
-        document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
+        document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
         document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
         
         const bar = document.getElementById('kpi-pct-bar');
         if(bar) {
             bar.style.width = Math.min(pct, 100) + '%';
             bar.className = pct >= 100 
-                ? "h-full bg-emerald-400 rounded-full transition-all duration-500" 
-                : "h-full bg-white/90 rounded-full transition-all duration-500";
+                ? "h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                : "h-full bg-slate-300 rounded-full transition-all duration-500";
         }
 
         const clt = usersCLT.size;
         const pj = usersPJ.size;
-        const totalUsers = clt + pj;
+        document.getElementById('kpi-clt-val').innerText = clt;
+        document.getElementById('kpi-pj-val').innerText = pj;
         
-        const elClt = document.getElementById('kpi-clt-val');
-        if(elClt) elClt.innerText = `${clt} (${totalUsers > 0 ? Math.round(clt/totalUsers*100) : 0}%)`;
-        const elPj = document.getElementById('kpi-pj-val');
-        if(elPj) elPj.innerText = `${pj} (${totalUsers > 0 ? Math.round(pj/totalUsers*100) : 0}%)`;
-        
-        const barClt = document.getElementById('kpi-clt-bar');
-        if(barClt) barClt.style.width = (totalUsers > 0 ? (clt/totalUsers)*100 : 0) + '%';
-        const barPj = document.getElementById('kpi-pj-bar');
-        if(barPj) barPj.style.width = (totalUsers > 0 ? (pj/totalUsers)*100 : 0) + '%';
-
         // DIAS ÚTEIS
         const diasUteisTotais = this.calcularDiasUteis(dataInicio, dataFim);
         const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) {
-            elDias.innerText = `${diasComProd.size} / ${diasUteisTotais}`;
-            elDias.style.fontSize = "1.5rem"; 
-        }
-        const elDiasTotal = document.getElementById('kpi-dias-total');
-        if(elDiasTotal) elDiasTotal.innerText = ""; 
-
+        if(elDias) elDias.innerText = `${diasComProd.size}/${diasUteisTotais}`;
+        
         // MÉDIA
         const numConsiderados = countAssistentes.size;
         const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
