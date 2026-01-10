@@ -3,7 +3,7 @@ MinhaArea.Geral = {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
         
-        // Se não tiver usuário alvo (caso do admin que acabou de entrar), mostra aviso
+        // Validação se há usuário selecionado
         if (!uid) {
             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
             this.zerarKPIs();
@@ -39,6 +39,7 @@ MinhaArea.Geral = {
 
             const metaDiariaPadrao = metaData ? Math.round(metaData.meta / 22) : 650;
 
+            // 3. Processamento
             let totalProd = 0;
             let totalFifo = 0;
             let totalGT = 0;
@@ -48,6 +49,11 @@ MinhaArea.Geral = {
             let somaFator = 0;
 
             tbody.innerHTML = '';
+
+            // Helper para formatar porcentagem com 2 decimais (ex: 100,00%)
+            const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+            // Helper para zeros ficarem discretos
+            const fmtZero = (val) => val === 0 ? '<span class="text-slate-300">0</span>' : val;
 
             data.forEach(item => {
                 const qtd = Number(item.quantidade || 0);
@@ -74,9 +80,6 @@ MinhaArea.Geral = {
                 const ano = dateObj.getFullYear();
                 const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase().replace('.', '');
                 
-                // Helper para zeros ficarem discretos
-                const fmtZero = (val) => val === 0 ? '<span class="text-slate-300">0</span>' : val;
-
                 const tr = `
                     <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600">
                         <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate font-bold text-slate-700 bg-slate-50/30">
@@ -89,7 +92,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center">${fmtZero(gp)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${qtd}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center">${metaDia}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold ${corPct}">${Math.round(pct)}%</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold ${corPct}">${fmtPct(pct)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate max-w-[200px]" title="${item.justificativa || ''}">
                             ${item.justificativa || '<span class="text-slate-300">-</span>'}
                         </td>
@@ -98,6 +101,7 @@ MinhaArea.Geral = {
                 tbody.innerHTML += tr;
             });
 
+            // Atualiza Rodapé
             this.setTxt('total-registros-footer', data.length);
             this.setTxt('footer-fator', somaFator.toFixed(1));
             this.setTxt('footer-fifo', totalFifo.toLocaleString('pt-BR'));
@@ -106,18 +110,19 @@ MinhaArea.Geral = {
             this.setTxt('footer-prod', totalProd.toLocaleString('pt-BR'));
             this.setTxt('footer-meta', totalMeta.toLocaleString('pt-BR'));
             
-            const atingimentoGeral = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
-            this.setTxt('footer-pct', atingimentoGeral + '%');
+            // KPI Atingimento Geral
+            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
+            this.setTxt('footer-pct', fmtPct(atingimentoGeral));
 
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado neste período.</td></tr>';
             }
 
-            // KPIs
+            // Atualiza Cards KPI (Topo)
             const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-            this.setTxt('kpi-pct', atingimentoGeral + '%');
+            this.setTxt('kpi-pct', fmtPct(atingimentoGeral)); // Agora com decimais
             this.setTxt('kpi-dias', diasUteis);
             this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
