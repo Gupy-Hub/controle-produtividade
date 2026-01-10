@@ -11,6 +11,13 @@ Produtividade.Matriz = {
 
     carregar: async function() {
         const tbody = document.getElementById('matriz-body');
+        
+        // --- PROTEÇÃO CONTRA ERRO (CORREÇÃO) ---
+        if (!tbody) {
+            console.warn("Elemento 'matriz-body' não encontrado. Verifique o HTML.");
+            return;
+        }
+
         const dateInput = document.getElementById('global-date');
         
         // Pega o ano do filtro global
@@ -48,7 +55,7 @@ Produtividade.Matriz = {
                 const nome = r.usuario.nome;
                 const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
                 
-                // --- FILTRO APLICADO AQUI ---
+                // Filtro
                 if (!mostrarGestao && ['AUDITORA', 'GESTORA'].includes(cargo)) return;
 
                 if (!users[uid]) {
@@ -74,11 +81,12 @@ Produtividade.Matriz = {
 
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = `<tr><td colspan="20" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="20" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
         }
     },
 
     renderizar: function(lista, tbody) {
+        if(!tbody) return; // Proteção extra
         tbody.innerHTML = '';
 
         if (lista.length === 0) {
@@ -107,10 +115,10 @@ Produtividade.Matriz = {
             
             // Colunas de Estilo
             const tdNome = "px-4 py-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]";
-            const tdMes = "px-3 py-3 text-center text-slate-600 border-r border-slate-100";
-            const tdQ = "px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/30 border-r border-blue-100";
-            const tdS = "px-3 py-3 text-center font-bold text-indigo-700 bg-indigo-50/30 border-r border-indigo-100";
-            const tdTotal = "px-4 py-3 text-center font-black text-slate-800 bg-slate-100";
+            const tdMes = "px-3 py-3 text-center text-slate-600 border-r border-slate-100 text-xs";
+            const tdQ = "px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/30 border-r border-blue-100 text-xs";
+            const tdS = "px-3 py-3 text-center font-bold text-indigo-700 bg-indigo-50/30 border-r border-indigo-100 text-xs";
+            const tdTotal = "px-4 py-3 text-center font-black text-slate-800 bg-slate-100 text-xs";
 
             tr.innerHTML = `
                 <td class="${tdNome}">
