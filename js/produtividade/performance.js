@@ -135,8 +135,8 @@ Produtividade.Performance = {
         this.renderRankingList(Object.values(producaoPorUser));
     },
 
+    // --- CORREÇÃO APLICADA AQUI ---
     renderizarVisaoIndividual: function(userId, userNameRaw) {
-        // Escapa aspas no nome para evitar bugs visuais
         const userName = userNameRaw.replace(/'/g, ""); 
         
         document.getElementById('btn-reset-chart').classList.remove('hidden');
@@ -158,18 +158,24 @@ Produtividade.Performance = {
 
             diasSet.add(date);
 
+            // Time
             if (!teamProd[date]) { teamProd[date] = 0; teamCount[date] = new Set(); }
             teamProd[date] += qtd;
             teamCount[date].add(r.usuario.id);
 
-            if (r.usuario.id === userId) {
+            // CORREÇÃO: Forçar conversão para String em ambos os lados para garantir igualdade
+            if (String(r.usuario.id) === String(userId)) {
                 if (!userProd[date]) userProd[date] = 0;
                 userProd[date] += qtd;
             }
         });
 
         const labels = Array.from(diasSet).sort();
+        
+        // Se usuário não trabalhou no dia, valor é 0
         const userValues = labels.map(d => userProd[d] || 0);
+        
+        // Média do time no dia (Produção Total / Pessoas Ativas naquele dia)
         const avgValues = labels.map(d => {
             const total = teamProd[d] || 0;
             const count = teamCount[d] ? teamCount[d].size : 1;
@@ -210,7 +216,6 @@ Produtividade.Performance = {
             if (index === 1) medal = `<i class="fas fa-medal text-slate-400 w-6 text-center"></i>`;
             if (index === 2) medal = `<i class="fas fa-medal text-amber-700 w-6 text-center"></i>`;
 
-            // Escapar aspas simples no nome para o onclick
             const safeName = u.nome.replace(/'/g, "\\'");
 
             html += `
@@ -234,7 +239,6 @@ Produtividade.Performance = {
         
         const ctx = document.getElementById('evolutionChart').getContext('2d');
         
-        // Formatar datas para DD/MM
         const formattedLabels = labels.map(d => {
             const parts = d.split('-');
             return `${parts[2]}/${parts[1]}`;
@@ -249,7 +253,7 @@ Produtividade.Performance = {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 500 }, // Otimização de Performance
+                animation: { duration: 500 },
                 interaction: {
                     mode: 'index',
                     intersect: false,
@@ -279,7 +283,7 @@ Produtividade.Performance = {
                         grid: { display: false },
                         ticks: { 
                             font: { size: 10 },
-                            maxTicksLimit: 15, // EVITA SOBREPOSIÇÃO DE LABELS
+                            maxTicksLimit: 15,
                             maxRotation: 0
                         }
                     }
