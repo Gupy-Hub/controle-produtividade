@@ -36,6 +36,10 @@ Produtividade.Matriz = {
 
             if (error) throw error;
 
+            // Lógica de Filtro de Gestão (Igual Validação e Consolidado)
+            const checkGestao = document.getElementById('check-gestao');
+            const mostrarGestao = checkGestao ? checkGestao.checked : false;
+
             // Estrutura: users[id] = { nome: '...', months: [0,0,0...] }
             const users = {};
 
@@ -44,10 +48,7 @@ Produtividade.Matriz = {
                 const nome = r.usuario.nome;
                 const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
                 
-                // Filtro de Gestão (Opcional: usar o toggle global se desejar)
-                const checkGestao = document.getElementById('check-gestao');
-                const mostrarGestao = checkGestao ? checkGestao.checked : false;
-                
+                // --- FILTRO APLICADO AQUI ---
                 if (!mostrarGestao && ['AUDITORA', 'GESTORA'].includes(cargo)) return;
 
                 if (!users[uid]) {
@@ -60,7 +61,6 @@ Produtividade.Matriz = {
                 }
 
                 // Identifica o mês (0-11) da data 'YYYY-MM-DD'
-                // Ajuste para fuso horário: tratar string como data local
                 const partes = r.data_referencia.split('-');
                 const mesIndex = parseInt(partes[1]) - 1; // Mês 1 vira Index 0
 
@@ -82,7 +82,7 @@ Produtividade.Matriz = {
         tbody.innerHTML = '';
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400 italic">Sem dados para este ano.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400 italic">Sem dados para este ano (ou filtro ocultou tudo).</td></tr>';
             return;
         }
 
