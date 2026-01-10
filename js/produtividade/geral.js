@@ -89,7 +89,6 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
-            // CORREÇÃO: Adicionado 'contrato' na query
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
@@ -111,7 +110,6 @@ Produtividade.Geral = {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 if(!dadosAgrupados[uid]) {
                     const metaBanco = 650;
-                    // Fallback seguro com contrato
                     dadosAgrupados[uid] = {
                         usuario: item.usuario || { nome: 'Desconhecido', perfil: 'user', funcao: 'Assistente', contrato: 'PJ' },
                         registros: [],
@@ -137,6 +135,7 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             
+            // CORREÇÃO: Garante que o filtro persista mesmo após recarregar dados
             if (this.usuarioSelecionado) {
                 this.filtrarUsuario(this.usuarioSelecionado, document.getElementById('selected-name').textContent);
             } else {
@@ -154,8 +153,9 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         const footer = document.getElementById('total-registros-footer');
         
+        // CORREÇÃO CRÍTICA: Uso de '==' para permitir comparação entre String (do HTML) e Number (do Banco)
         const lista = this.usuarioSelecionado 
-            ? this.dadosOriginais.filter(d => d.usuario.id === this.usuarioSelecionado)
+            ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado)
             : this.dadosOriginais;
 
         tbody.innerHTML = '';
@@ -166,8 +166,6 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             const cargoExibicao = (d.usuario.funcao || 'Assistente').toUpperCase();
-            
-            // CORREÇÃO: Usar o campo contrato diretamente
             const contratoExibicao = (d.usuario.contrato || 'PJ').toUpperCase();
             
             const metaBase = d.meta_real;
@@ -225,7 +223,6 @@ Produtividade.Geral = {
                 `;
                 tbody.appendChild(tr);
             } else {
-                // VISÃO AGRUPADA
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
@@ -266,6 +263,94 @@ Produtividade.Geral = {
         }
     },
     
+    // CORREÇÃO CRÍTICA: ID e Nome agora são recebidos e tratados com comparação flexível
+    filtrarUsuario: function(id, nome) {
+        this.usuarioSelecionado = id; // Armazena ID (pode vir como string do HTML)
+        
+        document.getElementById('selection-header').classList.remove('hidden');
+        document.getElementById('selected-name').textContent = nome;
+        
+        // 1. Filtra a tabela visualmente
+        this.renderizarTabela();
+
+        // 2. Filtra os KPIs usando '==' para garantir que String ID === Number ID
+        const dadosFiltrados = this.cacheData.filter(r => r.usuario.id == id);
+        this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
+    },
+
+    limparSelecao: function() {
+        this.usuarioSelecionado = null;
+        document.getElementById('selection-header').classList.add('hidden');
+        this.renderizarTabela();
+        this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
+    },
+
+    // Funções de atualização e KPIs (Mantidas inalteradas na lógica, apenas o filtro acima afeta o que entra aqui)
+    atualizarKPIs: function(data, dataInicio, dataFim) {
+        let totalProdGeral = 0;
+        let metaTotalGeral = 0;
+        let diasComProd = new Set();
+        let totalProdAssistentes = 0;
+        let countAssistentes = new Set(); 
+        
+        let usersCLT = new Set();
+        let usersPJ = new Set();
+        
+        const isSingleUser = this.usuarioSelecionado !== null;
+
+        data.forEach(r => {
+            const qtd = Number(r.quantidade) || 0;
+            const metaUser = 650;
+            const metaCalc = metaUser * r.fator;
+            
+            totalProdGeral += qtd;
+            metaTotalGeral += metaCalc;
+            diasComProd.add(r.data_referencia);
+            
+            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
+            
+            if(contrato === 'CLT') usersCLT.add(r.usuario.id);
+            else usersPJ.add(r.usuario.id);
+
+            const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            if (isSingleUser) {
+                totalProdAssistentes += qtd;
+                countAssistentes.add(r.usuario.id);
+            } else {
+                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                    totalProdAssistentes += qtd;
+                    countAssistentes.add(r.usuario.id);
+                }
+            }
+        });
+
+        document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
+        document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
+
+        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
+        document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
+        const bar = document.getElementById('kpi-pct-bar');
+        if(bar) {
+            bar.style.width = Math.min(pct, 100) + '%';
+            bar.className = pct >= 100 
+                ? "h-full bg-emerald-500 rounded-full transition-all duration-500" 
+                : "h-full bg-slate-300 rounded-full transition-all duration-500";
+        }
+
+        document.getElementById('kpi-clt-val').innerText = usersCLT.size;
+        document.getElementById('kpi-pj-val').innerText = usersPJ.size;
+        
+        const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
+        const diasTrabalhadosReal = diasComProd.size; 
+        const elDias = document.getElementById('kpi-dias-val');
+        if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
+        
+        const numConsiderados = countAssistentes.size;
+        const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
+        const elMedia = document.getElementById('kpi-media-todas');
+        if(elMedia) elMedia.innerText = media;
+    },
+
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
@@ -310,7 +395,7 @@ Produtividade.Geral = {
         }
 
         const ids = [];
-        const lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id === this.usuarioSelecionado) : this.dadosOriginais;
+        const lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) : this.dadosOriginais;
         lista.forEach(g => g.registros.forEach(r => ids.push(r.id)));
 
         try {
@@ -335,93 +420,5 @@ Produtividade.Geral = {
             if(error) throw error;
             this.carregarTela();
         } catch(err) { alert("Erro ao excluir: " + err.message); }
-    },
-
-    filtrarUsuario: function(id, nome) {
-        this.usuarioSelecionado = id;
-        document.getElementById('selection-header').classList.remove('hidden');
-        document.getElementById('selected-name').textContent = nome;
-        this.renderizarTabela();
-        const dadosFiltrados = this.cacheData.filter(r => r.usuario.id === id);
-        this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
-    },
-
-    limparSelecao: function() {
-        this.usuarioSelecionado = null;
-        document.getElementById('selection-header').classList.add('hidden');
-        this.renderizarTabela();
-        this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
-    },
-
-    atualizarKPIs: function(data, dataInicio, dataFim) {
-        let totalProdGeral = 0;
-        let metaTotalGeral = 0;
-        let diasComProd = new Set();
-        let totalProdAssistentes = 0;
-        let countAssistentes = new Set(); 
-        
-        let usersCLT = new Set();
-        let usersPJ = new Set();
-        
-        const isSingleUser = this.usuarioSelecionado !== null;
-
-        data.forEach(r => {
-            const qtd = Number(r.quantidade) || 0;
-            const metaUser = 650;
-            const metaCalc = metaUser * r.fator;
-            
-            totalProdGeral += qtd;
-            metaTotalGeral += metaCalc;
-            diasComProd.add(r.data_referencia);
-            
-            // CORREÇÃO: Usar 'contrato' para definir a estatística de equipe
-            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
-            
-            // Categorização simples para o Dashboard (CLT vs Outros/PJ)
-            if(contrato === 'CLT') usersCLT.add(r.usuario.id);
-            else usersPJ.add(r.usuario.id); // PJ, Auditora, Gestora, etc caem aqui como "Não CLT"
-
-            const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            if (isSingleUser) {
-                totalProdAssistentes += qtd;
-                countAssistentes.add(r.usuario.id);
-            } else {
-                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
-                    totalProdAssistentes += qtd;
-                    countAssistentes.add(r.usuario.id);
-                }
-            }
-        });
-
-        // 1. KPI PRODUÇÃO
-        document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
-        document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
-
-        // 2. KPI ATINGIMENTO
-        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
-        document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
-        const bar = document.getElementById('kpi-pct-bar');
-        if(bar) {
-            bar.style.width = Math.min(pct, 100) + '%';
-            bar.className = pct >= 100 
-                ? "h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                : "h-full bg-slate-300 rounded-full transition-all duration-500";
-        }
-
-        // 3. KPI EQUIPE
-        document.getElementById('kpi-clt-val').innerText = usersCLT.size;
-        document.getElementById('kpi-pj-val').innerText = usersPJ.size;
-        
-        // 4. KPI DIAS ÚTEIS
-        const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
-        const diasTrabalhadosReal = diasComProd.size; 
-        const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
-        
-        // 5. KPI MÉDIA
-        const numConsiderados = countAssistentes.size;
-        const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
-        const elMedia = document.getElementById('kpi-media-todas');
-        if(elMedia) elMedia.innerText = media;
     }
 };
