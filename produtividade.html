@@ -32,6 +32,9 @@
             font-size: 11px; font-weight: 600; white-space: nowrap; z-index: 100;
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); pointer-events: none;
         }
+        /* Remove setas do input number */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -96,6 +99,9 @@
                             <option value="1">1º Semestre</option>
                             <option value="2">2º Semestre</option>
                         </select>
+                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95">
+                            <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
+                        </button>
                     </div>
 
                     <div id="ctrl-performance" class="hidden flex items-center gap-2">
@@ -162,7 +168,7 @@
                         <thead id="cons-table-header" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
                         </thead>
                         <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white">
-                            </tbody>
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -182,7 +188,7 @@
     <script>
         Produtividade.atualizarTodasAbas = function() {
             if(Produtividade.Geral && document.getElementById('tab-geral').classList.contains('hidden') === false) Produtividade.Geral.renderizarTabela();
-            if(Produtividade.Consolidado && document.getElementById('tab-consolidado').classList.contains('hidden') === false) Produtividade.Consolidado.renderizar();
+            if(Produtividade.Consolidado && document.getElementById('tab-consolidado').classList.contains('hidden') === false) Produtividade.Consolidado.renderizar(Produtividade.Consolidado.dadosCalculados);
         }
     </script>
 </body>

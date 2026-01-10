@@ -1,7 +1,8 @@
 Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
-    baseManualHC: 0,
+    baseManualHC: 0, // Fallback global
+    overridesHC: {}, // Armazena ajustes manuais por coluna { 1: 15, 2: 17 }
     dadosCalculados: null, 
 
     init: async function() { 
@@ -9,6 +10,20 @@ Produtividade.Consolidado = {
             this.initialized = true; 
         } 
         this.togglePeriodo();
+    },
+
+    // Função chamada quando o usuário altera o input no cabeçalho
+    atualizarHC: function(colIndex, novoValor) {
+        const val = parseInt(novoValor);
+        if (isNaN(val) || val <= 0) {
+            delete this.overridesHC[colIndex]; // Remove override se vazio/invalido
+        } else {
+            this.overridesHC[colIndex] = val;
+        }
+        // Redesenha a tabela com os novos cálculos, sem ir ao banco
+        if (this.dadosCalculados) {
+            this.renderizar(this.dadosCalculados);
+        }
     },
 
     togglePeriodo: function() {
@@ -35,6 +50,8 @@ Produtividade.Consolidado = {
             }
         }
         
+        // Limpa overrides ao mudar de período para evitar confusão visual
+        this.overridesHC = {};
         this.carregar(false); 
     },
     
@@ -97,8 +114,9 @@ Produtividade.Consolidado = {
                 
             if(error) throw error;
             
+            // Define base padrão como Fallback
             const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
-            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 1;
+            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 17; // Default 17 se 0
             
             this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
             this.processarEExibir(rawData, t, mes, ano);
@@ -221,15 +239,61 @@ Produtividade.Consolidado = {
         const tbody = document.getElementById('cons-table-body');
         const hRow = document.getElementById('cons-table-header');
         
-        if(hRow) hRow.innerHTML = `
+        // GERAÇÃO DINÂMICA DO HEADER COM INPUTS
+        if(hRow) {
+            let headerHTML = `
             <tr class="bg-slate-50 border-b border-slate-200">
                 <th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]">
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
-                </th>` + 
-            cols.map(c => `<th class="px-4 py-4 text-center border-l border-slate-200 min-w-[100px]"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span></th>`).join('') + 
-            `<th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px]">
-                <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
+                </th>`;
+            
+            // Colunas de Período (com Input)
+            cols.forEach((c, index) => {
+                const colIdx = index + 1;
+                // Busca se tem override salvo
+                const valOverride = this.overridesHC[colIdx] || '';
+                // Busca o valor automático para placeholder
+                const autoCount = st[colIdx].users.size || 17;
+
+                headerHTML += `
+                <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[100px] group">
+                    <div class="flex flex-col items-center gap-1">
+                        <span class="text-xs font-bold text-slate-600 uppercase">${c}</span>
+                        <div class="relative w-full max-w-[60px]">
+                            <input 
+                                type="number" 
+                                value="${valOverride}" 
+                                placeholder="(${autoCount})" 
+                                onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)"
+                                class="w-full text-[10px] text-center bg-white border border-slate-200 rounded py-0.5 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-100 transition text-blue-600 font-bold placeholder-slate-300" 
+                                title="Ajustar HC Manualmente"
+                            >
+                        </div>
+                    </div>
+                </th>`;
+            });
+
+            // Coluna Total (Também com Input para ajuste global da média anual)
+            const valTotal = this.overridesHC[99] || '';
+            const autoTotal = st[99].users.size || 17;
+            headerHTML += `
+            <th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[120px]">
+                <div class="flex flex-col items-center gap-1">
+                    <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
+                    <div class="relative w-full max-w-[60px]">
+                        <input 
+                            type="number" 
+                            value="${valTotal}" 
+                            placeholder="(${autoTotal})" 
+                            onchange="Produtividade.Consolidado.atualizarHC(99, this.value)"
+                            class="w-full text-[10px] text-center bg-white border border-blue-200 rounded py-0.5 outline-none focus:border-blue-500 text-blue-700 font-bold placeholder-blue-200"
+                        >
+                    </div>
+                </div>
             </th></tr>`;
+            
+            hRow.innerHTML = headerHTML;
+        }
 
         let h = ''; 
         const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
@@ -251,7 +315,12 @@ Produtividade.Consolidado = {
             
             idxs.forEach(i => {
                 const s = st[i]; 
-                const HF = this.baseManualHC > 0 ? this.baseManualHC : (s.users.size || 1); 
+                
+                // LÓGICA DE OVERRIDE: Se tiver manual no overridesHC usa, senão usa automático, senão 17
+                const countManual = this.overridesHC[i];
+                const countAuto = s.users.size || 17;
+                const HF = countManual ? parseInt(countManual) : countAuto;
+
                 let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 if (val instanceof Set) val = val.size;
                 
@@ -266,16 +335,17 @@ Produtividade.Consolidado = {
             return tr + '</tr>';
         };
 
-        h += mkRow('Base Assistentes (HC)', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
+        // Linhas de Dados
+        h += mkRow('HC Utilizado', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
         h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
-        h += mkRow('Total Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-        h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
-        h += mkRow('Média Validação (Todas Assistentes)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
-        h += mkRow('Média Validação Diária (Por Assist.)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
+        h += mkRow('Total Doc. Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
+        h += mkRow('Total Val. Diária', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
+        h += mkRow('Média Val. (Equipe)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
+        h += mkRow('Média Val. Diária (Pessoa)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
         
         tbody.innerHTML = h;
     },
