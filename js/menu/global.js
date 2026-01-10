@@ -1,21 +1,21 @@
 window.MenuGlobal = {
     renderizar: function() {
-        // 1. Detecta onde estamos (Raiz ou Subpasta)
+        // 1. Detecta o caminho atual para corrigir os links (Raiz vs Subpasta)
         const path = window.location.pathname;
         const isInGestao = path.includes('/gestao/');
         
-        // Define o caminho para voltar à raiz
-        // Se estiver dentro de "gestao/", usa "../". Se estiver na raiz, usa "./"
+        // Se estiver dentro de /gestao/, usamos '../' para voltar à raiz. 
+        // Se estiver na raiz, usamos './' para navegar normalmente.
         const rootPath = isInGestao ? '../' : './';
 
-        // Verifica se estamos no módulo de gestão para deixar o botão ativo
+        // Verifica se a seção Gestão está ativa para destacar o botão
         const isGestaoActive = isInGestao; 
 
-        // Estilos
+        // Classes de Estilo (Ativo vs Inativo)
         const activeClass = "bg-slate-800 text-white border-l-4 border-blue-500 shadow-lg";
         const inactiveClass = "text-slate-400 hover:bg-slate-800 hover:text-white transition-all";
 
-        // 2. Monta o HTML do Menu
+        // 2. Monta o HTML do Menu Preto Lateral (Fixo)
         const menuHtml = `
         <aside class="fixed left-0 top-0 h-full w-20 md:w-64 bg-slate-900 z-50 flex flex-col transition-all duration-300 shadow-2xl">
             <div class="h-20 flex items-center justify-center border-b border-slate-800">
@@ -57,7 +57,7 @@ window.MenuGlobal = {
             </aside>
         `;
 
-        // 3. Injeta na página
+        // 3. Injeta o Menu na Página
         let container = document.getElementById('menu-global-container');
         if (!container) {
             container = document.createElement('div');
@@ -66,18 +66,22 @@ window.MenuGlobal = {
         }
         container.innerHTML = menuHtml;
 
-        // 4. Ajustes de Layout
+        // 4. Ajustes de Layout (Padding do Body)
+        // Garante que o conteúdo não fique escondido atrás do menu fixo
         document.body.classList.add('pl-20', 'md:pl-64');
 
-        // Se estiver na Gestão, mostramos o submenu lateral branco
+        // Se estiver na Gestão, mostramos o submenu branco lateral
         if (isGestaoActive) {
             const submenu = document.getElementById('sidebar-menu-content');
             if (submenu) {
                 submenu.classList.remove('hidden', 'lg:hidden');
-                submenu.classList.add('lg:block'); 
+                submenu.classList.add('lg:block'); // Mostra em telas grandes
                 
+                // Empurra o conteúdo mais para a direita para caber os 2 menus
+                // Mas precisamos verificar se o container principal existe para não quebrar layout
                 const mainContent = document.querySelector('.max-w-\\[1600px\\]');
                 if(mainContent) {
+                    // Adiciona margem extra à esquerda somente em telas grandes onde o submenu branco aparece
                     mainContent.classList.add('lg:ml-64'); 
                 }
             }
@@ -85,6 +89,7 @@ window.MenuGlobal = {
     }
 };
 
+// Inicializa o menu assim que o DOM carregar
 document.addEventListener('DOMContentLoaded', () => {
     window.MenuGlobal.renderizar();
 });
