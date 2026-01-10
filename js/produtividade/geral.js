@@ -89,12 +89,12 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
-            // QUERY CORRIGIDA PARA TRAZER DADOS REAIS
+            // CORREÇÃO: Adicionado 'contrato' na query
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
-                    usuario:usuarios ( id, nome, perfil, funcao )
+                    usuario:usuarios ( id, nome, perfil, funcao, contrato )
                 `)
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
@@ -110,20 +110,18 @@ Produtividade.Geral = {
             data.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 if(!dadosAgrupados[uid]) {
-                    // Meta padrão 650 se não houver lógica customizada ainda
                     const metaBanco = 650;
+                    // Fallback seguro com contrato
                     dadosAgrupados[uid] = {
-                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', funcao: 'Assistente' },
+                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'user', funcao: 'Assistente', contrato: 'PJ' },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
                         meta_real: metaBanco
                     };
                 }
                 
-                // Adiciona o registro individual
                 dadosAgrupados[uid].registros.push(item);
                 
-                // SOMA DOS TOTAIS (Garante que nulos virem zero)
                 const d = dadosAgrupados[uid].totais;
                 const f = Number(item.fator);
                 
@@ -133,8 +131,8 @@ Produtividade.Geral = {
                 d.gp += (Number(item.gradual_parcial) || 0);
                 d.fc += (Number(item.perfil_fc) || 0);
                 
-                d.dias += 1; // Dias trabalhados (contagem de registros)
-                d.diasUteis += f; // Dias ponderados pelo fator
+                d.dias += 1; 
+                d.diasUteis += f; 
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -168,15 +166,14 @@ Produtividade.Geral = {
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
             const cargoExibicao = (d.usuario.funcao || 'Assistente').toUpperCase();
-            let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
-            if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
-            const perfilExibicao = perfilRaw;
+            
+            // CORREÇÃO: Usar o campo contrato diretamente
+            const contratoExibicao = (d.usuario.contrato || 'PJ').toUpperCase();
+            
             const metaBase = d.meta_real;
-
             const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (isDia && d.registros.length === 1) {
-                // VISÃO DIÁRIA (Linha única por usuário)
                 const r = d.registros[0];
                 const metaCalc = metaBase * r.fator;
                 const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -209,10 +206,11 @@ Produtividade.Geral = {
                     <td class="px-3 py-2 border-r border-slate-200">
                         <div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                             <span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span>
-                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${perfilExibicao}</span>
+                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${contratoExibicao}</span>
                         </div>
                     </td>
-                    <td class="${commonCellClass}">${r.fator}</td> <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
+                    <td class="${commonCellClass}">${r.fator}</td>
+                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
                     <td class="${commonCellClass}">${r.fifo || 0}</td>
                     <td class="${commonCellClass}">${r.gradual_total || 0}</td>
                     <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
@@ -227,7 +225,7 @@ Produtividade.Geral = {
                 `;
                 tbody.appendChild(tr);
             } else {
-                // VISÃO AGRUPADA (SEMANA/MÊS) - SOMA TUDO
+                // VISÃO AGRUPADA
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
@@ -240,11 +238,12 @@ Produtividade.Geral = {
                     <td class="px-3 py-2 border-r border-slate-200">
                          <div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                             <span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span>
-                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${perfilExibicao}</span>
+                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${contratoExibicao}</span>
                         </div>
                     </td>
                     <td class="${commonCellClass} font-bold text-slate-700">
-                        ${d.totais.diasUteis} </td>
+                        ${d.totais.diasUteis}
+                    </td>
                     <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
                     <td class="${commonCellClass}">${d.totais.fifo}</td>
                     <td class="${commonCellClass}">${d.totais.gt}</td>
@@ -267,7 +266,6 @@ Produtividade.Geral = {
         }
     },
     
-    // Funções de manipulação (Mudar Fator, Excluir, etc) mantidas iguais...
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
@@ -287,7 +285,6 @@ Produtividade.Geral = {
             const { error } = await Sistema.supabase.from('producao').update({ fator: novoFator, justificativa: justificativa }).eq('id', id);
             if (error) throw error;
             
-            // Atualiza localmente
             let usuarioIdAfetado = null;
             this.dadosOriginais.forEach(group => {
                 group.registros.forEach(r => {
@@ -360,7 +357,6 @@ Produtividade.Geral = {
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        
         let totalProdAssistentes = 0;
         let countAssistentes = new Set(); 
         
@@ -378,14 +374,14 @@ Produtividade.Geral = {
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
+            // CORREÇÃO: Usar 'contrato' para definir a estatística de equipe
+            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
+            
+            // Categorização simples para o Dashboard (CLT vs Outros/PJ)
+            if(contrato === 'CLT') usersCLT.add(r.usuario.id);
+            else usersPJ.add(r.usuario.id); // PJ, Auditora, Gestora, etc caem aqui como "Não CLT"
+
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            let perfil = String(r.usuario.perfil).trim().toUpperCase();
-            if(perfil === 'USER') perfil = 'PJ';
-
-            if(perfil === 'CLT') usersCLT.add(r.usuario.id);
-            else usersPJ.add(r.usuario.id);
-
-            // Filtro de Média
             if (isSingleUser) {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
@@ -416,10 +412,9 @@ Produtividade.Geral = {
         document.getElementById('kpi-clt-val').innerText = usersCLT.size;
         document.getElementById('kpi-pj-val').innerText = usersPJ.size;
         
-        // 4. KPI DIAS ÚTEIS (Real vs Esperado)
+        // 4. KPI DIAS ÚTEIS
         const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
-        const diasTrabalhadosReal = diasComProd.size; // Quantidade de dias únicos com dados lançados
-        
+        const diasTrabalhadosReal = diasComProd.size; 
         const elDias = document.getElementById('kpi-dias-val');
         if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
