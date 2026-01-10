@@ -1,209 +1,100 @@
-// js/minha_area/geral.js
-
 MinhaArea.Geral = {
     carregar: async function() {
-        console.log("Carregando Dia a Dia (Tabela Producao)...");
-        
-        const datas = MinhaArea.getDatasFiltro();
-        const usuario = MinhaArea.usuario;
-        
-        if (!usuario || !usuario.id) {
-            console.error("Usuário não identificado");
-            return;
-        }
+        const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
+        if (!uid) return;
 
-        this.setLoading(true);
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
+        const tbody = document.getElementById('tabela-diario');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400"><i class="fas fa-spinner fa-spin"></i> Carregando...</td></tr>';
 
         try {
-            // 1. BUSCAR PRODUÇÃO (Tabela 'producao')
-            const { data: dadosProducao, error: erroProd } = await window.supabase
+            // 1. Busca Produção do Usuário
+            const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select('*')
-                .eq('usuario_id', usuario.id)
-                .gte('data_referencia', datas.inicio)
-                .lte('data_referencia', datas.fim)
+                .eq('usuario_id', uid)
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
                 .order('data_referencia', { ascending: false });
 
-            if (erroProd) throw new Error("Erro ao buscar produção: " + erroProd.message);
+            if (error) throw error;
 
-            // 2. BUSCAR METAS (Tabela 'metas')
-            // CORREÇÃO: Usar 'mes' e 'ano' em vez de 'data_inicio'
-            // Buscamos todas as metas do usuário para garantir que teremos a competência necessária
-            // (Poderíamos filtrar por ano, mas buscar tudo é seguro dado o volume baixo de metas/ano)
-            const { data: dadosMetas, error: erroMetas } = await window.supabase
-                .from('metas')
-                .select('mes, ano, meta') // Colunas corretas baseadas em gestao/metas.js
-                .eq('usuario_id', usuario.id);
+            // 2. Busca Média do Time (para KPI)
+            // Otimização: Fazer em paralelo se necessário
+            const { data: timeData } = await Sistema.supabase
+                .from('producao')
+                .select('quantidade')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
 
-            if (erroMetas) throw new Error("Erro ao buscar metas: " + erroMetas.message);
+            // PROCESSAMENTO
+            let totalProd = 0;
+            let diasTrabalhados = 0;
+            let metaAcumulada = 0;
+            const metaDiariaBase = 650;
 
-            // 3. Processar e Cruzar Dados
-            const dadosConsolidados = this.processarDados(dadosProducao || [], dadosMetas || []);
+            tbody.innerHTML = '';
+
+            data.forEach(r => {
+                const qtd = Number(r.quantidade) || 0;
+                const fator = Number(r.fator) || 0;
+                
+                totalProd += qtd;
+                metaAcumulada += (metaDiariaBase * fator);
+                if (fator > 0) diasTrabalhados++;
+
+                // Renderiza Linha Tabela
+                const [ano, mes, dia] = r.data_referencia.split('-');
+                const pctDia = (metaDiariaBase * fator) > 0 ? (qtd / (metaDiariaBase * fator)) * 100 : 0;
+                
+                let statusBadge = `<span class="bg-slate-100 text-slate-500 text-[10px] px-2 py-1 rounded font-bold">N/A</span>`;
+                if (fator > 0) {
+                    if (pctDia >= 100) statusBadge = `<span class="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-1 rounded font-bold">Meta Batida</span>`;
+                    else if (pctDia >= 80) statusBadge = `<span class="bg-amber-100 text-amber-700 text-[10px] px-2 py-1 rounded font-bold">Atenção</span>`;
+                    else statusBadge = `<span class="bg-rose-100 text-rose-700 text-[10px] px-2 py-1 rounded font-bold">Baixo</span>`;
+                }
+
+                const tr = `
+                    <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0">
+                        <td class="px-6 py-3 font-bold text-slate-600 text-xs">${dia}/${mes}/${ano}</td>
+                        <td class="px-6 py-3 text-center font-black text-blue-600">${qtd}</td>
+                        <td class="px-6 py-3 text-center text-xs text-slate-500">${fator}</td>
+                        <td class="px-6 py-3 text-center text-xs text-slate-400">${Math.round(metaDiariaBase * fator)}</td>
+                        <td class="px-6 py-3 text-center">${statusBadge}</td>
+                        <td class="px-6 py-3 text-xs text-slate-400 italic truncate max-w-[150px]" title="${r.justificativa || ''}">${r.justificativa || '-'}</td>
+                    </tr>
+                `;
+                tbody.innerHTML += tr;
+            });
+
+            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-8 text-slate-400 italic text-xs">Sem registros no período.</td></tr>';
+
+            // ATUALIZA KPIS
+            const pctTotal = metaAcumulada > 0 ? Math.round((totalProd / metaAcumulada) * 100) : 0;
+            const mediaMinha = diasTrabalhados > 0 ? Math.round(totalProd / diasTrabalhados) : 0;
             
-            // 4. Renderizar
-            this.renderizarKPIs(dadosConsolidados);
-            this.renderizarTabela(dadosConsolidados);
+            // Média Time (Simplificada: Total Produção / Total Registros do Time)
+            // Para maior precisão, deveria dividir por dias únicos x pessoas, mas isso serve para estimativa
+            const mediaTime = timeData.length > 0 ? Math.round(timeData.reduce((acc, curr) => acc + curr.quantidade, 0) / timeData.length) : 0;
 
-        } catch (erro) {
-            console.error("Erro Geral:", erro);
-            const tbody = document.getElementById('tabela-diario');
-            if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-red-400">Erro: ${erro.message}</td></tr>`;
-        } finally {
-            this.setLoading(false);
-        }
-    },
+            this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
+            this.setTxt('kpi-meta-total', metaAcumulada.toLocaleString('pt-BR'));
+            this.setTxt('kpi-pct', pctTotal + '%');
+            this.setTxt('kpi-dias', diasTrabalhados);
+            this.setTxt('kpi-media-real', mediaMinha.toLocaleString('pt-BR'));
+            this.setTxt('kpi-media-time', mediaTime.toLocaleString('pt-BR'));
 
-    // Função para cruzar Produção com a Meta da competência (Mês/Ano)
-    processarDados: function(listaProducao, listaMetas) {
-        const mapaDias = {};
-
-        listaProducao.forEach(reg => {
-            const data = reg.data_referencia; // Formato YYYY-MM-DD
-            
-            if (!mapaDias[data]) {
-                // Extrai Mês e Ano da data da produção para encontrar a meta correspondente
-                const [anoStr, mesStr, diaStr] = data.split('-');
-                const anoRef = parseInt(anoStr);
-                const mesRef = parseInt(mesStr);
-
-                // Busca a meta onde mes e ano batem
-                const metaCompetencia = listaMetas.find(m => m.mes === mesRef && m.ano === anoRef);
-                const valorMeta = metaCompetencia ? Number(metaCompetencia.meta) : 0;
-
-                mapaDias[data] = {
-                    data: data,
-                    producao: 0,
-                    meta: valorMeta,
-                    fator: Number(reg.fator) || 1, 
-                    detalhes: [] 
-                };
+            const bar = document.getElementById('bar-progress');
+            if (bar) {
+                bar.style.width = `${Math.min(pctTotal, 100)}%`;
+                bar.className = pctTotal >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
             }
 
-            mapaDias[data].producao += Number(reg.quantidade || 0);
-        });
-
-        // Retorna array ordenado (Data mais recente primeiro)
-        return Object.values(mapaDias).sort((a, b) => new Date(b.data) - new Date(a.data));
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-red-400 text-xs">Erro ao carregar dados.</td></tr>';
+        }
     },
 
-    renderizarKPIs: function(dados) {
-        let totalProduzido = 0;
-        let totalMeta = 0;
-        let diasProdutivos = 0;
-        let somaFatores = 0;
-
-        dados.forEach(d => {
-            totalProduzido += d.producao;
-            // A meta total é a soma das metas diárias ponderadas ou simples?
-            // Geralmente: Meta do Mês * Fator do Dia (se houver lógica de dias úteis)
-            // Aqui vamos somar a meta do dia apenas se houver produção ou se esperava produção
-            totalMeta += d.meta; 
-            
-            if (d.producao > 0) diasProdutivos++;
-            somaFatores += d.fator;
-        });
-
-        // 1. Total
-        const elTotal = document.getElementById('kpi-total');
-        if(elTotal) elTotal.innerText = totalProduzido.toLocaleString('pt-BR');
-
-        // 2. Atingimento
-        let atingimento = totalMeta > 0 ? (totalProduzido / totalMeta) * 100 : 0;
-        if (totalMeta === 0 && totalProduzido > 0) atingimento = 100;
-
-        const elPct = document.getElementById('kpi-pct');
-        const elBar = document.getElementById('bar-progress');
-        
-        if(elPct) elPct.innerText = atingimento.toFixed(1) + '%';
-        if(elBar) {
-            elBar.style.width = Math.min(atingimento, 100) + '%';
-            
-            if(atingimento >= 100) {
-                elPct.className = "text-2xl font-black text-emerald-600";
-                elBar.className = "h-full bg-emerald-500 rounded-full transition-all duration-500";
-            } else if (atingimento >= 80) {
-                elPct.className = "text-2xl font-black text-amber-500";
-                elBar.className = "h-full bg-amber-400 rounded-full transition-all duration-500";
-            } else {
-                elPct.className = "text-2xl font-black text-red-500";
-                elBar.className = "h-full bg-red-400 rounded-full transition-all duration-500";
-            }
-        }
-
-        // 3. Dias
-        const elDias = document.getElementById('kpi-dias');
-        if(elDias) elDias.innerText = diasProdutivos;
-
-        // 4. Média
-        const media = diasProdutivos > 0 ? (totalProduzido / diasProdutivos) : 0;
-        const elMedia = document.getElementById('kpi-media-real');
-        if(elMedia) elMedia.innerText = media.toFixed(0);
-        
-        const elMediaTime = document.getElementById('kpi-media-time');
-        if(elMediaTime) elMediaTime.innerText = "-"; 
-    },
-
-    renderizarTabela: function(dados) {
-        const tbody = document.getElementById('tabela-diario');
-        if(!tbody) return;
-        
-        tbody.innerHTML = '';
-
-        if (dados.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-slate-400">Nenhum registro encontrado neste período.</td></tr>`;
-            return;
-        }
-
-        dados.forEach(dia => {
-            const pct = dia.meta > 0 ? (dia.producao / dia.meta) * 100 : 0;
-            
-            let statusHtml;
-            if (dia.meta === 0) {
-                statusHtml = `<span class="bg-slate-100 text-slate-500 py-1 px-3 rounded-full text-[10px] font-bold">SEM META</span>`;
-            } else if (dia.producao >= dia.meta) {
-                statusHtml = `<span class="bg-emerald-100 text-emerald-700 py-1 px-3 rounded-full text-[10px] font-bold border border-emerald-200">META BATIDA</span>`;
-            } else if (dia.producao > 0) {
-                statusHtml = `<span class="bg-amber-100 text-amber-700 py-1 px-3 rounded-full text-[10px] font-bold border border-amber-200">PARCIAL (${pct.toFixed(0)}%)</span>`;
-            } else {
-                statusHtml = `<span class="bg-red-50 text-red-500 py-1 px-3 rounded-full text-[10px] font-bold border border-red-100">ABAIXO</span>`;
-            }
-
-            const partesData = dia.data.split('-'); 
-            const dataVisual = `${partesData[2]}/${partesData[1]}/${partesData[0]}`;
-
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0";
-            
-            tr.innerHTML = `
-                <td class="px-6 py-4 font-bold text-slate-700">
-                    ${dataVisual}
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <span class="font-bold text-blue-600 text-sm">${dia.producao}</span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <span class="text-slate-500 text-xs">${dia.fator.toFixed(2)}</span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <span class="text-slate-500 font-semibold text-xs">${dia.meta}</span>
-                </td>
-                <td class="px-6 py-4 text-center">
-                    ${statusHtml}
-                </td>
-                <td class="px-6 py-4 text-center">
-                    <span class="text-xs text-slate-400">-</span>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
-    },
-
-    setLoading: function(isLoading) {
-        const tbody = document.getElementById('tabela-diario');
-        if(!tbody) return;
-        
-        if (isLoading) {
-            tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-12 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl text-blue-500 mb-2"></i><br>Carregando dados...</td></tr>`;
-        }
-    }
+    setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
 };
