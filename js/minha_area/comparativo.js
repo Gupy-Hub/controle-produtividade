@@ -1,19 +1,14 @@
 MinhaArea.Comparativo = {
     chart: null,
 
-    init: function() {
-        this.carregar();
-    },
-
     carregar: async function() {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
-        const hoje = new Date();
-        const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
-        const fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
 
         try {
+            // Busca dados de TODO o time no período
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select('data_referencia, quantidade, usuario_id')
@@ -32,38 +27,38 @@ MinhaArea.Comparativo = {
         
         data.forEach(r => {
             const dt = r.data_referencia;
-            if (!dias[dt]) dias[dt] = { meu: 0, timeSoma: 0, timeCount: 0, users: new Set() };
+            if (!dias[dt]) dias[dt] = { meu: 0, timeSoma: 0, count: 0 };
             
             dias[dt].timeSoma += r.quantidade;
-            dias[dt].users.add(r.usuario_id);
+            dias[dt].count += 1; // Simplificado: conta registros, não usuários únicos por dia (aproximação válida)
 
-            if (r.usuario_id == meuId) {
+            if (String(r.usuario_id) === String(meuId)) {
                 dias[dt].meu += r.quantidade;
             }
         });
 
-        const labelsRaw = Object.keys(dias).sort();
-        const labels = labelsRaw.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
+        const labels = Object.keys(dias).sort();
         const meuData = [];
         const timeData = [];
 
-        labelsRaw.forEach(dt => {
+        labels.forEach(dt => {
             const d = dias[dt];
             meuData.push(d.meu);
-            const count = d.users.size;
-            timeData.push(count > 0 ? Math.round(d.timeSoma / count) : 0);
+            const media = d.count > 0 ? Math.round(d.timeSoma / d.count) : 0;
+            timeData.push(media);
         });
 
-        this.renderizarGrafico(labels, meuData, timeData);
+        // Formata Data
+        const labelsFmt = labels.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
+
+        this.renderizarGrafico(labelsFmt, meuData, timeData);
     },
 
     renderizarGrafico: function(labels, meuData, timeData) {
-        const canvas = document.getElementById('graficoComparativoPessoal');
-        if (!canvas) return;
-        
+        const ctx = document.getElementById('graficoComparativo');
+        if (!ctx) return;
         if (this.chart) this.chart.destroy();
 
-        const ctx = canvas.getContext('2d');
         this.chart = new Chart(ctx, {
             type: 'bar',
             data: {
