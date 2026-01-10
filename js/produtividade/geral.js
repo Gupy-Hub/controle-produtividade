@@ -135,7 +135,7 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             
-            // CORREÇÃO: Garante que o filtro persista mesmo após recarregar dados
+            // Aplica filtro se já houver seleção
             if (this.usuarioSelecionado) {
                 this.filtrarUsuario(this.usuarioSelecionado, document.getElementById('selected-name').textContent);
             } else {
@@ -152,77 +152,99 @@ Produtividade.Geral = {
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
         const footer = document.getElementById('total-registros-footer');
+        const viewMode = document.getElementById('view-mode').value;
         
-        // CORREÇÃO CRÍTICA: Uso de '==' para permitir comparação entre String (do HTML) e Number (do Banco)
+        // --- NOVA LÓGICA: Detalhar se for Modo Dia OU se um usuário foi clicado ---
+        const mostrarDetalhes = (viewMode === 'dia' || this.usuarioSelecionado !== null);
+
+        // Filtra a lista base (1 usuário ou todos)
         const lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado)
             : this.dadosOriginais;
 
         tbody.innerHTML = '';
-        if(footer) footer.innerText = lista.length;
         
+        // Ordena por nome
         lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
 
+        let totalLinhas = 0;
+
         lista.forEach(d => {
-            const isDia = document.getElementById('view-mode').value === 'dia';
             const cargoExibicao = (d.usuario.funcao || 'Assistente').toUpperCase();
             const contratoExibicao = (d.usuario.contrato || 'PJ').toUpperCase();
-            
             const metaBase = d.meta_real;
             const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
-            if (isDia && d.registros.length === 1) {
-                const r = d.registros[0];
-                const metaCalc = metaBase * r.fator;
-                const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
+            if (mostrarDetalhes) {
+                // === VISÃO DETALHADA (Dia a Dia) ===
                 
-                let corFator = 'bg-emerald-50 text-emerald-700';
-                if(r.fator == 0.5) corFator = 'bg-amber-50 text-amber-700';
-                if(r.fator == 0) corFator = 'bg-rose-50 text-rose-700';
+                // Ordena os registros deste usuário por data
+                d.registros.sort((a, b) => a.data_referencia.localeCompare(b.data_referencia));
 
-                let iconJustificativa = '';
-                if(r.justificativa && r.justificativa.trim() !== "") {
-                    const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
-                    iconJustificativa = `<i class="fas fa-comment-alt text-blue-400 ml-1.5 custom-tooltip cursor-help text-[10px]" data-tooltip="${textoSeguro}"></i>`;
-                }
+                d.registros.forEach(r => {
+                    totalLinhas++;
+                    const metaCalc = metaBase * r.fator;
+                    const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
+                    
+                    // Formatação da Data (YYYY-MM-DD -> DD/MM) para exibir na tabela
+                    const [ano, mes, dia] = r.data_referencia.split('-');
+                    const dataFormatada = `${dia}/${mes}`;
 
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
-                
-                tr.innerHTML = `
-                    <td class="px-2 py-2 text-center border-r border-slate-200">
-                        <div class="flex items-center justify-center">
-                            <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" 
-                                class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none cursor-pointer w-full text-center">
-                                <option value="1" ${String(r.fator) === '1' ? 'selected' : ''}>100%</option>
-                                <option value="0.5" ${String(r.fator) === '0.5' ? 'selected' : ''}>50%</option>
-                                <option value="0" ${String(r.fator) === '0' ? 'selected' : ''}>Abonar</option>
-                            </select>
-                            ${iconJustificativa}
-                        </div>
-                    </td>
-                    <td class="px-3 py-2 border-r border-slate-200">
-                        <div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
-                            <span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span>
-                            <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${contratoExibicao}</span>
-                        </div>
-                    </td>
-                    <td class="${commonCellClass}">${r.fator}</td>
-                    <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
-                    <td class="${commonCellClass}">${r.fifo || 0}</td>
-                    <td class="${commonCellClass}">${r.gradual_total || 0}</td>
-                    <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
-                    <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaCalc)}</td>
-                    <td class="px-2 py-2 text-center">
-                         <div class="flex items-center justify-center gap-1">
-                             <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
-                                ${Math.round(pct)}%
-                            </span>
-                         </div>
-                    </td>
-                `;
-                tbody.appendChild(tr);
+                    // Lógica de Cores do Fator
+                    let corFator = 'bg-emerald-50 text-emerald-700';
+                    if(r.fator == 0.5) corFator = 'bg-amber-50 text-amber-700';
+                    if(r.fator == 0) corFator = 'bg-rose-50 text-rose-700';
+
+                    let iconJustificativa = '';
+                    if(r.justificativa && r.justificativa.trim() !== "") {
+                        const textoSeguro = r.justificativa.replace(/"/g, '&quot;');
+                        iconJustificativa = `<i class="fas fa-comment-alt text-blue-400 ml-1.5 custom-tooltip cursor-help text-[10px]" data-tooltip="${textoSeguro}"></i>`;
+                    }
+
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
+                    
+                    tr.innerHTML = `
+                        <td class="px-2 py-2 text-center border-r border-slate-200">
+                            <div class="flex items-center justify-center">
+                                <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" 
+                                    class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none cursor-pointer w-full text-center">
+                                    <option value="1" ${String(r.fator) === '1' ? 'selected' : ''}>100%</option>
+                                    <option value="0.5" ${String(r.fator) === '0.5' ? 'selected' : ''}>50%</option>
+                                    <option value="0" ${String(r.fator) === '0' ? 'selected' : ''}>Abonar</option>
+                                </select>
+                                ${iconJustificativa}
+                            </div>
+                        </td>
+                        <td class="px-3 py-2 border-r border-slate-200">
+                            <div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span>
+                                    <span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 rounded border border-blue-100 ml-2">${dataFormatada}</span>
+                                </div>
+                                <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargoExibicao} • ${contratoExibicao}</span>
+                            </div>
+                        </td>
+                        <td class="${commonCellClass}">${r.fator}</td>
+                        <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
+                        <td class="${commonCellClass}">${r.fifo || 0}</td>
+                        <td class="${commonCellClass}">${r.gradual_total || 0}</td>
+                        <td class="${commonCellClass}">${r.gradual_parcial || 0}</td>
+                        <td class="${commonCellClass} bg-slate-50 text-[10px]">${Math.round(metaCalc)}</td>
+                        <td class="px-2 py-2 text-center">
+                             <div class="flex items-center justify-center gap-1">
+                                 <span class="${pct >= 100 ? 'text-emerald-700 font-black' : 'text-amber-600 font-bold'} text-xs">
+                                    ${Math.round(pct)}%
+                                </span>
+                             </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
             } else {
+                // === VISÃO AGRUPADA (Mês/Semana sem seleção) ===
+                totalLinhas++;
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
                 
@@ -258,22 +280,23 @@ Produtividade.Geral = {
             }
         });
         
+        if(footer) footer.innerText = totalLinhas;
+        
         if(lista.length === 0) {
              tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado para este período.</td></tr>';
         }
     },
     
-    // CORREÇÃO CRÍTICA: ID e Nome agora são recebidos e tratados com comparação flexível
+    // Filtro e Seleção
     filtrarUsuario: function(id, nome) {
-        this.usuarioSelecionado = id; // Armazena ID (pode vir como string do HTML)
-        
+        this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
         document.getElementById('selected-name').textContent = nome;
         
-        // 1. Filtra a tabela visualmente
+        // Renderiza (agora entrará no modo detalhado)
         this.renderizarTabela();
 
-        // 2. Filtra os KPIs usando '==' para garantir que String ID === Number ID
+        // Filtra KPIs
         const dadosFiltrados = this.cacheData.filter(r => r.usuario.id == id);
         this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
     },
@@ -281,76 +304,15 @@ Produtividade.Geral = {
     limparSelecao: function() {
         this.usuarioSelecionado = null;
         document.getElementById('selection-header').classList.add('hidden');
+        
+        // Renderiza (volta ao modo agrupado)
         this.renderizarTabela();
+        
+        // Restaura KPIs globais
         this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
 
-    // Funções de atualização e KPIs (Mantidas inalteradas na lógica, apenas o filtro acima afeta o que entra aqui)
-    atualizarKPIs: function(data, dataInicio, dataFim) {
-        let totalProdGeral = 0;
-        let metaTotalGeral = 0;
-        let diasComProd = new Set();
-        let totalProdAssistentes = 0;
-        let countAssistentes = new Set(); 
-        
-        let usersCLT = new Set();
-        let usersPJ = new Set();
-        
-        const isSingleUser = this.usuarioSelecionado !== null;
-
-        data.forEach(r => {
-            const qtd = Number(r.quantidade) || 0;
-            const metaUser = 650;
-            const metaCalc = metaUser * r.fator;
-            
-            totalProdGeral += qtd;
-            metaTotalGeral += metaCalc;
-            diasComProd.add(r.data_referencia);
-            
-            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
-            
-            if(contrato === 'CLT') usersCLT.add(r.usuario.id);
-            else usersPJ.add(r.usuario.id);
-
-            const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            if (isSingleUser) {
-                totalProdAssistentes += qtd;
-                countAssistentes.add(r.usuario.id);
-            } else {
-                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
-                    totalProdAssistentes += qtd;
-                    countAssistentes.add(r.usuario.id);
-                }
-            }
-        });
-
-        document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
-        document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
-
-        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
-        document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
-        const bar = document.getElementById('kpi-pct-bar');
-        if(bar) {
-            bar.style.width = Math.min(pct, 100) + '%';
-            bar.className = pct >= 100 
-                ? "h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                : "h-full bg-slate-300 rounded-full transition-all duration-500";
-        }
-
-        document.getElementById('kpi-clt-val').innerText = usersCLT.size;
-        document.getElementById('kpi-pj-val').innerText = usersPJ.size;
-        
-        const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
-        const diasTrabalhadosReal = diasComProd.size; 
-        const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
-        
-        const numConsiderados = countAssistentes.size;
-        const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
-        const elMedia = document.getElementById('kpi-media-todas');
-        if(elMedia) elMedia.innerText = media;
-    },
-
+    // Funções de manipulação (Mudar Fator, Excluir, etc)
     mudarFator: async function(id, novoFatorStr) {
         const novoFator = String(novoFatorStr); 
         let justificativa = null;
@@ -370,6 +332,7 @@ Produtividade.Geral = {
             const { error } = await Sistema.supabase.from('producao').update({ fator: novoFator, justificativa: justificativa }).eq('id', id);
             if (error) throw error;
             
+            // Atualiza cache local
             let usuarioIdAfetado = null;
             this.dadosOriginais.forEach(group => {
                 group.registros.forEach(r => {
@@ -420,5 +383,64 @@ Produtividade.Geral = {
             if(error) throw error;
             this.carregarTela();
         } catch(err) { alert("Erro ao excluir: " + err.message); }
+    },
+
+    atualizarKPIs: function(data, dataInicio, dataFim) {
+        let totalProdGeral = 0;
+        let metaTotalGeral = 0;
+        let diasComProd = new Set();
+        let totalProdAssistentes = 0;
+        let countAssistentes = new Set(); 
+        let usersCLT = new Set();
+        let usersPJ = new Set();
+        const isSingleUser = this.usuarioSelecionado !== null;
+
+        data.forEach(r => {
+            const qtd = Number(r.quantidade) || 0;
+            const metaUser = 650;
+            const metaCalc = metaUser * r.fator;
+            
+            totalProdGeral += qtd;
+            metaTotalGeral += metaCalc;
+            diasComProd.add(r.data_referencia);
+            
+            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
+            if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
+
+            const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            if (isSingleUser) {
+                totalProdAssistentes += qtd;
+                countAssistentes.add(r.usuario.id);
+            } else {
+                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                    totalProdAssistentes += qtd;
+                    countAssistentes.add(r.usuario.id);
+                }
+            }
+        });
+
+        document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
+        document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
+
+        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
+        document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
+        const bar = document.getElementById('kpi-pct-bar');
+        if(bar) {
+            bar.style.width = Math.min(pct, 100) + '%';
+            bar.className = pct >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-slate-300 rounded-full";
+        }
+
+        document.getElementById('kpi-clt-val').innerText = usersCLT.size;
+        document.getElementById('kpi-pj-val').innerText = usersPJ.size;
+        
+        const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
+        const diasTrabalhadosReal = diasComProd.size; 
+        const elDias = document.getElementById('kpi-dias-val');
+        if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
+        
+        const numConsiderados = countAssistentes.size;
+        const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
+        const elMedia = document.getElementById('kpi-media-todas');
+        if(elMedia) elMedia.innerText = media;
     }
 };
