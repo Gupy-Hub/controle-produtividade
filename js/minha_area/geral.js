@@ -3,7 +3,6 @@ MinhaArea.Geral = {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
         
-        // Validação se há usuário selecionado
         if (!uid) {
             tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
             this.zerarKPIs();
@@ -44,15 +43,12 @@ MinhaArea.Geral = {
             let totalFifo = 0;
             let totalGT = 0;
             let totalGP = 0;
-            let diasUteis = 0;
             let totalMeta = 0;
-            let somaFator = 0;
+            let somaFator = 0; // Soma exata dos fatores (ex: 0.5 + 0.5 = 1.0)
 
             tbody.innerHTML = '';
 
-            // Helper para formatar porcentagem com 2 decimais (ex: 100,00%)
             const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
-            // Helper para zeros ficarem discretos
             const fmtZero = (val) => val === 0 ? '<span class="text-slate-300">0</span>' : val;
 
             data.forEach(item => {
@@ -67,9 +63,8 @@ MinhaArea.Geral = {
                 totalFifo += fifo;
                 totalGT += gt;
                 totalGP += gp;
-                somaFator += fator;
+                somaFator += fator; // Acumula o fator real
                 totalMeta += metaDia;
-                if (fator > 0) diasUteis++;
 
                 const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
                 let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
@@ -101,6 +96,12 @@ MinhaArea.Geral = {
                 tbody.innerHTML += tr;
             });
 
+            // --- APLICAÇÃO DA NOVA REGRA DE DIAS ÚTEIS ---
+            // Soma Fatores arredondada para cima.
+            // Ex: 0.5 (1 dia meio periodo) -> Ceil(0.5) = 1
+            // Ex: 1.0 (2 dias meio periodo) -> Ceil(1.0) = 1
+            const diasUteis = Math.ceil(somaFator);
+
             // Atualiza Rodapé
             this.setTxt('total-registros-footer', data.length);
             this.setTxt('footer-fator', somaFator.toFixed(1));
@@ -110,7 +111,6 @@ MinhaArea.Geral = {
             this.setTxt('footer-prod', totalProd.toLocaleString('pt-BR'));
             this.setTxt('footer-meta', totalMeta.toLocaleString('pt-BR'));
             
-            // KPI Atingimento Geral
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             this.setTxt('footer-pct', fmtPct(atingimentoGeral));
 
@@ -122,8 +122,8 @@ MinhaArea.Geral = {
             const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
-            this.setTxt('kpi-pct', fmtPct(atingimentoGeral)); // Agora com decimais
-            this.setTxt('kpi-dias', diasUteis);
+            this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
+            this.setTxt('kpi-dias', diasUteis); // Agora exibe o valor arredondado
             this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
 
