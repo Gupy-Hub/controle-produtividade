@@ -1,63 +1,59 @@
 window.MenuGlobal = {
     renderizar: function() {
-        // 1. Detecta o caminho atual para corrigir os links (Raiz vs Subpasta)
+        // 1. Lógica de Caminhos (Raiz vs Pasta Gestão)
         const path = window.location.pathname;
-        const isInGestao = path.includes('/gestao/');
-        
-        // Se estiver dentro de /gestao/, usamos '../' para voltar à raiz. 
-        // Se estiver na raiz, usamos './' para navegar normalmente.
+        const isInGestao = path.includes('/gestao/') || path.includes('\\gestao\\');
         const rootPath = isInGestao ? '../' : './';
-
-        // Verifica se a seção Gestão está ativa para destacar o botão
         const isGestaoActive = isInGestao; 
 
-        // Classes de Estilo (Ativo vs Inativo)
-        const activeClass = "bg-slate-800 text-white border-l-4 border-blue-500 shadow-lg";
-        const inactiveClass = "text-slate-400 hover:bg-slate-800 hover:text-white transition-all";
+        // Estilos
+        const activeClass = "text-white font-bold border-b-4 border-blue-500";
+        const inactiveClass = "text-slate-400 hover:text-white transition-colors";
 
-        // 2. Monta o HTML do Menu Preto Lateral (Fixo)
+        // 2. HTML da Barra Superior (Preta)
         const menuHtml = `
-        <aside class="fixed left-0 top-0 h-full w-20 md:w-64 bg-slate-900 z-50 flex flex-col transition-all duration-300 shadow-2xl">
-            <div class="h-20 flex items-center justify-center border-b border-slate-800">
-                <div class="font-bold text-white text-xl tracking-wider flex items-center gap-2 cursor-pointer" onclick="window.location.href='${rootPath}index.html'">
-                    <i class="fas fa-chart-line text-blue-500"></i>
-                    <span class="hidden md:inline">PERFORMANCE</span>
+        <nav class="fixed top-0 left-0 w-full h-20 bg-slate-900 shadow-md z-50 flex items-center justify-between px-8">
+            
+            <div class="flex items-center gap-3 cursor-pointer group" onclick="window.location.href='${rootPath}index.html'">
+                <div class="h-10 w-10 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-lg group-hover:scale-105 transition">
+                    <i class="fas fa-chart-line text-xl"></i>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-white font-bold text-lg tracking-wide leading-tight">PERFORMANCE</span>
+                    <span class="text-blue-500 text-[10px] font-bold uppercase tracking-widest leading-none">PRO SYSTEM</span>
                 </div>
             </div>
 
-            <nav class="flex-1 py-6 flex flex-col gap-2 px-2 md:px-4 overflow-y-auto custom-scroll">
+            <div class="flex items-center h-full gap-8">
+                <a href="${rootPath}index.html" class="h-full flex items-center gap-2 px-2 ${!isGestaoActive ? activeClass : inactiveClass}">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
                 
-                <a href="${rootPath}index.html" class="flex items-center gap-4 px-4 py-3 rounded-lg font-medium ${!isGestaoActive ? activeClass : inactiveClass}">
-                    <i class="fas fa-home w-5 text-center text-lg"></i>
-                    <span class="hidden md:inline">Dashboard</span>
+                <a href="${rootPath}gestao/usuarios.html" class="h-full flex items-center gap-2 px-2 ${isGestaoActive ? activeClass : inactiveClass}">
+                    <i class="fas fa-users-cog"></i> Gestão
                 </a>
 
-                <a href="${rootPath}gestao/usuarios.html" class="flex items-center gap-4 px-4 py-3 rounded-lg font-medium ${isGestaoActive ? activeClass : inactiveClass}">
-                    <i class="fas fa-users-cog w-5 text-center text-lg"></i>
-                    <span class="hidden md:inline">Gestão</span>
+                <a href="#" class="h-full flex items-center gap-2 px-2 ${inactiveClass}">
+                    <i class="fas fa-cog"></i> Configurações
                 </a>
+            </div>
 
-                <div class="my-2 border-t border-slate-800 mx-2"></div>
-
-                <a href="#" class="flex items-center gap-4 px-4 py-3 rounded-lg font-medium ${inactiveClass}">
-                    <i class="fas fa-cog w-5 text-center text-lg"></i>
-                    <span class="hidden md:inline">Configurações</span>
-                </a>
-            </nav>
-
-            <div class="p-4 border-t border-slate-800">
-                <button class="flex items-center justify-center md:justify-start gap-3 text-slate-400 hover:text-white w-full transition p-2 rounded hover:bg-slate-800">
+            <div class="flex items-center gap-4">
+                <div class="text-right hidden md:block">
+                    <p class="text-white text-sm font-bold">Gestora</p>
+                    <p class="text-slate-500 text-xs">Admin</p>
+                </div>
+                <button class="bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-400 p-2.5 rounded-lg transition" title="Sair">
                     <i class="fas fa-sign-out-alt"></i>
-                    <span class="hidden md:inline">Sair</span>
                 </button>
             </div>
-        </aside>
+        </nav>
 
-        <aside id="sidebar-menu-content" class="fixed left-20 md:left-64 top-0 h-full w-64 bg-white border-r border-slate-200 z-40 hidden lg:hidden pt-24 animate-fade overflow-y-auto">
-            </aside>
+        <div id="submenu-container" class="fixed top-20 left-0 w-full z-40 bg-white border-b border-slate-200 hidden">
+            </div>
         `;
 
-        // 3. Injeta o Menu na Página
+        // 3. Injeta na página
         let container = document.getElementById('menu-global-container');
         if (!container) {
             container = document.createElement('div');
@@ -66,30 +62,13 @@ window.MenuGlobal = {
         }
         container.innerHTML = menuHtml;
 
-        // 4. Ajustes de Layout (Padding do Body)
-        // Garante que o conteúdo não fique escondido atrás do menu fixo
-        document.body.classList.add('pl-20', 'md:pl-64');
-
-        // Se estiver na Gestão, mostramos o submenu branco lateral
+        // 4. Ajuste do Submenu
         if (isGestaoActive) {
-            const submenu = document.getElementById('sidebar-menu-content');
-            if (submenu) {
-                submenu.classList.remove('hidden', 'lg:hidden');
-                submenu.classList.add('lg:block'); // Mostra em telas grandes
-                
-                // Empurra o conteúdo mais para a direita para caber os 2 menus
-                // Mas precisamos verificar se o container principal existe para não quebrar layout
-                const mainContent = document.querySelector('.max-w-\\[1600px\\]');
-                if(mainContent) {
-                    // Adiciona margem extra à esquerda somente em telas grandes onde o submenu branco aparece
-                    mainContent.classList.add('lg:ml-64'); 
-                }
-            }
+            document.getElementById('submenu-container').classList.remove('hidden');
         }
     }
 };
 
-// Inicializa o menu assim que o DOM carregar
 document.addEventListener('DOMContentLoaded', () => {
     window.MenuGlobal.renderizar();
 });
