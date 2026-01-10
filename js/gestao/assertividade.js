@@ -1,36 +1,54 @@
 Gestao.Assertividade = {
     timerBusca: null, 
 
-    // --- CARREGAMENTO INICIAL ---
+    // --- CARREGAMENTO INICIAL (Últimos 30 dias) ---
     carregar: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const searchInput = document.getElementById('search-assert');
         
+        // Se já tiver busca, usa a busca
         if (searchInput && searchInput.value.trim().length > 0) {
             this.filtrar();
             return;
         }
 
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando dados...</p></td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando auditorias recentes...</p></td></tr>';
 
         try {
             const dataLimite = new Date();
             dataLimite.setDate(dataLimite.getDate() - 30);
             const dataIso = dataLimite.toISOString().split('T')[0];
 
-            // Busca inicial usando RPC para garantir que traga o ID da empresa corretamente
-            this.executarBuscaRPC('');
+            const { data, error } = await Sistema.supabase
+                .from('producao')
+                .select('*, usuarios!inner(nome)')
+                .gte('data_referencia', dataIso)
+                .order('data_referencia', { ascending: false })
+                .order('hora', { ascending: false })
+                .limit(200);
+
+            if (error) throw error;
+
+            this.renderizarTabela(data || [], "Recentes (30 dias)");
 
         } catch (e) {
             console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
-    // --- BUSCA ---
+    // --- BUSCA INTELIGENTE (Via RPC) ---
     filtrar: function() {
         const termo = document.getElementById('search-assert').value.trim();
+        
         clearTimeout(this.timerBusca);
+
+        if (termo.length === 0) {
+            this.carregar();
+            return;
+        }
+
+        // Delay de 600ms para não sobrecarregar
         this.timerBusca = setTimeout(() => {
             this.executarBuscaRPC(termo);
         }, 600);
@@ -38,25 +56,27 @@ Gestao.Assertividade = {
 
     executarBuscaRPC: async function(termo) {
         const tbody = document.getElementById('lista-assertividade');
-        const msg = termo ? "Pesquisando..." : "Carregando recentes...";
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">${msg}</p></td></tr>`;
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Pesquisando no servidor...</p></td></tr>';
 
         try {
-            const termoBusca = termo || '';
-            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias', { termo: termoBusca });
+            // CHAMA A FUNÇÃO SQL CRIADA NO BANCO (MUITO RÁPIDA)
+            const { data, error } = await Sistema.supabase
+                .rpc('buscar_auditorias', { termo: termo });
 
             if (error) throw error;
 
+            // Adapta o retorno do RPC para o formato esperado pelo renderizar
+            // A função SQL retorna 'usuario_nome', mas o renderizador espera um objeto usuarios: { nome: ... }
             const dadosFormatados = (data || []).map(item => ({
                 ...item,
                 usuarios: { nome: item.usuario_nome }
             }));
 
-            this.renderizarTabela(dadosFormatados, termo ? `Resultados para: "${termo}"` : "Últimos registros");
+            this.renderizarTabela(dadosFormatados, `Resultados para: "${termo}"`);
 
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500">Erro na busca: ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-8 text-red-500">Erro na busca: ${e.message}</td></tr>`;
         }
     },
 
@@ -69,7 +89,7 @@ Gestao.Assertividade = {
         }
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
             return;
         }
 
@@ -80,14 +100,13 @@ Gestao.Assertividade = {
             const nomeUser = item.usuarios?.nome || `ID: ${item.usuario_id}`;
             
             // Tratamento do ID da Empresa
-            // Se o ID vier null do banco, mostramos um traço
-            const empIdDisplay = item.empresa_id ? `#${item.empresa_id}` : '<span class="text-slate-200">-</span>';
+            const empIdDisplay = item.empresa_id ? `<span class="text-[10px] text-slate-400 mr-1">#${item.empresa_id}</span>` : '';
 
             // Badge Status
             let statusBadge = `<span class="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">${item.status || '-'}</span>`;
             const stUpper = (item.status||'').toUpperCase();
             if (stUpper === 'OK' || stUpper === 'VALIDO') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200 font-bold">OK</span>`;
-            else if (stUpper.includes('NOK') || stUpper.includes('INV')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
+            else if (stUpper.includes('NOK') || stUpper.includes('INV') || stUpper.includes('REP')) statusBadge = `<span class="bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded border border-rose-200 font-bold">${item.status}</span>`;
             else if (stUpper.includes('JUST')) statusBadge = `<span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded border border-blue-200 font-bold">JUST</span>`;
 
             // Cor Assertividade
@@ -95,6 +114,7 @@ Gestao.Assertividade = {
             if(item.assertividade) {
                 assertVal = parseFloat(String(item.assertividade).replace('%','').replace(',','.'));
             }
+            
             let assertColor = 'text-slate-600';
             if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
             else if (assertVal > 0 && assertVal < 90) assertColor = 'text-rose-600 font-bold';
@@ -110,7 +130,7 @@ Gestao.Assertividade = {
                 <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${item.empresa}">
                     ${item.empresa || '-'}
                 </td>
-                
+
                 <td class="px-3 py-2 text-slate-600 max-w-[150px] truncate" title="${nomeUser}">${nomeUser}</td>
                 <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${item.nome_documento}">${item.nome_documento || '-'}</td>
                 <td class="px-3 py-2 text-center text-[10px]">${statusBadge}</td>
