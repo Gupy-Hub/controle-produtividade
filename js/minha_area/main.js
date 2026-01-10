@@ -1,5 +1,6 @@
 const MinhaArea = {
     usuario: null,
+    usuarioAlvoId: null, // ID do usuário cujos dados estamos vendo
     filtroPeriodo: 'mes',
 
     init: async function() {
@@ -12,12 +13,67 @@ const MinhaArea = {
             return;
         }
         this.usuario = JSON.parse(storedUser);
+        
+        // Define o alvo inicial como o próprio usuário
+        this.usuarioAlvoId = this.usuario.id;
 
-        // 2. Data Global
+        // 2. Verifica se tem permissão para ver outros
+        this.setupAdminAccess();
+
+        // 3. Data Global
         this.configurarDataGlobal();
 
-        // 3. Inicia na aba padrão (Dia a Dia)
+        // 4. Inicia na aba padrão
         this.mudarAba('diario');
+    },
+
+    setupAdminAccess: async function() {
+        // Regra: Gestora, Auditora, Admin ou ID 1
+        const podeVerTodos = ['GESTORA', 'AUDITORA', 'ADMIN'].includes(this.usuario.funcao) || this.usuario.perfil === 'admin' || this.usuario.id == 1;
+
+        if (podeVerTodos) {
+            const container = document.getElementById('admin-selector-container');
+            const select = document.getElementById('admin-user-selector');
+            
+            if (container && select) {
+                container.classList.remove('hidden');
+                
+                try {
+                    // Busca lista de usuários para o dropdown
+                    const { data: users, error } = await Sistema.supabase
+                        .from('usuarios')
+                        .select('id, nome')
+                        .eq('ativo', true)
+                        .order('nome');
+
+                    if (!error && users) {
+                        // Adiciona opção "Eu Mesmo" no topo
+                        let options = `<option value="${this.usuario.id}">👤 Meus Dados</option>`;
+                        options += `<optgroup label="Colaboradores">`;
+                        users.forEach(u => {
+                            if (u.id !== this.usuario.id) {
+                                options += `<option value="${u.id}">${u.nome}</option>`;
+                            }
+                        });
+                        options += `</optgroup>`;
+                        select.innerHTML = options;
+                        select.value = this.usuario.id;
+                    }
+                } catch (e) {
+                    console.error("Erro ao carregar lista de usuários admin", e);
+                }
+            }
+        }
+    },
+
+    mudarUsuarioAlvo: function(novoId) {
+        this.usuarioAlvoId = parseInt(novoId);
+        this.atualizarTudo();
+    },
+
+    getUsuarioAlvo: function() {
+        // Retorna o ID que deve ser usado nas queries
+        return this.usuarioAlvoId || this.usuario.id;
     },
 
     configurarDataGlobal: function() {
@@ -28,7 +84,6 @@ const MinhaArea = {
     },
 
     atualizarTudo: function() {
-        // Identifica qual aba está ativa para recarregar apenas ela
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -37,45 +92,35 @@ const MinhaArea = {
     },
 
     mudarAba: function(abaId) {
-        // Esconde todas as views e remove active dos botões
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
-        // Mostra a view alvo e ativa o botão
         const aba = document.getElementById(`ma-tab-${abaId}`);
         const btn = document.getElementById(`btn-ma-${abaId}`);
         
         if(aba) aba.classList.remove('hidden');
         if(btn) btn.classList.add('active');
 
-        // Carrega os dados da aba selecionada
         this.carregarDadosAba(abaId);
     },
 
     carregarDadosAba: function(abaId) {
-        // Mapeamento das funções de carregamento
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
-        if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar(); // Nova Aba
+        if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
         if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
-        if (abaId === 'feedback' && this.Feedback) this.Feedback.carregar(); // Nova Aba
+        if (abaId === 'feedback' && this.Feedback) this.Feedback.carregar();
     },
 
     mudarPeriodo: function(tipo) {
         this.filtroPeriodo = tipo;
-        
-        // Atualiza estilo dos botões
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
-                if(t === tipo) {
-                    btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
-                } else {
-                    btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
-                }
+                if(t === tipo) btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
+                else btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
             }
         });
-
         this.atualizarTudo();
     },
 
@@ -86,7 +131,6 @@ const MinhaArea = {
         const mes = dataRef.getMonth();
 
         let inicio, fim;
-
         if (this.filtroPeriodo === 'mes') {
             inicio = new Date(ano, mes, 1).toISOString().split('T')[0];
             fim = new Date(ano, mes + 1, 0).toISOString().split('T')[0];
@@ -102,7 +146,6 @@ const MinhaArea = {
             inicio = dataInicio.toISOString().split('T')[0];
             fim = dataFim.toISOString().split('T')[0];
         }
-
         return { inicio, fim };
     }
 };

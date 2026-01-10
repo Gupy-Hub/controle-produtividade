@@ -56,6 +56,13 @@
             </div>
 
             <div class="flex items-center gap-4">
+                
+                <div id="admin-selector-container" class="hidden flex items-center gap-2 border-r border-slate-200 pr-4 mr-2">
+                    <span class="text-[10px] font-bold text-slate-400 uppercase">Visualizar:</span>
+                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none cursor-pointer w-40 truncate">
+                        </select>
+                </div>
+
                 <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-inner">
                     <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-blue-600 bg-white shadow-sm">Mês</button>
                     <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500">Semana</button>
@@ -71,7 +78,6 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
-            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
                 <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20">
                     <p class="text-[9px] font-bold text-slate-400 uppercase">Produção Total</p>
@@ -112,8 +118,7 @@
                                 <th class="px-3 py-3 text-left">Justificativa / Obs</th>
                             </tr>
                         </thead>
-                        <tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white">
-                        </tbody>
+                        <tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody>
                     </table>
                 </div>
                 <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
