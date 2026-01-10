@@ -10,7 +10,15 @@ Menu.Global = {
             document.body.prepend(container);
         }
 
-        const user = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
+        // Recupera o usuário com segurança. Se falhar, usa objeto vazio.
+        let user = {};
+        try {
+            const sessao = localStorage.getItem('usuario_logado');
+            if (sessao) user = JSON.parse(sessao);
+        } catch (e) {
+            console.error("Erro ao ler sessão:", e);
+        }
+
         const isGestao = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
         const currentPath = window.location.pathname;
 
@@ -28,7 +36,7 @@ Menu.Global = {
         // 3. Minha Área
         links.push({ nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' });
 
-        // 4. Biblioteca (Antigo Ferramentas) - Ícone alterado para livro
+        // 4. Biblioteca
         links.push({ nome: 'Biblioteca', url: 'ferramentas.html', icon: 'fas fa-book' });
 
         // --- RENDERIZAÇÃO ---
@@ -57,7 +65,9 @@ Menu.Global = {
         </nav>`;
 
         container.innerHTML = html;
-        document.body.style.paddingTop = '0px'; 
+        
+        // CORREÇÃO: Adiciona margem no topo para o menu não cobrir o conteúdo
+        document.body.style.paddingTop = '48px'; 
     }
 };
 
