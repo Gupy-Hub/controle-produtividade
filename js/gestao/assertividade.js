@@ -83,8 +83,8 @@ Gestao.Assertividade = {
         if(btnProx) btnProx.disabled = true;
 
         try {
-            // CHAMADA V4 (OTIMIZADA)
-            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v4', {
+            // CHAMADA V5 (SUPORTA STATUS 'EMPTY')
+            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v5', {
                 p_termo: this.estado.termo,
                 p_data: this.estado.filtros.data,
                 p_status: this.estado.filtros.status,
@@ -101,7 +101,6 @@ Gestao.Assertividade = {
 
             const lista = data || [];
             
-            // Pega total da primeira linha
             this.estado.total = lista.length > 0 ? lista[0].total_registros : 0;
             if(lista.length === 0 && this.estado.pagina === 0) this.estado.total = 0;
 
@@ -111,12 +110,7 @@ Gestao.Assertividade = {
         } catch (e) {
             console.error(e);
             let msgErro = e.message;
-            
-            // Tratamento amigável para Timeout
-            if (msgErro.includes("timeout")) {
-                msgErro = "A busca demorou muito. Tente ser mais específico nos filtros (ex: selecione uma data ou status).";
-            }
-
+            if (msgErro.includes("timeout")) msgErro = "Tempo limite excedido. Tente refinar a busca.";
             if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold"><i class="fas fa-exclamation-triangle mr-2"></i> ${msgErro}</td></tr>`;
             if(infoPag) infoPag.innerHTML = "Erro na busca.";
         }
@@ -159,7 +153,9 @@ Gestao.Assertividade = {
         lista.forEach(item => {
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
-            const nomeUser = item.u_nome || `ID: ${item.usuario_id}`;
+            const nomeUser = item.usuario_nome || `ID: ${item.usuario_id}`;
+            
+            // CORREÇÃO: Usando a propriedade correta retornada pelo SQL V5
             const empIdDisplay = item.empresa_id ? `#${item.empresa_id}` : '<span class="text-slate-200">-</span>';
 
             // Status Badge
