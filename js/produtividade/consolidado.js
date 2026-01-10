@@ -2,7 +2,7 @@ Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
     baseManualHC: 0, 
-    overridesHC: {}, // Agora armazena objetos: { valor: 15, motivo: "Férias" }
+    overridesHC: {}, 
     dadosCalculados: null, 
 
     init: async function() { 
@@ -12,42 +12,33 @@ Produtividade.Consolidado = {
         this.togglePeriodo();
     },
 
-    // --- NOVA LÓGICA DE ATUALIZAÇÃO COM JUSTIFICATIVA ---
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
         
-        // 1. Validação básica
         if (isNaN(val) || val <= 0) {
-            // Se apagar o valor, removemos a customização sem perguntar (reset)
             delete this.overridesHC[colIndex];
             this.renderizar(this.dadosCalculados);
             return;
         }
 
-        // 2. Verifica se o valor realmente mudou em relação ao que já estava salvo
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
 
-        // 3. Pequeno delay para garantir que a UI não trave antes do prompt
         await new Promise(r => setTimeout(r, 50));
 
-        // 4. Pergunta o Motivo (Obrigatório)
         const motivo = prompt(`Você alterou a base de cálculo para ${val}.\n\nPor favor, informe o motivo desta alteração (Ex: Férias, Atestado, Desligamento):`);
 
         if (motivo === null || motivo.trim() === "") {
             alert("Alteração cancelada: A justificativa é obrigatória para alterar a base de cálculo.");
-            // Força a renderização novamente para voltar o valor antigo no input visualmente
             this.renderizar(this.dadosCalculados); 
             return;
         }
 
-        // 5. Salva Valor + Motivo
         this.overridesHC[colIndex] = {
             valor: val,
             motivo: motivo.trim()
         };
 
-        // 6. Recalcula tudo
         if (this.dadosCalculados) {
             this.renderizar(this.dadosCalculados);
         }
@@ -77,7 +68,6 @@ Produtividade.Consolidado = {
             }
         }
         
-        // Limpa overrides ao mudar de período para evitar confusão de dados de um mês pro outro
         this.overridesHC = {};
         this.carregar(false); 
     },
@@ -272,19 +262,15 @@ Produtividade.Consolidado = {
                     <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
                 </th>`;
             
-            // Colunas Temporais
             cols.forEach((c, index) => {
                 const colIdx = index + 1;
                 
-                // Lógica de Override
                 const overrideObj = this.overridesHC[colIdx];
                 const valOverride = overrideObj ? overrideObj.valor : '';
                 const motivoOverride = overrideObj ? overrideObj.motivo : '';
                 
-                // Valor Automático (Cálculo real do sistema)
                 const autoCount = st[colIdx].users.size || 17;
 
-                // Estilo condicional se houver alteração
                 const inputClass = valOverride 
                     ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" 
                     : "bg-white border-slate-200 text-blue-600 font-bold focus:border-blue-400";
@@ -307,7 +293,6 @@ Produtividade.Consolidado = {
                 </th>`;
             });
 
-            // Coluna Total
             const overrideTotal = this.overridesHC[99];
             const valTotal = overrideTotal ? overrideTotal.valor : '';
             const motivoTotal = overrideTotal ? overrideTotal.motivo : '';
@@ -358,10 +343,7 @@ Produtividade.Consolidado = {
             idxs.forEach(i => {
                 const s = st[i]; 
                 
-                // LÓGICA DE OVERRIDE NO CÁLCULO
-                // 1. Checa se tem override manual (Objeto {valor, motivo})
                 const overrideObj = this.overridesHC[i];
-                // 2. Se tiver, usa o valor manual. Se não, usa o automático. Se falhar, usa 17.
                 const countAuto = s.users.size || 17;
                 const HF = overrideObj ? overrideObj.valor : countAuto;
 
@@ -374,7 +356,6 @@ Produtividade.Consolidado = {
                 if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`;
                 else cellClass += `text-slate-500 font-medium`;
 
-                // Se houver override, destaca levemente as células afetadas da coluna para indicar que é um dado manipulado
                 if (overrideObj) cellClass += " bg-amber-50/30";
 
                 tr += `<td class="${cellClass}">${txt}</td>`;
@@ -401,5 +382,52 @@ Produtividade.Consolidado = {
             users: new Set(), dates: new Set(), diasUteis: 0,
             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0
         }; 
+    },
+
+    exportarExcel: function() {
+        if (!this.dadosCalculados) return alert("Nenhum dado para exportar.");
+        
+        const { cols, st, numCols } = this.dadosCalculados;
+        const wsData = [];
+        
+        const headers = ['Indicador', ...cols, 'TOTAL'];
+        wsData.push(headers);
+
+        const addRow = (label, getter, isCalc=false) => {
+            const row = [label];
+            for(let i=1; i<=numCols; i++) {
+                const s = st[i];
+                const overrideObj = this.overridesHC[i];
+                const HF = overrideObj ? overrideObj.valor : (s.users.size || 17);
+                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
+                if (val instanceof Set) val = val.size;
+                row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
+            }
+            
+            const sTotal = st[99];
+            const overrideTotal = this.overridesHC[99];
+            const HFTotal = overrideTotal ? overrideTotal.valor : (sTotal.users.size || 17);
+            let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal);
+            if (valTotal instanceof Set) valTotal = valTotal.size;
+            row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
+
+            wsData.push(row);
+        };
+
+        addRow('HC Utilizado', (s, d, HF) => HF, true);
+        addRow('Dias Úteis', (s) => s.diasUteis);
+        addRow('Total FIFO', s => s.fifo);
+        addRow('Total G. Parcial', s => s.gp);
+        addRow('Total G. Total', s => s.gt);
+        addRow('Total Perfil FC', s => s.fc);
+        addRow('Total Documentos Validados', s => s.qty);
+        addRow('Total Validação Diária', (s, d) => d > 0 ? s.qty / d : 0, true);
+        addRow('Média Validação (Todas Assistentes)', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
+        addRow('Média Validação Diária (Por Assist.)', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
+
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        XLSX.utils.book_append_sheet(wb, ws, "Consolidado");
+        XLSX.writeFile(wb, "Relatorio_Consolidado.xlsx");
     }
 };
