@@ -74,7 +74,7 @@ Produtividade.Geral = {
         } else if (viewMode === 'mes') {
             dataInicio = `${ano}-${mes}-01`;
             dataFim = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`;
-        } else if (viewMode === 'ano') { // LOGICA DE ANO INTEIRO
+        } else if (viewMode === 'ano') { 
             dataInicio = `${ano}-01-01`;
             dataFim = `${ano}-12-31`;
         } else if (viewMode === 'semana') {
@@ -175,7 +175,6 @@ Produtividade.Geral = {
             const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // === VISÃO DETALHADA (Dia a Dia) CONSOLIDADA ===
                 const mapaDias = {};
                 d.registros.forEach(r => {
                     const data = r.data_referencia;
@@ -262,7 +261,6 @@ Produtividade.Geral = {
                 });
 
             } else {
-                // === VISÃO AGRUPADA ===
                 totalLinhas++;
                 const metaTotal = metaBase * d.totais.diasUteis;
                 const pct = metaTotal > 0 ? (d.totais.qty / metaTotal) * 100 : 0;
@@ -332,7 +330,8 @@ Produtividade.Geral = {
         let usersPJ = new Set();
         let ranking = {}; 
         
-        const isSingleUser = this.usuarioSelecionado !== null;
+        // Novo contador para Headcount (Assistentes Ativos)
+        let countAssistentesAtivos = new Set();
 
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
@@ -350,24 +349,25 @@ Produtividade.Geral = {
             if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
 
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            
+            // Só conta para ranking e headcount se NÃO for gestão
             if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                countAssistentesAtivos.add(r.usuario.id);
+                
                 if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
                 ranking[r.usuario.id].total += qtd;
             }
         });
 
-        // KPI PRODUÇÃO
+        // 1. KPI PRODUÇÃO (Atingido vs Esperado)
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
         document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
         
-        const pctProd = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
-        const barProd = document.getElementById('kpi-prod-bar');
-        if(barProd) {
-             barProd.style.width = Math.min(pctProd, 100) + '%';
-             barProd.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
-        }
+        // 1.1 KPI ASSISTENTES (Ativos vs Meta 17)
+        document.getElementById('kpi-assistentes-val').innerText = `${countAssistentesAtivos.size} / 17`;
 
-        // KPI ATINGIMENTO
+        // 2. KPI ATINGIMENTO
+        const pctProd = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
         document.getElementById('kpi-pct').innerText = Math.round(pctProd) + '%';
         const barPct = document.getElementById('kpi-pct-bar');
         if(barPct) {
@@ -375,7 +375,7 @@ Produtividade.Geral = {
             barPct.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-slate-300 rounded-full";
         }
 
-        // KPI EQUIPE
+        // 3. KPI EQUIPE
         const clt = usersCLT.size;
         const pj = usersPJ.size;
         const totalEquipe = clt + pj;
@@ -390,7 +390,7 @@ Produtividade.Geral = {
         const barPj = document.getElementById('kpi-pj-bar');
         if(barPj) barPj.style.width = pctPj + '%';
         
-        // KPI DIAS E MÉDIA
+        // 4. KPI DIAS e MÉDIA
         const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
         const diasTrabalhadosReal = diasComProd.size; 
         document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
@@ -398,7 +398,7 @@ Produtividade.Geral = {
         const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdGeral / totalDiasTrabalhadosPonderados) : 0;
         document.getElementById('kpi-media-todas').innerText = media;
 
-        // KPI TOP PERFORMANCE
+        // 5. KPI TOP PERFORMANCE
         const listaRanking = Object.values(ranking).sort((a, b) => b.total - a.total).slice(0, 3);
         const containerTop3 = document.getElementById('kpi-top3-list');
         if(containerTop3) {
@@ -407,7 +407,7 @@ Produtividade.Geral = {
             } else {
                 let htmlRanking = '';
                 listaRanking.forEach((u, index) => {
-                    const colors = ['text-yellow-500', 'text-slate-400', 'text-amber-700']; // Ouro, Prata, Bronze
+                    const colors = ['text-yellow-500', 'text-slate-400', 'text-amber-700'];
                     htmlRanking += `
                         <div class="flex justify-between items-center text-[10px] border-b border-slate-50 last:border-0 pb-0.5">
                             <span class="font-bold text-slate-600 truncate max-w-[90px]">

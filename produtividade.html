@@ -79,7 +79,8 @@
                         <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
                             <option value="dia">Apenas o Dia</option>
                             <option value="mes">Mês da Data</option>
-                            <option value="ano">Ano Inteiro</option> <option value="semana">Semana Específica</option>
+                            <option value="ano">Ano Inteiro</option>
+                            <option value="semana">Semana Específica</option>
                         </select>
                         <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
                             <option value="1">Semana 1</option>
@@ -160,20 +161,21 @@
             
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
                 
-                <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24 relative overflow-hidden">
-                    <div class="flex justify-between items-start z-10">
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden">
+                    <div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between">
                         <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção</p>
-                        <i class="fas fa-file-contract text-slate-100 text-4xl absolute -right-2 -bottom-2 transform rotate-12"></i>
-                    </div>
-                    <div class="z-10 mt-1">
-                        <div class="flex items-baseline gap-1">
-                            <h3 class="text-2xl font-black text-slate-800 leading-none" id="kpi-total">--</h3>
+                        <div class="text-center">
+                            <h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3>
+                            <p class="text-[9px] text-slate-500 font-bold mt-1">Exp: <span class="text-blue-600" id="kpi-meta-total">--</span></p>
                         </div>
-                        <p class="text-[10px] text-slate-500 font-bold mt-1">
-                            Esperado: <span class="text-blue-600" id="kpi-meta-total">--</span>
-                        </p>
                     </div>
-                    <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-2"><div id="kpi-prod-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div>
+                    <div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Assistentes</p>
+                        <div class="text-right">
+                            <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-assistentes-val">--</h3>
+                            <p class="text-[9px] text-slate-500 font-bold mt-1">Esperado: <span class="text-blue-600">17</span></p>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24 relative overflow-hidden">
