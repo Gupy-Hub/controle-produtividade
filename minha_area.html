@@ -35,20 +35,10 @@
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-40">
+    <div class="bg-white border-b border-slate-200 shadow-sm sticky top-12 z-40">
         <div class="max-w-[1600px] mx-auto px-4">
             <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-16 gap-3 py-2 md:py-0">
                 
-                <div class="flex items-center gap-3">
-                    <div class="w-9 h-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 border border-blue-200 shadow-sm">
-                        <i class="fas fa-user-circle"></i>
-                    </div>
-                    <div class="flex flex-col">
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Colaborador</span>
-                        <h1 class="text-sm font-black text-slate-700 truncate max-w-[200px]" id="user-name-display">Carregando...</h1>
-                    </div>
-                </div>
-
                 <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-inner">
                     <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-blue-600 bg-white shadow-sm">Mês</button>
                     <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500">Semana</button>
@@ -125,7 +115,7 @@
                             </tr>
                         </thead>
                         <tbody id="tabela-extrato" class="divide-y divide-slate-100 text-slate-600 text-xs">
-                            </tbody>
+                        </tbody>
                         <tfoot class="bg-slate-50 font-bold text-slate-700 text-xs">
                             <tr>
                                 <td class="px-6 py-3">TOTAIS</td>
@@ -161,8 +151,7 @@
     </div>
 
     <script src="js/minha_area/main.js"></script>
-    <script src="js/minha_area/diario.js"></script>
-    <script src="js/minha_area/metas.js"></script>
+    <script src="js/minha_area/geral.js"></script> <script src="js/minha_area/metas.js"></script>
     <script src="js/minha_area/comparativo.js"></script>
     <script>
         // Placeholders para abas futuras
