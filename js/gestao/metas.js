@@ -1,15 +1,14 @@
 Gestao.Metas = {
-    dataAtual: new Date(), // Controla o mês/ano selecionado na tela
-    dadosAtuais: [], // Cache para edição
+    dataAtual: new Date(), 
+    dadosAtuais: [], 
 
     init: function() {
-        // Define data inicial como hoje, mas dia 1 para evitar problemas de virada de mês
         this.dataAtual = new Date(); 
         this.dataAtual.setDate(1);
     },
 
     carregar: async function() {
-        const mes = this.dataAtual.getMonth() + 1; // JS conta mês de 0 a 11
+        const mes = this.dataAtual.getMonth() + 1; 
         const ano = this.dataAtual.getFullYear();
         
         // Atualiza Labels
@@ -18,14 +17,15 @@ Gestao.Metas = {
             document.getElementById('metas-periodo-label').innerText = `${nomeMes} ${ano}`;
         }
 
+        // Reseta checkbox mestre
+        if(document.getElementById('check-meta-todos')) document.getElementById('check-meta-todos').checked = false;
+
         const tbody = document.getElementById('lista-metas');
         if(tbody) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando metas...</p></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando metas...</p></td></tr>';
         }
 
         try {
-            // Chama a função SQL
-            // IMPORTANTE: Força conversão para inteiro para evitar erro 400
             const { data, error } = await Sistema.supabase.rpc('buscar_metas_periodo', { 
                 p_mes: parseInt(mes), 
                 p_ano: parseInt(ano) 
@@ -39,7 +39,7 @@ Gestao.Metas = {
 
         } catch (e) {
             console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="5" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
@@ -55,20 +55,21 @@ Gestao.Metas = {
         if (!tbody) return;
 
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center py-12 text-slate-400">Nenhum usuário ativo encontrado para este período.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12 text-slate-400">Nenhum usuário ativo encontrado para este período.</td></tr>';
             return;
         }
 
         let html = '';
         lista.forEach(user => {
-            // Se meta_definida for null, deixa em branco
             const valorMeta = user.meta_definida !== null ? user.meta_definida : '';
-            
-            // Estilo do Input: Se tiver valor, negrito. Se vazio, normal.
             const inputClass = valorMeta ? 'font-bold text-blue-700' : 'text-slate-500';
 
             html += `
-            <tr class="hover:bg-slate-50 transition group">
+            <tr class="hover:bg-slate-50 transition group border-b border-slate-50">
+                <td class="px-6 py-4 text-center">
+                    <input type="checkbox" class="check-meta-row w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" value="${user.usuario_id}">
+                </td>
+                
                 <td class="px-6 py-4 font-mono text-slate-500">#${user.usuario_id}</td>
                 <td class="px-6 py-4 font-bold text-slate-700">
                     ${user.nome}
@@ -100,29 +101,67 @@ Gestao.Metas = {
 
     atualizarResumo: function() {
         let totalMeta = 0;
-        let qtdUsers = this.dadosAtuais.length;
-        
-        // Calcula o total VISUAL (baseado no que veio do banco)
         this.dadosAtuais.forEach(u => {
-            if(u.meta_definida) totalMeta += u.meta_definida;
+            // Tenta pegar o valor visual do input se existir, senão usa o do banco
+            const input = document.getElementById(`meta-input-${u.usuario_id}`);
+            if(input && input.value) totalMeta += parseInt(input.value);
+            else if(u.meta_definida) totalMeta += u.meta_definida;
         });
 
-        const elQtd = document.getElementById('resumo-usuarios');
-        const elTotal = document.getElementById('resumo-total-meta');
+        const footer = document.getElementById('resumo-metas-footer');
+        if(footer) footer.innerText = `Total Previsto: ${totalMeta.toLocaleString('pt-BR')}`;
+    },
+
+    // --- SELEÇÃO EM MASSA ---
+
+    toggleSelecionarTodos: function() {
+        const master = document.getElementById('check-meta-todos');
+        const checkboxes = document.querySelectorAll('.check-meta-row');
+        checkboxes.forEach(chk => chk.checked = master.checked);
+    },
+
+    aplicarEmMassa: function() {
+        const valorInput = document.getElementById('input-meta-massa');
+        if (!valorInput || !valorInput.value) return alert("Digite um valor no campo de definição em massa.");
         
-        if(elQtd) elQtd.innerText = qtdUsers;
-        if(elTotal) elTotal.innerText = totalMeta.toLocaleString('pt-BR');
+        const valor = parseInt(valorInput.value);
+        const checkboxes = document.querySelectorAll('.check-meta-row:checked');
+
+        if (checkboxes.length === 0) return alert("Selecione pelo menos um usuário na tabela.");
+
+        let count = 0;
+        checkboxes.forEach(chk => {
+            const userId = chk.value;
+            const inputMeta = document.getElementById(`meta-input-${userId}`);
+            if (inputMeta) {
+                inputMeta.value = valor;
+                this.marcarAlterado(userId);
+                count++;
+            }
+        });
+
+        // Atualiza resumo visual
+        this.atualizarResumo();
+        
+        // Feedback visual simples
+        const btn = document.querySelector('button[onclick="Gestao.Metas.aplicarEmMassa()"]');
+        const htmlOrig = btn.innerHTML;
+        btn.innerHTML = `<i class="fas fa-check"></i> Aplicado (${count})`;
+        setTimeout(() => btn.innerHTML = htmlOrig, 2000);
     },
 
     // --- LÓGICA DE SALVAMENTO ---
 
     marcarAlterado: function(id) {
         const input = document.getElementById(`meta-input-${id}`);
-        if(input) input.classList.add('bg-yellow-50', 'border-yellow-300');
+        if(input) {
+            input.classList.add('bg-yellow-50', 'border-yellow-300', 'font-bold', 'text-blue-700');
+            input.classList.remove('text-slate-500');
+        }
+        this.atualizarResumo();
     },
 
     salvarTodas: async function() {
-        // Encontra botão para feedback
         const btnSalvar = document.querySelector('button[onclick="Gestao.Metas.salvarTodas()"]');
         let originalHtml = '';
         if(btnSalvar) {
@@ -135,12 +174,10 @@ Gestao.Metas = {
         const ano = this.dataAtual.getFullYear();
         const inserts = [];
 
-        // Varre a lista de dados atuais e pega o valor do input correspondente
         this.dadosAtuais.forEach(user => {
             const input = document.getElementById(`meta-input-${user.usuario_id}`);
             if (input) {
                 const valor = input.value.trim();
-                // Só salva se tiver valor numérico
                 if (valor !== '') {
                     inserts.push({
                         usuario_id: user.usuario_id,
@@ -161,7 +198,6 @@ Gestao.Metas = {
         }
 
         try {
-            // Upsert (Insere ou Atualiza se já existir user+mes+ano)
             const { error } = await Sistema.supabase
                 .from('metas')
                 .upsert(inserts, { onConflict: 'usuario_id,mes,ano' });
@@ -169,7 +205,7 @@ Gestao.Metas = {
             if (error) throw error;
 
             alert('Metas atualizadas com sucesso!');
-            this.carregar(); // Recarrega para limpar status de edição
+            this.carregar(); 
 
         } catch (e) {
             console.error(e);
@@ -182,27 +218,8 @@ Gestao.Metas = {
         }
     },
 
-    // --- FERRAMENTAS EM MASSA ---
-
-    aplicarPadrao: function(valorPadrao) {
-        // Aplica o valor padrão APENAS nos inputs que estão vazios
-        let count = 0;
-        this.dadosAtuais.forEach(user => {
-            const input = document.getElementById(`meta-input-${user.usuario_id}`);
-            if (input && input.value.trim() === '') {
-                input.value = valorPadrao;
-                this.marcarAlterado(user.usuario_id);
-                count++;
-            }
-        });
-        if(count > 0) alert(`${count} usuários sem meta foram preenchidos com ${valorPadrao}. Clique em Salvar para confirmar.`);
-        else alert("Todos os usuários já possuem meta preenchida.");
-    },
-
     // --- HISTÓRICO ---
-
     verHistorico: async function(userId, nomeUser) {
-        // Busca histórico
         const { data, error } = await Sistema.supabase
             .from('metas')
             .select('mes, ano, meta')
@@ -216,13 +233,13 @@ Gestao.Metas = {
         const listaHist = data || [];
         
         let htmlLista = '';
-        if(listaHist.length === 0) htmlLista = '<p class="text-slate-400 text-center">Sem histórico.</p>';
+        if(listaHist.length === 0) htmlLista = '<p class="text-slate-400 text-center text-sm">Sem histórico.</p>';
         else {
             htmlLista = '<div class="space-y-2">';
             listaHist.forEach(h => {
                 const nomeMes = new Date(h.ano, h.mes - 1).toLocaleString('pt-BR', { month: 'long' });
                 htmlLista += `
-                <div class="flex justify-between items-center p-2 bg-slate-50 rounded border border-slate-100">
+                <div class="flex justify-between items-center p-2 bg-slate-50 rounded border border-slate-100 text-sm">
                     <span class="capitalize text-slate-600 font-bold">${nomeMes} ${h.ano}</span>
                     <span class="text-blue-600 font-mono font-bold">${h.meta}</span>
                 </div>`;
@@ -245,7 +262,6 @@ Gestao.Metas = {
         document.body.insertAdjacentHTML('beforeend', modalHtml);
     },
 
-    // --- UTILITÁRIOS ---
     isNovato: function(dataInicio) {
         if (!dataInicio) return false;
         const dInicio = new Date(dataInicio);
@@ -256,5 +272,4 @@ Gestao.Metas = {
     }
 };
 
-// Inicializa automaticamente
 Gestao.Metas.init();
