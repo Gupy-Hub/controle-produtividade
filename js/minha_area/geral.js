@@ -6,14 +6,14 @@ MinhaArea.Geral = {
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         
         const tbody = document.getElementById('tabela-extrato');
-        // Mensagem de loading no estilo grade
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Carregando dados...</span></div></td></tr>';
+        // Loading Style
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados da validação...</span></div></td></tr>';
 
         try {
-            // 1. Busca Produção
+            // 1. Busca Produção Completa (incluindo FIFO e Graduais)
             const { data, error } = await Sistema.supabase
                 .from('producao')
-                .select('*')
+                .select('*') // Traz fifo, gradual_total, gradual_parcial, etc.
                 .eq('usuario_id', uid)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
@@ -35,8 +35,11 @@ MinhaArea.Geral = {
 
             const metaDiariaPadrao = metaData ? Math.round(metaData.meta / 22) : 650;
 
-            // 3. Processamento
+            // 3. Processamento e Totais
             let totalProd = 0;
+            let totalFifo = 0;
+            let totalGT = 0;
+            let totalGP = 0;
             let diasUteis = 0;
             let totalMeta = 0;
             let somaFator = 0;
@@ -45,29 +48,38 @@ MinhaArea.Geral = {
 
             data.forEach(item => {
                 const qtd = Number(item.quantidade || 0);
+                const fifo = Number(item.fifo || 0);
+                const gt = Number(item.gradual_total || 0);
+                const gp = Number(item.gradual_parcial || 0);
                 const fator = Number(item.fator);
                 const metaDia = Math.round(metaDiariaPadrao * fator);
                 
+                // Acumula Totais
                 totalProd += qtd;
+                totalFifo += fifo;
+                totalGT += gt;
+                totalGP += gp;
                 somaFator += fator;
                 totalMeta += metaDia;
+                
                 if (fator > 0) diasUteis++;
 
                 const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
                 let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
                 
                 // Formatação de Data
-                const dateObj = new Date(item.data_referencia + 'T12:00:00'); // Garante fuso
+                const dateObj = new Date(item.data_referencia + 'T12:00:00');
                 const dia = String(dateObj.getDate()).padStart(2, '0');
                 const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
                 const ano = dateObj.getFullYear();
-                
-                // Dia da semana (ex: SEG, TER)
                 const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase().replace('.', '');
 
-                // Estilo "Visão de Grade": Borders between cells, compact rows
+                // Classes de estilo Grade
                 const tdClass = "px-2 py-2 border-r border-slate-100 last:border-0 truncate";
                 const tdCenter = "px-2 py-2 border-r border-slate-100 text-center";
+                
+                // Formatação condicional para zeros (deixa cinza claro para limpar a vista)
+                const fmtZero = (val) => val === 0 ? '<span class="text-slate-300">0</span>' : val;
 
                 const tr = `
                     <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600">
@@ -76,9 +88,9 @@ MinhaArea.Geral = {
                             ${dia}/${mes}/${ano}
                         </td>
                         <td class="${tdCenter}">${fator}</td>
-                        <td class="${tdCenter} text-slate-400 font-mono">-</td>
-                        <td class="${tdCenter} text-slate-400 font-mono">-</td>
-                        <td class="${tdCenter} text-slate-400 font-mono">-</td>
+                        <td class="${tdCenter}">${fmtZero(fifo)}</td>
+                        <td class="${tdCenter}">${fmtZero(gt)}</td>
+                        <td class="${tdCenter}">${fmtZero(gp)}</td>
                         <td class="${tdCenter} font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${qtd}</td>
                         <td class="${tdCenter}">${metaDia}</td>
                         <td class="${tdCenter} font-bold ${corPct}">${Math.round(pct)}%</td>
@@ -90,16 +102,23 @@ MinhaArea.Geral = {
                 tbody.innerHTML += tr;
             });
 
-            // Footer count
-            const footerCount = document.getElementById('total-registros-footer');
-            if(footerCount) footerCount.innerText = data.length;
+            // Atualiza rodapé da tabela
+            this.setTxt('total-registros-footer', data.length);
+            this.setTxt('footer-fator', somaFator.toFixed(1));
+            this.setTxt('footer-fifo', totalFifo.toLocaleString('pt-BR'));
+            this.setTxt('footer-gt', totalGT.toLocaleString('pt-BR'));
+            this.setTxt('footer-gp', totalGP.toLocaleString('pt-BR'));
+            this.setTxt('footer-prod', totalProd.toLocaleString('pt-BR'));
+            this.setTxt('footer-meta', totalMeta.toLocaleString('pt-BR'));
+            
+            const atingimentoGeral = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
+            this.setTxt('footer-pct', atingimentoGeral + '%');
 
             if (data.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado neste período.</td></tr>';
             }
 
-            // 4. Atualiza KPIs
-            const atingimentoGeral = totalMeta > 0 ? Math.round((totalProd / totalMeta) * 100) : 0;
+            // 4. Atualiza KPIs do topo
             const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
