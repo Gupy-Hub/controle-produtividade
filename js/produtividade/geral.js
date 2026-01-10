@@ -172,16 +172,13 @@ Produtividade.Geral = {
             const commonCellClass = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // === VISÃO DETALHADA (Dia a Dia) COM CONSOLIDAÇÃO ===
-                
-                // 1. Agrupar registros por Data para remover duplicidades visuais
+                // === VISÃO DETALHADA (Dia a Dia) CONSOLIDADA ===
                 const mapaDias = {};
-
                 d.registros.forEach(r => {
                     const data = r.data_referencia;
                     if (!mapaDias[data]) {
                         mapaDias[data] = {
-                            id: r.id, // Usa o ID do primeiro registro para edições
+                            id: r.id, 
                             data_referencia: data,
                             fator: r.fator,
                             justificativa: r.justificativa,
@@ -192,7 +189,6 @@ Produtividade.Geral = {
                             perfil_fc: 0
                         };
                     }
-                    // Soma os valores se houver duplicidade
                     mapaDias[data].quantidade += (Number(r.quantidade) || 0);
                     mapaDias[data].fifo += (Number(r.fifo) || 0);
                     mapaDias[data].gradual_total += (Number(r.gradual_total) || 0);
@@ -200,11 +196,9 @@ Produtividade.Geral = {
                     mapaDias[data].perfil_fc += (Number(r.perfil_fc) || 0);
                 });
 
-                // Converte mapa de volta para array e ordena
                 const diasConsolidados = Object.values(mapaDias);
                 diasConsolidados.sort((a, b) => a.data_referencia.localeCompare(b.data_referencia));
 
-                // Renderiza os dias consolidados
                 diasConsolidados.forEach(r => {
                     totalLinhas++;
                     const metaCalc = metaBase * r.fator;
@@ -325,69 +319,111 @@ Produtividade.Geral = {
         this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
 
+    // --- NOVA LÓGICA DE KPIS ---
     atualizarKPIs: function(data, dataInicio, dataFim) {
         let totalProdGeral = 0;
         let metaTotalGeral = 0;
         let diasComProd = new Set();
-        let totalProdAssistentes = 0;
-        let countAssistentes = new Set(); 
+        let totalDiasTrabalhadosPonderados = 0; // Para calcular média diária
         
+        // Estruturas para Equipe e Top Performance
         let usersCLT = new Set();
         let usersPJ = new Set();
+        let ranking = {}; // Mapa para agrupar produção por usuário
         
         const isSingleUser = this.usuarioSelecionado !== null;
 
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
             const metaUser = 650;
-            const metaCalc = metaUser * r.fator;
+            const fator = Number(r.fator) || 0;
+            const metaCalc = metaUser * fator;
             
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
-            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
-            
-            if(contrato === 'CLT') usersCLT.add(r.usuario.id);
-            else usersPJ.add(r.usuario.id);
+            // Só soma para média se não for abono total (fator > 0)
+            if (fator > 0) totalDiasTrabalhadosPonderados += fator;
 
+            const contrato = (r.usuario && r.usuario.contrato) ? String(r.usuario.contrato).toUpperCase() : 'PJ';
+            if(contrato === 'CLT') usersCLT.add(r.usuario.id); else usersPJ.add(r.usuario.id);
+
+            // Monta Ranking (Ignora Gestão/Auditoria para o Top 3 se quiser focar na operação)
             const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            if (isSingleUser) {
-                totalProdAssistentes += qtd;
-                countAssistentes.add(r.usuario.id);
-            } else {
-                if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
-                    totalProdAssistentes += qtd;
-                    countAssistentes.add(r.usuario.id);
-                }
+            if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
+                if(!ranking[r.usuario.id]) ranking[r.usuario.id] = { nome: r.usuario.nome, total: 0 };
+                ranking[r.usuario.id].total += qtd;
             }
         });
 
+        // 1. KPI PRODUÇÃO (Atingido vs Esperado)
         document.getElementById('kpi-total').innerText = totalProdGeral.toLocaleString('pt-BR');
-        document.getElementById('kpi-meta-total').innerText = 'Meta: ' + Math.round(metaTotalGeral).toLocaleString('pt-BR');
-
-        const pct = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
-        document.getElementById('kpi-pct').innerText = Math.round(pct) + '%';
-        const bar = document.getElementById('kpi-pct-bar');
-        if(bar) {
-            bar.style.width = Math.min(pct, 100) + '%';
-            bar.className = pct >= 100 
-                ? "h-full bg-emerald-500 rounded-full transition-all duration-500" 
-                : "h-full bg-slate-300 rounded-full transition-all duration-500";
+        document.getElementById('kpi-meta-total').innerText = Math.round(metaTotalGeral).toLocaleString('pt-BR');
+        
+        // Barra de progresso da Produção (Opcional, usando a mesma lógica do atingimento)
+        const pctProd = metaTotalGeral > 0 ? (totalProdGeral / metaTotalGeral) * 100 : 0;
+        const barProd = document.getElementById('kpi-prod-bar');
+        if(barProd) {
+             barProd.style.width = Math.min(pctProd, 100) + '%';
+             barProd.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
         }
 
-        document.getElementById('kpi-clt-val').innerText = usersCLT.size;
-        document.getElementById('kpi-pj-val').innerText = usersPJ.size;
+        // 2. KPI ATINGIMENTO (% vs 100%)
+        document.getElementById('kpi-pct').innerText = Math.round(pctProd) + '%';
+        const barPct = document.getElementById('kpi-pct-bar');
+        if(barPct) {
+            barPct.style.width = Math.min(pctProd, 100) + '%';
+            barPct.className = pctProd >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-slate-300 rounded-full";
+        }
+
+        // 3. KPI EQUIPE (% de cada)
+        const clt = usersCLT.size;
+        const pj = usersPJ.size;
+        const totalEquipe = clt + pj;
+        const pctClt = totalEquipe > 0 ? Math.round((clt / totalEquipe) * 100) : 0;
+        const pctPj = totalEquipe > 0 ? Math.round((pj / totalEquipe) * 100) : 0;
+
+        document.getElementById('kpi-clt-val').innerText = `${clt} (${pctClt}%)`;
+        document.getElementById('kpi-pj-val').innerText = `${pj} (${pctPj}%)`;
         
+        const barClt = document.getElementById('kpi-clt-bar');
+        if(barClt) barClt.style.width = pctClt + '%';
+        
+        const barPj = document.getElementById('kpi-pj-bar');
+        if(barPj) barPj.style.width = pctPj + '%';
+        
+        // 4. KPI DIAS ÚTEIS e MÉDIA (Dividido)
         const diasUteisCalendario = this.calcularDiasUteis(dataInicio, dataFim);
         const diasTrabalhadosReal = diasComProd.size; 
-        const elDias = document.getElementById('kpi-dias-val');
-        if(elDias) elDias.innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
+        document.getElementById('kpi-dias-val').innerText = `${diasTrabalhadosReal} / ${diasUteisCalendario}`;
         
-        const numConsiderados = countAssistentes.size;
-        const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
-        const elMedia = document.getElementById('kpi-media-todas');
-        if(elMedia) elMedia.innerText = media;
+        // Média: Produção Total / Total de Dias-Pessoa Trabalhados
+        const media = totalDiasTrabalhadosPonderados > 0 ? Math.round(totalProdGeral / totalDiasTrabalhadosPonderados) : 0;
+        document.getElementById('kpi-media-todas').innerText = media;
+
+        // 5. KPI TOP PERFORMANCE (Top 3)
+        const listaRanking = Object.values(ranking).sort((a, b) => b.total - a.total).slice(0, 3);
+        const containerTop3 = document.getElementById('kpi-top3-list');
+        if(containerTop3) {
+            if (listaRanking.length === 0) {
+                containerTop3.innerHTML = '<div class="text-[10px] text-slate-400 italic text-center mt-2">Sem dados</div>';
+            } else {
+                let htmlRanking = '';
+                listaRanking.forEach((u, index) => {
+                    const colors = ['text-yellow-500', 'text-slate-400', 'text-amber-700']; // Ouro, Prata, Bronze
+                    htmlRanking += `
+                        <div class="flex justify-between items-center text-[10px] border-b border-slate-50 last:border-0 pb-0.5">
+                            <span class="font-bold text-slate-600 truncate max-w-[90px]">
+                                <i class="fas fa-trophy ${colors[index]} mr-1 text-[9px]"></i>${u.nome.split(' ')[0]}
+                            </span>
+                            <span class="font-black text-slate-800">${u.total}</span>
+                        </div>
+                    `;
+                });
+                containerTop3.innerHTML = htmlRanking;
+            }
+        }
     },
 
     mudarFator: async function(id, novoFatorStr) {
