@@ -4,6 +4,13 @@ Produtividade.Performance = {
     dadosCache: [], 
     
     init: function() {
+        // Verifica se a biblioteca de gráficos carregou
+        if (typeof Chart === 'undefined') {
+            console.error("ERRO CRÍTICO: A biblioteca Chart.js não foi carregada. Verifique o HTML.");
+            alert("Erro: Biblioteca de gráficos não encontrada. Recarregue a página.");
+            return;
+        }
+
         if (!this.initialized) {
             this.initialized = true;
         }
@@ -11,7 +18,10 @@ Produtividade.Performance = {
     },
 
     togglePeriodo: function() {
-        const t = document.getElementById('perf-period-type').value;
+        const tEl = document.getElementById('perf-period-type');
+        if(!tEl) return; // Proteção se o HTML não carregou
+
+        const t = tEl.value;
         const selQ = document.getElementById('perf-select-quarter');
         const selS = document.getElementById('perf-select-semester');
         const dateInput = document.getElementById('global-date');
@@ -38,11 +48,17 @@ Produtividade.Performance = {
 
     carregar: async function() {
         const listContainer = document.getElementById('ranking-list-container');
-        listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
+        if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
         
         const t = document.getElementById('perf-period-type').value; 
         const dateInput = document.getElementById('global-date');
-        let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+        
+        if(!dateInput.value) {
+            console.warn("Data global vazia. Usando data de hoje.");
+            dateInput.value = new Date().toISOString().split('T')[0];
+        }
+
+        let val = dateInput.value;
         let [ano, mes, dia] = val.split('-').map(Number);
         const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
         
@@ -63,6 +79,8 @@ Produtividade.Performance = {
             s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
         }
 
+        console.log(`[Performance] Buscando dados de ${s} até ${e}...`);
+
         try {
             const { data, error } = await Sistema.supabase
                 .from('producao')
@@ -73,24 +91,41 @@ Produtividade.Performance = {
 
             if (error) throw error;
 
+            console.log(`[Performance] Registros encontrados: ${data.length}`);
+            
             this.dadosCache = data;
             this.renderizarVisaoGeral();
 
         } catch (err) {
-            console.error(err);
-            listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro: ${err.message}</div>`;
+            console.error("[Performance] Erro:", err);
+            if(listContainer) listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro ao carregar: ${err.message}</div>`;
         }
     },
 
     renderizarVisaoGeral: function() {
-        document.getElementById('btn-reset-chart').classList.add('hidden');
-        document.getElementById('chart-title').innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
-        document.getElementById('chart-subtitle').innerText = 'Soma da produção diária de toda a equipe';
+        const btnReset = document.getElementById('btn-reset-chart');
+        if(btnReset) btnReset.classList.add('hidden');
+        
+        const titleEl = document.getElementById('chart-title');
+        if(titleEl) titleEl.innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
+        
+        const subTitleEl = document.getElementById('chart-subtitle');
+        if(subTitleEl) subTitleEl.innerText = 'Soma da produção diária de toda a equipe';
 
         const data = this.dadosCache;
+        const listContainer = document.getElementById('ranking-list-container');
+
         if (!data || data.length === 0) {
+            console.warn("[Performance] Nenhum dado retornado para o período.");
             this.destroyChart();
-            document.getElementById('ranking-list-container').innerHTML = '<div class="text-center text-slate-400 py-10 text-xs">Sem dados no período.</div>';
+            if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs">Nenhum dado encontrado neste período.<br>Tente mudar o filtro de data.</div>';
+            
+            // Limpa o gráfico visualmente
+            const ctx = document.getElementById('evolutionChart');
+            if(ctx) {
+                // Desenha um gráfico vazio para não ficar buraco na tela
+                this.renderChart([], []); 
+            }
             return;
         }
 
@@ -101,9 +136,13 @@ Produtividade.Performance = {
         data.forEach(r => {
             const date = r.data_referencia;
             const qtd = Number(r.quantidade) || 0;
-            const uid = r.usuario.id;
             
+            // Validação de Usuário (Evita erro se usuário foi deletado mas produção existe)
+            if(!r.usuario) return;
+
+            const uid = r.usuario.id;
             const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            
             if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
 
             diasSet.add(date);
@@ -116,7 +155,7 @@ Produtividade.Performance = {
         });
 
         const labels = Array.from(diasSet).sort();
-        const values = labels.map(d => producaoPorDia[d]);
+        const values = labels.map(d => producaoPorDia[d] || 0);
 
         this.renderChart(labels, [
             {
@@ -135,13 +174,18 @@ Produtividade.Performance = {
         this.renderRankingList(Object.values(producaoPorUser));
     },
 
-    // --- CORREÇÃO APLICADA AQUI ---
     renderizarVisaoIndividual: function(userId, userNameRaw) {
-        const userName = userNameRaw.replace(/'/g, ""); 
+        // Remove aspas simples para evitar erro no seletor ou título
+        const userName = userNameRaw ? userNameRaw.replace(/'/g, "") : "Usuário"; 
         
-        document.getElementById('btn-reset-chart').classList.remove('hidden');
-        document.getElementById('chart-title').innerHTML = `<i class="fas fa-user text-emerald-500 mr-2"></i> ${userName}`;
-        document.getElementById('chart-subtitle').innerText = 'Comparativo: Individual vs Média do Time';
+        const btnReset = document.getElementById('btn-reset-chart');
+        if(btnReset) btnReset.classList.remove('hidden');
+
+        const titleEl = document.getElementById('chart-title');
+        if(titleEl) titleEl.innerHTML = `<i class="fas fa-user text-emerald-500 mr-2"></i> ${userName}`;
+        
+        const subTitleEl = document.getElementById('chart-subtitle');
+        if(subTitleEl) subTitleEl.innerText = 'Comparativo: Individual vs Média do Time';
 
         const data = this.dadosCache;
         const diasSet = new Set();
@@ -150,6 +194,8 @@ Produtividade.Performance = {
         const teamCount = {}; 
 
         data.forEach(r => {
+            if(!r.usuario) return;
+
             const date = r.data_referencia;
             const qtd = Number(r.quantidade) || 0;
             const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
@@ -158,12 +204,11 @@ Produtividade.Performance = {
 
             diasSet.add(date);
 
-            // Time
             if (!teamProd[date]) { teamProd[date] = 0; teamCount[date] = new Set(); }
             teamProd[date] += qtd;
             teamCount[date].add(r.usuario.id);
 
-            // CORREÇÃO: Forçar conversão para String em ambos os lados para garantir igualdade
+            // Comparação de ID forçando String para garantir igualdade
             if (String(r.usuario.id) === String(userId)) {
                 if (!userProd[date]) userProd[date] = 0;
                 userProd[date] += qtd;
@@ -171,11 +216,7 @@ Produtividade.Performance = {
         });
 
         const labels = Array.from(diasSet).sort();
-        
-        // Se usuário não trabalhou no dia, valor é 0
         const userValues = labels.map(d => userProd[d] || 0);
-        
-        // Média do time no dia (Produção Total / Pessoas Ativas naquele dia)
         const avgValues = labels.map(d => {
             const total = teamProd[d] || 0;
             const count = teamCount[d] ? teamCount[d].size : 1;
@@ -184,7 +225,7 @@ Produtividade.Performance = {
 
         this.renderChart(labels, [
             {
-                label: 'Produção de ' + userName.split(' ')[0],
+                label: 'Produção: ' + userName.split(' ')[0],
                 data: userValues,
                 borderColor: '#10b981',
                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -207,6 +248,8 @@ Produtividade.Performance = {
 
     renderRankingList: function(usersArray) {
         const container = document.getElementById('ranking-list-container');
+        if(!container) return;
+
         usersArray.sort((a, b) => b.total - a.total);
 
         let html = '';
@@ -231,24 +274,39 @@ Produtividade.Performance = {
                 </div>
             `;
         });
+        
+        if(usersArray.length === 0) {
+            html = '<div class="text-center text-slate-400 py-10 text-xs">Nenhum dado.</div>';
+        }
+        
         container.innerHTML = html;
     },
 
     renderChart: function(labels, datasets) {
         this.destroyChart();
         
-        const ctx = document.getElementById('evolutionChart').getContext('2d');
+        const canvas = document.getElementById('evolutionChart');
+        if (!canvas) {
+            console.error("[Performance] Elemento <canvas id='evolutionChart'> não encontrado.");
+            return;
+        }
+        
+        const ctx = canvas.getContext('2d');
         
         const formattedLabels = labels.map(d => {
             const parts = d.split('-');
             return `${parts[2]}/${parts[1]}`;
         });
 
+        // Configuração de segurança caso labels estejam vazias
+        const finalLabels = formattedLabels.length > 0 ? formattedLabels : ['Sem Dados'];
+        const finalDatasets = datasets.length > 0 ? datasets : [{ label: 'Vazio', data: [0] }];
+
         this.chartInstance = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: formattedLabels,
-                datasets: datasets
+                labels: finalLabels,
+                datasets: finalDatasets
             },
             options: {
                 responsive: true,
