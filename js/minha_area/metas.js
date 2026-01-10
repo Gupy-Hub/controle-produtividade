@@ -5,12 +5,11 @@ MinhaArea.Metas = {
         const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
-        // Pega o ano do filtro atual
         const { inicio } = MinhaArea.getDatasFiltro();
         const ano = new Date(inicio).getFullYear();
 
         try {
-            // 1. Busca Produção Agrupada (Simulação de agrupamento via JS, pois Supabase não tem group by nativo simples no cliente)
+            // 1. Busca Produção
             const { data: producoes } = await Sistema.supabase
                 .from('producao')
                 .select('data_referencia, quantidade')
@@ -18,29 +17,29 @@ MinhaArea.Metas = {
                 .gte('data_referencia', `${ano}-01-01`)
                 .lte('data_referencia', `${ano}-12-31`);
 
-            // 2. Busca Metas do ano
+            // 2. Busca Metas (CORREÇÃO: coluna 'meta')
             const { data: metas } = await Sistema.supabase
                 .from('metas')
-                .select('mes, valor')
+                .select('mes, meta') 
                 .eq('usuario_id', uid)
                 .eq('ano', ano);
 
-            // 3. Consolida Dados (Jan-Dez)
+            // 3. Consolida Dados
             const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dadosProducao = new Array(12).fill(0);
-            const dadosMeta = new Array(12).fill(650 * 22); // Valor padrão inicial (ex: 14300)
+            const dadosMeta = new Array(12).fill(650 * 22);
 
-            // Preenche Metas Reais
+            // Preenche Metas Reais (Usa m.meta)
             if (metas) {
                 metas.forEach(m => {
-                    if(m.mes >= 1 && m.mes <= 12) dadosMeta[m.mes - 1] = m.valor;
+                    if(m.mes >= 1 && m.mes <= 12) dadosMeta[m.mes - 1] = m.meta;
                 });
             }
 
-            // Soma Produção por Mês
+            // Soma Produção
             if (producoes) {
                 producoes.forEach(p => {
-                    const mes = new Date(p.data_referencia).getMonth(); // 0 a 11
+                    const mes = new Date(p.data_referencia).getMonth();
                     dadosProducao[mes] += (Number(p.quantidade) || 0);
                 });
             }
@@ -66,7 +65,7 @@ MinhaArea.Metas = {
                     {
                         label: 'Minha Produção',
                         data: prod,
-                        backgroundColor: '#2563eb', // Blue 600
+                        backgroundColor: '#2563eb',
                         borderRadius: 4,
                         order: 2
                     },
@@ -74,7 +73,7 @@ MinhaArea.Metas = {
                         label: 'Meta',
                         data: metas,
                         type: 'line',
-                        borderColor: '#059669', // Emerald 600
+                        borderColor: '#059669',
                         borderWidth: 2,
                         pointBackgroundColor: '#fff',
                         pointBorderColor: '#059669',
