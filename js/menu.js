@@ -9,20 +9,27 @@ const MenuGlobal = {
 
         const user = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
         const isGestao = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
+        const currentPath = window.location.pathname;
 
-        const links = [
-            { nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' },
-            // ALTERADO DE 'Painel Produtividade' PARA 'Produtividade'
-            { nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' },
-            { nome: 'Ferramentas', url: 'ferramentas.html', icon: 'fas fa-toolbox' }
-        ];
+        // --- DEFINIÇÃO DA ORDEM DOS LINKS ---
+        const links = [];
 
+        // 1. Gestão
         if (isGestao) {
             links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
         }
 
-        const currentPath = window.location.pathname;
+        // 2. Produtividade
+        links.push({ nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' });
 
+        // 3. Minha Área
+        links.push({ nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' });
+
+        // 4. Biblioteca
+        links.push({ nome: 'Biblioteca', url: 'ferramentas.html', icon: 'fas fa-book' });
+
+
+        // --- RENDERIZAÇÃO ---
         let html = `
         <nav class="bg-slate-900 text-slate-300 shadow-md fixed top-0 left-0 w-full z-[60] h-12">
             <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
@@ -62,6 +69,7 @@ const MenuGlobal = {
         </nav>`;
 
         container.innerHTML = html;
+
         document.body.style.paddingTop = '0px'; 
         
         const subHeader = document.querySelector('.fixed.top-0:not(nav)');

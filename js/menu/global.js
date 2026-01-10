@@ -14,15 +14,24 @@ Menu.Global = {
         const isGestao = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
         const currentPath = window.location.pathname;
 
-        const links = [
-            { nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' },
-            // ALTERADO DE 'Painel Produtividade' PARA 'Produtividade'
-            { nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' },
-            { nome: 'Ferramentas', url: 'ferramentas.html', icon: 'fas fa-toolbox' }
-        ];
+        // --- DEFINIÇÃO DA ORDEM DOS LINKS ---
+        const links = [];
 
-        if (isGestao) links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
+        // 1. Gestão (Aparece primeiro se tiver permissão)
+        if (isGestao) {
+            links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
+        }
 
+        // 2. Produtividade
+        links.push({ nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' });
+
+        // 3. Minha Área
+        links.push({ nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' });
+
+        // 4. Biblioteca (Antigo Ferramentas) - Ícone alterado para livro
+        links.push({ nome: 'Biblioteca', url: 'ferramentas.html', icon: 'fas fa-book' });
+
+        // --- RENDERIZAÇÃO ---
         let html = `
         <nav class="bg-slate-900 text-slate-300 shadow-md fixed top-0 left-0 w-full z-[60] h-12">
             <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
