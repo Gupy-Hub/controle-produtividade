@@ -1,36 +1,63 @@
 Gestao.Assertividade = {
     timerBusca: null,
     
-    // Estado da Paginação
+    // Estado Centralizado da Tela
     estado: {
         pagina: 0,
-        limite: 50, // Itens por página
+        limite: 50, // 50 itens por página (padrão ideal de performance)
         total: 0,
         termo: '',
-        status: '',
-        auditora: '',
-        data: ''
+        filtros: {
+            data: '',
+            empresa: '',
+            assistente: '',
+            doc: '',
+            status: '',
+            obs: '',
+            auditora: ''
+        }
     },
 
     // --- CARREGAMENTO INICIAL ---
     carregar: async function() {
-        // Reseta tudo ao entrar na tela
         this.estado.pagina = 0;
         this.limparCamposUI();
-        this.buscarDados();
+        this.buscarDados(); // Busca inicial (Tudo)
     },
 
     limparCamposUI: function() {
-        if(document.getElementById('search-assert')) document.getElementById('search-assert').value = '';
-        if(document.getElementById('filtro-status')) document.getElementById('filtro-status').value = '';
-        if(document.getElementById('filtro-data')) document.getElementById('filtro-data').value = '';
-        if(document.getElementById('filtro-auditora')) document.getElementById('filtro-auditora').value = '';
+        const ids = ['search-assert', 'filtro-data', 'filtro-empresa', 'filtro-assistente', 'filtro-doc', 'filtro-status', 'filtro-obs', 'filtro-auditora'];
+        ids.forEach(id => {
+            if(document.getElementById(id)) document.getElementById(id).value = '';
+        });
     },
 
-    // --- GATILHO DE BUSCA (Debounce) ---
-    resetarPaginaEBuscar: function() {
-        this.estado.pagina = 0; // Volta para página 1 se mudou filtro
+    // --- GATILHO DE BUSCA UNIFICADO ---
+    // Chamado por QUALQUER input da tela (Busca Global ou Filtros de Coluna)
+    atualizarFiltrosEBuscar: function() {
+        // 1. Coleta dados da interface
+        this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
+        
+        this.estado.filtros.data = document.getElementById('filtro-data')?.value || '';
+        this.estado.filtros.empresa = document.getElementById('filtro-empresa')?.value.trim() || '';
+        this.estado.filtros.assistente = document.getElementById('filtro-assistente')?.value.trim() || '';
+        this.estado.filtros.doc = document.getElementById('filtro-doc')?.value.trim() || '';
+        this.estado.filtros.status = document.getElementById('filtro-status')?.value || '';
+        this.estado.filtros.obs = document.getElementById('filtro-obs')?.value.trim() || '';
+        this.estado.filtros.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
+
+        // 2. Reseta para página 0 (sempre que muda filtro, volta pro começo)
+        this.estado.pagina = 0;
+
+        // 3. Debounce (Espera parar de digitar)
         clearTimeout(this.timerBusca);
+        
+        const tbody = document.getElementById('lista-assertividade');
+        if(tbody && tbody.rows.length === 0) {
+            // Feedback imediato se estiver vazio
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Atualizando...</p></td></tr>`;
+        }
+
         this.timerBusca = setTimeout(() => {
             this.buscarDados();
         }, 600);
@@ -42,35 +69,37 @@ Gestao.Assertividade = {
 
         if (novaPagina >= 0 && (this.estado.total === 0 || novaPagina < maxPaginas)) {
             this.estado.pagina = novaPagina;
-            this.buscarDados();
+            this.buscarDados(); // Busca nova página com os MESMOS filtros
         }
     },
 
-    // --- BUSCA NO SERVIDOR ---
+    // --- COMUNICAÇÃO COM O SERVIDOR (SUPABASE) ---
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
         const btnAnt = document.getElementById('btn-ant');
         const btnProx = document.getElementById('btn-prox');
 
-        // Atualiza estado com valores dos inputs
-        this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
-        this.estado.status = document.getElementById('filtro-status')?.value || '';
-        this.estado.data = document.getElementById('filtro-data')?.value || '';
-        this.estado.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
-
-        // Feedback de Carregamento
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Buscando na base de dados...</p></td></tr>`;
+        // Feedback Visual Sutil (para não piscar a tela toda hora)
+        if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-sync fa-spin"></i> Sincronizando...</span>`;
         if(btnAnt) btnAnt.disabled = true;
         if(btnProx) btnProx.disabled = true;
 
         try {
-            // CHAMA A NOVA FUNÇÃO SQL V2
-            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v2', {
+            // ENVIA TODOS OS FILTROS PARA O SQL V3
+            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v3', {
                 p_termo: this.estado.termo,
-                p_status: this.estado.status,
-                p_auditora: this.estado.auditora ? `%${this.estado.auditora}%` : '', // Adiciona % para busca parcial
-                p_data: this.estado.data,
+                
+                // Filtros Específicos
+                p_data: this.estado.filtros.data,
+                p_status: this.estado.filtros.status,
+                p_auditora: this.estado.filtros.auditora,
+                p_empresa: this.estado.filtros.empresa,
+                p_assistente: this.estado.filtros.assistente,
+                p_doc: this.estado.filtros.doc,
+                p_obs: this.estado.filtros.obs,
+                
+                // Paginação
                 p_page: this.estado.pagina,
                 p_limit: this.estado.limite
             });
@@ -79,36 +108,44 @@ Gestao.Assertividade = {
 
             const lista = data || [];
             
-            // Atualiza Total (Vem na coluna total_registros da primeira linha, ou 0 se vazio)
+            // O Total vem na propriedade 'total_registros' da primeira linha
             this.estado.total = lista.length > 0 ? lista[0].total_registros : 0;
+            // Se a lista veio vazia mas estamos na página 0, total é 0.
+            if(lista.length === 0 && this.estado.pagina === 0) this.estado.total = 0;
 
             this.renderizarTabela(lista);
             this.atualizarControlesPaginacao();
+            this.popularSelectsDinamicamente(lista); // Opcional: atualiza selects baseado na vista atual ou mantém estático
 
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
+            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold">Erro ao buscar dados: ${e.message}</td></tr>`;
         }
     },
 
+    // --- RENDERIZAÇÃO ---
     atualizarControlesPaginacao: function() {
         const infoPag = document.getElementById('info-paginacao');
         const btnAnt = document.getElementById('btn-ant');
         const btnProx = document.getElementById('btn-prox');
+        const contador = document.getElementById('contador-assert');
 
         const total = this.estado.total;
         const inicio = (this.estado.pagina * this.estado.limite) + 1;
         let fim = (this.estado.pagina + 1) * this.estado.limite;
         if (fim > total) fim = total;
 
+        // Atualiza Contador Global no Topo
+        if(contador) contador.innerText = total.toLocaleString('pt-BR');
+
         if (total === 0) {
-            infoPag.innerHTML = "Nenhum resultado encontrado.";
-            btnAnt.disabled = true;
-            btnProx.disabled = true;
+            if(infoPag) infoPag.innerHTML = "Nenhum resultado encontrado.";
+            if(btnAnt) btnAnt.disabled = true;
+            if(btnProx) btnProx.disabled = true;
         } else {
-            infoPag.innerHTML = `Exibindo <b>${inicio}</b> a <b>${fim}</b> de <b>${total}</b> registros`;
-            btnAnt.disabled = this.estado.pagina === 0;
-            btnProx.disabled = fim >= total;
+            if(infoPag) infoPag.innerHTML = `Exibindo <b>${inicio}</b> a <b>${fim}</b> de <b>${total.toLocaleString('pt-BR')}</b> registros encontrados no banco.`;
+            if(btnAnt) btnAnt.disabled = this.estado.pagina === 0;
+            if(btnProx) btnProx.disabled = fim >= total;
         }
     },
 
@@ -116,7 +153,7 @@ Gestao.Assertividade = {
         const tbody = document.getElementById('lista-assertividade');
         
         if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-filter text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Nenhum registro encontrado para esses filtros.</span></div></td></tr>';
             return;
         }
 
@@ -124,7 +161,7 @@ Gestao.Assertividade = {
         lista.forEach(item => {
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
-            const nomeUser = item.u_nome || `ID: ${item.usuario_id}`; // u_nome vem da V2
+            const nomeUser = item.u_nome || `ID: ${item.usuario_id}`;
             const empIdDisplay = item.e_id ? `#${item.e_id}` : '<span class="text-slate-200">-</span>';
 
             // Status Badge
@@ -170,6 +207,12 @@ Gestao.Assertividade = {
         });
 
         tbody.innerHTML = html;
+    },
+
+    // (Opcional) Poderíamos popular o select de auditoras aqui, 
+    // mas para performance máxima, melhor deixar estático ou carregar uma vez no inicio.
+    popularSelectsDinamicamente: function(lista) {
+        // Implementação futura se necessário carregar lista de auditoras do banco
     },
 
     salvarMeta: function() { }

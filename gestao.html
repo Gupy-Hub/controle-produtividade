@@ -11,6 +11,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
         .animate-fade { animation: fadeIn 0.3s ease-out; }
@@ -72,13 +73,13 @@
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
                     <input type="text" 
                            id="search-assert" 
-                           onkeyup="Gestao.Assertividade.resetarPaginaEBuscar()" 
+                           onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" 
                            placeholder="Buscar Geral (ID, Nome, Empresa)..." 
                            class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition shadow-sm">
                 </div>
                 <div class="text-xs text-slate-400 text-right">
-                    <span class="bg-blue-50 text-blue-600 px-2 py-1 rounded font-bold border border-blue-100">Modo Servidor Ativo</span>
-                    <span class="ml-2">Todos os filtros abaixo pesquisam no banco inteiro.</span>
+                    <span class="bg-emerald-50 text-emerald-600 px-2 py-1 rounded font-bold border border-emerald-100">Database Live</span>
+                    <span class="ml-2">Pesquisa em tempo real em 100% dos dados.</span>
                 </div>
              </div>
 
@@ -100,14 +101,15 @@
                                 <th class="px-3 py-2 w-[5%] text-center">%</th>
                                 <th class="px-3 py-2 w-[10%]">Auditora</th>
                             </tr>
+                            
                             <tr class="bg-slate-100/50 border-b border-slate-200">
-                                <td class="p-1"><input type="date" id="filtro-data" onchange="Gestao.Assertividade.resetarPaginaEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="date" id="filtro-data" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
                                 <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td>
-                                <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed text-center" value="Use a Busca"></td>
-                                <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed text-center" value="Use a Busca"></td>
-                                <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed text-center" value="Use a Busca"></td>
+                                <td class="p-1"><input type="text" id="filtro-empresa" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" id="filtro-assistente" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" id="filtro-doc" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
                                 <td class="p-1">
-                                    <select id="filtro-status" onchange="Gestao.Assertividade.resetarPaginaEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
+                                    <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
                                         <option value="">TODOS</option>
                                         <option value="OK">OK</option>
                                         <option value="NOK">NOK</option>
@@ -119,13 +121,13 @@
                                         <option value="REC">REC (Recusado)</option>
                                     </select>
                                 </td>
-                                <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td>
+                                <td class="p-1"><input type="text" id="filtro-obs" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
                                 <td class="p-1 text-center text-xs text-slate-300">-</td>
                                 <td class="p-1 text-center text-xs text-slate-300">-</td>
                                 <td class="p-1 text-center text-xs text-slate-300">-</td>
                                 <td class="p-1 text-center text-xs text-slate-300">-</td>
                                 <td class="p-1">
-                                    <input type="text" id="filtro-auditora" onkeyup="Gestao.Assertividade.resetarPaginaEBuscar()" placeholder="Nome..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm">
+                                    <input type="text" id="filtro-auditora" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Nome..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm">
                                 </td>
                             </tr>
                         </thead>
@@ -135,7 +137,7 @@
                  
                  <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs font-semibold text-slate-600">
                      <div class="flex items-center gap-4">
-                        <span id="info-paginacao" class="text-slate-500">Carregando...</span>
+                        <span id="info-paginacao" class="text-slate-500">Iniciando...</span>
                      </div>
                      <div class="flex items-center gap-2">
                          <button onclick="Gestao.Assertividade.mudarPagina(-1)" id="btn-ant" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><i class="fas fa-chevron-left"></i> Anterior</button>
