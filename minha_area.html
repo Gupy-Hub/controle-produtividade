@@ -16,14 +16,12 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
-        /* Estilos globais de tab que combinam com o menu */
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .animate-enter { animation: enter 0.3s ease-out; }
         @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        /* Esconde barra de rolagem horizontal nos menus em telas menores */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -38,7 +36,6 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-6">
-            
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
                     <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Total Produzido</p>
@@ -63,14 +60,13 @@
                     <p class="text-[10px] text-slate-400 mt-1">Média Time: <span id="kpi-media-time">--</span></p>
                 </div>
             </div>
-
+            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                     <h3 class="font-bold text-slate-700 text-sm flex items-center gap-2">
                         <i class="fas fa-list-alt text-blue-500"></i> Detalhamento do Período
                     </h3>
                 </div>
-                
                 <div class="overflow-x-auto">
                     <table class="w-full text-sm text-left">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px]">
@@ -83,8 +79,7 @@
                                 <th class="px-6 py-3 border-b border-slate-200">Justificativa / Obs</th>
                             </tr>
                         </thead>
-                        <tbody id="tabela-diario" class="divide-y divide-slate-100 text-slate-600 text-xs">
-                        </tbody>
+                        <tbody id="tabela-diario" class="divide-y divide-slate-100 text-slate-600 text-xs"></tbody>
                     </table>
                 </div>
             </div>
@@ -92,8 +87,26 @@
 
         <div id="ma-tab-metas" class="ma-view hidden animate-enter">
             <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]">
-                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Anual</h3>
+                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Anual de Metas</h3>
                 <div class="h-[400px] w-full"><canvas id="graficoEvolucao"></canvas></div>
+            </div>
+        </div>
+
+        <div id="ma-tab-assertividade" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center justify-center min-h-[400px]">
+                <div class="text-center text-slate-400">
+                    <i class="fas fa-check-double text-4xl mb-3"></i>
+                    <p>Módulo de Assertividade</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="ma-tab-auditoria" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center justify-center min-h-[400px]">
+                <div class="text-center text-slate-400">
+                    <i class="fas fa-clipboard-check text-4xl mb-3"></i>
+                    <p>Módulo de Auditoria</p>
+                </div>
             </div>
         </div>
 
@@ -104,11 +117,23 @@
             </div>
         </div>
 
+        <div id="ma-tab-feedback" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center justify-center min-h-[400px]">
+                <div class="text-center text-slate-400">
+                    <i class="fas fa-comments text-4xl mb-3"></i>
+                    <p>Módulo de Feedback</p>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script src="js/minha_area/main.js"></script>
     <script src="js/minha_area/geral.js"></script> 
     <script src="js/minha_area/metas.js"></script>
+    <script src="js/minha_area/assertividade.js"></script>
+    <script src="js/minha_area/auditoria.js"></script>
     <script src="js/minha_area/comparativo.js"></script>
+    <script src="js/minha_area/feedback.js"></script>
 </body>
 </html>
