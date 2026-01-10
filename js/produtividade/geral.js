@@ -95,12 +95,12 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando...</td></tr>';
 
         try {
-            // CORREÇÃO: Removida a coluna 'meta_diaria' que não existe na tabela usuarios
+            // CORREÇÃO: 'cargo' alterado para 'funcao' e removido 'meta_diaria'
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select(`
                     id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa,
-                    usuario:usuarios ( id, nome, perfil, cargo )
+                    usuario:usuarios ( id, nome, perfil, funcao )
                 `)
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
@@ -117,14 +117,15 @@ Produtividade.Geral = {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
                 
                 if(!dadosAgrupados[uid]) {
-                    // Tenta ler meta_diaria (agora virá undefined), fallback para 650
-                    const metaBanco = item.usuario && item.usuario.meta_diaria ? Number(item.usuario.meta_diaria) : 0;
+                    // Fallback de meta (já que removemos do select)
+                    const metaBanco = 650;
                     
                     dadosAgrupados[uid] = {
-                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', cargo: 'Assistente' },
+                        // Ajustado fallback para usar funcao
+                        usuario: item.usuario || { nome: 'Desconhecido', perfil: 'PJ', funcao: 'Assistente' },
                         registros: [],
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
-                        meta_real: metaBanco > 0 ? metaBanco : 650 // Padrão 650
+                        meta_real: metaBanco
                     };
                 }
                 dadosAgrupados[uid].registros.push(item);
@@ -142,7 +143,6 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             
-            // Se já tiver alguém selecionado (ex: após refresh), re-filtra
             if (this.usuarioSelecionado) {
                 this.filtrarUsuario(this.usuarioSelecionado, document.getElementById('selected-name').textContent);
             } else {
@@ -152,7 +152,8 @@ Produtividade.Geral = {
 
         } catch (error) {
             console.error("Erro ao carregar:", error);
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${error.message}</td></tr>`;
+            // Exibe o erro detalhado na tabela para facilitar debug
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${error.message || JSON.stringify(error)}</td></tr>`;
         }
     },
 
@@ -168,7 +169,8 @@ Produtividade.Geral = {
 
         lista.forEach(d => {
             const isDia = document.getElementById('view-mode').value === 'dia';
-            const cargoExibicao = (d.usuario.cargo || 'Assistente').toUpperCase();
+            // CORREÇÃO: Usando 'funcao' em vez de 'cargo'
+            const cargoExibicao = (d.usuario.funcao || 'Assistente').toUpperCase();
             
             let perfilRaw = (d.usuario.perfil || 'PJ').toUpperCase();
             if (perfilRaw === 'USER') perfilRaw = 'PJ'; 
@@ -412,10 +414,7 @@ Produtividade.Geral = {
         this.renderizarTabela();
 
         // 2. Filtra os KPIs (cards)
-        // Pega os dados do cache e filtra apenas para este ID
         const dadosFiltrados = this.cacheData.filter(r => r.usuario.id === id);
-        
-        // Recalcula KPIs com os dados filtrados
         this.atualizarKPIs(dadosFiltrados, this.cacheDatas.start, this.cacheDatas.end);
     },
 
@@ -426,7 +425,7 @@ Produtividade.Geral = {
         // 1. Restaura a tabela completa
         this.renderizarTabela();
 
-        // 2. Restaura os KPIs completos (usa o cache total)
+        // 2. Restaura os KPIs completos
         this.atualizarKPIs(this.cacheData, this.cacheDatas.start, this.cacheDatas.end);
     },
 
@@ -441,35 +440,30 @@ Produtividade.Geral = {
         let usersCLT = new Set();
         let usersPJ = new Set();
         
-        // Verifica se há um usuário filtrado para ajustar o contexto
         const isSingleUser = this.usuarioSelecionado !== null;
 
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0;
-            // CORREÇÃO: Fallback se meta_diaria for undefined
-            const metaUser = (r.usuario && r.usuario.meta_diaria && Number(r.usuario.meta_diaria) > 0) ? Number(r.usuario.meta_diaria) : 650;
+            const metaUser = 650; // Fallback fixo por segurança
             const metaCalc = metaUser * r.fator;
             
-            // 1. SOMA TUDO NO GERAL (Inclusive Auditoras se elas estiverem na lista filtrada)
             totalProdGeral += qtd;
             metaTotalGeral += metaCalc;
             diasComProd.add(r.data_referencia);
             
-            const cargo = r.usuario && r.usuario.cargo ? String(r.usuario.cargo).toUpperCase() : 'ASSISTENTE';
+            // CORREÇÃO: Usando 'funcao' em vez de 'cargo'
+            const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             let perfil = String(r.usuario.perfil).trim().toUpperCase();
             if(perfil === 'USER') perfil = 'PJ';
 
-            // Contagem de Perfil (Mostra o perfil do usuário atual ou a soma do time)
             if(perfil === 'CLT') usersCLT.add(r.usuario.id);
             else usersPJ.add(r.usuario.id);
 
-            // 2. LÓGICA DE MÉDIA
-            // Se tiver filtrado apenas UM usuário, a média deve ser dele (mesmo que seja auditora)
+            // Se tiver filtrado, considera todos. Se não, exclui gestão.
             if (isSingleUser) {
                 totalProdAssistentes += qtd;
                 countAssistentes.add(r.usuario.id);
             } else {
-                // Se for o time todo, exclui Auditoras/Gestoras da média
                 if (cargo !== 'AUDITORA' && cargo !== 'GESTORA') {
                     totalProdAssistentes += qtd;
                     countAssistentes.add(r.usuario.id);
@@ -514,7 +508,7 @@ Produtividade.Geral = {
         const elDiasTotal = document.getElementById('kpi-dias-total');
         if(elDiasTotal) elDiasTotal.innerText = ""; 
 
-        // MÉDIA (Assistentes ou Usuário Selecionado)
+        // MÉDIA
         const numConsiderados = countAssistentes.size;
         const media = numConsiderados > 0 ? Math.round(totalProdAssistentes / numConsiderados) : 0;
         const elMedia = document.getElementById('kpi-media-todas');
