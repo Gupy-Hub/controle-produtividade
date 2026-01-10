@@ -15,23 +15,15 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        
-        /* Abas */
         .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
         .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        
-        /* Animações */
         .animate-fade-in { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        /* Scrollbars Customizadas (Estilo Excel) */
         .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        /* Tooltip */
         .custom-tooltip { position: relative; display: inline-block; cursor: help; }
         .custom-tooltip:hover::after {
             content: attr(data-tooltip);
@@ -45,37 +37,25 @@
 <body class="bg-slate-100">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
-    
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
     <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
-            
             <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-check-circle"></i> Validação
-                </button>
-                <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-table"></i> Consolidado
-                </button>
-                <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-trophy"></i> Performance
-                </button>
-                <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-th"></i> Matriz
-                </button>
+                <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Validação</button>
+                <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-table"></i> Consolidado</button>
+                <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-trophy"></i> Performance</button>
+                <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-th"></i> Matriz</button>
             </div>
 
             <div class="flex items-center gap-4">
-                
                 <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer shadow-sm">
                     <i class="fas fa-calendar-alt text-blue-500"></i>
                     <input type="date" id="global-date" onchange="Produtividade.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
                 </div>
 
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4" id="top-bar-controls">
-                    
                     <div id="ctrl-geral" class="flex items-center gap-3">
                         <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
                             <option value="dia">Apenas o Dia</option>
@@ -83,7 +63,6 @@
                             <option value="ano">Ano Inteiro</option>
                             <option value="semana">Semana Específica</option>
                         </select>
-                        
                         <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
                             <option value="1">Semana 1</option>
                             <option value="2">Semana 2</option>
@@ -92,7 +71,6 @@
                             <option value="5">Semana 5</option>
                             <option value="6">Semana 6</option>
                         </select>
-
                         <label class="inline-flex items-center cursor-pointer border-l border-slate-200 pl-3" title="Exibir Auditoras e Gestoras na tabela">
                             <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()">
                             <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
@@ -108,9 +86,16 @@
                             <option value="semestre">Semestral</option>
                             <option value="ano">Anual</option>
                         </select>
-                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95">
-                            <i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span>
-                        </button>
+                        <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Trimestre</option>
+                            <option value="2">2º Trimestre</option>
+                            <option value="3">3º Trimestre</option>
+                            <option value="4">4º Trimestre</option>
+                        </select>
+                        <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
+                            <option value="1">1º Semestre</option>
+                            <option value="2">2º Semestre</option>
+                        </select>
                     </div>
 
                     <div id="ctrl-performance" class="hidden flex items-center gap-2">
@@ -125,20 +110,10 @@
 
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4">
                     <input type="file" id="input-excel" accept=".csv" multiple class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
-                    
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar em Massa">
-                        <i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span>
-                    </button>
-                    
-                    <button onclick="Produtividade.Importacao.Validacao.limparBancoCompleto()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Resetar Banco">
-                        <i class="fas fa-skull"></i> <span class="hidden sm:inline">Resetar</span>
-                    </button>
-
-                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir Período">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar"><i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span></button>
+                    <button onclick="Produtividade.Importacao.Validacao.limparBancoCompleto()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Resetar"><i class="fas fa-skull"></i> <span class="hidden sm:inline">Resetar</span></button>
+                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir"><i class="fas fa-trash-alt"></i></button>
                 </div>
-
             </div>
         </div>
     </div>
@@ -146,7 +121,6 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
-            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex h-24 overflow-hidden"><div class="w-1/2 p-3 border-r border-slate-100 flex flex-col justify-between"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Produção</p><div class="text-center"><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Exp: <span class="text-blue-600" id="kpi-meta-total">--</span></p></div></div><div class="w-1/2 p-3 flex flex-col justify-between bg-slate-50/50"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-right">Assistentes</p><div class="text-right"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-assistentes-val">--</h3><p class="text-[9px] text-slate-500 font-bold mt-1">Esperado: <span class="text-blue-600">17</span></p></div></div></div>
                 <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-24 relative overflow-hidden"><div class="flex justify-between items-start z-10"><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Atingimento</p><i class="fas fa-chart-pie text-slate-100 text-4xl absolute -right-2 -bottom-2 transform rotate-12"></i></div><div class="z-10 mt-1"><div class="flex items-baseline gap-1"><h3 class="text-2xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><p class="text-[10px] text-slate-500 font-bold mt-1">Meta Esperada: <span class="text-slate-400">100%</span></p></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-2"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
@@ -182,36 +156,19 @@
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-4">
-            
             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
-                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-3 py-3 w-[25%]">Assistente</th>
-                                <th class="px-2 py-3 text-center w-[8%]">Dias Trab.</th>
-                                <th class="px-2 py-3 text-center w-[8%]">FIFO</th>
-                                <th class="px-2 py-3 text-center w-[8%]">G. Total</th>
-                                <th class="px-2 py-3 text-center w-[8%]">G. Parcial</th>
-                                <th class="px-2 py-3 text-center w-[8%] bg-slate-100">Meta Base</th>
-                                <th class="px-2 py-3 text-center w-[10%] bg-slate-100">Meta Período</th>
-                                <th class="px-2 py-3 text-center w-[10%] text-blue-700">Produção</th>
-                                <th class="px-2 py-3 text-center w-[10%]">% Ating.</th>
-                            </tr>
+                        <thead id="cons-table-header" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
                         </thead>
-                        <tbody id="tabela-consolidado-body" class="divide-y divide-slate-200 bg-white">
+                        <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white">
                             </tbody>
                     </table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
-                    <span><i class="fas fa-layer-group mr-1"></i> Visão Agrupada por Período</span>
-                    <span>Total Assistentes: <span id="total-consolidado-footer">0</span></span>
                 </div>
             </div>
         </div>
 
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6"><div class="p-8 text-center text-slate-400">Carregando Performance...</div></div>
-        
         <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6"><div class="p-8 text-center text-slate-400">Carregando Matriz...</div></div>
     </div>
 
@@ -223,7 +180,6 @@
     <script src="js/produtividade/importacao/validacao.js"></script>
     
     <script>
-        // Função auxiliar para atualizar tudo quando muda o checkbox de gestão
         Produtividade.atualizarTodasAbas = function() {
             if(Produtividade.Geral && document.getElementById('tab-geral').classList.contains('hidden') === false) Produtividade.Geral.renderizarTabela();
             if(Produtividade.Consolidado && document.getElementById('tab-consolidado').classList.contains('hidden') === false) Produtividade.Consolidado.renderizar();

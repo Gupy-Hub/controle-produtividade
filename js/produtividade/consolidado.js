@@ -1,136 +1,289 @@
 Produtividade.Consolidado = {
-    dadosProcessados: [],
+    initialized: false,
+    ultimoCache: { key: null, data: null },
+    baseManualHC: 0,
+    dadosCalculados: null, 
 
-    carregar: async function() {
-        const tbody = document.getElementById('tabela-consolidado-body');
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados consolidados...</td></tr>';
-
-        // 1. Pega datas do filtro global (Reutiliza lógica do Geral para consistência)
-        const dateInput = document.getElementById('global-date');
-        const viewMode = document.getElementById('view-mode').value;
-        let dataSel = dateInput.value;
-        const [ano, mes, dia] = dataSel.split('-');
-        let dataInicio, dataFim;
-
-        if (viewMode === 'dia') { dataInicio = dataSel; dataFim = dataSel; }
-        else if (viewMode === 'mes') { dataInicio = `${ano}-${mes}-01`; dataFim = `${ano}-${mes}-${new Date(ano, mes, 0).getDate()}`; }
-        else if (viewMode === 'ano') { dataInicio = `${ano}-01-01`; dataFim = `${ano}-12-31`; }
-        else if (viewMode === 'semana') {
-            const semanaSel = parseInt(document.getElementById('select-semana').value) - 1;
-            const semanas = Produtividade.Geral.getSemanasDoMes(parseInt(ano), parseInt(mes));
-            if (semanas[semanaSel]) { dataInicio = semanas[semanaSel].inicio; dataFim = semanas[semanaSel].fim; }
-        }
-
-        try {
-            // 2. Busca dados brutos no banco
-            const { data, error } = await Sistema.supabase
-                .from('producao')
-                .select(`
-                    quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator,
-                    usuario:usuarios ( id, nome, perfil, funcao, contrato )
-                `)
-                .gte('data_referencia', dataInicio)
-                .lte('data_referencia', dataFim);
-
-            if (error) throw error;
-
-            // 3. Agrupa por Usuário (Lógica de Consolidação)
-            let dadosAgrupados = {};
-            
-            data.forEach(r => {
-                const uid = r.usuario ? r.usuario.id : 'desc';
-                if (!dadosAgrupados[uid]) {
-                    dadosAgrupados[uid] = {
-                        usuario: r.usuario || { nome: 'Desconhecido', funcao: 'Assistente', contrato: 'PJ' },
-                        dias: 0,
-                        fifo: 0,
-                        gt: 0,
-                        gp: 0,
-                        producao: 0,
-                        meta_base: 650 // Padrão
-                    };
-                }
-                const d = dadosAgrupados[uid];
-                const fator = Number(r.fator) || 0;
-                
-                d.dias += fator; // Dias ponderados (0.5 ou 1)
-                d.fifo += (Number(r.fifo) || 0);
-                d.gt += (Number(r.gradual_total) || 0);
-                d.gp += (Number(r.gradual_parcial) || 0);
-                d.producao += (Number(r.quantidade) || 0);
-            });
-
-            this.dadosProcessados = Object.values(dadosAgrupados); 
-            this.renderizar();
-
-        } catch (err) {
-            console.error(err);
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
-        }
+    init: async function() { 
+        if(!this.initialized) { 
+            this.initialized = true; 
+        } 
+        this.togglePeriodo();
     },
 
-    renderizar: function() {
-        const tbody = document.getElementById('tabela-consolidado-body');
-        const footer = document.getElementById('total-consolidado-footer');
-        const checkGestao = document.getElementById('check-gestao');
-        const mostrarGestao = checkGestao ? checkGestao.checked : false;
+    togglePeriodo: function() {
+        const t = document.getElementById('cons-period-type').value;
+        const selQ = document.getElementById('cons-select-quarter');
+        const selS = document.getElementById('cons-select-semester');
+        const dateInput = document.getElementById('global-date');
+        
+        if(selQ) selQ.classList.add('hidden');
+        if(selS) selS.classList.add('hidden');
 
-        if (!this.dadosProcessados) return;
+        if (t === 'trimestre' && selQ) {
+            selQ.classList.remove('hidden');
+            if(dateInput && dateInput.value) {
+                const m = parseInt(dateInput.value.split('-')[1]);
+                selQ.value = Math.ceil(m / 3);
+            }
+        } 
+        else if (t === 'semestre' && selS) {
+            selS.classList.remove('hidden');
+            if(dateInput && dateInput.value) {
+                const m = parseInt(dateInput.value.split('-')[1]);
+                selS.value = m <= 6 ? 1 : 2;
+            }
+        }
+        
+        this.carregar(false); 
+    },
+    
+    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
+        let count = 0;
+        let cur = new Date(dataInicio + 'T12:00:00'); 
+        const end = new Date(dataFim + 'T12:00:00');
+        while (cur <= end) {
+            const day = cur.getDay();
+            if (day !== 0 && day !== 6) count++;
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count;
+    },
+    
+    carregar: async function(forcar = false) {
+        const tbody = document.getElementById('cons-table-body'); 
+        const t = document.getElementById('cons-period-type').value; 
+        const dateInput = document.getElementById('global-date');
+        
+        let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
+        let [ano, mes, dia] = val.split('-').map(Number);
+        const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
+        
+        let s, e;
+        
+        if (t === 'dia') { 
+            s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
+        } else if (t === 'mes') { 
+            s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
+        } else if (t === 'trimestre') { 
+            const selQ = document.getElementById('cons-select-quarter');
+            const trim = selQ ? parseInt(selQ.value) : Math.ceil(mes / 3); 
+            const mStart = ((trim-1)*3)+1; 
+            s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; 
+            e = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`; 
+        } else if (t === 'semestre') { 
+            const selS = document.getElementById('cons-select-semester');
+            const sem = selS ? parseInt(selS.value) : (mes <= 6 ? 1 : 2); 
+            s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; 
+            e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; 
+        } else { 
+            s = `${sAno}-01-01`; e = `${sAno}-12-31`; 
+        }
 
-        // Filtro de Gestão (Mesmo checkbox da aba Geral)
-        let lista = this.dadosProcessados.filter(d => {
-            if (mostrarGestao) return true;
-            const funcao = (d.usuario.funcao || '').toUpperCase();
-            return !['AUDITORA', 'GESTORA'].includes(funcao);
-        });
-
-        // Ordenação por Nome
-        lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
-
-        tbody.innerHTML = '';
-        if(footer) footer.innerText = lista.length;
-
-        if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum dado encontrado para este período.</td></tr>';
+        const cacheKey = `${t}_${s}_${e}`;
+        if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) {
+            this.processarEExibir(this.ultimoCache.data, t, mes, ano);
             return;
         }
 
-        const commonCellClass = "px-2 py-3 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
-        lista.forEach(d => {
-            const metaPeriodo = d.dias * d.meta_base;
-            const pct = metaPeriodo > 0 ? (d.producao / metaPeriodo) * 100 : 0;
+        try {
+            const { data: rawData, error } = await Sistema.supabase
+                .from('producao')
+                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
+                .gte('data_referencia', s)
+                .lte('data_referencia', e);
+                
+            if(error) throw error;
             
-            const cargo = (d.usuario.funcao || 'Assistente').toUpperCase();
-            const contrato = (d.usuario.contrato || 'PJ').toUpperCase();
-
-            // Estilização da porcentagem
-            let classPct = "text-amber-600 font-bold";
-            if (pct >= 100) classPct = "text-emerald-700 font-black";
-            else if (pct < 70) classPct = "text-rose-600 font-bold";
-
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
+            const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
+            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 1;
             
-            tr.innerHTML = `
-                <td class="px-3 py-3 border-r border-slate-200">
-                    <div class="flex flex-col">
-                        <span class="font-bold text-slate-700 text-xs truncate">${d.usuario.nome}</span>
-                        <span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargo} • ${contrato}</span>
+            this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
+            this.processarEExibir(rawData, t, mes, ano);
+            
+        } catch (e) { 
+            console.error(e);
+            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`;
+        }
+    },
+
+    processarDados: function(rawData, t, currentMonth, currentYear) {
+        const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        let cols = []; 
+        let datesMap = {}; 
+
+        if (t === 'dia') { 
+            const lastDay = new Date(currentYear, currentMonth, 0).getDate();
+            for(let d=1; d<=lastDay; d++) {
+                cols.push(String(d).padStart(2,'0'));
+                datesMap[d] = { 
+                    ini: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`,
+                    fim: `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+                };
+            }
+        } else if (t === 'mes') { 
+            const semanas = Produtividade.Geral.getSemanasDoMes ? Produtividade.Geral.getSemanasDoMes(currentYear, currentMonth) : [];
+            semanas.forEach((s, i) => {
+                cols.push(`Sem ${i+1}`);
+                datesMap[i+1] = { ini: s.inicio, fim: s.fim };
+            });
+        } else if (t === 'trimestre') {
+            const selQ = document.getElementById('cons-select-quarter');
+            const trim = selQ ? parseInt(selQ.value) : Math.ceil(currentMonth / 3);
+            const idxStart = (trim - 1) * 3;
+            cols = [mesesNomes[idxStart], mesesNomes[idxStart+1], mesesNomes[idxStart+2]];
+            for(let i=0; i<3; i++) {
+                const m = idxStart + i + 1;
+                datesMap[i+1] = {
+                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
+                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
+                };
+            }
+        } else if (t === 'semestre') {
+            const selS = document.getElementById('cons-select-semester');
+            const sem = selS ? parseInt(selS.value) : (currentMonth <= 6 ? 1 : 2);
+            const idxStart = (sem - 1) * 6;
+            cols = mesesNomes.slice(idxStart, idxStart + 6);
+            for(let i=0; i<6; i++) {
+                const m = idxStart + i + 1;
+                datesMap[i+1] = {
+                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
+                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
+                };
+            }
+        } else { 
+            cols = mesesNomes; 
+            for(let i=0; i<12; i++) {
+                const m = i + 1;
+                datesMap[i+1] = {
+                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`,
+                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}`
+                };
+            }
+        }
+
+        const numCols = cols.length;
+        let st = {}; for(let i=1; i<=numCols; i++) st[i] = this.newStats(); st[99] = this.newStats();
+
+        if(rawData) {
+            rawData.forEach(r => {
+                const sys = Number(r.quantidade) || 0;
+                let b = 1; 
+
+                if (t === 'dia') { 
+                    b = parseInt(r.data_referencia.split('-')[2]); 
+                } else if (t === 'mes') { 
+                    for(let k=1; k<=numCols; k++) {
+                        if(r.data_referencia >= datesMap[k].ini && r.data_referencia <= datesMap[k].fim) { b = k; break; }
+                    }
+                } else { 
+                    const mData = parseInt(r.data_referencia.split('-')[1]);
+                    for(let k=1; k<=numCols; k++) {
+                        const mIni = parseInt(datesMap[k].ini.split('-')[1]);
+                        if(mData === mIni) { b = k; break; }
+                    }
+                }
+
+                if(b >= 1 && b <= numCols) {
+                    const populate = (k) => {
+                        const x = st[k];
+                        x.users.add(r.usuario_id); 
+                        x.dates.add(r.data_referencia);
+                        x.qty += sys; 
+                        x.fifo += (Number(r.fifo)||0); 
+                        x.gt += (Number(r.gradual_total)||0); 
+                        x.gp += (Number(r.gradual_parcial)||0); 
+                        x.fc += (Number(r.perfil_fc)||0);
+                    };
+                    populate(b);
+                    populate(99);
+                }
+            });
+        }
+
+        for(let i=1; i<=numCols; i++) {
+            st[i].diasUteis = datesMap[i] ? this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim) : 0;
+        }
+        st[99].diasUteis = 0;
+        for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
+
+        return { cols, st, numCols, datesMap };
+    },
+
+    processarEExibir: function(rawData, t, mes, ano) {
+        this.dadosCalculados = this.processarDados(rawData, t, mes, ano);
+        this.renderizar(this.dadosCalculados);
+    },
+
+    renderizar: function({ cols, st, numCols }) {
+        const tbody = document.getElementById('cons-table-body');
+        const hRow = document.getElementById('cons-table-header');
+        
+        if(hRow) hRow.innerHTML = `
+            <tr class="bg-slate-50 border-b border-slate-200">
+                <th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]">
+                    <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span>
+                </th>` + 
+            cols.map(c => `<th class="px-4 py-4 text-center border-l border-slate-200 min-w-[100px]"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span></th>`).join('') + 
+            `<th class="px-6 py-4 text-center bg-blue-50 border-l border-blue-100 min-w-[120px]">
+                <span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span>
+            </th></tr>`;
+
+        let h = ''; 
+        const idxs = [...Array(numCols).keys()].map(i => i + 1); idxs.push(99);
+
+        const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
+            const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
+            const iconColor = colorInfo || 'text-slate-400';
+            const textColor = isBold ? 'text-slate-800' : 'text-slate-600';
+            
+            let tr = `<tr class="${rowBg} border-b border-slate-100 last:border-0 group">
+                <td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200 group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100">
+                            <i class="${icon} ${iconColor} text-sm"></i>
+                        </div>
+                        <span class="${textColor} ${isBold ? 'font-black' : 'font-medium'} text-xs uppercase tracking-wide">${label}</span>
                     </div>
-                </td>
-                <td class="${commonCellClass} font-bold text-slate-700">${d.dias}</td>
-                <td class="${commonCellClass}">${d.fifo}</td>
-                <td class="${commonCellClass}">${d.gt}</td>
-                <td class="${commonCellClass}">${d.gp}</td>
-                <td class="${commonCellClass} text-slate-400">${d.meta_base}</td>
-                <td class="${commonCellClass} bg-slate-50">${Math.round(metaPeriodo)}</td>
-                <td class="${commonCellClass} font-bold text-blue-700 bg-blue-50/30">${d.producao}</td>
-                <td class="px-2 py-3 text-center">
-                     <span class="${classPct} text-xs">${Math.round(pct)}%</span>
-                </td>
-            `;
-            tbody.appendChild(tr);
-        });
+                </td>`;
+            
+            idxs.forEach(i => {
+                const s = st[i]; 
+                const HF = this.baseManualHC > 0 ? this.baseManualHC : (s.users.size || 1); 
+                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
+                if (val instanceof Set) val = val.size;
+                
+                const txt = (val !== undefined && val !== null && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
+                
+                let cellClass = `px-4 py-3 text-center text-xs border-l border-slate-100 `;
+                if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`;
+                else cellClass += `text-slate-500 font-medium`;
+
+                tr += `<td class="${cellClass}">${txt}</td>`;
+            });
+            return tr + '</tr>';
+        };
+
+        h += mkRow('Base Assistentes (HC)', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
+        h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
+        h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
+        h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
+        h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
+        h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
+        h += mkRow('Total Documentos Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
+        h += mkRow('Total Validação Diária (Dias Úteis)', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
+        h += mkRow('Média Validação (Todas Assistentes)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
+        h += mkRow('Média Validação Diária (Por Assist.)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
+        
+        tbody.innerHTML = h;
+    },
+
+    newStats: function() { 
+        return { 
+            users: new Set(), dates: new Set(), diasUteis: 0,
+            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0
+        }; 
     }
 };
