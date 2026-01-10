@@ -1,167 +1,131 @@
 Gestao.Assertividade = {
-    timerBusca: null, 
-    dadosCache: [], // Armazena os dados vindos do servidor para filtrar localmente
+    timerBusca: null,
+    
+    // Estado da Paginação
+    estado: {
+        pagina: 0,
+        limite: 50, // Itens por página
+        total: 0,
+        termo: '',
+        status: '',
+        auditora: '',
+        data: ''
+    },
 
     // --- CARREGAMENTO INICIAL ---
     carregar: async function() {
-        const tbody = document.getElementById('lista-assertividade');
-        const searchInput = document.getElementById('search-assert');
-        
-        // Limpa os inputs de filtro local ao recarregar
-        this.limparFiltrosLocais();
-
-        // Se já tiver busca digitada, mantém a busca global
-        if (searchInput && searchInput.value.trim().length > 0) {
-            this.filtrarGlobal();
-            return;
-        }
-
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12"><i class="fas fa-spinner fa-spin text-purple-500 text-2xl"></i><p class="text-slate-400 mt-2">Carregando dados...</p></td></tr>';
-
-        try {
-            // Busca inicial (vazia = traz recentes)
-            this.executarBuscaRPC('');
-        } catch (e) {
-            console.error(e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
-        }
+        // Reseta tudo ao entrar na tela
+        this.estado.pagina = 0;
+        this.limparCamposUI();
+        this.buscarDados();
     },
 
-    // --- BUSCA GLOBAL (NO SERVIDOR) ---
-    filtrarGlobal: function() {
-        const termo = document.getElementById('search-assert').value.trim();
+    limparCamposUI: function() {
+        if(document.getElementById('search-assert')) document.getElementById('search-assert').value = '';
+        if(document.getElementById('filtro-status')) document.getElementById('filtro-status').value = '';
+        if(document.getElementById('filtro-data')) document.getElementById('filtro-data').value = '';
+        if(document.getElementById('filtro-auditora')) document.getElementById('filtro-auditora').value = '';
+    },
+
+    // --- GATILHO DE BUSCA (Debounce) ---
+    resetarPaginaEBuscar: function() {
+        this.estado.pagina = 0; // Volta para página 1 se mudou filtro
         clearTimeout(this.timerBusca);
-        // Aumentei o delay para 800ms pois a busca agora é pesada (traz histórico completo)
         this.timerBusca = setTimeout(() => {
-            this.executarBuscaRPC(termo);
-        }, 800);
+            this.buscarDados();
+        }, 600);
     },
 
-    executarBuscaRPC: async function(termo) {
+    mudarPagina: function(delta) {
+        const novaPagina = this.estado.pagina + delta;
+        const maxPaginas = Math.ceil(this.estado.total / this.estado.limite);
+
+        if (novaPagina >= 0 && (this.estado.total === 0 || novaPagina < maxPaginas)) {
+            this.estado.pagina = novaPagina;
+            this.buscarDados();
+        }
+    },
+
+    // --- BUSCA NO SERVIDOR ---
+    buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
-        const msg = termo ? "Buscando todo histórico..." : "Carregando recentes...";
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">${msg}</p></td></tr>`;
+        const infoPag = document.getElementById('info-paginacao');
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
+
+        // Atualiza estado com valores dos inputs
+        this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
+        this.estado.status = document.getElementById('filtro-status')?.value || '';
+        this.estado.data = document.getElementById('filtro-data')?.value || '';
+        this.estado.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
+
+        // Feedback de Carregamento
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Buscando na base de dados...</p></td></tr>`;
+        if(btnAnt) btnAnt.disabled = true;
+        if(btnProx) btnProx.disabled = true;
 
         try {
-            const termoBusca = termo || '';
-            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias', { termo: termoBusca });
+            // CHAMA A NOVA FUNÇÃO SQL V2
+            const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v2', {
+                p_termo: this.estado.termo,
+                p_status: this.estado.status,
+                p_auditora: this.estado.auditora ? `%${this.estado.auditora}%` : '', // Adiciona % para busca parcial
+                p_data: this.estado.data,
+                p_page: this.estado.pagina,
+                p_limit: this.estado.limite
+            });
 
             if (error) throw error;
 
-            // Formata e salva no cache
-            this.dadosCache = (data || []).map(item => ({
-                ...item,
-                usuarios: { nome: item.usuario_nome }
-            }));
+            const lista = data || [];
+            
+            // Atualiza Total (Vem na coluna total_registros da primeira linha, ou 0 se vazio)
+            this.estado.total = lista.length > 0 ? lista[0].total_registros : 0;
 
-            // Popula os selects de Status e Auditora com o que veio do banco
-            this.popularSelectsFiltro();
-
-            // Renderiza tudo (pois ainda não tem filtro local aplicado)
-            this.renderizarTabela(this.dadosCache, termo ? `Histórico completo para: "${termo}"` : "Últimos registros");
+            this.renderizarTabela(lista);
+            this.atualizarControlesPaginacao();
 
         } catch (e) {
             console.error(e);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500">Erro na busca: ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500">Erro: ${e.message}</td></tr>`;
         }
     },
 
-    // --- LÓGICA DE FILTROS LOCAIS (NA TELA) ---
-    
-    popularSelectsFiltro: function() {
-        const selStatus = document.getElementById('filtro-status');
-        const selAuditora = document.getElementById('filtro-auditora');
-        
-        if(!selStatus || !selAuditora) return;
+    atualizarControlesPaginacao: function() {
+        const infoPag = document.getElementById('info-paginacao');
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
 
-        const statusSet = new Set();
-        const auditoraSet = new Set();
+        const total = this.estado.total;
+        const inicio = (this.estado.pagina * this.estado.limite) + 1;
+        let fim = (this.estado.pagina + 1) * this.estado.limite;
+        if (fim > total) fim = total;
 
-        this.dadosCache.forEach(item => {
-            if(item.status) statusSet.add(item.status); 
-            if(item.auditora) auditoraSet.add(item.auditora);
-        });
-
-        // Monta Select Status
-        let htmlStatus = '<option value="">Todos</option>';
-        Array.from(statusSet).sort().forEach(st => {
-            htmlStatus += `<option value="${st}">${st}</option>`;
-        });
-        selStatus.innerHTML = htmlStatus;
-
-        // Monta Select Auditora
-        let htmlAud = '<option value="">Todas</option>';
-        Array.from(auditoraSet).sort().forEach(au => {
-            htmlAud += `<option value="${au}">${au}</option>`;
-        });
-        selAuditora.innerHTML = htmlAud;
+        if (total === 0) {
+            infoPag.innerHTML = "Nenhum resultado encontrado.";
+            btnAnt.disabled = true;
+            btnProx.disabled = true;
+        } else {
+            infoPag.innerHTML = `Exibindo <b>${inicio}</b> a <b>${fim}</b> de <b>${total}</b> registros`;
+            btnAnt.disabled = this.estado.pagina === 0;
+            btnProx.disabled = fim >= total;
+        }
     },
 
-    limparFiltrosLocais: function() {
-        const ids = ['filtro-data', 'filtro-empresa', 'filtro-assistente', 'filtro-doc', 'filtro-status', 'filtro-obs', 'filtro-auditora'];
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.value = '';
-        });
-    },
-
-    aplicarFiltrosLocais: function() {
-        // Pega valores
-        const fData = document.getElementById('filtro-data')?.value; 
-        const fEmpresa = document.getElementById('filtro-empresa')?.value.toLowerCase();
-        const fAssistente = document.getElementById('filtro-assistente')?.value.toLowerCase();
-        const fDoc = document.getElementById('filtro-doc')?.value.toLowerCase();
-        const fStatus = document.getElementById('filtro-status')?.value; 
-        const fObs = document.getElementById('filtro-obs')?.value.toLowerCase();
-        const fAuditora = document.getElementById('filtro-auditora')?.value; 
-
-        // Filtra o array em memória
-        const filtrados = this.dadosCache.filter(item => {
-            if (fData && item.data_referencia !== fData) return false;
-            if (fEmpresa && !(item.empresa || '').toLowerCase().includes(fEmpresa)) return false;
-            
-            const nomeUser = (item.usuarios?.nome || '').toLowerCase();
-            if (fAssistente && !nomeUser.includes(fAssistente)) return false;
-
-            if (fDoc && !(item.nome_documento || '').toLowerCase().includes(fDoc)) return false;
-            
-            // Status exato
-            if (fStatus && (item.status || '').toLowerCase() !== fStatus.toLowerCase()) return false;
-
-            if (fObs && !(item.observacao || '').toLowerCase().includes(fObs)) return false;
-
-            // Auditora exata
-            if (fAuditora && (item.auditora || '').toLowerCase() !== fAuditora.toLowerCase()) return false;
-
-            return true;
-        });
-
-        this.renderizarTabela(filtrados, "Filtrado na tela");
-    },
-
-    renderizarTabela: function(lista, mensagemRodape = "") {
+    renderizarTabela: function(lista) {
         const tbody = document.getElementById('lista-assertividade');
-        const contador = document.getElementById('contador-assert');
         
-        if(contador) {
-             contador.innerHTML = `<strong>${lista.length}</strong> <span class="text-xs font-normal text-slate-400 ml-2">(${mensagemRodape})</span>`;
-        }
-
         if (lista.length === 0) {
             tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-filter text-3xl opacity-20"></i><span>Nenhum registro encontrado.</span></div></td></tr>';
             return;
         }
 
         let html = '';
-        // Limita renderização a 2000 linhas para não travar o navegador se a busca trouxer 10 mil
-        const renderLimit = 2000;
-        const listaRender = lista.slice(0, renderLimit);
-
-        listaRender.forEach(item => {
+        lista.forEach(item => {
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
-            const nomeUser = item.usuarios?.nome || `ID: ${item.usuario_id}`;
-            const empIdDisplay = item.empresa_id ? `#${item.empresa_id}` : '<span class="text-slate-200">-</span>';
+            const nomeUser = item.u_nome || `ID: ${item.usuario_id}`; // u_nome vem da V2
+            const empIdDisplay = item.e_id ? `#${item.e_id}` : '<span class="text-slate-200">-</span>';
 
             // Status Badge
             const stRaw = item.status || '-';     
@@ -204,10 +168,6 @@ Gestao.Assertividade = {
                 <td class="px-3 py-2 text-slate-500 italic text-[10px]">${item.auditora || '-'}</td>
             </tr>`;
         });
-
-        if (lista.length > renderLimit) {
-            html += `<tr><td colspan="12" class="text-center py-4 text-slate-400 text-xs bg-slate-50">Exibindo os primeiros ${renderLimit} de ${lista.length} resultados. Refine sua busca para ver mais.</td></tr>`;
-        }
 
         tbody.innerHTML = html;
     },
