@@ -3,8 +3,7 @@ const Sistema = {
     usuarioLogado: null,
 
     inicializar: async function(requerLogin = true) {
-        // CORREÇÃO: Só cria o cliente se ele ainda não existir (Singleton)
-        if (!Sistema.supabase && window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
+        if (window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
             Sistema.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
         }
 
@@ -16,7 +15,7 @@ const Sistema = {
         }
     },
 
-    // --- FUNÇÃO DE CRIPTOGRAFIA (SHA-256) ---
+    // --- NOVA FUNÇÃO DE CRIPTOGRAFIA (SHA-256) ---
     gerarHash: async function(texto) {
         const msgBuffer = new TextEncoder().encode(texto);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -33,6 +32,5 @@ const Sistema = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Tenta inicializar sem forçar login imediato ao carregar scripts
-    Sistema.inicializar(false);
+    if(!Sistema.supabase) Sistema.inicializar(false);
 });
