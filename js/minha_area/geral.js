@@ -10,9 +10,10 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Carregando...</span></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
 
         try {
+            // 1. Busca Produção
             const { data, error } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -23,8 +24,11 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            const mesAtual = new Date(inicio).getMonth() + 1;
-            const anoAtual = new Date(inicio).getFullYear();
+            // 2. Busca Meta (CORREÇÃO DE DATA SEGURA)
+            // Extrai mês e ano diretamente da string YYYY-MM-DD para evitar erro de fuso horário
+            const [anoStr, mesStr] = inicio.split('-');
+            const mesAtual = parseInt(mesStr);
+            const anoAtual = parseInt(anoStr);
             
             const { data: metaData } = await Sistema.supabase
                 .from('metas')
@@ -34,8 +38,10 @@ MinhaArea.Geral = {
                 .eq('ano', anoAtual)
                 .maybeSingle();
 
-            const metaDiariaPadrao = metaData ? Math.round(metaData.meta / 22) : 650;
+            // CORREÇÃO CRÍTICA: Não divide mais por 22. Usa o valor direto do banco.
+            const metaDiariaPadrao = metaData ? metaData.meta : 650;
 
+            // 3. Processamento
             let totalProd = 0; let totalFifo = 0; let totalGT = 0; let totalGP = 0;
             let totalMeta = 0; let somaFator = 0; let diasUteis = 0;
 
@@ -49,6 +55,8 @@ MinhaArea.Geral = {
                 const gt = Number(item.gradual_total || 0);
                 const gp = Number(item.gradual_parcial || 0);
                 const fator = Number(item.fator);
+                
+                // Meta do dia proporcional ao fator
                 const metaDia = Math.round(metaDiariaPadrao * fator);
                 
                 totalProd += qtd; totalFifo += fifo; totalGT += gt; totalGP += gp;
@@ -59,6 +67,7 @@ MinhaArea.Geral = {
                 const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
                 let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
                 
+                // Formata Data
                 const dateObj = new Date(item.data_referencia + 'T12:00:00');
                 const dia = String(dateObj.getDate()).padStart(2, '0');
                 const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -79,29 +88,21 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // Footer
             this.setTxt('total-registros-footer', data.length);
             
             // KPIs
-            const diasUteisCalculados = Math.ceil(somaFator); // Regra 0.5+0.5=1
+            const diasUteisCalculados = Math.ceil(somaFator);
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
-            // Card 1: Produção vs Meta
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
-            
-            // Card 2: Atingimento vs Status
             this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
             this.setStatus(atingimentoGeral);
-            
-            // Card 3: Dias Produtivos vs Dias Uteis Reais
-            this.setTxt('kpi-dias', diasUteisCalculados); // Fator acumulado
-            this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim)); // Dias do calendário
-
-            // Card 4: Média vs Ideal
+            this.setTxt('kpi-dias', diasUteisCalculados);
+            this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
             this.setTxt('kpi-media', mediaDiaria);
-            this.setTxt('kpi-meta-dia', metaDiariaPadrao);
+            this.setTxt('kpi-meta-dia', metaDiariaPadrao); // Mostra a meta diária usada (ex: 450)
 
             const bar = document.getElementById('bar-progress');
             if(bar) {
@@ -132,7 +133,7 @@ MinhaArea.Geral = {
         const end = new Date(fim);
         while (cur <= end) {
             const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++; // Seg a Sex
+            if (day !== 0 && day !== 6) count++;
             cur.setDate(cur.getDate() + 1);
         }
         return count;
