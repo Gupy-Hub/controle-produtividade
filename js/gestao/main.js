@@ -1,9 +1,10 @@
 window.Gestao = window.Gestao || {};
 
 Gestao.init = async function() {
-    // Garante que o sistema base rodou
+    // 1. Inicializa Sistema Base
     if (!Sistema.supabase) await Sistema.inicializar(false);
     
+    // 2. Validação de Segurança
     const sessao = localStorage.getItem('usuario_logado');
     if (!sessao) {
         window.location.href = 'index.html';
@@ -11,46 +12,74 @@ Gestao.init = async function() {
     }
     
     const user = JSON.parse(sessao);
-    // Validação extra de acesso
-    if (user.funcao !== 'GESTORA' && user.funcao !== 'AUDITORA' && user.id != 1 && user.perfil !== 'admin') {
+    // Permite Gestora, Auditora, Admin ou ID 1
+    const allowed = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) 
+                    || user.perfil === 'admin' 
+                    || user.id == 1;
+
+    if (!allowed) {
         alert("Acesso restrito."); 
         window.location.href = 'minha_area.html'; 
         return;
     }
 
-    console.log("Módulo Gestão Iniciado (App Unificado)");
+    console.log("Gestão Iniciada - v2.0 (SPA Mode)");
 
-    // LÓGICA DE PERSISTÊNCIA DA ABA
+    // 3. Renderiza o Menu Dinâmico (Evita duplicação com o HTML antigo)
+    if (window.Menu && Menu.Gestao) {
+        Menu.Gestao.renderizar();
+    }
+
+    // 4. Restaura Aba e Inicializa Listeners
     const ultimaAba = localStorage.getItem('gestao_aba_ativa') || 'usuarios';
     
-    // Pequeno delay para garantir renderização
+    // Inicializa listeners específicos se necessário
+    if(Gestao.Assertividade && Gestao.Assertividade.initListeners) {
+        Gestao.Assertividade.initListeners();
+    }
+
+    // Delay para garantir que o DOM do menu existe
     setTimeout(() => {
         Gestao.mudarAba(ultimaAba);
     }, 50);
 };
 
 Gestao.mudarAba = function(aba) {
-    // 1. Salva a escolha
+    // A. Salva estado
     localStorage.setItem('gestao_aba_ativa', aba);
 
-    // 2. Atualiza Interface (Botões)
-    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    const btnAtivo = document.getElementById(`btn-${aba}`);
-    if (btnAtivo) btnAtivo.classList.add('active');
+    // B. Atualiza Visual dos Botões (Menu Dinâmico)
+    // Remove active de todos
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-blue-50', 'text-blue-700', 'border-blue-600', 'active');
+        btn.classList.add('text-slate-600');
+    });
 
-    // 3. Atualiza Interface (Views)
+    // Ativa o atual (tenta achar pelo ID dinâmico gerado em menu/gestao.js)
+    const btnAtivo = document.getElementById(`btn-g-${aba}`);
+    if (btnAtivo) {
+        btnAtivo.classList.remove('text-slate-600');
+        btnAtivo.classList.add('bg-blue-50', 'text-blue-700');
+    }
+
+    // C. Atualiza Botão de Ação (Importar CSV) no Menu
+    if (window.Menu && Menu.Gestao && Menu.Gestao.atualizarAcao) {
+        Menu.Gestao.atualizarAcao(aba);
+    }
+
+    // D. Troca a View (Conteúdo da página)
     document.querySelectorAll('.gestao-view').forEach(el => el.classList.add('hidden'));
     const view = document.getElementById(`view-${aba}`);
     if (view) view.classList.remove('hidden');
 
-    // 4. Carrega Dados
+    // E. Carrega os Dados da Aba
     if (aba === 'usuarios' && Gestao.Usuarios) Gestao.Usuarios.carregar();
     else if (aba === 'empresas' && Gestao.Empresas) Gestao.Empresas.carregar();
     else if (aba === 'assertividade' && Gestao.Assertividade) Gestao.Assertividade.carregar();
     else if (aba === 'metas' && Gestao.Metas) Gestao.Metas.carregar();
 };
 
-// Helper de leitura de arquivos (CSV/Excel)
+// Helper Global de Leitura de Arquivos
 Gestao.lerArquivo = async function(file) {
     return new Promise((resolve, reject) => {
         const ext = file.name.split('.').pop().toLowerCase();
