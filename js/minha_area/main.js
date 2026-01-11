@@ -13,17 +13,21 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
-        await this.setupAdminAccess();
-        if (!this.isAdmin()) {
+        // 1. Configura a UI de Admin (mostra o container, mas o select virá vazio inicialmente)
+        if (this.isAdmin()) {
+            const container = document.getElementById('admin-selector-container');
+            if (container) container.classList.remove('hidden');
+        } else {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // 1. Popula Selects Iniciais
+        // 2. Popula Selects de Data
         this.popularSeletoresIniciais();
 
-        // 2. Carrega Estado Salvo (Persistência) ou usa padrão
+        // 3. Carrega Estado Salvo
         this.carregarEstadoSalvo();
 
+        // 4. Inicia (Isso vai disparar a atualização da lista e depois dos dados)
         this.mudarAba('diario');
     },
 
@@ -31,32 +35,102 @@ const MinhaArea = {
         return ['GESTORA', 'AUDITORA', 'ADMIN'].includes(this.usuario.funcao) || this.usuario.perfil === 'admin' || this.usuario.id == 1;
     },
 
-    setupAdminAccess: async function() {
-        if (this.isAdmin()) {
-            const container = document.getElementById('admin-selector-container');
-            const select = document.getElementById('admin-user-selector');
-            if (container && select) {
-                container.classList.remove('hidden');
-                try {
-                    const { data: users, error } = await Sistema.supabase
-                        .from('usuarios').select('id, nome').eq('ativo', true).order('nome');
-                    if (!error && users) {
-                        let options = `<option value="" disabled selected>👉 Selecionar Colaboradora...</option>`;
-                        users.forEach(u => { if (u.id !== this.usuario.id) options += `<option value="${u.id}">${u.nome}</option>`; });
-                        select.innerHTML = options;
-                    }
-                } catch (e) { console.error(e); }
+    // --- LÓGICA DO SELETOR DINÂMICO ---
+
+    atualizarListaAssistentes: async function() {
+        // Se não for admin, não faz nada
+        if (!this.isAdmin()) return;
+
+        const select = document.getElementById('admin-user-selector');
+        if (!select) return;
+
+        const { inicio, fim } = this.getDatasFiltro();
+
+        // Feedback visual de carregamento no select
+        const idAnterior = this.usuarioAlvoId;
+        select.innerHTML = `<option>🔄 Buscando...</option>`;
+        select.disabled = true;
+
+        try {
+            // 1. Descobre quem produziu no período (IDs únicos)
+            const { data: prodData, error: prodError } = await Sistema.supabase
+                .from('producao')
+                .select('usuario_id')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
+
+            if (prodError) throw prodError;
+
+            // Extrai IDs únicos
+            const idsComProducao = [...new Set(prodData.map(item => item.usuario_id))];
+
+            if (idsComProducao.length === 0) {
+                select.innerHTML = `<option value="">(Sem dados no período)</option>`;
+                select.disabled = false;
+                this.usuarioAlvoId = null; // Ninguém para mostrar
+                return false; // Retorna false para indicar que não há dados para carregar nas abas
             }
+
+            // 2. Busca detalhes desses usuários, EXCLUINDO Gestoras/Auditoras
+            const { data: users, error: userError } = await Sistema.supabase
+                .from('usuarios')
+                .select('id, nome, funcao')
+                .in('id', idsComProducao)
+                .neq('funcao', 'GESTORA')  // Filtra Gestora
+                .neq('funcao', 'AUDITORA') // Filtra Auditora
+                .neq('perfil', 'admin')    // Filtra Admin
+                .order('nome');
+
+            if (userError) throw userError;
+
+            // 3. Monta o Select
+            let html = `<option value="" disabled ${!idAnterior ? 'selected' : ''}>👉 Selecionar Assistente...</option>`;
+            let mantemSelecao = false;
+
+            users.forEach(u => {
+                // Verifica se o usuário anteriormente selecionado ainda está na lista
+                const isSelected = u.id == idAnterior;
+                if (isSelected) mantemSelecao = true;
+                
+                html += `<option value="${u.id}" ${isSelected ? 'selected' : ''}>${u.nome}</option>`;
+            });
+
+            select.innerHTML = html;
+            select.disabled = false;
+
+            // Se o usuário que eu estava vendo não tem dados neste novo período, reseta o alvo
+            if (!mantemSelecao) {
+                this.usuarioAlvoId = null;
+            } else {
+                this.usuarioAlvoId = idAnterior; // Garante o tipo numérico
+            }
+
+            return true; // Lista carregada com sucesso
+
+        } catch (err) {
+            console.error("Erro ao atualizar lista de assistentes:", err);
+            select.innerHTML = `<option>Erro ao carregar</option>`;
+            return false;
         }
     },
 
     mudarUsuarioAlvo: function(novoId) {
         if (!novoId) return;
         this.usuarioAlvoId = parseInt(novoId);
-        this.atualizarTudo();
+        
+        // Atualiza apenas os dados da aba, sem recarregar a lista de usuários (pois a data não mudou)
+        const abaAtiva = document.querySelector('.tab-btn.active');
+        if (abaAtiva) {
+            const id = abaAtiva.id.replace('btn-ma-', '');
+            this.carregarDadosAba(id);
+        }
     },
 
-    getUsuarioAlvo: function() { return this.usuarioAlvoId; },
+    getUsuarioAlvo: function() {
+        return this.usuarioAlvoId;
+    },
+
+    // --- CONTROLES DE DATA ---
 
     popularSeletoresIniciais: function() {
         const anoSelect = document.getElementById('sel-ano');
@@ -72,10 +146,7 @@ const MinhaArea = {
         if(mesSelect) mesSelect.value = mesAtual;
     },
 
-    // --- PERSISTÊNCIA E EVENTOS ---
-
     salvarEAtualizar: function() {
-        // Salva estado no LocalStorage
         const estado = {
             tipo: this.filtroPeriodo,
             ano: document.getElementById('sel-ano').value,
@@ -84,7 +155,6 @@ const MinhaArea = {
             sub: document.getElementById('sel-subperiodo-ano').value
         };
         localStorage.setItem('ma_filtro_state', JSON.stringify(estado));
-        
         this.atualizarTudo();
     },
 
@@ -93,26 +163,19 @@ const MinhaArea = {
         if (salvo) {
             try {
                 const s = JSON.parse(salvo);
-                
-                // Restaura valores dos inputs
                 if(document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
                 if(document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
                 if(document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
                 if(document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
-                
-                // Restaura o tipo e a UI
-                this.mudarPeriodo(s.tipo, false); // false = não salvar de novo agora
+                this.mudarPeriodo(s.tipo, false);
                 return;
-            } catch(e) { console.error("Erro ao ler estado salvo", e); }
+            } catch(e) { console.error(e); }
         }
-        
-        // Padrão se não houver salvo
         this.mudarPeriodo('mes', false);
     },
 
     mudarPeriodo: function(tipo, salvar = true) {
         this.filtroPeriodo = tipo;
-        
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
@@ -153,7 +216,6 @@ const MinhaArea = {
             let diaFim = diaInicio + 6;
             const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
             if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
-            
             if (diaInicio > ultimoDiaMes) {
                 inicio = new Date(ano, mes, ultimoDiaMes);
                 fim = new Date(ano, mes, ultimoDiaMes);
@@ -184,7 +246,15 @@ const MinhaArea = {
         return { inicio: fmt(inicio), fim: fmt(fim) };
     },
 
-    atualizarTudo: function() {
+    // --- CICLO DE ATUALIZAÇÃO ---
+
+    atualizarTudo: async function() {
+        // 1. Se for admin, primeiro atualiza a lista de usuários disponíveis para este período
+        if (this.isAdmin()) {
+            await this.atualizarListaAssistentes();
+        }
+
+        // 2. Carrega a aba ativa
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -195,15 +265,27 @@ const MinhaArea = {
     mudarAba: function(abaId) {
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        
         const aba = document.getElementById(`ma-tab-${abaId}`);
         const btn = document.getElementById(`btn-ma-${abaId}`);
+        
         if(aba) aba.classList.remove('hidden');
         if(btn) btn.classList.add('active');
+
+        // Se estiver trocando de aba, apenas carrega os dados (não precisa recarregar lista de usuários se a data não mudou)
+        // Porém, se for a inicialização, a data pode ter sido setada agora. 
+        // Para simplificar, chamamos carregarDadosAba, pois atualizarLista já foi chamado no init ou no change date
         this.carregarDadosAba(abaId);
     },
 
     carregarDadosAba: function(abaId) {
-        if (this.isAdmin() && !this.usuarioAlvoId) return;
+        // Se for admin e não tiver ninguém selecionado (ou lista vazia), não carrega gráficos
+        if (this.isAdmin() && !this.usuarioAlvoId) {
+            // Pode limpar os dados visuais aqui se quiser
+            if (abaId === 'diario' && this.Geral) this.Geral.zerarKPIs();
+            return;
+        }
+
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
         if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
