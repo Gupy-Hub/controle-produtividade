@@ -4,13 +4,13 @@ MinhaArea.Geral = {
         const tbody = document.getElementById('tabela-extrato');
         
         if (!uid) {
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
             this.zerarKPIs();
             return;
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
 
         try {
             // 1. Busca Produção
@@ -37,15 +37,33 @@ MinhaArea.Geral = {
                 .eq('ano', anoAtual)
                 .maybeSingle();
 
-            // Usa a meta exata salva no banco (ex: 450)
             const metaDiariaPadrao = metaData ? metaData.meta : 650;
 
-            // 3. Processamento
+            // 3. NOVO: Busca Dados de Assertividade (Erros)
+            const { data: auditData } = await Sistema.supabase
+                .from('assertividade')
+                .select('data_referencia, status')
+                .eq('usuario_id', uid)
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
+
+            // Mapeia erros por dia: { '2024-01-01': { total: 10, erros: 2 } }
+            const auditMap = {};
+            if (auditData) {
+                auditData.forEach(a => {
+                    const d = a.data_referencia;
+                    if (!auditMap[d]) auditMap[d] = { total: 0, erros: 0 };
+                    auditMap[d].total++;
+                    // Considera erro se status não for OK
+                    if (a.status !== 'OK' && a.status !== 'EM BRANCO' && a.status !== 'EMPTY') {
+                        auditMap[d].erros++;
+                    }
+                });
+            }
+
+            // 4. Processamento
             let totalProd = 0; let totalFifo = 0; let totalGT = 0; let totalGP = 0;
-            let totalMeta = 0; let somaFator = 0; 
-            
-            // Variável para contar apenas dias com apontamento (para validação, se necessário)
-            let countApontamentos = 0;
+            let totalMeta = 0; let somaFator = 0; let diasUteis = 0;
 
             tbody.innerHTML = '';
             const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
@@ -62,12 +80,17 @@ MinhaArea.Geral = {
                 totalProd += qtd; totalFifo += fifo; totalGT += gt; totalGP += gp;
                 somaFator += fator;
                 totalMeta += metaDia;
-                
-                if (fator > 0) countApontamentos++;
+                if (fator > 0) diasUteis++;
 
                 const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
                 let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
                 
+                // Dados de Auditoria para este dia
+                const auditDia = auditMap[item.data_referencia] || { total: 0, erros: 0 };
+                const pctAssert = auditDia.total > 0 ? ((auditDia.total - auditDia.erros) / auditDia.total) * 100 : 100;
+                let corAssert = pctAssert >= 98 ? 'text-emerald-600' : (pctAssert >= 90 ? 'text-amber-600' : 'text-rose-600');
+                
+                // Formata Data
                 const dateObj = new Date(item.data_referencia + 'T12:00:00');
                 const dia = String(dateObj.getDate()).padStart(2, '0');
                 const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -84,39 +107,30 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${qtd}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center">${metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-bold ${corPct}">${fmtPct(pct)}</td>
+                        
+                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold bg-orange-50/30 ${corAssert}">
+                            ${auditDia.total > 0 ? fmtPct(pctAssert) : '<span class="text-slate-300">-</span>'}
+                        </td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold bg-rose-50/30 ${auditDia.erros > 0 ? 'text-rose-600' : 'text-slate-300'}">
+                            ${auditDia.erros > 0 ? auditDia.erros : '-'}
+                        </td>
                         <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate max-w-[200px]" title="${item.justificativa || ''}">${item.justificativa || '<span class="text-slate-300">-</span>'}</td>
                     </tr>`;
             });
 
             this.setTxt('total-registros-footer', data.length);
             
-            // --- CÁLCULOS KPI AJUSTADOS ---
-            
-            // 1. Dias Trabalhados (Regra: Soma fatores e arredonda para cima)
-            // Ex: 0.5 + 0.5 = 1.0 -> 1 dia
-            // Ex: 0.5 (sozinho) = 0.5 -> 1 dia
-            const diasConsiderados = Math.ceil(somaFator);
-
-            // 2. Média Diária (Baseada nos dias trabalhados e NÃO nos dias úteis do calendário)
-            // Se diasConsiderados for 0, média é 0.
-            const mediaDiaria = diasConsiderados > 0 ? Math.round(totalProd / diasConsiderados) : 0;
-
-            // 3. Atingimento Geral
+            // KPIs
+            const diasUteisCalculados = Math.ceil(somaFator);
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
+            const mediaDiaria = diasUteisCalculados > 0 ? Math.round(totalProd / diasUteisCalculados) : 0;
 
-            // --- ATUALIZAÇÃO DOS CARDS ---
-            
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
-            
             this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
             this.setStatus(atingimentoGeral);
-            
-            // Card Dias: Mostra o calculado vs calendário, para clareza
-            this.setTxt('kpi-dias', diasConsiderados); 
+            this.setTxt('kpi-dias', diasUteisCalculados);
             this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
-
-            // Card Média: Usa a média calculada sobre dias trabalhados
             this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-dia', metaDiariaPadrao);
 
@@ -126,11 +140,11 @@ MinhaArea.Geral = {
                 bar.className = atingimentoGeral >= 100 ? "h-full bg-emerald-500" : "h-full bg-blue-500";
             }
 
-            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
+            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
 
