@@ -1,229 +1,295 @@
-window.Gestao = window.Gestao || {};
-window.Gestao.Importacao = window.Gestao.Importacao || {};
+Gestao.Assertividade = {
+    paginaAtual: 1,
+    itensPorPagina: 50,
+    totalRegistros: 0,
+    filtrosAtivos: {},
+    timeoutBusca: null,
+    
+    // Estado do Seletor de Data
+    filtroPeriodo: 'mes', // 'mes', 'semana', 'ano'
 
-Gestao.Importacao.Assertividade = {
-    BATCH_SIZE: 500,
-    CONCURRENCY_LIMIT: 3,
+    initListeners: function() {
+        // Listeners das colunas de texto
+        ['search-assert', 'filtro-empresa', 'filtro-assistente', 'filtro-doc', 'filtro-obs', 'filtro-auditora'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('keyup', () => this.atualizarFiltrosEBuscar());
+        });
 
-    executar: async function(input) {
-        if (!input.files || !input.files[0]) return;
-        const file = input.files[0];
+        // Listener do Status
+        const st = document.getElementById('filtro-status');
+        if(st) st.addEventListener('change', () => this.atualizarFiltrosEBuscar());
+    },
 
-        // 1. Setup Visual
-        const btn = input.parentElement;
-        const originalHtml = btn.innerHTML;
-        const originalClass = btn.className;
+    carregar: function() {
+        this.popularSeletoresIniciais();
+        this.mudarPeriodo('mes', false); // Default para Mês atual
+        this.paginaAtual = 1;
+        this.capturarFiltros();
+        this.buscarDados();
+    },
+
+    limparFiltros: function() {
+        const inputs = document.querySelectorAll('#view-assertividade input:not(#search-assert), #view-assertividade select:not([id^="sel-assert"])');
+        inputs.forEach(el => el.value = '');
+        document.getElementById('search-assert').value = '';
+        this.carregar();
+    },
+
+    // --- LÓGICA DE DATA (Igual Minha Área) ---
+
+    popularSeletoresIniciais: function() {
+        const anoSelect = document.getElementById('sel-assert-ano');
+        if (anoSelect && anoSelect.options.length === 0) {
+            const anoAtual = new Date().getFullYear();
+            let htmlAnos = '';
+            for (let i = anoAtual + 1; i >= anoAtual - 2; i--) {
+                htmlAnos += `<option value="${i}" ${i === anoAtual ? 'selected' : ''}>${i}</option>`;
+            }
+            anoSelect.innerHTML = htmlAnos;
+        }
         
-        const atualizarBotao = (texto, icon = 'fa-circle-notch fa-spin') => {
-            btn.innerHTML = `<i class="fas ${icon}"></i> ${texto}`;
-            btn.appendChild(input); 
-        };
+        const mesSelect = document.getElementById('sel-assert-mes');
+        if (mesSelect && !mesSelect.value) {
+            mesSelect.value = new Date().getMonth();
+        }
+    },
 
-        btn.classList.add('opacity-75', 'cursor-not-allowed', 'pointer-events-none');
-        atualizarBotao("Lendo arquivo...");
+    mudarPeriodo: function(tipo, buscar = true) {
+        this.filtroPeriodo = tipo;
+        
+        // Atualiza estilo dos botões
+        ['mes', 'semana', 'ano'].forEach(t => {
+            const btn = document.getElementById(`btn-assert-${t}`);
+            if(btn) {
+                btn.className = (t === tipo) 
+                    ? "px-3 py-1.5 text-xs font-bold rounded bg-blue-50 text-blue-600 shadow-sm border border-blue-100 transition"
+                    : "px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:bg-slate-50 transition border border-transparent";
+            }
+        });
+
+        // Alterna visibilidade dos selects
+        const selMes = document.getElementById('sel-assert-mes');
+        const selSemana = document.getElementById('sel-assert-semana');
+        const selSubAno = document.getElementById('sel-assert-subano');
+
+        if(selMes) selMes.classList.remove('hidden');
+        if(selSemana) selSemana.classList.add('hidden');
+        if(selSubAno) selSubAno.classList.add('hidden');
+
+        if (tipo === 'semana') {
+            if(selSemana) selSemana.classList.remove('hidden');
+        } else if (tipo === 'ano') {
+            if(selMes) selMes.classList.add('hidden');
+            if(selSubAno) selSubAno.classList.remove('hidden');
+        }
+
+        if(buscar) this.atualizarPeriodo();
+    },
+
+    atualizarPeriodo: function() {
+        this.paginaAtual = 1; // Reseta paginação ao mudar data
+        this.buscarDados();
+    },
+
+    getDatasFiltro: function() {
+        const anoEl = document.getElementById('sel-assert-ano');
+        const mesEl = document.getElementById('sel-assert-mes');
+        if (!anoEl || !mesEl) return { inicio: null, fim: null };
+
+        const ano = parseInt(anoEl.value);
+        const mes = parseInt(mesEl.value);
+        
+        let inicio, fim;
 
         try {
-            await new Promise(r => setTimeout(r, 50));
+            if (this.filtroPeriodo === 'mes') {
+                inicio = new Date(ano, mes, 1);
+                fim = new Date(ano, mes + 1, 0);
+            } else if (this.filtroPeriodo === 'semana') {
+                const semanaIndex = parseInt(document.getElementById('sel-assert-semana').value);
+                const diaInicio = (semanaIndex - 1) * 7 + 1;
+                let diaFim = diaInicio + 6;
+                const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
+                if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
+                
+                inicio = new Date(ano, mes, diaInicio);
+                fim = new Date(ano, mes, diaFim);
+            } else if (this.filtroPeriodo === 'ano') {
+                const sub = document.getElementById('sel-assert-subano').value;
+                if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
+                else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
+                else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
+                else if (sub.startsWith('T')) {
+                    const tri = parseInt(sub.replace('T', ''));
+                    const mesInicio = (tri - 1) * 3;
+                    const mesFim = mesInicio + 3;
+                    inicio = new Date(ano, mesInicio, 1);
+                    fim = new Date(ano, mesFim, 0);
+                }
+            }
 
-            // 2. Dados Auxiliares
-            const [resUsers, resEmpresas] = await Promise.all([
-                Sistema.supabase.from('usuarios').select('id, nome'),
-                Sistema.supabase.from('empresas').select('id, nome, subdominio')
-            ]);
-
-            const mapUsuariosID = new Map(resUsers.data?.map(u => [u.id, u.id]));
-            const mapUsuariosNome = new Map(resUsers.data?.map(u => [this.normalizar(u.nome), u.id]));
+            const fmt = (d) => {
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
             
-            const mapEmpresas = new Map();
-            resEmpresas.data?.forEach(e => {
-                const info = { id: e.id, nome: e.nome };
-                mapEmpresas.set(this.normalizar(e.nome), info);
-                if(e.subdominio) mapEmpresas.set(this.normalizar(e.subdominio), info);
-            });
-
-            // 3. Processamento
-            const linhas = await Gestao.lerArquivo(file);
-            atualizarBotao(`Processando ${linhas.length}...`);
-
-            const inserts = [];
-            const logErros = new Set();
-            let ultimaDataValida = null; // Para usar no filtro depois
-
-            for (const [index, row] of linhas.entries()) {
-                const c = {};
-                for (const k in row) c[this.normalizarKey(k)] = row[k];
-
-                // Identifica Usuário
-                let usuarioId = null;
-                let rawId = c['idassistente'] || c['idusuario'] || c['id'];
-                if (rawId && mapUsuariosID.has(parseInt(rawId))) {
-                    usuarioId = parseInt(rawId);
-                } else {
-                    let rawNome = c['assistente'] || c['usuario'] || c['nome'];
-                    if(rawNome) usuarioId = mapUsuariosNome.get(this.normalizar(rawNome));
-                }
-
-                if (!usuarioId) {
-                    logErros.add(`Linha ${index+2}: Usuário não identificado (${c['assistente'] || '?'})`);
-                    continue;
-                }
-
-                // Identifica Empresa
-                let empresaId = null;
-                let nomeEmpresa = c['empresa'] || '';
-                let rawEmpId = c['companyid'] || c['company_id'] || c['idempresa'];
-                
-                if (rawEmpId) {
-                     empresaId = parseInt(rawEmpId);
-                } else {
-                    const match = mapEmpresas.get(this.normalizar(nomeEmpresa));
-                    if(match) {
-                        empresaId = match.id;
-                        nomeEmpresa = match.nome;
-                    }
-                }
-
-                // Data
-                const rawDate = c['endtime'] || c['datadaauditoria'] || c['data'] || c['date'];
-                const dataObj = this.parseDate(rawDate);
-                
-                if (!dataObj) continue;
-
-                ultimaDataValida = dataObj.data; // Guarda 'YYYY-MM-DD'
-
-                inserts.push({
-                    usuario_id: usuarioId,
-                    data_referencia: dataObj.data,
-                    hora: dataObj.hora,
-                    empresa: nomeEmpresa,
-                    empresa_id: empresaId,
-                    nome_documento: String(c['docname'] || c['documento'] || '').substring(0, 255),
-                    status: c['status'] || null,
-                    observacao: String(c['apontamentosobs'] || c['obs'] || '').substring(0, 500),
-                    num_campos: parseInt(c['ncampos'] || c['numerocampos'] || 0),
-                    qtd_ok: parseInt(c['ok'] || 0),
-                    nok: parseInt(c['nok'] || 0),
-                    assertividade: c['assert'] || c['assertividade'] || null,
-                    auditora: c['auditora'] || null,
-                    quantidade: 1,
-                    fator: 1
-                });
-            }
-
-            // 4. Envio
-            if (inserts.length > 0) {
-                const totalLotes = Math.ceil(inserts.length / this.BATCH_SIZE);
-                let lotesProcessados = 0;
-
-                const lotes = [];
-                for (let i = 0; i < inserts.length; i += this.BATCH_SIZE) {
-                    lotes.push(inserts.slice(i, i + this.BATCH_SIZE));
-                }
-
-                // Envio Paralelo
-                const processar = async (lote) => {
-                    const { error } = await Sistema.supabase.from('producao').insert(lote);
-                    if (error) throw error;
-                    lotesProcessados++;
-                    const pct = Math.round((lotesProcessados / totalLotes) * 100);
-                    atualizarBotao(`Salvando ${pct}%...`);
-                };
-
-                for (let i = 0; i < lotes.length; i += this.CONCURRENCY_LIMIT) {
-                    await Promise.all(lotes.slice(i, i + this.CONCURRENCY_LIMIT).map(processar));
-                }
-
-                // 5. Sucesso e Auto-Filtro
-                this.showToast(`Sucesso! ${inserts.length} registros salvos.`, 'success');
-                
-                if (logErros.size > 0) {
-                    this.baixarLog(logErros);
-                    this.showToast(`${logErros.size} erros (ver log).`, 'warning');
-                }
-
-                // --- O PULO DO GATO ---
-                // Aplica a última data importada no filtro para o usuário ver os dados
-                if (ultimaDataValida && Gestao.Assertividade) {
-                    const filtroData = document.getElementById('filtro-data');
-                    if (filtroData) {
-                        filtroData.value = ultimaDataValida;
-                        // Simula o evento de change para disparar a busca
-                        filtroData.dispatchEvent(new Event('change'));
-                        this.showToast(`Filtro atualizado para ${ultimaDataValida.split('-').reverse().join('/')}`, 'info');
-                    } else {
-                        Gestao.Assertividade.carregar();
-                    }
-                }
-
-            } else {
-                this.showToast("Nenhum registro válido encontrado.", 'error');
-            }
-
+            return { inicio: fmt(inicio), fim: fmt(fim) };
         } catch (e) {
             console.error(e);
-            this.showToast(`Erro: ${e.message}`, 'error');
-        } finally {
-            btn.innerHTML = originalHtml;
-            btn.className = originalClass;
-            input.value = "";
+            return { inicio: null, fim: null };
         }
     },
 
-    // Parser Melhorado para anos de 2 e 4 dígitos
-    parseDate: function(val) {
-        if (!val) return null;
-        let dateObj = null;
+    // --- BUSCA E RENDERIZAÇÃO ---
 
-        // 1. Excel Serial
-        if (typeof val === 'number') {
-            dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
-        } 
-        // 2. String
-        else if (typeof val === 'string') {
-            const clean = val.trim();
-            // Formato DD/MM/YY ou DD/MM/YYYY
-            const matchBR = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
-            if (matchBR) {
-                let y = parseInt(matchBR[3]);
-                // Ajuste para ano com 2 dígitos (ex: 25 -> 2025)
-                if (y < 100) y += 2000; 
-                dateObj = new Date(y, parseInt(matchBR[2]) - 1, parseInt(matchBR[1]));
-            } else {
-                dateObj = new Date(clean);
+    capturarFiltros: function() {
+        const get = (id) => { const el = document.getElementById(id); return el && el.value.trim() ? el.value.trim() : null; };
+        
+        this.filtrosAtivos = {
+            global: get('search-assert'),
+            empresa: get('filtro-empresa'),
+            assistente: get('filtro-assistente'),
+            doc: get('filtro-doc'),
+            status: get('filtro-status'),
+            obs: get('filtro-obs'),
+            auditora: get('filtro-auditora')
+        };
+    },
+
+    atualizarFiltrosEBuscar: function() {
+        if (this.timeoutBusca) clearTimeout(this.timeoutBusca);
+        this.timeoutBusca = setTimeout(() => {
+            this.paginaAtual = 1;
+            this.capturarFiltros();
+            this.buscarDados();
+        }, 400);
+    },
+
+    buscarDados: async function() {
+        const tbody = document.getElementById('lista-assertividade');
+        const contador = document.getElementById('contador-assert');
+        if(!tbody) return;
+
+        // Calcula Datas do Seletor
+        const { inicio, fim } = this.getDatasFiltro();
+        const dataLegivel = `${inicio ? inicio.split('-').reverse().join('/') : '?'} até ${fim ? fim.split('-').reverse().join('/') : '?'}`;
+
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-20"><i class="fas fa-circle-notch fa-spin text-blue-500 text-3xl"></i><p class="text-slate-400 mt-2">Buscando dados...</p></td></tr>';
+        if(contador) contador.innerHTML = '';
+
+        try {
+            // ATENÇÃO: Mudamos a lógica de 'p_filtro_data' (único) para intervalo.
+            // Se o RPC não suportar 'p_data_inicio', isso dará erro e precisaremos ajustar o RPC.
+            const params = {
+                p_pagina: this.paginaAtual,
+                p_tamanho: this.itensPorPagina,
+                p_busca_global: this.filtrosAtivos.global,
+                
+                // Novos parâmetros de intervalo
+                p_data_inicio: inicio, 
+                p_data_fim: fim,
+
+                p_filtro_empresa: this.filtrosAtivos.empresa,
+                p_filtro_assistente: this.filtrosAtivos.assistente,
+                p_filtro_doc: this.filtrosAtivos.doc,
+                p_filtro_status: this.filtrosAtivos.status,
+                p_filtro_obs: this.filtrosAtivos.obs,
+                p_filtro_auditora: this.filtrosAtivos.auditora
+            };
+
+            const { data, error } = await Sistema.supabase.rpc('buscar_assertividade_v5', params);
+            if (error) throw error;
+
+            this.renderizarTabela(data);
+            this.atualizarPaginacao(data, dataLegivel);
+
+        } catch (e) {
+            console.error("Erro busca:", e);
+            // Mensagem amigável caso o RPC esteja desatualizado
+            let msg = e.message;
+            if (e.message.includes('function') && e.message.includes('does not exist')) {
+                msg = "A função de banco de dados precisa ser atualizada para aceitar 'Data Início' e 'Fim'.";
             }
-        } 
-        else if (val instanceof Date) {
-            dateObj = val;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-rose-500"><i class="fas fa-exclamation-triangle"></i> Erro ao buscar: ${msg}</td></tr>`;
+        }
+    },
+
+    renderizarTabela: function(dados) {
+        const tbody = document.getElementById('lista-assertividade');
+        tbody.innerHTML = '';
+
+        if (!dados || dados.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-16 text-slate-400"><i class="far fa-folder-open text-3xl mb-3 block"></i>Nenhum registro encontrado neste período.</td></tr>`;
+            return;
         }
 
-        if (!dateObj || isNaN(dateObj.getTime())) return null;
+        const fragment = document.createDocumentFragment();
+        dados.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-blue-50/50 transition border-b border-slate-50 text-xs group";
+            
+            let dataFmt = '-';
+            if(row.data_auditoria) {
+                const [Y, M, D] = row.data_auditoria.split('-');
+                dataFmt = `${D}/${M}/${Y}`;
+            }
 
-        const y = dateObj.getFullYear();
-        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const d = String(dateObj.getDate()).padStart(2, '0');
-        const h = String(dateObj.getHours()).padStart(2, '0');
-        const min = String(dateObj.getMinutes()).padStart(2, '0');
+            const statusClass = this.getStatusColor(row.status);
 
-        return { data: `${y}-${m}-${d}`, hora: `${h}:${min}` };
+            tr.innerHTML = `
+                <td class="px-3 py-2 font-mono text-slate-500 whitespace-nowrap">${dataFmt}</td>
+                <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[200px]" title="${row.empresa}">${row.empresa || '-'}</td>
+                <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${row.assistente}">${row.assistente || '-'}</td>
+                <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${row.doc_name}">${row.doc_name || '-'}</td>
+                <td class="px-3 py-2 text-center"><span class="${statusClass} px-2 py-0.5 rounded text-[10px] font-bold border block w-full truncate">${row.status || '-'}</span></td>
+                <td class="px-3 py-2 text-slate-500 truncate max-w-[200px]" title="${row.obs}">${row.obs || '-'}</td>
+                <td class="px-3 py-2 text-center font-mono text-slate-400">${row.campos || 0}</td>
+                <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50 rounded">${row.ok || 0}</td>
+                <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50 rounded">${row.nok || 0}</td>
+                <td class="px-3 py-2 text-center font-bold text-slate-700">${row.porcentagem || '-'}</td>
+                <td class="px-3 py-2 text-slate-500 truncate max-w-[100px]">${row.auditora || '-'}</td>
+            `;
+            fragment.appendChild(tr);
+        });
+        tbody.appendChild(fragment);
     },
 
-    normalizar: function(s) { return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ''); },
-    normalizarKey: function(k) { return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, ""); },
-
-    baixarLog: function(setErros) {
-        const url = window.URL.createObjectURL(new Blob([Array.from(setErros).join('\n')], {type:'text/plain'}));
-        const a = document.createElement('a'); a.href = url; a.download = `erros_${Date.now()}.txt`;
-        document.body.appendChild(a); a.click(); a.remove();
+    atualizarPaginacao: function(dados, labelPeriodo) {
+        const total = (dados && dados.length > 0) ? dados[0].total_registros : 0;
+        this.totalRegistros = total;
+        
+        const elInfo = document.getElementById('info-paginacao');
+        const elContador = document.getElementById('contador-assert');
+        
+        if(elInfo) elInfo.innerText = `Pág ${this.paginaAtual} de ${Math.ceil(total/this.itensPorPagina) || 1}`;
+        if(elContador) elContador.innerHTML = `
+            <span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-100 ml-2">Período: ${labelPeriodo}</span>
+            <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 ml-1">Total: ${total}</span>
+        `;
+        
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
+        
+        if(btnAnt) {
+            btnAnt.disabled = this.paginaAtual === 1;
+            btnAnt.onclick = () => { this.paginaAtual--; this.buscarDados(); };
+        }
+        if(btnProx) {
+            btnProx.disabled = (this.paginaAtual * this.itensPorPagina) >= total;
+            btnProx.onclick = () => { this.paginaAtual++; this.buscarDados(); };
+        }
     },
 
-    showToast: function(msg, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if(!container) return alert(msg);
-        const el = document.createElement('div');
-        const cls = {success:'bg-emerald-600', error:'bg-rose-600', warning:'bg-amber-600', info:'bg-blue-600'};
-        el.className = `${cls[type]||cls.info} text-white px-4 py-3 rounded shadow-lg flex items-center gap-3 animate-fade text-sm font-bold min-w-[300px] mb-2`;
-        el.innerHTML = `<i class="fas ${type==='success'?'fa-check':type==='error'?'fa-times':'fa-info-circle'}"></i><span>${msg}</span>`;
-        container.appendChild(el);
-        setTimeout(()=>el.remove(), 4000);
+    getStatusColor: function(status) {
+        if(!status) return 'bg-slate-100 text-slate-400 border-slate-200';
+        const s = status.toString().toUpperCase();
+        if(s.includes('OK')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+        if(s.includes('NOK')) return 'bg-rose-100 text-rose-700 border-rose-200';
+        if(s.includes('REV')) return 'bg-amber-100 text-amber-700 border-amber-200';
+        if(s.includes('JUST')) return 'bg-blue-100 text-blue-700 border-blue-200';
+        if(s.includes('IA')) return 'bg-indigo-100 text-indigo-700 border-indigo-200';
+        return 'bg-slate-100 text-slate-600 border-slate-200';
     }
 };

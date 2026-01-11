@@ -74,6 +74,7 @@
                 </div>
                 <button onclick="Gestao.Empresas.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2 rounded-lg text-sm font-bold shadow-sm transition"><i class="fas fa-plus-circle"></i> Nova Empresa</button>
             </div>
+            
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                  <div class="overflow-x-auto custom-scroll flex-1">
                     <table class="w-full min-w-[1000px] text-sm text-left">
@@ -92,14 +93,42 @@
         </div>
 
         <div id="view-assertividade" class="gestao-view hidden space-y-4">
-             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
-                <div class="relative w-full md:w-96 group">
+             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-4 justify-between items-center">
+                <div class="relative w-full xl:w-96 group">
                     <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
                     <input type="text" id="search-assert" placeholder="Busca global (ID, Nome, Doc)..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
                 </div>
-                <div class="flex items-center gap-3">
-                    <button onclick="Gestao.Assertividade.limparFiltros()" class="text-slate-500 hover:text-blue-600 text-sm font-semibold px-3"><i class="fas fa-eraser"></i> Limpar</button>
-                    <span class="bg-emerald-50 text-emerald-600 px-3 py-1 rounded font-bold border border-emerald-100 text-xs">Live Database</span>
+
+                <div class="flex flex-col sm:flex-row items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-100">
+                    <div class="flex bg-white p-1 rounded-lg border border-slate-200 shadow-sm">
+                        <button onclick="Gestao.Assertividade.mudarPeriodo('mes')" id="btn-assert-mes" class="px-3 py-1.5 text-xs font-bold rounded text-blue-600 bg-blue-50 transition">Mês</button>
+                        <button onclick="Gestao.Assertividade.mudarPeriodo('semana')" id="btn-assert-semana" class="px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:bg-slate-50 transition">Semana</button>
+                        <button onclick="Gestao.Assertividade.mudarPeriodo('ano')" id="btn-assert-ano" class="px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:bg-slate-50 transition">Ano</button>
+                    </div>
+                    
+                    <div class="hidden sm:block w-px h-6 bg-slate-300 mx-1"></div>
+
+                    <div class="flex gap-2">
+                        <select id="sel-assert-ano" onchange="Gestao.Assertividade.atualizarPeriodo()" class="bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 focus:ring-1 focus:ring-blue-500"></select>
+                        
+                        <select id="sel-assert-mes" onchange="Gestao.Assertividade.atualizarPeriodo()" class="bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">
+                            <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option><option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option><option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option><option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
+                        </select>
+                        
+                        <select id="sel-assert-semana" onchange="Gestao.Assertividade.atualizarPeriodo()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500">
+                            <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
+                        </select>
+
+                        <select id="sel-assert-subano" onchange="Gestao.Assertividade.atualizarPeriodo()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-purple-500">
+                            <option value="full">Ano Completo</option>
+                            <optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup>
+                            <optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <button onclick="Gestao.Assertividade.limparFiltros()" class="text-slate-400 hover:text-rose-600 transition p-2" title="Limpar Filtros de Coluna"><i class="fas fa-eraser"></i></button>
                 </div>
              </div>
              
@@ -108,7 +137,7 @@
                      <table class="w-full text-sm text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[11px] border-b border-slate-200 tracking-wider sticky top-0 z-10 shadow-sm">
                             <tr>
-                                <th class="px-3 py-3 w-[120px] bg-slate-50">Data</th>
+                                <th class="px-3 py-3 w-[100px] bg-slate-50">Data</th>
                                 <th class="px-3 py-3 min-w-[200px] bg-slate-50">Empresa</th>
                                 <th class="px-3 py-3 min-w-[150px] bg-slate-50">Assistente</th>
                                 <th class="px-3 py-3 min-w-[150px] bg-slate-50">Doc Name</th>
@@ -121,7 +150,7 @@
                                 <th class="px-3 py-3 w-[120px] bg-slate-50">Auditora</th>
                             </tr>
                             <tr class="bg-white border-b border-slate-100">
-                                <td class="p-1"><input type="date" id="filtro-data" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none"></td>
+                                <td class="p-1 text-center text-slate-300 bg-slate-50/30"><i class="fas fa-calendar-alt"></i></td> 
                                 <td class="p-1"><input type="text" id="filtro-empresa" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none"></td>
                                 <td class="p-1"><input type="text" id="filtro-assistente" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none"></td>
                                 <td class="p-1"><input type="text" id="filtro-doc" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none"></td>
