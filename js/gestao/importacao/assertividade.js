@@ -2,63 +2,53 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 Gestao.Importacao.Assertividade = {
-    // Configurações de Performance
-    BATCH_SIZE: 500,        // Tamanho ideal para não travar o banco
-    CONCURRENCY_LIMIT: 3,   // Requisições simultâneas
+    BATCH_SIZE: 500,
+    CONCURRENCY_LIMIT: 3,
 
     executar: async function(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
 
-        // --- 1. CAPTURA O BOTÃO PARA DAR FEEDBACK ---
-        // O input está dentro da label (que é o botão visual), então pegamos o pai
+        // 1. Setup Visual
         const btn = input.parentElement;
         const originalHtml = btn.innerHTML;
         const originalClass = btn.className;
-
-        // Função interna para atualizar o texto do botão
-        const atualizarBotao = (texto, icone = 'fa-circle-notch fa-spin') => {
-            btn.innerHTML = `<i class="fas ${icone}"></i> ${texto}`;
-            // Mantém o input dentro para não quebrar a referência, mas oculto
+        
+        const atualizarBotao = (texto, icon = 'fa-circle-notch fa-spin') => {
+            btn.innerHTML = `<i class="fas ${icon}"></i> ${texto}`;
             btn.appendChild(input); 
         };
 
-        // Trava o botão visualmente
         btn.classList.add('opacity-75', 'cursor-not-allowed', 'pointer-events-none');
         atualizarBotao("Lendo arquivo...");
 
         try {
-            await new Promise(r => setTimeout(r, 50)); // Pequeno delay para a UI renderizar
+            await new Promise(r => setTimeout(r, 50));
 
-            // --- 2. CARREGA DADOS AUXILIARES (CACHE) ---
+            // 2. Dados Auxiliares
             const [resUsers, resEmpresas] = await Promise.all([
                 Sistema.supabase.from('usuarios').select('id, nome'),
                 Sistema.supabase.from('empresas').select('id, nome, subdominio')
             ]);
 
-            if(resUsers.error) throw resUsers.error;
-            if(resEmpresas.error) throw resEmpresas.error;
-
-            // Mapas para busca rápida O(1)
-            const mapUsuariosID = new Map(resUsers.data.map(u => [u.id, u.id]));
-            const mapUsuariosNome = new Map(resUsers.data.map(u => [this.normalizar(u.nome), u.id]));
+            const mapUsuariosID = new Map(resUsers.data?.map(u => [u.id, u.id]));
+            const mapUsuariosNome = new Map(resUsers.data?.map(u => [this.normalizar(u.nome), u.id]));
             
             const mapEmpresas = new Map();
-            resEmpresas.data.forEach(e => {
+            resEmpresas.data?.forEach(e => {
                 const info = { id: e.id, nome: e.nome };
                 mapEmpresas.set(this.normalizar(e.nome), info);
                 if(e.subdominio) mapEmpresas.set(this.normalizar(e.subdominio), info);
             });
 
-            // --- 3. PROCESSAMENTO DO ARQUIVO ---
+            // 3. Processamento
             const linhas = await Gestao.lerArquivo(file);
             atualizarBotao(`Processando ${linhas.length}...`);
 
             const inserts = [];
             const logErros = new Set();
-            let stats = { total: linhas.length, sucesso: 0, ignorados: 0 };
+            let ultimaDataValida = null; // Para usar no filtro depois
 
-            // Loop de transformação
             for (const [index, row] of linhas.entries()) {
                 const c = {};
                 for (const k in row) c[this.normalizarKey(k)] = row[k];
@@ -74,33 +64,32 @@ Gestao.Importacao.Assertividade = {
                 }
 
                 if (!usuarioId) {
-                    logErros.add(`Linha ${index+2}: Usuário não identificado (${c['assistente'] || 'Sem nome'})`);
-                    stats.ignorados++;
+                    logErros.add(`Linha ${index+2}: Usuário não identificado (${c['assistente'] || '?'})`);
                     continue;
                 }
 
                 // Identifica Empresa
-                let empresaId = parseInt(c['companyid'] || c['company_id'] || c['idempresa'] || 0);
+                let empresaId = null;
                 let nomeEmpresa = c['empresa'] || '';
+                let rawEmpId = c['companyid'] || c['company_id'] || c['idempresa'];
                 
-                if (!empresaId) {
+                if (rawEmpId) {
+                     empresaId = parseInt(rawEmpId);
+                } else {
                     const match = mapEmpresas.get(this.normalizar(nomeEmpresa));
-                    if (match) {
+                    if(match) {
                         empresaId = match.id;
                         nomeEmpresa = match.nome;
-                    } else {
-                        empresaId = null;
                     }
                 }
 
-                // Identifica Data
+                // Data
                 const rawDate = c['endtime'] || c['datadaauditoria'] || c['data'] || c['date'];
                 const dataObj = this.parseDate(rawDate);
                 
-                if (!dataObj) {
-                    stats.ignorados++;
-                    continue;
-                }
+                if (!dataObj) continue;
+
+                ultimaDataValida = dataObj.data; // Guarda 'YYYY-MM-DD'
 
                 inserts.push({
                     usuario_id: usuarioId,
@@ -121,77 +110,89 @@ Gestao.Importacao.Assertividade = {
                 });
             }
 
-            // --- 4. ENVIO COM BARRA DE PROGRESSO NO BOTÃO ---
+            // 4. Envio
             if (inserts.length > 0) {
                 const totalLotes = Math.ceil(inserts.length / this.BATCH_SIZE);
                 let lotesProcessados = 0;
 
-                const processarLote = async (lote) => {
-                    const { error } = await Sistema.supabase.from('producao').insert(lote);
-                    if (error) throw error;
-                    
-                    lotesProcessados++;
-                    // CÁLCULO DA PORCENTAGEM
-                    const pct = Math.round((lotesProcessados / totalLotes) * 100);
-                    atualizarBotao(`Salvando ${pct}%...`);
-                };
-
-                // Divide em lotes
                 const lotes = [];
                 for (let i = 0; i < inserts.length; i += this.BATCH_SIZE) {
                     lotes.push(inserts.slice(i, i + this.BATCH_SIZE));
                 }
 
-                // Executa em paralelo controlado
+                // Envio Paralelo
+                const processar = async (lote) => {
+                    const { error } = await Sistema.supabase.from('producao').insert(lote);
+                    if (error) throw error;
+                    lotesProcessados++;
+                    const pct = Math.round((lotesProcessados / totalLotes) * 100);
+                    atualizarBotao(`Salvando ${pct}%...`);
+                };
+
                 for (let i = 0; i < lotes.length; i += this.CONCURRENCY_LIMIT) {
-                    const chunk = lotes.slice(i, i + this.CONCURRENCY_LIMIT);
-                    await Promise.all(chunk.map(l => processarLote(l)));
+                    await Promise.all(lotes.slice(i, i + this.CONCURRENCY_LIMIT).map(processar));
                 }
 
-                stats.sucesso = inserts.length;
-                this.showToast(`Sucesso! ${stats.sucesso} registros importados.`, 'success');
+                // 5. Sucesso e Auto-Filtro
+                this.showToast(`Sucesso! ${inserts.length} registros salvos.`, 'success');
                 
                 if (logErros.size > 0) {
                     this.baixarLog(logErros);
-                    this.showToast(`${logErros.size} linhas ignoradas (ver log).`, 'warning');
+                    this.showToast(`${logErros.size} erros (ver log).`, 'warning');
                 }
 
-                // Recarrega a tabela no fundo
-                if (Gestao.Assertividade) Gestao.Assertividade.carregar();
+                // --- O PULO DO GATO ---
+                // Aplica a última data importada no filtro para o usuário ver os dados
+                if (ultimaDataValida && Gestao.Assertividade) {
+                    const filtroData = document.getElementById('filtro-data');
+                    if (filtroData) {
+                        filtroData.value = ultimaDataValida;
+                        // Simula o evento de change para disparar a busca
+                        filtroData.dispatchEvent(new Event('change'));
+                        this.showToast(`Filtro atualizado para ${ultimaDataValida.split('-').reverse().join('/')}`, 'info');
+                    } else {
+                        Gestao.Assertividade.carregar();
+                    }
+                }
 
             } else {
-                this.showToast("Nenhum dado válido encontrado para importar.", 'error');
+                this.showToast("Nenhum registro válido encontrado.", 'error');
             }
 
         } catch (e) {
             console.error(e);
             this.showToast(`Erro: ${e.message}`, 'error');
         } finally {
-            // --- 5. RESTAURA O BOTÃO ---
             btn.innerHTML = originalHtml;
-            btn.className = originalClass; // Remove classes de desabilitado
-            input.value = ""; // Limpa o input para permitir selecionar o mesmo arquivo novamente
+            btn.className = originalClass;
+            input.value = "";
         }
     },
 
-    // --- Helpers ---
-
+    // Parser Melhorado para anos de 2 e 4 dígitos
     parseDate: function(val) {
         if (!val) return null;
         let dateObj = null;
-        
+
+        // 1. Excel Serial
         if (typeof val === 'number') {
-            // Excel Serial Date
             dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
-        } else if (typeof val === 'string') {
+        } 
+        // 2. String
+        else if (typeof val === 'string') {
             const clean = val.trim();
-            if (clean.match(/^\d{2}\/\d{2}\/\d{4}/)) {
-                const p = clean.split('/');
-                dateObj = new Date(p[2], p[1] - 1, p[0]);
+            // Formato DD/MM/YY ou DD/MM/YYYY
+            const matchBR = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+            if (matchBR) {
+                let y = parseInt(matchBR[3]);
+                // Ajuste para ano com 2 dígitos (ex: 25 -> 2025)
+                if (y < 100) y += 2000; 
+                dateObj = new Date(y, parseInt(matchBR[2]) - 1, parseInt(matchBR[1]));
             } else {
                 dateObj = new Date(clean);
             }
-        } else if (val instanceof Date) {
+        } 
+        else if (val instanceof Date) {
             dateObj = val;
         }
 
@@ -206,37 +207,23 @@ Gestao.Importacao.Assertividade = {
         return { data: `${y}-${m}-${d}`, hora: `${h}:${min}` };
     },
 
-    normalizar: function(str) {
-        return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '');
-    },
-
-    normalizarKey: function(k) {
-        return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-    },
+    normalizar: function(s) { return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ''); },
+    normalizarKey: function(k) { return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, ""); },
 
     baixarLog: function(setErros) {
-        const conteudo = `LOG DE IMPORTAÇÃO - ${new Date().toLocaleString()}\n\n${Array.from(setErros).join('\n')}`;
-        const blob = new Blob([conteudo], { type: 'text/plain' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `erros_importacao_${Date.now()}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        const url = window.URL.createObjectURL(new Blob([Array.from(setErros).join('\n')], {type:'text/plain'}));
+        const a = document.createElement('a'); a.href = url; a.download = `erros_${Date.now()}.txt`;
+        document.body.appendChild(a); a.click(); a.remove();
     },
 
     showToast: function(msg, type = 'info') {
         const container = document.getElementById('toast-container');
         if(!container) return alert(msg);
-
         const el = document.createElement('div');
-        const colors = { success: 'bg-emerald-600', error: 'bg-rose-600', warning: 'bg-amber-600', info: 'bg-blue-600' };
-        
-        el.className = `${colors[type] || colors.info} text-white px-4 py-3 rounded shadow-lg flex items-center gap-3 animate-fade text-sm font-bold min-w-[300px] mb-2`;
-        el.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check' : type === 'error' ? 'fa-times' : 'fa-info-circle'}"></i> <span>${msg}</span>`;
-        
+        const cls = {success:'bg-emerald-600', error:'bg-rose-600', warning:'bg-amber-600', info:'bg-blue-600'};
+        el.className = `${cls[type]||cls.info} text-white px-4 py-3 rounded shadow-lg flex items-center gap-3 animate-fade text-sm font-bold min-w-[300px] mb-2`;
+        el.innerHTML = `<i class="fas ${type==='success'?'fa-check':type==='error'?'fa-times':'fa-info-circle'}"></i><span>${msg}</span>`;
         container.appendChild(el);
-        setTimeout(() => el.remove(), 4000);
+        setTimeout(()=>el.remove(), 4000);
     }
 };
