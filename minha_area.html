@@ -3,353 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Área</title>
+    <title>Minha Área - Performance Pro</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
-        /* Inputs Personalizados */
-        .input-manual { text-align: center; font-weight: 600; transition: all 0.2s; }
-        .input-manual:focus { ring: 2px; ring-color: #2563eb; outline: none; background: white; }
-        .bg-lock { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; opacity: 0.7; }
+        .tab-btn:hover { opacity: 1; background-color: #f1f5f9; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; opacity: 1; }
+        .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background-color: #2563eb; border-radius: 3px 3px 0 0; }
+        .animate-enter { animation: enter 0.4s ease-out; }
+        @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .custom-scroll::-webkit-scrollbar { height: 6px; width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .card-stat { transition: transform 0.2s; }
+        .card-stat:hover { transform: translateY(-2px); }
     </style>
 </head>
-<body class="text-slate-800">
+<body class="bg-slate-50">
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
+    <div id="global-menu"></div>
 
-    <script>
-        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
-        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
-        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
-
-        function renderNavbar() {
-            const usuario = JSON.parse(localStorage.getItem('usuario'));
-            if (!usuario) { window.location.href = 'index.html'; return; }
-
-            const navbarHTML = `
-            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
-                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
-                    <div class="flex flex-col leading-tight">
-                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
-                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
-                    </div>
-                </div>
-                <div class="hidden md:flex items-center gap-1 h-full">
-                    ${createNavLink('Gestão', 'gestao.html')}
-                    ${createNavLink('Produtividade', 'produtividade.html')}
-                    ${createNavLink('Performance', 'performance.html')}
-                    ${createNavLink('Consolidado', 'consolidado.html')}
-                    ${createNavLink('Minha Área', 'minha_area.html')}
-                    ${createNavLink('Ferramentas', 'ferramentas.html')}
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="text-right hidden sm:block">
-                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
-                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
-                    </div>
-                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
-                </div>
-            </nav>
-            <div class="h-20"></div>`;
-            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
-        }
-        function createNavLink(label, linkUrl) {
-            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
-            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
-        }
-        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
-        renderNavbar();
-    </script>
-
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-            <div>
-                <h1 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
-                    Minha Área <span id="welcome-name" class="text-blue-600"></span>
-                </h1>
-            </div>
-            
-            <div class="flex flex-wrap gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 transition-all duration-300">
+        <div class="max-w-[1600px] mx-auto px-4">
+            <div class="flex flex-col md:flex-row items-center justify-between h-auto md:h-16 gap-3 py-2">
                 
-                <div id="manager-control" class="hidden border-r border-slate-200 pr-3 mr-1">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Visão Gestora</label>
-                    <select id="user-selector" onchange="carregarDados()" class="text-sm font-bold text-blue-700 bg-transparent outline-none cursor-pointer"></select>
+                <div class="flex flex-wrap items-center gap-4 w-full md:w-auto justify-center md:justify-start">
+                    <div class="flex items-center gap-3 border-r border-slate-200 pr-4 hidden sm:flex">
+                        <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shadow-sm">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <h1 class="text-lg font-bold text-slate-800 tracking-tight">Performance</h1>
+                    </div>
+                    
+                    <div class="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200 shadow-sm">
+                        <select id="filtro-tipo" onchange="MinhaArea.mudarTipoFiltro(this.value)" class="bg-transparent text-xs font-bold text-slate-600 outline-none cursor-pointer pl-2 py-1 uppercase tracking-wide">
+                            <option value="dia">Dia</option>
+                            <option value="semana">Semana</option>
+                            <option value="mes" selected>Mês</option>
+                            <option value="trimestre">Trimestre</option>
+                            <option value="semestre">Semestre</option>
+                            <option value="ano">Ano</option>
+                            <option value="todos">Tudo</option>
+                        </select>
+                        <div class="w-px h-4 bg-slate-300"></div>
+                        <div id="filtro-valor-container" class="px-2 flex items-center"></div>
+                    </div>
+
+                    <div id="admin-controls" class="hidden flex items-center gap-2 animate-enter border-l border-slate-200 pl-2">
+                        <div class="flex items-center gap-2 bg-white px-2 py-1 rounded border border-slate-200 shadow-sm">
+                            <i class="fas fa-user-circle text-slate-400"></i>
+                            <select id="admin-user-select" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-transparent text-xs font-bold text-slate-700 outline-none cursor-pointer w-[120px] truncate">
+                                <option value="todos">Toda a Equipe</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Ano</label>
-                    <select id="year-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none"></select>
+                <div class="flex items-center gap-1 w-full md:w-auto overflow-x-auto no-scrollbar justify-center md:justify-end">
+                    <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-calendar-check"></i> Diário</button>
+                    <button onclick="MinhaArea.mudarAba('evolucao')" id="btn-ma-evolucao" class="tab-btn px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-bullseye"></i> Meta / OKR</button>
+                    <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-users"></i> Comparativo</button>
+                    <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="tab-btn px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Qualidade</button>
+                    <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-comments"></i> Feedback</button>
                 </div>
-                <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Mês</label>
-                    <select id="month-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none text-slate-700 w-24"></select>
-                </div>
             </div>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Sistema (Automático)</p>
-                <p class="text-3xl font-extrabold text-blue-700" id="kpi-sys">0</p>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Manual (Ajustes)</p>
-                <p class="text-3xl font-extrabold text-amber-600" id="kpi-man">0</p>
-            </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-xs font-bold text-slate-400 uppercase mb-1">% Meta Atingida (Dias)</p>
-                <p class="text-3xl font-extrabold text-emerald-600" id="kpi-hit">0%</p>
-            </div>
-        </div>
-
-        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-8 h-80 relative">
-            <canvas id="productionChart"></canvas>
-        </div>
-
-        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                <h3 class="font-bold text-slate-700">Diário de Produção</h3>
-                <span class="text-xs text-slate-400 flex items-center gap-1">🔒 = Validado pela Gestão</span>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-sm text-left text-slate-600">
-                    <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
-                        <tr>
-                            <th class="px-4 py-3 text-center">Data</th>
-                            <th class="px-4 py-3 text-center text-blue-700">Sis</th>
-                            <th class="px-4 py-3 text-center text-amber-600">Manual</th>
-                            <th class="px-4 py-3 text-center">Meta</th>
-                            <th class="px-4 py-3 text-center">Status</th>
-                            <th class="px-4 py-3 w-1/4">Anotações (Assistente)</th>
-                            <th class="px-4 py-3 w-1/4 text-blue-800">Feedback (Gestão)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="log-body" class="divide-y divide-slate-100"></tbody>
-                </table>
-            </div>
-        </div>
-
     </div>
 
-    <script>
-        const sessao = JSON.parse(localStorage.getItem('usuario'));
-        const isMgr = sessao.funcao === 'Gestora';
-        let chartInstance = null;
-        let currentUserTarget = sessao.id;
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-40 md:pt-36">
+        
+        <div id="ma-tab-diario" class="ma-view animate-enter space-y-6">
+            <div id="box-confirmacao-leitura" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 animate-pulse"><i class="fas fa-bell"></i></div>
+                    <div><h4 class="font-bold text-amber-900">Check-in Pendente</h4><p class="text-xs text-amber-700">Valide suas metas.</p></div>
+                </div>
+                <button onclick="MinhaArea.Diario.confirmarAcessoHoje()" class="bg-amber-600 hover:bg-amber-700 text-white font-bold py-2 px-6 rounded-lg text-sm">Confirmar</button>
+            </div>
 
-        document.addEventListener('DOMContentLoaded', init);
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
+                    <div class="flex justify-between mb-2"><span class="text-xs font-bold text-slate-400 uppercase">Eficiência</span><span id="kpi-pct" class="text-lg font-black text-blue-600">--%</span></div>
+                    <div class="flex items-end gap-2"><h3 id="kpi-total" class="text-3xl font-black text-slate-800">--</h3><span class="text-xs text-slate-400 mb-1">de <span id="kpi-meta-total">--</span> (Meta)</span></div>
+                    <div class="mt-3 w-full bg-slate-100 h-1.5 rounded-full"><div id="bar-progress" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div></div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
+                    <div class="flex justify-between mb-4"><span class="text-xs font-bold text-slate-400 uppercase">Comparativo</span><i class="fas fa-users text-slate-300"></i></div>
+                    <div class="flex justify-between items-end">
+                        <div><span class="text-xs text-slate-400">Sua Média Diária</span><div id="kpi-media-real" class="text-2xl font-black text-slate-700">--</div></div>
+                        <div class="text-right"><span class="text-xs text-slate-400">Média Equipe</span><div id="kpi-media-time" class="text-xl font-bold text-slate-500">--</div></div>
+                    </div>
+                </div>
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 card-stat">
+                    <div class="flex justify-between mb-1"><span class="text-xs font-bold text-slate-400 uppercase">Status</span><div id="icon-status-container" class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center"><i id="icon-status" class="fas fa-minus text-slate-300"></i></div></div>
+                    <div class="flex items-end gap-2"><h3 id="kpi-dias" class="text-3xl font-black text-slate-800">--</h3><span class="text-xs text-slate-400 mb-1">Dias Trabalhados</span></div>
+                    <div id="kpi-status-text" class="mt-2 text-xs font-bold text-slate-500">--</div>
+                </div>
+            </div>
 
-        async function init() {
-            document.getElementById('welcome-name').innerText = isMgr ? "(Visão Geral)" : `Olá, ${sessao.nome.split(' ')[0]}`;
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="px-6 py-4 border-b border-slate-100 bg-slate-50"><h3 class="font-bold text-slate-700 text-sm">Detalhamento Diário / Auditoria</h3></div>
+                <div class="overflow-x-auto max-h-[500px] custom-scroll">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs sticky top-0 z-10">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Data / Hora</th>
+                                <th class="px-4 py-3 text-left">Empresa (ID)</th>
+                                <th class="px-4 py-3 text-left">Assistente</th>
+                                <th class="px-4 py-3 text-center">Status</th>
+                                <th class="px-4 py-3 text-left">Obs / Apontamentos</th>
+                                <th class="px-4 py-3 text-center">NOK</th>
+                                <th class="px-4 py-3 text-center">% Assert.</th>
+                                <th class="px-4 py-3 text-left">Auditora</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabela-diario" class="divide-y divide-slate-100 text-slate-600"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
 
-            const cy = new Date().getFullYear();
-            const ys = document.getElementById('year-selector');
-            const ms = document.getElementById('month-selector');
-            
-            for(let y=cy; y>=2024; y--) ys.innerHTML += `<option value="${y}">${y}</option>`;
-            ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => {
-                ms.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`;
-            });
+        <div id="ma-tab-evolucao" class="ma-view hidden animate-enter">
+            <div class="flex flex-col items-center justify-center h-64 text-slate-400">
+                <i class="fas fa-spinner fa-spin text-2xl mb-2"></i><p>Carregando Meta / OKR...</p>
+            </div>
+        </div>
+        <div id="ma-tab-comparativo" class="ma-view hidden animate-enter"></div>
+        <div id="ma-tab-assertividade" class="ma-view hidden animate-enter"></div>
+        <div id="ma-tab-feedback" class="ma-view hidden animate-enter"></div>
+    </div>
 
-            if (isMgr) {
-                document.getElementById('manager-control').classList.remove('hidden');
-                const { data } = await _supabase.from('usuarios').select('*').eq('funcao', 'Assistente').order('nome');
-                const us = document.getElementById('user-selector');
-                if(data && data.length) {
-                    data.forEach(u => us.innerHTML += `<option value="${u.id}">${u.nome}</option>`);
-                    currentUserTarget = data[0].id;
-                }
-            }
-            carregarDados();
-        }
-
-        async function carregarDados() {
-            if (isMgr) currentUserTarget = document.getElementById('user-selector').value;
-
-            const ano = document.getElementById('year-selector').value;
-            const mes = document.getElementById('month-selector').value;
-            
-            const startStr = `${ano}-${mes.toString().padStart(2,'0')}-01`;
-            const endObj = new Date(ano, mes, 0);
-            const endStr = `${ano}-${mes.toString().padStart(2,'0')}-${endObj.getDate()}`;
-
-            document.getElementById('log-body').innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
-
-            try {
-                const { data: prods } = await _supabase.from('producao')
-                    .select('*')
-                    .eq('usuario_id', currentUserTarget)
-                    .gte('data_referencia', startStr)
-                    .lte('data_referencia', endStr)
-                    .order('data_referencia');
-
-                const { data: metas } = await _supabase.from('metas')
-                    .select('*')
-                    .eq('usuario_id', currentUserTarget)
-                    .order('data_inicio', { ascending: false });
-                
-                const metaVigente = metas.find(m => m.data_inicio <= endStr)?.valor_meta || 650;
-
-                renderizarTela(prods || [], metaVigente, startStr, endStr);
-
-            } catch (err) { console.error(err); alert("Erro ao carregar dados."); }
-        }
-
-        function renderizarTela(dados, meta, sDate, eDate) {
-            const map = {};
-            dados.forEach(d => map[d.data_referencia] = d);
-
-            let html = '';
-            let s = new Date(sDate + 'T12:00:00');
-            let e = new Date(eDate + 'T12:00:00');
-            
-            let totalSys = 0, totalMan = 0, diasMeta = 0, diasUteis = 0;
-            let labels = [], dataSys = [], dataMeta = [];
-
-            for (let dt = new Date(s); dt <= e; dt.setDate(dt.getDate() + 1)) {
-                const diaStr = dt.toISOString().split('T')[0];
-                const diaSemana = dt.getDay();
-                const isFds = diaSemana === 0 || diaSemana === 6;
-                const row = map[diaStr] || {};
-                
-                // Converte para Número para garantir soma correta
-                const qSys = Number(row.quantidade) || 0;
-                const qMan = row.quantidade_manual !== null ? Number(row.quantidade_manual) : null;
-                const qManVal = qMan || 0;
-                
-                const obs = row.observacao || '';
-                const feed = row.observacao_gestora || '';
-                
-                if (!isFds || qSys > 0) {
-                    labels.push(dt.getDate());
-                    // No gráfico, mostramos a soma para o usuário visualizar seu desempenho total
-                    dataSys.push(qSys + qManVal);
-                    dataMeta.push(meta);
-                    diasUteis++;
-                    if ((qSys + qManVal) >= meta) diasMeta++;
-                }
-                
-                totalSys += qSys;
-                if (qMan !== null) totalMan += qMan;
-
-                const isLocked = !isMgr && (feed && feed.trim() !== '');
-                const lockClass = isLocked ? 'bg-lock' : 'bg-white';
-                const lockIcon = isLocked ? '🔒' : '';
-                const disableMan = isMgr || isLocked ? 'disabled' : '';
-                const disableObs = isMgr || isLocked ? 'disabled' : '';
-                const disableFeed = !isMgr ? 'disabled' : '';
-                
-                const valMan = (qMan !== null) ? qMan : '';
-                const statusBadge = (qSys + qManVal) >= meta 
-                    ? '<span class="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full">Sim</span>' 
-                    : '<span class="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-1 rounded-full">Não</span>';
-                
-                const rowClass = isFds ? 'bg-slate-50' : 'hover:bg-slate-50';
-
-                html += `
-                <tr class="${rowClass} transition border-b border-slate-100">
-                    <td class="px-2 py-3 text-center font-medium text-slate-500">${diaStr.split('-').reverse().join('/').substring(0,5)}</td>
-                    <td class="px-2 py-3 text-center font-bold text-blue-700">${qSys || '-'}</td>
-                    <td class="px-2 py-3 text-center">
-                        <input type="number" value="${valMan}" 
-                            class="input-manual w-16 p-1 border border-slate-200 rounded text-amber-600 ${lockClass}"
-                            placeholder="-" 
-                            onchange="salvar(this, '${diaStr}', 'quantidade_manual')" ${disableMan}>
-                    </td>
-                    <td class="px-2 py-3 text-center text-slate-400 text-xs">${meta}</td>
-                    <td class="px-2 py-3 text-center">${(qSys||valMan)?statusBadge:'-'}</td>
-                    <td class="px-2 py-3">
-                        <div class="flex items-center gap-2">
-                            <input type="text" value="${obs}" 
-                                class="w-full text-xs p-1 border border-slate-200 rounded ${lockClass}"
-                                placeholder="..." 
-                                onchange="salvar(this, '${diaStr}', 'observacao')" ${disableObs}>
-                            ${lockIcon}
-                        </div>
-                    </td>
-                    <td class="px-2 py-3">
-                        <input type="text" value="${feed}" 
-                            class="w-full text-xs p-1 border border-amber-100 bg-amber-50 rounded text-blue-800 font-medium"
-                            placeholder="${isMgr ? 'Escreva feedback...' : ''}" 
-                            onchange="salvar(this, '${diaStr}', 'observacao_gestora')" ${disableFeed}>
-                    </td>
-                </tr>`;
-            }
-
-            document.getElementById('log-body').innerHTML = html;
-            
-            document.getElementById('kpi-sys').innerText = totalSys.toLocaleString();
-            document.getElementById('kpi-man').innerText = totalMan.toLocaleString();
-            document.getElementById('kpi-hit').innerText = diasUteis > 0 ? Math.round((diasMeta/diasUteis)*100) + '%' : '0%';
-
-            renderChart(labels, dataSys, dataMeta);
-        }
-
-        async function salvar(input, dataRef, campo) {
-            const val = campo === 'quantidade_manual' ? (input.value ? parseInt(input.value) : null) : input.value;
-            input.classList.add('bg-blue-50');
-
-            try {
-                const { data: existing } = await _supabase.from('producao').select('id').eq('usuario_id', currentUserTarget).eq('data_referencia', dataRef).maybeSingle();
-
-                if (existing) {
-                    await _supabase.from('producao').update({ [campo]: val }).eq('id', existing.id);
-                } else {
-                    await _supabase.from('producao').insert({
-                        usuario_id: currentUserTarget,
-                        data_referencia: dataRef,
-                        quantidade: 0,
-                        [campo]: val
-                    });
-                }
-                input.classList.remove('bg-blue-50');
-                input.classList.add('bg-emerald-50', 'text-emerald-700');
-                setTimeout(() => input.classList.remove('bg-emerald-50', 'text-emerald-700'), 1000);
-                
-                if(campo === 'observacao_gestora' || campo === 'quantidade_manual') carregarDados();
-
-            } catch (err) { console.error(err); alert("Erro ao salvar."); input.classList.add('bg-red-100'); }
-        }
-
-        function renderChart(labels, dataSys, dataMeta) {
-            const ctx = document.getElementById('productionChart').getContext('2d');
-            if (chartInstance) chartInstance.destroy();
-
-            chartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Produção Total (Sis + Man)',
-                            data: dataSys,
-                            borderColor: '#2563eb',
-                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                            fill: true,
-                            tension: 0.3
-                        },
-                        {
-                            label: 'Meta',
-                            data: dataMeta,
-                            borderColor: '#ef4444',
-                            borderDash: [5, 5],
-                            pointRadius: 0,
-                            borderWidth: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' } },
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
-        }
-    </script>
+    <script src="js/minha_area/main.js"></script>
+    <script src="js/minha_area/diario/controle.js"></script>
+    <script src="js/minha_area/evolucao.js"></script>
+    <script src="js/minha_area/comparativo.js"></script>
+    <script src="js/minha_area/assertividade.js"></script>
+    <script src="js/minha_area/feedback.js"></script>
+    
+    <script src="js/menu.js"></script>
 </body>
 </html>
