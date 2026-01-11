@@ -1,22 +1,34 @@
-const Sistema = {
+// Define o namespace globalmente IMEDIATAMENTE
+window.Sistema = window.Sistema || {
     supabase: null,
     usuarioLogado: null,
 
     inicializar: async function(requerLogin = true) {
-        // CORREÇÃO: Só cria o cliente se ele ainda não existir (Singleton)
-        if (!Sistema.supabase && window.supabase && window.SUPABASE_URL && window.SUPABASE_KEY) {
-            Sistema.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+        console.log("Sistema: Inicializando...");
+
+        // 1. Conecta ao Supabase
+        if (!this.supabase) {
+            try {
+                if (window.supabase && window.supabase.createClient && window.SUPABASE_URL && window.SUPABASE_KEY) {
+                    this.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+                    console.log("Sistema: Conectado ao Supabase.");
+                } else {
+                    console.error("Sistema: Biblioteca Supabase ou chaves (config.js) não encontradas.");
+                }
+            } catch (e) {
+                console.error("Sistema: Erro fatal na conexão:", e);
+            }
         }
 
+        // 2. Verifica Sessão
         const sessao = localStorage.getItem('usuario_logado');
         if (sessao) {
-            Sistema.usuarioLogado = JSON.parse(sessao);
+            this.usuarioLogado = JSON.parse(sessao);
         } else if (requerLogin && !window.location.pathname.includes('index.html')) {
             window.location.href = 'index.html';
         }
     },
 
-    // --- FUNÇÃO DE CRIPTOGRAFIA (SHA-256) ---
     gerarHash: async function(texto) {
         const msgBuffer = new TextEncoder().encode(texto);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -32,7 +44,7 @@ const Sistema = {
     }
 };
 
+// Auto-inicialização segura
 document.addEventListener('DOMContentLoaded', () => {
-    // Tenta inicializar sem forçar login imediato ao carregar scripts
     Sistema.inicializar(false);
 });

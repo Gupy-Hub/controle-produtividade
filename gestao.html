@@ -15,6 +15,9 @@
 
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
+        .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .animate-fade { animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .custom-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
@@ -27,8 +30,23 @@
     
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
+    
     <script src="js/menu/global.js"></script>
-    <script src="js/menu/gestao.js"></script>
+    <div id="global-menu"></div>
+
+    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
+        <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar">
+                <button onclick="Gestao.mudarAba('usuarios')" id="btn-usuarios" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-users"></i> Usuários</button>
+                <button onclick="Gestao.mudarAba('empresas')" id="btn-empresas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-building"></i> Empresas</button>
+                <button onclick="Gestao.mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-double"></i> Assertividade</button>
+                <button onclick="Gestao.mudarAba('metas')" id="btn-metas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-bullseye"></i> Metas</button>
+            </div>
+            <div class="text-xs text-slate-400 font-bold hidden md:block">
+                Painel Administrativo
+            </div>
+        </div>
+    </div>
 
     <div class="max-w-[1600px] mx-auto px-4 py-8 pt-32">
         

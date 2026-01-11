@@ -12,8 +12,9 @@ const Login = {
         msg.classList.add('hidden');
 
         try {
-            if (!Sistema.supabase && window.supabase) {
-                Sistema.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
+            // VERIFICAÇÃO DE SEGURANÇA: Garante que o sistema iniciou
+            if (!Sistema.supabase) {
+                throw new Error("Erro de conexão com o banco de dados. Recarregue a página.");
             }
 
             // 1. Busca o usuário
@@ -30,7 +31,6 @@ const Login = {
             const hashDigitado = await Sistema.gerarHash(senhaInput);
             
             // Verifica a senha (compara Hash com Hash ou Texto Puro para compatibilidade com Admin antigo)
-            // Se a senha no banco for 'Admin' (legado), compara direto. Se for longa (hash), compara hash.
             let senhaCorreta = false;
             if (usuario.senha === 'Admin' && senhaInput === 'Admin') senhaCorreta = true;
             else if (usuario.senha === hashDigitado) senhaCorreta = true;
@@ -70,8 +70,12 @@ const Login = {
 
     mostrarErro: function(texto) {
         const msg = document.getElementById('msg-erro');
-        msg.innerText = texto;
-        msg.classList.remove('hidden');
+        if (msg) {
+            msg.innerText = texto;
+            msg.classList.remove('hidden');
+        } else {
+            alert(texto);
+        }
     }
 };
 

@@ -1,88 +1,72 @@
 MinhaArea.Comparativo = {
-    chartInstance: null,
+    chart: null,
 
     carregar: async function() {
-        const periodo = MinhaArea.getPeriodo();
-        const uid = MinhaArea.user.id;
+        // CORREÇÃO: Usa ID dinâmico
+        const uid = MinhaArea.getUsuarioAlvo();
+        if (!uid) return;
+
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
 
         try {
-            // 1. Busca TODA a produção do mês (para calcular média da equipe)
-            const { data: todos, error } = await MinhaArea.supabase
+            // Minha Produção (do alvo)
+            const { data: meusDados } = await Sistema.supabase
                 .from('producao')
-                .select('*')
-                .gte('data_referencia', periodo.inicio)
-                .lte('data_referencia', periodo.fim);
+                .select('quantidade')
+                .eq('usuario_id', uid)
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
 
-            if(error) throw error;
+            const meuTotal = meusDados ? meusDados.reduce((acc, curr) => acc + (Number(curr.quantidade)||0), 0) : 0;
 
-            let somaUser = 0, diasUser = 0;
-            let somaTeam = 0, diasTeam = 0;
+            // Produção do Time (para comparar)
+            const { data: timeDados } = await Sistema.supabase
+                .from('producao')
+                .select('usuario_id, quantidade')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
 
-            todos.forEach(d => {
-                const fator = d.fator_multiplicador !== null ? d.fator_multiplicador : 1;
-                if (fator <= 0) return; // Ignora dias de abono
-
-                if (d.usuario_id === uid) {
-                    somaUser += d.quantidade;
-                    diasUser += 1; // Conta dias trabalhados (independente se foi 0.5 ou 1)
-                } else {
-                    somaTeam += d.quantidade;
-                    diasTeam += 1;
-                }
+            const producaoPorUsuario = {};
+            timeDados.forEach(d => {
+                if(!producaoPorUsuario[d.usuario_id]) producaoPorUsuario[d.usuario_id] = 0;
+                producaoPorUsuario[d.usuario_id] += (Number(d.quantidade) || 0);
             });
 
-            const mediaUser = diasUser > 0 ? Math.round(somaUser / diasUser) : 0;
-            const mediaTeam = diasTeam > 0 ? Math.round(somaTeam / diasTeam) : 0;
+            const usuariosIds = Object.keys(producaoPorUsuario);
+            const somaTime = Object.values(producaoPorUsuario).reduce((a, b) => a + b, 0);
+            const mediaTime = usuariosIds.length > 0 ? Math.round(somaTime / usuariosIds.length) : 0;
+            const melhorDoTime = usuariosIds.length > 0 ? Math.max(...Object.values(producaoPorUsuario)) : 0;
 
-            // Atualiza Textos
-            document.getElementById('comp-media-user').innerText = mediaUser;
-            document.getElementById('comp-media-team').innerText = mediaTeam;
+            this.renderizarGrafico(meuTotal, mediaTime, melhorDoTime);
 
-            // Mensagem de Feedback
-            const diff = mediaUser - mediaTeam;
-            const icon = document.getElementById('comp-icon');
-            const msg = document.getElementById('comp-msg');
-
-            if (diff > 50) {
-                icon.innerHTML = '<i class="fas fa-trophy text-emerald-500"></i>';
-                msg.innerText = "Você está acima da média!";
-                msg.className = "text-sm font-bold text-emerald-600";
-            } else if (diff < -50) {
-                icon.innerHTML = '<i class="fas fa-arrow-down text-red-500"></i>';
-                msg.innerText = "Abaixo da média da equipe.";
-                msg.className = "text-sm font-bold text-red-600";
-            } else {
-                icon.innerHTML = '<i class="fas fa-equals text-blue-500"></i>';
-                msg.innerText = "Alinhado com a equipe.";
-                msg.className = "text-sm font-bold text-blue-600";
-            }
-
-            this.renderizarGrafico(mediaUser, mediaTeam);
-
-        } catch (e) { console.error(e); }
+        } catch (err) {
+            console.error("Erro comparativo:", err);
+        }
     },
 
-    renderizarGrafico: function(user, team) {
-        const ctx = document.getElementById('chart-comparativo').getContext('2d');
-        if (this.chartInstance) this.chartInstance.destroy();
+    renderizarGrafico: function(eu, media, melhor) {
+        const ctx = document.getElementById('graficoComparativo');
+        if (!ctx) return;
+        if (this.chart) this.chart.destroy();
 
-        this.chartInstance = new Chart(ctx, {
-            type: 'bar',
+        this.chart = new Chart(ctx, {
+            type: 'doughnut',
             data: {
-                labels: ['Você', 'Média Equipe'],
+                labels: ['Alvo', 'Média da Equipe', 'Gap'],
                 datasets: [{
-                    label: 'Produção Média',
-                    data: [user, team],
-                    backgroundColor: ['#3b82f6', '#cbd5e1'],
-                    borderRadius: 8,
-                    barThickness: 50
+                    data: [eu, media, Math.max(0, melhor - eu)],
+                    backgroundColor: ['#2563eb', '#94a3b8', '#f1f5f9'],
+                    borderWidth: 0,
+                    hoverOffset: 4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { y: { beginAtZero: true } }
+                cutout: '70%',
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
             }
         });
     }
