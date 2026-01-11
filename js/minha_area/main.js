@@ -4,20 +4,38 @@ const MinhaArea = {
     filtroPeriodo: 'mes',
 
     init: async function() {
-        console.log("Minha Área Iniciada");
+        console.log("Minha Área: Tentando iniciar...");
         
-        // 1. Aguarda conexão do Sistema (Tentativa de reconexão segura)
+        // 1. Aguarda conexão do Sistema (Até 5 segundos)
         let tentativas = 0;
-        while ((!window.Sistema || !window.Sistema.supabase) && tentativas < 20) {
-            await new Promise(r => setTimeout(r, 100));
+        // Espera enquanto Sistema não existe OU Supabase não conectou
+        while ((!window.Sistema || !window.Sistema.supabase) && tentativas < 50) {
+            await new Promise(r => setTimeout(r, 100)); // Espera 100ms
             tentativas++;
         }
 
         if (!window.Sistema || !window.Sistema.supabase) {
-            console.error("Erro: Sistema não inicializou corretamente.");
-            alert("Erro de conexão. Por favor, recarregue a página.");
+            console.error("Erro Crítico: Sistema timeout.", { sistema: window.Sistema });
+            
+            // Tenta recuperar se o Sistema existir mas o Supabase não
+            if (window.Sistema && !window.Sistema.supabase) {
+                console.warn("Minha Área: Tentando forçar inicialização do Sistema...");
+                await window.Sistema.inicializar(false);
+                if (window.Sistema.supabase) {
+                    console.log("Minha Área: Recuperado com sucesso!");
+                    return this.prosseguirInit();
+                }
+            }
+
+            document.body.innerHTML = '<div style="text-align:center; padding:50px; color:#ef4444;"><h3>Erro de Conexão</h3><p>Não foi possível conectar ao banco de dados.</p><button onclick="location.reload()" style="padding:10px 20px; cursor:pointer;">Tentar Novamente</button></div>';
             return;
         }
+
+        this.prosseguirInit();
+    },
+
+    prosseguirInit: async function() {
+        console.log("Minha Área: Sistema OK. Carregando interface...");
 
         const storedUser = localStorage.getItem('usuario_logado');
         if (!storedUser) {
@@ -26,13 +44,11 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
-        // 2. Popula Selects de Data (Isso precisa acontecer ANTES de qualquer busca)
+        // Popula Selects
         this.popularSeletoresIniciais();
-
-        // 3. Carrega Estado Salvo (Recupera filtro anterior se houver)
         this.carregarEstadoSalvo();
 
-        // 4. Configura Permissão Admin
+        // Admin
         if (this.isAdmin()) {
             const container = document.getElementById('admin-selector-container');
             if (container) container.classList.remove('hidden');
@@ -40,9 +56,8 @@ const MinhaArea = {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // 5. Inicia o ciclo de atualização
-        // Pequeno delay para garantir que o DOM dos selects esteja pronto
-        setTimeout(() => this.atualizarTudo(), 50);
+        // Inicia
+        setTimeout(() => this.atualizarTudo(), 100);
     },
 
     isAdmin: function() {
@@ -61,21 +76,14 @@ const MinhaArea = {
         if (!select) return false;
 
         const { inicio, fim } = this.getDatasFiltro();
-        
-        // Validação de Datas
-        if (!inicio || !fim || inicio.includes('NaN') || fim.includes('NaN')) {
-            console.error("Datas inválidas detectadas:", inicio, fim);
-            return false;
-        }
+        if (!inicio || !fim) return false;
 
         const idAnterior = this.usuarioAlvoId;
         
-        // Estado de Loading Visual
         select.innerHTML = `<option value="" disabled selected>🔄 Buscando...</option>`;
         select.disabled = true;
 
         try {
-            // 1. Busca IDs de quem produziu no período
             const { data: prodData, error: prodError } = await Sistema.supabase
                 .from('producao')
                 .select('usuario_id')
@@ -84,30 +92,27 @@ const MinhaArea = {
 
             if (prodError) throw prodError;
 
-            // Filtra IDs únicos e remove nulos
             const idsComProducao = [...new Set(prodData.map(item => item.usuario_id))].filter(id => id);
 
             if (idsComProducao.length === 0) {
                 select.innerHTML = `<option value="" disabled selected>⚠️ Sem dados no período</option>`;
                 select.disabled = false;
                 this.usuarioAlvoId = null; 
-                this.limparTelas(); // Limpa gráficos para não mostrar dados antigos
+                this.limparTelas();
                 return false;
             }
 
-            // 2. Busca nomes, excluindo Gestão/Auditoria
             const { data: users, error: userError } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, funcao')
                 .in('id', idsComProducao)
                 .neq('funcao', 'GESTORA')
                 .neq('funcao', 'AUDITORA')
-                .neq('perfil', 'admin') // Garante que admin não aparece
+                .neq('perfil', 'admin')
                 .order('nome');
 
             if (userError) throw userError;
 
-            // 3. Monta o HTML do Select
             let html = `<option value="" disabled ${!idAnterior ? 'selected' : ''}>👉 Selecionar Assistente...</option>`;
             let mantemSelecao = false;
 
@@ -120,13 +125,12 @@ const MinhaArea = {
             select.innerHTML = html;
             select.disabled = false;
 
-            // Se a pessoa selecionada anteriormente não está na lista nova, reseta
             if (mantemSelecao) {
                 this.usuarioAlvoId = parseInt(idAnterior);
                 return true;
             } else {
                 this.usuarioAlvoId = null;
-                this.limparTelas(); // Limpa a tela pois perdeu o alvo
+                this.limparTelas();
                 return false;
             }
 
@@ -139,8 +143,7 @@ const MinhaArea = {
     },
 
     limparTelas: function() {
-        // Função auxiliar para limpar dados visuais quando não há usuário selecionado
-        if (this.Geral) this.Geral.zerarKPIs();
+        if (this.Geral && this.Geral.zerarKPIs) this.Geral.zerarKPIs();
         const tbody = document.getElementById('tabela-extrato');
         if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma assistente</p></td></tr>';
     },
@@ -149,7 +152,6 @@ const MinhaArea = {
         if (!novoId) return;
         this.usuarioAlvoId = parseInt(novoId);
         
-        // Atualiza a aba ativa
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -157,9 +159,7 @@ const MinhaArea = {
         }
     },
 
-    getUsuarioAlvo: function() {
-        return this.usuarioAlvoId;
-    },
+    getUsuarioAlvo: function() { return this.usuarioAlvoId; },
 
     // --- DATAS E FILTROS ---
 
@@ -206,7 +206,6 @@ const MinhaArea = {
                 return;
             } catch(e) { console.error(e); }
         }
-        // Padrão
         this.mudarPeriodo('mes', false);
     },
 
@@ -243,8 +242,6 @@ const MinhaArea = {
     getDatasFiltro: function() {
         const anoEl = document.getElementById('sel-ano');
         const mesEl = document.getElementById('sel-mes');
-        
-        // Proteção contra elementos não carregados
         if (!anoEl || !mesEl) return { inicio: null, fim: null };
 
         const ano = parseInt(anoEl.value);
@@ -261,11 +258,9 @@ const MinhaArea = {
                 const diaInicio = (semanaIndex - 1) * 7 + 1;
                 let diaFim = diaInicio + 6;
                 const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
-                
                 if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
                 
                 if (diaInicio > ultimoDiaMes) {
-                    // Semana inexistente no mês (ex: dia 30 em Fev)
                     inicio = new Date(ano, mes, ultimoDiaMes);
                     fim = new Date(ano, mes, ultimoDiaMes);
                 } else {
@@ -294,20 +289,17 @@ const MinhaArea = {
             };
             
             return { inicio: fmt(inicio), fim: fmt(fim) };
-
         } catch (e) {
-            console.error("Erro ao calcular datas:", e);
+            console.error(e);
             return { inicio: null, fim: null };
         }
     },
 
     atualizarTudo: async function() {
-        // 1. Atualiza seletor se for admin
         if (this.isAdmin()) {
             await this.atualizarListaAssistentes();
         }
-
-        // 2. Atualiza aba
+        
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -318,19 +310,15 @@ const MinhaArea = {
     mudarAba: function(abaId) {
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
         const aba = document.getElementById(`ma-tab-${abaId}`);
         const btn = document.getElementById(`btn-ma-${abaId}`);
-        
         if(aba) aba.classList.remove('hidden');
         if(btn) btn.classList.add('active');
-
         this.carregarDadosAba(abaId);
     },
 
     carregarDadosAba: function(abaId) {
         if (this.isAdmin() && !this.usuarioAlvoId) return;
-
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
         if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
@@ -340,8 +328,6 @@ const MinhaArea = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Inicialização atrasada para garantir carregamento de libs
-    setTimeout(() => { 
-        if(typeof MinhaArea !== 'undefined') MinhaArea.init(); 
-    }, 100);
+    // Timeout maior para garantir carregamento de todas as bibliotecas
+    setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
 });
