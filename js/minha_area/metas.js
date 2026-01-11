@@ -2,14 +2,14 @@ MinhaArea.Metas = {
     chart: null,
 
     carregar: async function() {
-        // CORREÇÃO: Usa ID dinâmico
-        const uid = MinhaArea.getUsuarioAlvo();
+        const uid = MinhaArea.usuario ? MinhaArea.usuario.id : null;
         if (!uid) return;
 
         const { inicio } = MinhaArea.getDatasFiltro();
         const ano = new Date(inicio).getFullYear();
 
         try {
+            // 1. Busca Produção
             const { data: producoes } = await Sistema.supabase
                 .from('producao')
                 .select('data_referencia, quantidade')
@@ -17,22 +17,26 @@ MinhaArea.Metas = {
                 .gte('data_referencia', `${ano}-01-01`)
                 .lte('data_referencia', `${ano}-12-31`);
 
+            // 2. Busca Metas (CORREÇÃO: coluna 'meta')
             const { data: metas } = await Sistema.supabase
                 .from('metas')
-                .select('mes, meta')
+                .select('mes, meta') 
                 .eq('usuario_id', uid)
                 .eq('ano', ano);
 
+            // 3. Consolida Dados
             const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dadosProducao = new Array(12).fill(0);
             const dadosMeta = new Array(12).fill(650 * 22);
 
+            // Preenche Metas Reais (Usa m.meta)
             if (metas) {
                 metas.forEach(m => {
                     if(m.mes >= 1 && m.mes <= 12) dadosMeta[m.mes - 1] = m.meta;
                 });
             }
 
+            // Soma Produção
             if (producoes) {
                 producoes.forEach(p => {
                     const mes = new Date(p.data_referencia).getMonth();
@@ -50,6 +54,7 @@ MinhaArea.Metas = {
     renderizarGrafico: function(labels, prod, metas) {
         const ctx = document.getElementById('graficoEvolucao');
         if (!ctx) return;
+
         if (this.chart) this.chart.destroy();
 
         this.chart = new Chart(ctx, {
@@ -58,7 +63,7 @@ MinhaArea.Metas = {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'Produção',
+                        label: 'Minha Produção',
                         data: prod,
                         backgroundColor: '#2563eb',
                         borderRadius: 4,
@@ -81,6 +86,10 @@ MinhaArea.Metas = {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: { mode: 'index', intersect: false }
+                },
                 scales: {
                     y: { beginAtZero: true, grid: { color: '#f1f5f9' } },
                     x: { grid: { display: false } }
