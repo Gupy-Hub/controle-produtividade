@@ -3,214 +3,167 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Produtividade - Performance Pro</title>
-    
-    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
-        .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
-        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    </style>
+    <title>Painel de Produtividade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style> body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } </style>
 </head>
-<body class="bg-slate-100">
-    <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script> 
-    
-    <script src="js/menu/global.js"></script>
-    <div id="global-menu"></div>
-
-    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
-        <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
-            <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Validação</button>
-                <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-table"></i> Consolidado</button>
-                <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-trophy"></i> Performance</button>
-                <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-th"></i> Matriz</button>
-            </div>
-
-            <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-300 transition group cursor-pointer shadow-sm">
-                    <i class="fas fa-calendar-alt text-blue-500"></i>
-                    <input type="date" id="global-date" onchange="Produtividade.atualizarDataGlobal(this.value)" class="bg-transparent font-bold text-slate-700 outline-none text-sm cursor-pointer w-[115px]">
-                </div>
-
-                <div class="flex items-center gap-2 border-l border-slate-200 pl-4" id="top-bar-controls">
-                    
-                    <div id="ctrl-geral" class="flex items-center gap-3">
-                        <select id="view-mode" onchange="Produtividade.Geral.toggleSemana()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
-                            <option value="dia">Apenas o Dia</option>
-                            <option value="mes">Mês da Data</option>
-                            <option value="ano">Ano Inteiro</option>
-                            <option value="semana">Semana Específica</option>
-                        </select>
-                        <select id="select-semana" onchange="Produtividade.Geral.carregarTela()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option><option value="6">Semana 6</option>
-                        </select>
-                        <label class="inline-flex items-center cursor-pointer border-l border-slate-200 pl-3" title="Exibir Auditoras e Gestoras">
-                            <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()">
-                            <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
-                            <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Ver Gestão</span>
-                        </label>
-                    </div>
-
-                    <div id="ctrl-consolidado" class="hidden flex items-center gap-2">
-                         <select id="cons-period-type" onchange="Produtividade.Consolidado.togglePeriodo()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
-                            <option value="mes" selected>Mensal</option>
-                            <option value="dia">Diária</option>
-                            <option value="trimestre">Trimestral</option>
-                            <option value="semestre">Semestral</option>
-                            <option value="ano">Anual</option>
-                        </select>
-                        <select id="cons-select-quarter" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>
-                        </select>
-                        <select id="cons-select-semester" onchange="Produtividade.Consolidado.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Semestre</option><option value="2">2º Semestre</option>
-                        </select>
-                        <button onclick="Produtividade.Consolidado.exportarExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95"><i class="fas fa-file-export"></i> <span class="hidden lg:inline">Exportar</span></button>
-                    </div>
-
-                    <div id="ctrl-performance" class="hidden flex items-center gap-2">
-                        <select id="perf-period-type" onchange="Produtividade.Performance.togglePeriodo()" class="py-1.5 px-3 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 outline-none bg-white cursor-pointer hover:border-blue-300 transition shadow-sm">
-                            <option value="mes">Mensal</option>
-                            <option value="trimestre">Trimestral</option>
-                            <option value="semestre">Semestral</option>
-                            <option value="ano">Anual</option>
-                        </select>
-                        <select id="perf-select-quarter" onchange="Produtividade.Performance.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Trimestre</option><option value="2">2º Trimestre</option><option value="3">3º Trimestre</option><option value="4">4º Trimestre</option>
-                        </select>
-                        <select id="perf-select-semester" onchange="Produtividade.Performance.carregar()" class="hidden py-1.5 px-3 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold outline-none cursor-pointer">
-                            <option value="1">1º Semestre</option><option value="2">2º Semestre</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="flex items-center gap-2 border-l border-slate-200 pl-4">
-                    <input type="file" id="input-excel" accept=".csv" multiple class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar"><i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span></button>
-                    <button onclick="Produtividade.Importacao.Validacao.limparBancoCompleto()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Resetar"><i class="fas fa-skull"></i> <span class="hidden sm:inline">Resetar</span></button>
-                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir"><i class="fas fa-trash-alt"></i></button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-28">
-        
-        <div id="tab-geral" class="view-section animate-fade-in space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Produção</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3><span class="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">Meta: --</span></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Atingimento</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-1"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Equipe</p><div class="space-y-1"><div class="flex justify-between items-center text-[9px]"><span class="font-bold text-slate-500">CLT</span><span class="font-bold text-blue-600" id="kpi-clt-val">0</span></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div><div class="flex justify-between items-center text-[9px]"><span class="font-bold text-slate-500">PJ</span><span class="font-bold text-purple-600" id="kpi-pj-val">0</span></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Dias Úteis</p><div class="flex items-center gap-2"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias-val">--</h3></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Média / Dia</p><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-media-todas">--</h3></div>
-            </div>
-            
-            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
-                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-2 py-3 text-center w-24 bg-slate-50"><div class="flex flex-col items-center gap-1"><span>Fator</span><select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[9px] bg-white border border-slate-300 rounded px-1 py-0.5 font-bold text-slate-700 outline-none cursor-pointer"><option value="">Aplicar...</option><option value="1">Todos 100%</option><option value="0.5">Todos 50%</option><option value="0">Todos Abonar</option></select></div></th>
-                                <th class="px-3 py-3 w-[25%]">Assistente</th><th class="px-2 py-3 text-center w-[6%]">Dias</th><th class="px-2 py-3 text-center w-[7%]">FIFO</th><th class="px-2 py-3 text-center w-[7%]">G. Total</th><th class="px-2 py-3 text-center w-[7%]">G. Parcial</th><th class="px-2 py-3 text-center w-[7%] bg-slate-100">Meta</th><th class="px-2 py-3 text-center w-[7%] bg-slate-100">Meta Período</th><th class="px-2 py-3 text-center w-[8%] text-blue-700">Produção</th><th class="px-2 py-3 text-center w-[8%]">% Ating.</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-corpo" class="divide-y divide-slate-200 bg-white"></tbody>
-                    </table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">0</span></span></div>
-            </div>
-        </div>
-
-        <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-4">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead id="cons-table-header" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm"></thead>
-                        <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white"></tbody>
-                    </table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-layer-group mr-1"></i> Visão Agrupada por Período</span><span>Total Assistentes: <span id="total-consolidado-footer">0</span></span></div>
-            </div>
-        </div>
-
-        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
-                <div class="col-span-8 flex flex-col gap-4">
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
-                        <div>
-                            <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3>
-                            <p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p>
-                        </div>
-                        <button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]">
-                        <canvas id="evolutionChart"></canvas>
-                    </div>
-                </div>
-                <div class="col-span-4 flex flex-col gap-4">
-                    <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-start gap-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i><p class="text-xs text-blue-800">Clique em uma assistente abaixo para ver a <strong>evolução individual</strong>.</p></div>
-                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
-                        <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center"><span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Ranking de Produção</span><i class="fas fa-filter text-slate-300"></i></div>
-                        <div class="overflow-y-auto custom-scrollbar flex-1 p-2" id="ranking-list-container"><div class="text-center text-slate-400 py-10 text-xs">Carregando...</div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-xs text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-center border-b-2 border-slate-200">
-                            <tr>
-                                <th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[200px]">Assistente</th>
-                                <th class="px-3 py-4 min-w-[70px]">Jan</th><th class="px-3 py-4 min-w-[70px]">Fev</th><th class="px-3 py-4 min-w-[70px]">Mar</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">1º Tri</th>
-                                <th class="px-3 py-4 min-w-[70px]">Abr</th><th class="px-3 py-4 min-w-[70px]">Mai</th><th class="px-3 py-4 min-w-[70px]">Jun</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">2º Tri</th>
-                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">1º Sem</th>
-                                <th class="px-3 py-4 min-w-[70px]">Jul</th><th class="px-3 py-4 min-w-[70px]">Ago</th><th class="px-3 py-4 min-w-[70px]">Set</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">3º Tri</th>
-                                <th class="px-3 py-4 min-w-[70px]">Out</th><th class="px-3 py-4 min-w-[70px]">Nov</th><th class="px-3 py-4 min-w-[70px]">Dez</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">4º Tri</th>
-                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">2º Sem</th>
-                                <th class="px-4 py-4 bg-slate-100 text-slate-800 font-black min-w-[100px]">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody id="matriz-body" class="divide-y divide-slate-100 bg-white"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="js/produtividade/main.js"></script>
-    <script src="js/produtividade/geral.js"></script>
-    <script src="js/produtividade/consolidado.js"></script>
-    <script src="js/produtividade/performance.js"></script>
-    <script src="js/produtividade/matriz.js"></script>
-    <script src="js/produtividade/importacao/validacao.js"></script>
+<body class="text-slate-800">
     <script>
-        Produtividade.atualizarTodasAbas = function() {
-            if(Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) Produtividade.Geral.renderizarTabela();
-            if(Produtividade.Consolidado && !document.getElementById('tab-consolidado').classList.contains('hidden')) Produtividade.Consolidado.renderizar(Produtividade.Consolidado.dadosCalculados);
-            if(Produtividade.Performance && !document.getElementById('tab-performance').classList.contains('hidden')) Produtividade.Performance.carregar();
-            if(Produtividade.Matriz && !document.getElementById('tab-matriz').classList.contains('hidden')) Produtividade.Matriz.carregar();
+        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
+        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
+
+        function renderNavbar() {
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) { window.location.href = 'index.html'; return; }
+            const navbarHTML = `
+            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
+                    <div class="flex flex-col leading-tight"><span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span><span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span></div>
+                </div>
+                <div class="hidden md:flex items-center gap-1 h-full">
+                    ${createNavLink('Gestão', 'gestao.html')}
+                    ${createNavLink('Produtividade', 'produtividade.html')}
+                    ${createNavLink('Performance', 'performance.html')}
+                    ${createNavLink('Consolidado', 'consolidado.html')}
+                    ${createNavLink('Minha Área', 'minha_area.html')}
+                    ${createNavLink('Ferramentas', 'ferramentas.html')}
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right hidden sm:block"><span class="block text-sm font-bold text-white">${usuario.nome}</span><span class="block text-xs text-slate-400">${usuario.funcao}</span></div>
+                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
+                </div>
+            </nav><div class="h-20"></div>`;
+            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
+        }
+        function createNavLink(label, linkUrl) {
+            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+        }
+        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
+        renderNavbar();
+    </script>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 mb-8 flex flex-wrap gap-4 items-center justify-between">
+            <div class="flex items-center gap-3"><div class="p-2 bg-blue-100 text-blue-700 rounded-lg"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg></div><h1 class="text-xl font-bold text-slate-800">Controle de Produção</h1></div>
+            <div class="flex flex-wrap gap-3 items-center">
+                <select id="view-selector" onchange="ajustarSeletores()" class="bg-slate-50 border border-slate-300 text-slate-700 text-sm rounded-lg focus:ring-blue-500 p-2.5 font-medium">
+                    <option value="dia">📅 Dia Específico</option><option value="semana">📅 Por Semana</option><option value="mes">📊 Mês Completo</option>
+                </select>
+                <input type="date" id="select-dia" onchange="carregarDados()" class="bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                <input type="month" id="select-mes" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                <select id="select-semana" onchange="carregarDados()" class="hidden bg-white border border-slate-300 text-slate-700 text-sm rounded-lg p-2.5">
+                    <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
+                </select>
+                <input type="file" id="excel-files" accept=".xlsx" multiple class="hidden" onchange="importarArquivos()">
+                <button id="btn-import" onclick="document.getElementById('excel-files').click()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg text-sm px-4 py-2.5 transition shadow-sm cursor-pointer">📂 Importar Excel</button>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Produção Total</p><p class="text-3xl font-extrabold text-blue-700" id="p-total">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Média do Time</p><p class="text-3xl font-extrabold text-slate-800" id="p-media">0</p></div>
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200"><p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Assistentes Ativos</p><p class="text-3xl font-extrabold text-slate-800" id="p-headcount">0</p></div>
+        </div>
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center"><h3 class="font-bold text-slate-700">Detalhamento por Assistente</h3><span id="panel-titulo" class="text-sm font-medium text-slate-500">Carregando...</span></div>
+            <div class="overflow-x-auto"><table class="w-full text-sm text-left text-slate-600"><thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200"><tr><th class="px-6 py-3">Assistente</th><th class="px-6 py-3 text-center text-blue-700 font-bold">Produção</th><th class="px-6 py-3 text-center">FIFO</th><th class="px-6 py-3 text-center">G. Total</th><th class="px-6 py-3 text-center">G. Parcial</th><th class="px-6 py-3 text-center">Meta</th><th class="px-6 py-3 text-center">Status</th></tr></thead><tbody id="tabela-corpo" class="divide-y divide-slate-100"></tbody></table></div>
+        </div>
+    </div>
+
+    <script>
+        let dadosGlobais = [], metasGlobais = [];
+        document.addEventListener('DOMContentLoaded', () => {
+            const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+            document.getElementById('select-dia').value = ontem.toISOString().split('T')[0];
+            document.getElementById('select-mes').value = ontem.toISOString().substring(0, 7);
+            ajustarSeletores(); 
+        });
+        function ajustarSeletores() {
+            const view = document.getElementById('view-selector').value;
+            const d = document.getElementById('select-dia'), m = document.getElementById('select-mes'), s = document.getElementById('select-semana');
+            d.classList.add('hidden'); m.classList.add('hidden'); s.classList.add('hidden');
+            if (view === 'dia') d.classList.remove('hidden');
+            else if (view === 'semana') { m.classList.remove('hidden'); s.classList.remove('hidden'); if(d.value && !m.value) m.value = d.value.substring(0, 7); }
+            else { m.classList.remove('hidden'); if(d.value && !m.value) m.value = d.value.substring(0, 7); }
+            carregarDados();
+        }
+        function getWeek(dateString) { const date = new Date(dateString + 'T12:00:00'); const firstDay = new Date(date.getFullYear(), date.getMonth(), 1).getDay(); return Math.ceil((date.getDate() + firstDay) / 7); }
+        async function carregarDados() {
+            const view = document.getElementById('view-selector').value;
+            let dataInicio, dataFim, titulo, semanaSel;
+            if (view === 'dia') {
+                const dia = document.getElementById('select-dia').value; if(!dia) return;
+                dataInicio = dia; dataFim = dia; titulo = `Visão do Dia: ${dia.split('-').reverse().join('/')}`;
+            } else {
+                const mes = document.getElementById('select-mes').value; if(!mes) return;
+                dataInicio = `${mes}-01`; const [ano, m] = mes.split('-'); const ultimoDia = new Date(ano, m, 0).getDate(); dataFim = `${mes}-${ultimoDia}`;
+                if (view === 'semana') { semanaSel = parseInt(document.getElementById('select-semana').value); titulo = `Visão: Semana ${semanaSel} de ${mes.split('-').reverse().join('/')}`; }
+                else { titulo = `Visão Mensal: ${mes}`; }
+            }
+            document.getElementById('panel-titulo').innerText = "Carregando..."; document.getElementById('tabela-corpo').innerHTML = '<tr><td colspan="7" class="text-center py-8">Carregando dados...</td></tr>';
+            try {
+                const { data: p, error: eP } = await _supabase.from('producao').select('*, usuarios(*)').gte('data_referencia', dataInicio).lte('data_referencia', dataFim);
+                if (eP) throw eP;
+                const { data: m, error: eM } = await _supabase.from('metas').select('*'); if (eM) throw eM;
+                dadosGlobais = p || []; metasGlobais = m || [];
+                if (view === 'semana') dadosGlobais = dadosGlobais.filter(d => getWeek(d.data_referencia) === semanaSel);
+                renderizarTabela(titulo);
+            } catch (err) { console.error(err); alert("Erro ao carregar dados."); }
+        }
+        function renderizarTabela(titulo) {
+            document.getElementById('panel-titulo').innerText = titulo;
+            let stats = {};
+            dadosGlobais.forEach(item => {
+                if (!item.usuarios || item.usuarios.funcao !== 'Assistente') return;
+                const uid = item.usuario_id;
+                // CORREÇÃO: Usar APENAS a quantidade do sistema
+                const qtdTotal = (item.quantidade || 0); 
+
+                if (!stats[uid]) stats[uid] = { id: uid, nome: item.usuarios.nome, total: 0, fifo: 0, gt: 0, gp: 0, dias: new Set() };
+                stats[uid].total += qtdTotal;
+                stats[uid].fifo += (item.fifo || 0);
+                stats[uid].gt += (item.gradual_total || 0);
+                stats[uid].gp += (item.gradual_parcial || 0);
+                stats[uid].dias.add(item.data_referencia);
+            });
+            const lista = Object.values(stats).sort((a, b) => b.total - a.total);
+            const total = lista.reduce((a, b) => a + b.total, 0);
+            document.getElementById('p-total').innerText = total.toLocaleString();
+            document.getElementById('p-media').innerText = lista.length ? Math.round(total / lista.length).toLocaleString() : 0;
+            document.getElementById('p-headcount').innerText = lista.length;
+            const tbody = document.getElementById('tabela-corpo');
+            if (!lista.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-500">Nenhum registro encontrado.</td></tr>'; return; }
+            let html = '';
+            lista.forEach(u => {
+                const diasTrab = u.dias.size || 1; const meta = 650 * diasTrab; const atingiu = u.total >= meta; const badge = atingiu ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+                html += `<tr class="hover:bg-slate-50 transition border-b border-slate-100"><td class="px-6 py-4 font-medium text-slate-900">${u.nome}</td><td class="px-6 py-4 text-center font-bold text-blue-700">${u.total.toLocaleString()}</td><td class="px-6 py-4 text-center">${u.fifo}</td><td class="px-6 py-4 text-center">${u.gt}</td><td class="px-6 py-4 text-center">${u.gp}</td><td class="px-6 py-4 text-center text-slate-400">${meta.toLocaleString()}</td><td class="px-6 py-4 text-center"><span class="${badge} text-xs font-bold px-2 py-1 rounded-full">${atingiu ? 'Atingida' : 'Abaixo'}</span></td></tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+        async function importarArquivos() {
+            const files = document.getElementById('excel-files').files; if (files.length === 0) return;
+            const btn = document.getElementById('btn-import'); const originalText = btn.innerHTML; btn.innerHTML = '⏳ Processando...'; btn.disabled = true;
+            let log = { ok: 0, dup: 0, err: 0 };
+            for (let f of files) {
+                try {
+                    const name = f.name.replace('.xlsx', ''); if (!/^\d{8}$/.test(name)) { log.err++; continue; }
+                    const dataRef = `${name.substring(0, 4)}-${name.substring(4, 6)}-${name.substring(6, 8)}`;
+                    const buffer = await f.arrayBuffer(); const wb = XLSX.read(buffer, { type: 'array' }); const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+                    for (let row of json) {
+                        if (!row.id_assistente) continue;
+                        const { data: exists } = await _supabase.from('producao').select('id').eq('usuario_id', row.id_assistente).eq('data_referencia', dataRef).maybeSingle();
+                        if (exists) { log.dup++; } else {
+                            await _supabase.from('producao').insert({ usuario_id: row.id_assistente, data_referencia: dataRef, fifo: row.documentos_validados_fifo || 0, gradual_total: row.documentos_validados_gradual_total || 0, gradual_parcial: row.documentos_validados_gradual_parcial || 0, perfil_fc: row.documentos_validados_perfil_fc || 0, quantidade: row.documentos_validados || 0 }); log.ok++;
+                        }
+                    }
+                } catch (e) { console.error(e); log.err++; }
+            }
+            alert(`Fim da Importação!\n✅ Sucesso: ${log.ok}\n⚠️ Duplicados: ${log.dup}\n❌ Erros: ${log.err}`);
+            btn.innerHTML = originalText; btn.disabled = false; document.getElementById('excel-files').value = ""; carregarDados();
         }
     </script>
 </body>

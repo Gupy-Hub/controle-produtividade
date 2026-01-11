@@ -3,171 +3,353 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Área - Performance Pro</title>
+    <title>Minha Área</title>
     
-    <script src="https://cdn.tailwindcss.com/3.4.1"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.3/dist/umd/supabase.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-0.18.5/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
-        .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
-        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        .animate-enter { animation: enter 0.3s ease-out; }
-        @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; } 
+        /* Inputs Personalizados */
+        .input-manual { text-align: center; font-weight: 600; transition: all 0.2s; }
+        .input-manual:focus { ring: 2px; ring-color: #2563eb; outline: none; background: white; }
+        .bg-lock { background-color: #f1f5f9; color: #94a3b8; cursor: not-allowed; }
     </style>
 </head>
-<body class="bg-slate-50">
-    <script src="js/config.js"></script>
-    <script src="js/sistema.js"></script> 
-    
-    <script src="js/menu/global.js"></script>
-    <div id="global-menu"></div>
+<body class="text-slate-800">
 
-    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
-        <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
-            
-            <div class="flex gap-1 overflow-x-auto no-scrollbar">
-                <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-calendar-day"></i> Dia a Dia
-                </button>
-                <button onclick="MinhaArea.mudarAba('metas')" id="btn-ma-metas" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-bullseye"></i> Meta/OKR
-                </button>
-                <button onclick="MinhaArea.mudarAba('assertividade')" id="btn-ma-assertividade" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-clipboard-check"></i> Assertividade
-                </button>
-                <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-chart-line"></i> Comparativo
-                </button>
-                <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap">
-                    <i class="fas fa-comments"></i> Feedback
-                </button>
-            </div>
+    <script>
+        const SB_URL = "https://glqrpsyjwozvislyxapj.supabase.co";
+        const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdscXJwc3lqd296dmlzbHl4YXBqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTQyOTgsImV4cCI6MjA4MTgzMDI5OH0.etzcmIHgPcGC12HwZPTU2u0DLtJdF3XTBSYW38O7S-w";
+        const _supabase = window.supabase ? window.supabase.createClient(SB_URL, SB_KEY) : null;
 
-            <div class="flex items-center gap-4">
-                <div id="admin-selector-container" class="hidden flex items-center gap-2 border-r border-slate-200 pr-4 mr-2">
-                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-1.5 outline-none cursor-pointer w-40 truncate"></select>
-                </div>
-                <div class="flex items-center gap-2">
-                    <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                        <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
-                        <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Semana</button>
-                        <button onclick="MinhaArea.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Ano</button>
-                    </div>
-                    <div class="w-px h-6 bg-slate-200 mx-1"></div>
-                    <div class="flex gap-2">
-                        <select id="sel-ano" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500"></select>
-                        <select id="sel-mes" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">
-                            <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option><option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option><option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option><option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
-                        </select>
-                        <select id="sel-semana" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500">
-                            <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
-                        </select>
-                        <select id="sel-subperiodo-ano" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-purple-500">
-                            <option value="full">Ano Completo</option>
-                            <optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup>
-                            <optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup>
-                        </select>
+        function renderNavbar() {
+            const usuario = JSON.parse(localStorage.getItem('usuario'));
+            if (!usuario) { window.location.href = 'index.html'; return; }
+
+            const navbarHTML = `
+            <nav class="bg-slate-900 text-white fixed top-0 left-0 w-full z-50 shadow-lg h-16 flex items-center justify-between px-6">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="window.location.href='produtividade.html'">
+                    <div class="flex flex-col leading-tight">
+                        <span class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Controle de</span>
+                        <span class="text-xl font-extrabold tracking-tighter text-white">PRODUTIVIDADE</span>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
+                <div class="hidden md:flex items-center gap-1 h-full">
+                    ${createNavLink('Gestão', 'gestao.html')}
+                    ${createNavLink('Produtividade', 'produtividade.html')}
+                    ${createNavLink('Performance', 'performance.html')}
+                    ${createNavLink('Consolidado', 'consolidado.html')}
+                    ${createNavLink('Minha Área', 'minha_area.html')}
+                    ${createNavLink('Ferramentas', 'ferramentas.html')}
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right hidden sm:block">
+                        <span class="block text-sm font-bold text-white">${usuario.nome}</span>
+                        <span class="block text-xs text-slate-400">${usuario.funcao}</span>
+                    </div>
+                    <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-semibold border border-red-900/50 bg-red-900/10 px-3 py-1 rounded transition">Sair</button>
+                </div>
+            </nav>
+            <div class="h-20"></div>`;
+            document.body.insertAdjacentHTML('afterbegin', navbarHTML);
+        }
+        function createNavLink(label, linkUrl) {
+            const activeClass = window.location.href.includes(linkUrl) ? "bg-blue-700 text-white shadow-md" : "text-slate-300 hover:bg-slate-800 hover:text-white";
+            return `<a href="${linkUrl}" class="${activeClass} px-4 py-2 rounded-lg text-sm font-medium transition duration-200">${label}</a>`;
+        }
+        function logout() { localStorage.removeItem('usuario'); window.location.href = 'index.html'; }
+        renderNavbar();
+    </script>
 
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
-        <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20"><div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Úteis</span><h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-dias-uteis">--</h3></div><div class="flex-1 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Prod.</span><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias">--</h3></div></div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20"><div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Meta</span><h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-acumulada">--</h3></div><div class="flex-1 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Produção</span><h3 class="text-xl font-black text-blue-600 leading-none" id="kpi-total">--</h3></div></div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20"><div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Ideal</span><h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-dia">--</h3></div><div class="flex-1 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Sua Média</span><h3 class="text-xl font-black text-indigo-600 leading-none" id="kpi-media">--</h3></div></div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20"><div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</span><h3 class="text-xs font-black text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 uppercase" id="kpi-status">Análise</h3></div><div class="flex-1 p-2 flex flex-col justify-center items-center relative"><span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Atingimento</span><h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3><div class="absolute bottom-0 left-0 w-full h-1 bg-slate-100"><div id="bar-progress" class="h-full bg-emerald-500" style="width: 0%"></div></div></div></div>
+        <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-800 flex items-center gap-2">
+                    Minha Área <span id="welcome-name" class="text-blue-600"></span>
+                </h1>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse"><thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm"><tr class="divide-x divide-slate-200 border-b border-slate-300"><th class="px-3 py-3 w-[12%] text-left">Data</th><th class="px-2 py-3 w-[8%] text-center">Fator</th><th class="px-2 py-3 w-[8%] text-center">FIFO</th><th class="px-2 py-3 w-[8%] text-center">G. Total</th><th class="px-2 py-3 w-[8%] text-center">G. Parcial</th><th class="px-2 py-3 w-[10%] text-center bg-blue-50/50 text-blue-700 border-x border-blue-100">Produção</th><th class="px-2 py-3 w-[10%] text-center">Meta Dia</th><th class="px-2 py-3 w-[8%] text-center">% Ating.</th><th class="px-3 py-3 text-left">Justificativa / Obs</th></tr></thead><tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody></table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">0</span></span></div>
-            </div>
-        </div>
-
-        <div id="ma-tab-assertividade" class="ma-view hidden animate-enter space-y-4">
             
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-2">
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total Auditado</span>
-                        <h3 class="text-xl font-bold text-slate-600 leading-none" id="kpi-audit-total">--</h3>
-                    </div>
-                    <div class="flex-1 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Total NOK</span>
-                        <h3 class="text-xl font-black text-rose-600 leading-none" id="kpi-audit-nok">--</h3>
-                    </div>
+            <div class="flex flex-wrap gap-3 bg-white p-2 rounded-lg border border-slate-200 shadow-sm">
+                
+                <div id="manager-control" class="hidden border-r border-slate-200 pr-3 mr-1">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Visão Gestora</label>
+                    <select id="user-selector" onchange="carregarDados()" class="text-sm font-bold text-blue-700 bg-transparent outline-none cursor-pointer"></select>
                 </div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Assertividade</span>
-                        <h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-audit-pct">--%</h3>
-                    </div>
-                    <div class="flex-1 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Erro x Prod.</span>
-                        <h3 class="text-xl font-black text-purple-600 leading-none" id="kpi-audit-impacto">--%</h3>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-3 flex items-center justify-between col-span-2">
-                    <div class="flex flex-col">
-                        <span class="text-xs font-bold text-slate-700">Índice de Qualidade</span>
-                        <span class="text-[10px] text-slate-400">Relação entre acertos e erros no período.</span>
-                    </div>
-                    <div class="w-1/2 bg-slate-100 h-2 rounded-full overflow-hidden">
-                        <div id="bar-audit-progress" class="h-full bg-emerald-500 rounded-full transition-all duration-500" style="width: 0%"></div>
-                    </div>
-                </div>
-            </div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
-                <div class="px-4 py-2 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
-                    <h3 class="text-xs font-bold text-slate-700 uppercase flex items-center gap-2"><i class="fas fa-list text-blue-500"></i> Detalhamento de Auditoria</h3>
-                    <span class="text-[10px] text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded">Listando todos os documentos auditados</span>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Ano</label>
+                    <select id="year-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none"></select>
                 </div>
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
-                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-3 py-3 w-[15%] text-left">Data</th>
-                                <th class="px-3 py-3 w-[30%] text-left">Documento</th>
-                                <th class="px-2 py-3 w-[10%] text-center">Status</th>
-                                <th class="px-3 py-3 w-[45%] text-left">Obs / Apontamento</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-audit" class="divide-y divide-slate-200 bg-white"></tbody>
-                    </table>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase">Mês</label>
+                    <select id="month-selector" onchange="carregarDados()" class="text-sm font-bold bg-transparent outline-none text-slate-700 w-24"></select>
                 </div>
             </div>
         </div>
 
-        <div id="ma-tab-metas" class="ma-view hidden animate-enter"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]"><h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Anual</h3><div class="h-[400px] w-full"><canvas id="graficoEvolucao"></canvas></div></div></div>
-        <div id="ma-tab-comparativo" class="ma-view hidden animate-enter"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]"><h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-users text-blue-500"></i> Comparativo no Período</h3><div class="h-[400px] w-full"><canvas id="graficoComparativo"></canvas></div></div></div>
-        <div id="ma-tab-feedback" class="ma-view hidden animate-enter space-y-4"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center min-h-[400px]"><div class="text-center"><div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-50 text-purple-500 mb-4"><i class="fas fa-comments text-2xl"></i></div><h3 class="text-lg font-bold text-slate-700">Meus Feedbacks</h3><p class="text-sm text-slate-500 mt-2">Histórico de feedbacks recebidos da gestão e planos de ação.</p><div id="feedback-content" class="mt-8 w-full"></div></div></div></div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Sistema (Automático)</p>
+                <p class="text-3xl font-extrabold text-blue-700" id="kpi-sys">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-1">Manual (Ajustes)</p>
+                <p class="text-3xl font-extrabold text-amber-600" id="kpi-man">0</p>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-xs font-bold text-slate-400 uppercase mb-1">% Meta Atingida (Dias)</p>
+                <p class="text-3xl font-extrabold text-emerald-600" id="kpi-hit">0%</p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 mb-8 h-80 relative">
+            <canvas id="productionChart"></canvas>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                <h3 class="font-bold text-slate-700">Diário de Produção</h3>
+                <span class="text-xs text-slate-400 flex items-center gap-1">🔒 = Validado pela Gestão</span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm text-left text-slate-600">
+                    <thead class="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                        <tr>
+                            <th class="px-4 py-3 text-center">Data</th>
+                            <th class="px-4 py-3 text-center text-blue-700">Sis</th>
+                            <th class="px-4 py-3 text-center text-amber-600">Manual</th>
+                            <th class="px-4 py-3 text-center">Meta</th>
+                            <th class="px-4 py-3 text-center">Status</th>
+                            <th class="px-4 py-3 w-1/4">Anotações (Assistente)</th>
+                            <th class="px-4 py-3 w-1/4 text-blue-800">Feedback (Gestão)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="log-body" class="divide-y divide-slate-100"></tbody>
+                </table>
+            </div>
+        </div>
+
     </div>
 
-    <script src="js/minha_area/main.js"></script>
-    <script src="js/minha_area/geral.js"></script>
-    <script src="js/minha_area/metas.js"></script>
-    <script src="js/minha_area/assertividade.js"></script>
-    <script src="js/minha_area/auditoria.js"></script>
-    <script src="js/minha_area/comparativo.js"></script>
-    <script src="js/minha_area/feedback.js"></script>
+    <script>
+        const sessao = JSON.parse(localStorage.getItem('usuario'));
+        const isMgr = sessao.funcao === 'Gestora';
+        let chartInstance = null;
+        let currentUserTarget = sessao.id;
+
+        document.addEventListener('DOMContentLoaded', init);
+
+        async function init() {
+            document.getElementById('welcome-name').innerText = isMgr ? "(Visão Geral)" : `Olá, ${sessao.nome.split(' ')[0]}`;
+
+            const cy = new Date().getFullYear();
+            const ys = document.getElementById('year-selector');
+            const ms = document.getElementById('month-selector');
+            
+            for(let y=cy; y>=2024; y--) ys.innerHTML += `<option value="${y}">${y}</option>`;
+            ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'].forEach((m, i) => {
+                ms.innerHTML += `<option value="${i+1}" ${i === new Date().getMonth() ? 'selected' : ''}>${m}</option>`;
+            });
+
+            if (isMgr) {
+                document.getElementById('manager-control').classList.remove('hidden');
+                const { data } = await _supabase.from('usuarios').select('*').eq('funcao', 'Assistente').order('nome');
+                const us = document.getElementById('user-selector');
+                if(data && data.length) {
+                    data.forEach(u => us.innerHTML += `<option value="${u.id}">${u.nome}</option>`);
+                    currentUserTarget = data[0].id;
+                }
+            }
+            carregarDados();
+        }
+
+        async function carregarDados() {
+            if (isMgr) currentUserTarget = document.getElementById('user-selector').value;
+
+            const ano = document.getElementById('year-selector').value;
+            const mes = document.getElementById('month-selector').value;
+            
+            const startStr = `${ano}-${mes.toString().padStart(2,'0')}-01`;
+            const endObj = new Date(ano, mes, 0);
+            const endStr = `${ano}-${mes.toString().padStart(2,'0')}-${endObj.getDate()}`;
+
+            document.getElementById('log-body').innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Carregando dados...</td></tr>';
+
+            try {
+                const { data: prods } = await _supabase.from('producao')
+                    .select('*')
+                    .eq('usuario_id', currentUserTarget)
+                    .gte('data_referencia', startStr)
+                    .lte('data_referencia', endStr)
+                    .order('data_referencia');
+
+                const { data: metas } = await _supabase.from('metas')
+                    .select('*')
+                    .eq('usuario_id', currentUserTarget)
+                    .order('data_inicio', { ascending: false });
+                
+                const metaVigente = metas.find(m => m.data_inicio <= endStr)?.valor_meta || 650;
+
+                renderizarTela(prods || [], metaVigente, startStr, endStr);
+
+            } catch (err) { console.error(err); alert("Erro ao carregar dados."); }
+        }
+
+        function renderizarTela(dados, meta, sDate, eDate) {
+            const map = {};
+            dados.forEach(d => map[d.data_referencia] = d);
+
+            let html = '';
+            let s = new Date(sDate + 'T12:00:00');
+            let e = new Date(eDate + 'T12:00:00');
+            
+            let totalSys = 0, totalMan = 0, diasMeta = 0, diasUteis = 0;
+            let labels = [], dataSys = [], dataMeta = [];
+
+            for (let dt = new Date(s); dt <= e; dt.setDate(dt.getDate() + 1)) {
+                const diaStr = dt.toISOString().split('T')[0];
+                const diaSemana = dt.getDay();
+                const isFds = diaSemana === 0 || diaSemana === 6;
+                const row = map[diaStr] || {};
+                
+                // Converte para Número para garantir soma correta
+                const qSys = Number(row.quantidade) || 0;
+                const qMan = row.quantidade_manual !== null ? Number(row.quantidade_manual) : null;
+                const qManVal = qMan || 0;
+                
+                const obs = row.observacao || '';
+                const feed = row.observacao_gestora || '';
+                
+                if (!isFds || qSys > 0) {
+                    labels.push(dt.getDate());
+                    // No gráfico, mostramos a soma para o usuário visualizar seu desempenho total
+                    dataSys.push(qSys + qManVal);
+                    dataMeta.push(meta);
+                    diasUteis++;
+                    if ((qSys + qManVal) >= meta) diasMeta++;
+                }
+                
+                totalSys += qSys;
+                if (qMan !== null) totalMan += qMan;
+
+                const isLocked = !isMgr && (feed && feed.trim() !== '');
+                const lockClass = isLocked ? 'bg-lock' : 'bg-white';
+                const lockIcon = isLocked ? '🔒' : '';
+                const disableMan = isMgr || isLocked ? 'disabled' : '';
+                const disableObs = isMgr || isLocked ? 'disabled' : '';
+                const disableFeed = !isMgr ? 'disabled' : '';
+                
+                const valMan = (qMan !== null) ? qMan : '';
+                const statusBadge = (qSys + qManVal) >= meta 
+                    ? '<span class="bg-emerald-100 text-emerald-700 text-xs font-bold px-2 py-1 rounded-full">Sim</span>' 
+                    : '<span class="bg-rose-100 text-rose-700 text-xs font-bold px-2 py-1 rounded-full">Não</span>';
+                
+                const rowClass = isFds ? 'bg-slate-50' : 'hover:bg-slate-50';
+
+                html += `
+                <tr class="${rowClass} transition border-b border-slate-100">
+                    <td class="px-2 py-3 text-center font-medium text-slate-500">${diaStr.split('-').reverse().join('/').substring(0,5)}</td>
+                    <td class="px-2 py-3 text-center font-bold text-blue-700">${qSys || '-'}</td>
+                    <td class="px-2 py-3 text-center">
+                        <input type="number" value="${valMan}" 
+                            class="input-manual w-16 p-1 border border-slate-200 rounded text-amber-600 ${lockClass}"
+                            placeholder="-" 
+                            onchange="salvar(this, '${diaStr}', 'quantidade_manual')" ${disableMan}>
+                    </td>
+                    <td class="px-2 py-3 text-center text-slate-400 text-xs">${meta}</td>
+                    <td class="px-2 py-3 text-center">${(qSys||valMan)?statusBadge:'-'}</td>
+                    <td class="px-2 py-3">
+                        <div class="flex items-center gap-2">
+                            <input type="text" value="${obs}" 
+                                class="w-full text-xs p-1 border border-slate-200 rounded ${lockClass}"
+                                placeholder="..." 
+                                onchange="salvar(this, '${diaStr}', 'observacao')" ${disableObs}>
+                            ${lockIcon}
+                        </div>
+                    </td>
+                    <td class="px-2 py-3">
+                        <input type="text" value="${feed}" 
+                            class="w-full text-xs p-1 border border-amber-100 bg-amber-50 rounded text-blue-800 font-medium"
+                            placeholder="${isMgr ? 'Escreva feedback...' : ''}" 
+                            onchange="salvar(this, '${diaStr}', 'observacao_gestora')" ${disableFeed}>
+                    </td>
+                </tr>`;
+            }
+
+            document.getElementById('log-body').innerHTML = html;
+            
+            document.getElementById('kpi-sys').innerText = totalSys.toLocaleString();
+            document.getElementById('kpi-man').innerText = totalMan.toLocaleString();
+            document.getElementById('kpi-hit').innerText = diasUteis > 0 ? Math.round((diasMeta/diasUteis)*100) + '%' : '0%';
+
+            renderChart(labels, dataSys, dataMeta);
+        }
+
+        async function salvar(input, dataRef, campo) {
+            const val = campo === 'quantidade_manual' ? (input.value ? parseInt(input.value) : null) : input.value;
+            input.classList.add('bg-blue-50');
+
+            try {
+                const { data: existing } = await _supabase.from('producao').select('id').eq('usuario_id', currentUserTarget).eq('data_referencia', dataRef).maybeSingle();
+
+                if (existing) {
+                    await _supabase.from('producao').update({ [campo]: val }).eq('id', existing.id);
+                } else {
+                    await _supabase.from('producao').insert({
+                        usuario_id: currentUserTarget,
+                        data_referencia: dataRef,
+                        quantidade: 0,
+                        [campo]: val
+                    });
+                }
+                input.classList.remove('bg-blue-50');
+                input.classList.add('bg-emerald-50', 'text-emerald-700');
+                setTimeout(() => input.classList.remove('bg-emerald-50', 'text-emerald-700'), 1000);
+                
+                if(campo === 'observacao_gestora' || campo === 'quantidade_manual') carregarDados();
+
+            } catch (err) { console.error(err); alert("Erro ao salvar."); input.classList.add('bg-red-100'); }
+        }
+
+        function renderChart(labels, dataSys, dataMeta) {
+            const ctx = document.getElementById('productionChart').getContext('2d');
+            if (chartInstance) chartInstance.destroy();
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'Produção Total (Sis + Man)',
+                            data: dataSys,
+                            borderColor: '#2563eb',
+                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Meta',
+                            data: dataMeta,
+                            borderColor: '#ef4444',
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
