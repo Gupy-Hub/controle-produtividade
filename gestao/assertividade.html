@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assertividade - Gestão</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .custom-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    </style>
+</head>
+<body class="bg-slate-50">
+    
+    <script src="../js/config.js"></script>
+    <script src="../js/sistema.js"></script>
+    <script src="../js/menu/global.js"></script>
+    <script src="../js/menu/gestao.js"></script>
+
+    <div class="max-w-[1600px] mx-auto px-4 py-8 pt-32">
+        <h1 class="text-2xl font-bold text-slate-800 mb-6 flex items-center gap-3">
+            <i class="fas fa-check-circle text-blue-600"></i> Histórico de Assertividade
+        </h1>
+
+        <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center mb-4">
+            
+            <div class="relative w-full md:w-96 group">
+                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
+                <input type="text" 
+                       id="search-assert" 
+                       onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" 
+                       placeholder="Buscar Geral (ID, Nome, Empresa)..." 
+                       class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition shadow-sm">
+            </div>
+
+            <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                
+                <div class="text-xs text-slate-400 text-right hidden md:block">
+                    <span class="bg-emerald-50 text-emerald-600 px-2 py-1 rounded font-bold border border-emerald-100">Database Live V5</span>
+                </div>
+
+                <button onclick="document.getElementById('input-csv-assertividade').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 transform active:scale-95">
+                    <i class="fas fa-file-csv"></i> Importar CSV
+                </button>
+
+                <input type="file" 
+                       id="input-csv-assertividade" 
+                       accept=".csv" 
+                       class="hidden" 
+                       onchange="Gestao.Importacao.Assertividade.processarArquivo(this)">
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="overflow-x-auto custom-scroll flex-1">
+                <table class="w-full min-w-[1500px] text-sm text-left">
+                    <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-100 tracking-wider">
+                        <tr>
+                            <th class="px-3 py-2 w-[8%]">Data</th>
+                            <th class="px-3 py-2 w-[5%] text-center">ID Emp</th>
+                            <th class="px-3 py-2 w-[12%]">Empresa</th>
+                            <th class="px-3 py-2 w-[12%]">Assistente</th>
+                            <th class="px-3 py-2 w-[12%]">Doc Name</th>
+                            <th class="px-3 py-2 w-[6%] text-center">Status</th>
+                            <th class="px-3 py-2 w-[15%]">Obs</th>
+                            <th class="px-3 py-2 w-[5%] text-center">Campos</th>
+                            <th class="px-3 py-2 w-[5%] text-center text-emerald-600">OK</th>
+                            <th class="px-3 py-2 w-[5%] text-center text-rose-600">NOK</th>
+                            <th class="px-3 py-2 w-[5%] text-center">%</th>
+                            <th class="px-3 py-2 w-[10%]">Auditora</th>
+                        </tr>
+                        
+                        <tr class="bg-slate-100/50 border-b border-slate-200">
+                            <td class="p-1"><input type="date" id="filtro-data" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td>
+                            <td class="p-1"><input type="text" id="filtro-empresa" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            <td class="p-1"><input type="text" id="filtro-assistente" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            <td class="p-1"><input type="text" id="filtro-doc" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            <td class="p-1">
+                                <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
+                                    <option value="">TODOS</option>
+                                    <option value="EMPTY">(Em Branco)</option>
+                                    <option value="OK">OK</option>
+                                    <option value="NOK">NOK</option>
+                                    <option value="REV">REV</option>
+                                    <option value="JUST">JUST</option>
+                                    <option value="DUPL">DUPL</option>
+                                    <option value="IA">IA</option>
+                                    <option value="EMPR">EMPR</option>
+                                    <option value="REC">REC</option>
+                                </select>
+                            </td>
+                            <td class="p-1"><input type="text" id="filtro-obs" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            <td class="p-1 text-center text-xs text-slate-300">-</td>
+                            <td class="p-1 text-center text-xs text-slate-300">-</td>
+                            <td class="p-1 text-center text-xs text-slate-300">-</td>
+                            <td class="p-1 text-center text-xs text-slate-300">-</td>
+                            <td class="p-1">
+                                <input type="text" id="filtro-auditora" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Nome..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm">
+                            </td>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-assertividade" class="divide-y divide-slate-100 bg-white">
+                        </tbody>
+                </table>
+            </div>
+            
+            <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs font-semibold text-slate-600">
+                <div class="flex items-center gap-4">
+                    <span id="info-paginacao" class="text-slate-500">Iniciando...</span>
+                    <span id="contador-assert"></span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="Gestao.Assertividade.mudarPagina(-1)" id="btn-ant" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><i class="fas fa-chevron-left"></i> Anterior</button>
+                    <button onclick="Gestao.Assertividade.mudarPagina(1)" id="btn-prox" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">Próximo <i class="fas fa-chevron-right"></i></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/gestao/assertividade.js"></script>
+    <script src="../js/gestao/importacao/assertividade.js"></script>
+    
+    <script>
+        // Inicializa ao carregar
+        document.addEventListener('DOMContentLoaded', () => {
+            // Garante que o namespace existe antes de chamar
+            if(window.Gestao && window.Gestao.Assertividade) {
+                Gestao.Assertividade.carregar();
+            }
+        });
+    </script>
+</body>
+</html>
