@@ -24,8 +24,7 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca Meta (CORREÇÃO DE DATA SEGURA)
-            // Extrai mês e ano diretamente da string YYYY-MM-DD para evitar erro de fuso horário
+            // 2. Busca Meta
             const [anoStr, mesStr] = inicio.split('-');
             const mesAtual = parseInt(mesStr);
             const anoAtual = parseInt(anoStr);
@@ -38,12 +37,15 @@ MinhaArea.Geral = {
                 .eq('ano', anoAtual)
                 .maybeSingle();
 
-            // CORREÇÃO CRÍTICA: Não divide mais por 22. Usa o valor direto do banco.
+            // Usa a meta exata salva no banco (ex: 450)
             const metaDiariaPadrao = metaData ? metaData.meta : 650;
 
             // 3. Processamento
             let totalProd = 0; let totalFifo = 0; let totalGT = 0; let totalGP = 0;
-            let totalMeta = 0; let somaFator = 0; let diasUteis = 0;
+            let totalMeta = 0; let somaFator = 0; 
+            
+            // Variável para contar apenas dias com apontamento (para validação, se necessário)
+            let countApontamentos = 0;
 
             tbody.innerHTML = '';
             const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
@@ -55,19 +57,17 @@ MinhaArea.Geral = {
                 const gt = Number(item.gradual_total || 0);
                 const gp = Number(item.gradual_parcial || 0);
                 const fator = Number(item.fator);
-                
-                // Meta do dia proporcional ao fator
                 const metaDia = Math.round(metaDiariaPadrao * fator);
                 
                 totalProd += qtd; totalFifo += fifo; totalGT += gt; totalGP += gp;
                 somaFator += fator;
                 totalMeta += metaDia;
-                if (fator > 0) diasUteis++;
+                
+                if (fator > 0) countApontamentos++;
 
                 const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
                 let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
                 
-                // Formata Data
                 const dateObj = new Date(item.data_referencia + 'T12:00:00');
                 const dia = String(dateObj.getDate()).padStart(2, '0');
                 const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -90,19 +90,35 @@ MinhaArea.Geral = {
 
             this.setTxt('total-registros-footer', data.length);
             
-            // KPIs
-            const diasUteisCalculados = Math.ceil(somaFator);
-            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
-            const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
+            // --- CÁLCULOS KPI AJUSTADOS ---
+            
+            // 1. Dias Trabalhados (Regra: Soma fatores e arredonda para cima)
+            // Ex: 0.5 + 0.5 = 1.0 -> 1 dia
+            // Ex: 0.5 (sozinho) = 0.5 -> 1 dia
+            const diasConsiderados = Math.ceil(somaFator);
 
+            // 2. Média Diária (Baseada nos dias trabalhados e NÃO nos dias úteis do calendário)
+            // Se diasConsiderados for 0, média é 0.
+            const mediaDiaria = diasConsiderados > 0 ? Math.round(totalProd / diasConsiderados) : 0;
+
+            // 3. Atingimento Geral
+            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
+
+            // --- ATUALIZAÇÃO DOS CARDS ---
+            
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
+            
             this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
             this.setStatus(atingimentoGeral);
-            this.setTxt('kpi-dias', diasUteisCalculados);
+            
+            // Card Dias: Mostra o calculado vs calendário, para clareza
+            this.setTxt('kpi-dias', diasConsiderados); 
             this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
+
+            // Card Média: Usa a média calculada sobre dias trabalhados
             this.setTxt('kpi-media', mediaDiaria);
-            this.setTxt('kpi-meta-dia', metaDiariaPadrao); // Mostra a meta diária usada (ex: 450)
+            this.setTxt('kpi-meta-dia', metaDiariaPadrao);
 
             const bar = document.getElementById('bar-progress');
             if(bar) {
