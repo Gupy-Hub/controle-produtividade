@@ -1,132 +1,76 @@
-window.Produtividade = window.Produtividade || {};
-
 Produtividade.Matriz = {
+    initialized: false,
     
-    carregarMatriz: async function() {
+    init: function() {
+        if (!this.initialized) { this.initialized = true; }
+        this.carregar();
+    },
+
+    carregar: async function() {
         const tbody = document.getElementById('matriz-body');
-        const dateInput = document.getElementById('global-date').value;
-        
-        if (!tbody) return;
+        if (!tbody) return; 
 
-        // Pega o ano da data selecionada (ou ano atual)
+        const dateInput = document.getElementById('global-date');
         let ano = new Date().getFullYear();
-        if (dateInput) {
-            ano = parseInt(dateInput.split('-')[0]);
-        }
+        if(dateInput && dateInput.value) ano = parseInt(dateInput.value.split('-')[0]);
 
-        tbody.innerHTML = '<tr><td colspan="19" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando Matriz Anual de ' + ano + '...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
-            // Busca dados do ANO INTEIRO
-            const { data, error } = await Sistema.supabase
-                .from('producao')
-                .select(`
-                    quantidade, data_referencia,
-                    usuario:usuarios ( id, nome, cargo, perfil )
-                `)
-                .gte('data_referencia', `${ano}-01-01`)
-                .lte('data_referencia', `${ano}-12-31`);
-
+            const { data, error } = await Sistema.supabase.from('producao').select(`quantidade, data_referencia, usuario:usuarios ( id, nome, perfil, funcao, contrato )`).gte('data_referencia', `${ano}-01-01`).lte('data_referencia', `${ano}-12-31`);
             if (error) throw error;
 
-            // Estrutura de dados para processamento
-            // Mapa: UsuarioID -> { nome, dados: { 1: qtd, 2: qtd ... 12: qtd } }
-            const matriz = {};
+            const checkGestao = document.getElementById('check-gestao');
+            const mostrarGestao = checkGestao ? checkGestao.checked : false;
+            const users = {};
 
             data.forEach(r => {
-                // Filtra Auditoras/Gestoras da Matriz se desejar (opcional, aqui mantive todos para visão geral)
-                // Se quiser filtrar, descomente:
-                // const cargo = r.usuario.cargo ? r.usuario.cargo.toUpperCase() : '';
-                // if (cargo === 'AUDITORA' || cargo === 'GESTORA') return;
+                if (!r.usuario) return; // Proteção contra nulo
 
                 const uid = r.usuario.id;
-                if (!matriz[uid]) {
-                    matriz[uid] = {
-                        nome: r.usuario.nome || 'Desconhecido',
-                        cargo: r.usuario.cargo || 'Assistente',
-                        perfil: r.usuario.perfil || 'PJ',
-                        meses: Array(13).fill(0) // Índices 1 a 12
-                    };
-                }
-
-                const mes = parseInt(r.data_referencia.split('-')[1]); // '2026-01-05' -> 01
-                const qtd = Number(r.quantidade) || 0;
+                const nome = r.usuario.nome || 'Sem Nome';
+                const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
                 
-                matriz[uid].meses[mes] += qtd;
+                if (!mostrarGestao && ['AUDITORA', 'GESTORA', 'COORDENADORA'].includes(cargo)) return;
+
+                if (!users[uid]) { users[uid] = { nome: nome, cargo: cargo, contrato: r.usuario.contrato || 'PJ', months: new Array(12).fill(0) }; }
+                const mesIndex = parseInt(r.data_referencia.split('-')[1]) - 1; 
+                if (mesIndex >= 0 && mesIndex <= 11) { users[uid].months[mesIndex] += (Number(r.quantidade) || 0); }
             });
 
-            // Converte para array e ordena por nome
-            const lista = Object.values(matriz).sort((a, b) => a.nome.localeCompare(b.nome));
-
-            tbody.innerHTML = '';
-
-            lista.forEach(u => {
-                // Cálculos de Trimestres e Semestres
-                const t1 = u.meses[1] + u.meses[2] + u.meses[3];
-                const t2 = u.meses[4] + u.meses[5] + u.meses[6];
-                const t3 = u.meses[7] + u.meses[8] + u.meses[9];
-                const t4 = u.meses[10] + u.meses[11] + u.meses[12];
-
-                const s1 = t1 + t2;
-                const s2 = t3 + t4;
-                
-                const total = s1 + s2;
-
-                // Formatação
-                const fmt = (n) => n > 0 ? Math.round(n).toLocaleString('pt-BR') : '-';
-                
-                // Estilo da linha
-                const tr = document.createElement('tr');
-                tr.className = "hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-xs";
-                
-                let iconCargo = '';
-                if(String(u.cargo).toUpperCase() === 'AUDITORA') iconCargo = '<i class="fas fa-star text-purple-400 ml-1 text-[8px]" title="Auditora"></i>';
-
-                tr.innerHTML = `
-                    <td class="px-4 py-3 font-bold text-slate-700 sticky left-0 bg-white border-r border-slate-200 truncate max-w-[150px]" title="${u.nome}">
-                        ${u.nome} ${iconCargo}
-                    </td>
-                    
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[1])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[2])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[3])}</td>
-                    
-                    <td class="px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/50 border-x border-blue-100">${fmt(t1)}</td>
-                    
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[4])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[5])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[6])}</td>
-                    
-                    <td class="px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/50 border-x border-blue-100">${fmt(t2)}</td>
-                    
-                    <td class="px-3 py-3 text-center font-black text-indigo-700 bg-indigo-50/50 border-r border-indigo-100">${fmt(s1)}</td>
-                    
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[7])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[8])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[9])}</td>
-                    
-                    <td class="px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/50 border-x border-blue-100">${fmt(t3)}</td>
-                    
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[10])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[11])}</td>
-                    <td class="px-3 py-3 text-center text-slate-500">${fmt(u.meses[12])}</td>
-                    
-                    <td class="px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/50 border-x border-blue-100">${fmt(t4)}</td>
-                    
-                    <td class="px-3 py-3 text-center font-black text-indigo-700 bg-indigo-50/50 border-r border-indigo-100">${fmt(s2)}</td>
-                    
-                    <td class="px-4 py-3 text-center font-black text-slate-800 bg-slate-100">${fmt(total)}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-
-            if (lista.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="19" class="text-center py-10 text-slate-400">Nenhum dado encontrado para o ano de ' + ano + '.</td></tr>';
-            }
-
+            const listaUsers = Object.values(users).sort((a, b) => a.nome.localeCompare(b.nome));
+            this.renderizar(listaUsers, tbody);
         } catch (err) {
-            console.error(err);
-            tbody.innerHTML = `<tr><td colspan="19" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
+            console.error("Erro na Matriz:", err);
+            tbody.innerHTML = `<tr><td colspan="20" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
         }
+    },
+
+    renderizar: function(lista, tbody) {
+        if(!tbody) return;
+        tbody.innerHTML = '';
+        if (lista.length === 0) { tbody.innerHTML = '<tr><td colspan="20" class="text-center py-12 text-slate-400 italic">Nenhum dado encontrado para os filtros atuais.</td></tr>'; return; }
+        const format = (n) => n === 0 ? '-' : Math.round(n).toLocaleString('pt-BR');
+        
+        lista.forEach(u => {
+            const m = u.months;
+            const q1 = m[0]+m[1]+m[2], q2 = m[3]+m[4]+m[5], q3 = m[6]+m[7]+m[8], q4 = m[9]+m[10]+m[11];
+            const s1 = q1+q2, s2 = q3+q4, total = s1+s2;
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 group border-b border-slate-100 last:border-0";
+            const tdNome = "px-4 py-3 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]";
+            const tdMes = "px-3 py-3 text-center text-slate-600 border-r border-slate-100 text-xs";
+            const tdQ = "px-3 py-3 text-center font-bold text-blue-700 bg-blue-50/30 border-r border-blue-100 text-xs";
+            const tdS = "px-3 py-3 text-center font-bold text-indigo-700 bg-indigo-50/30 border-r border-indigo-100 text-xs";
+            const tdTotal = "px-4 py-3 text-center font-black text-slate-800 bg-slate-100 text-xs";
+
+            tr.innerHTML = `<td class="${tdNome}"><div class="flex flex-col"><span class="font-bold text-slate-700 text-xs truncate max-w-[180px]" title="${u.nome}">${u.nome}</span><span class="text-[9px] text-slate-400 uppercase tracking-tight">${u.cargo} • ${u.contrato}</span></div></td>` +
+                `<td class="${tdMes}">${format(m[0])}</td><td class="${tdMes}">${format(m[1])}</td><td class="${tdMes}">${format(m[2])}</td><td class="${tdQ}">${format(q1)}</td>` +
+                `<td class="${tdMes}">${format(m[3])}</td><td class="${tdMes}">${format(m[4])}</td><td class="${tdMes}">${format(m[5])}</td><td class="${tdQ}">${format(q2)}</td><td class="${tdS}">${format(s1)}</td>` +
+                `<td class="${tdMes}">${format(m[6])}</td><td class="${tdMes}">${format(m[7])}</td><td class="${tdMes}">${format(m[8])}</td><td class="${tdQ}">${format(q3)}</td>` +
+                `<td class="${tdMes}">${format(m[9])}</td><td class="${tdMes}">${format(m[10])}</td><td class="${tdMes}">${format(m[11])}</td><td class="${tdQ}">${format(q4)}</td><td class="${tdS}">${format(s2)}</td>` +
+                `<td class="${tdTotal}">${format(total)}</td>`;
+            tbody.appendChild(tr);
+        });
     }
 };
