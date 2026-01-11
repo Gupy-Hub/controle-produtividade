@@ -6,6 +6,19 @@ const MinhaArea = {
     init: async function() {
         console.log("Minha Área Iniciada");
         
+        // 1. Aguarda conexão do Sistema (Tentativa de reconexão segura)
+        let tentativas = 0;
+        while ((!window.Sistema || !window.Sistema.supabase) && tentativas < 20) {
+            await new Promise(r => setTimeout(r, 100));
+            tentativas++;
+        }
+
+        if (!window.Sistema || !window.Sistema.supabase) {
+            console.error("Erro: Sistema não inicializou corretamente.");
+            alert("Erro de conexão. Por favor, recarregue a página.");
+            return;
+        }
+
         const storedUser = localStorage.getItem('usuario_logado');
         if (!storedUser) {
             window.location.href = 'index.html';
@@ -13,7 +26,13 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
-        // 1. Configura a UI de Admin (mostra o container, mas o select virá vazio inicialmente)
+        // 2. Popula Selects de Data (Isso precisa acontecer ANTES de qualquer busca)
+        this.popularSeletoresIniciais();
+
+        // 3. Carrega Estado Salvo (Recupera filtro anterior se houver)
+        this.carregarEstadoSalvo();
+
+        // 4. Configura Permissão Admin
         if (this.isAdmin()) {
             const container = document.getElementById('admin-selector-container');
             if (container) container.classList.remove('hidden');
@@ -21,38 +40,42 @@ const MinhaArea = {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // 2. Popula Selects de Data
-        this.popularSeletoresIniciais();
-
-        // 3. Carrega Estado Salvo
-        this.carregarEstadoSalvo();
-
-        // 4. Inicia (Isso vai disparar a atualização da lista e depois dos dados)
-        this.mudarAba('diario');
+        // 5. Inicia o ciclo de atualização
+        // Pequeno delay para garantir que o DOM dos selects esteja pronto
+        setTimeout(() => this.atualizarTudo(), 50);
     },
 
     isAdmin: function() {
-        return ['GESTORA', 'AUDITORA', 'ADMIN'].includes(this.usuario.funcao) || this.usuario.perfil === 'admin' || this.usuario.id == 1;
+        if (!this.usuario) return false;
+        const funcao = (this.usuario.funcao || '').toUpperCase();
+        const perfil = (this.usuario.perfil || '').toLowerCase();
+        return ['GESTORA', 'AUDITORA', 'ADMIN'].includes(funcao) || perfil === 'admin' || this.usuario.id == 1;
     },
 
     // --- LÓGICA DO SELETOR DINÂMICO ---
 
     atualizarListaAssistentes: async function() {
-        // Se não for admin, não faz nada
-        if (!this.isAdmin()) return;
+        if (!this.isAdmin()) return false;
 
         const select = document.getElementById('admin-user-selector');
-        if (!select) return;
+        if (!select) return false;
 
         const { inicio, fim } = this.getDatasFiltro();
+        
+        // Validação de Datas
+        if (!inicio || !fim || inicio.includes('NaN') || fim.includes('NaN')) {
+            console.error("Datas inválidas detectadas:", inicio, fim);
+            return false;
+        }
 
-        // Feedback visual de carregamento no select
         const idAnterior = this.usuarioAlvoId;
-        select.innerHTML = `<option>🔄 Buscando...</option>`;
+        
+        // Estado de Loading Visual
+        select.innerHTML = `<option value="" disabled selected>🔄 Buscando...</option>`;
         select.disabled = true;
 
         try {
-            // 1. Descobre quem produziu no período (IDs únicos)
+            // 1. Busca IDs de quem produziu no período
             const { data: prodData, error: prodError } = await Sistema.supabase
                 .from('producao')
                 .select('usuario_id')
@@ -61,64 +84,72 @@ const MinhaArea = {
 
             if (prodError) throw prodError;
 
-            // Extrai IDs únicos
-            const idsComProducao = [...new Set(prodData.map(item => item.usuario_id))];
+            // Filtra IDs únicos e remove nulos
+            const idsComProducao = [...new Set(prodData.map(item => item.usuario_id))].filter(id => id);
 
             if (idsComProducao.length === 0) {
-                select.innerHTML = `<option value="">(Sem dados no período)</option>`;
+                select.innerHTML = `<option value="" disabled selected>⚠️ Sem dados no período</option>`;
                 select.disabled = false;
-                this.usuarioAlvoId = null; // Ninguém para mostrar
-                return false; // Retorna false para indicar que não há dados para carregar nas abas
+                this.usuarioAlvoId = null; 
+                this.limparTelas(); // Limpa gráficos para não mostrar dados antigos
+                return false;
             }
 
-            // 2. Busca detalhes desses usuários, EXCLUINDO Gestoras/Auditoras
+            // 2. Busca nomes, excluindo Gestão/Auditoria
             const { data: users, error: userError } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, funcao')
                 .in('id', idsComProducao)
-                .neq('funcao', 'GESTORA')  // Filtra Gestora
-                .neq('funcao', 'AUDITORA') // Filtra Auditora
-                .neq('perfil', 'admin')    // Filtra Admin
+                .neq('funcao', 'GESTORA')
+                .neq('funcao', 'AUDITORA')
+                .neq('perfil', 'admin') // Garante que admin não aparece
                 .order('nome');
 
             if (userError) throw userError;
 
-            // 3. Monta o Select
+            // 3. Monta o HTML do Select
             let html = `<option value="" disabled ${!idAnterior ? 'selected' : ''}>👉 Selecionar Assistente...</option>`;
             let mantemSelecao = false;
 
             users.forEach(u => {
-                // Verifica se o usuário anteriormente selecionado ainda está na lista
-                const isSelected = u.id == idAnterior;
+                const isSelected = (u.id == idAnterior);
                 if (isSelected) mantemSelecao = true;
-                
                 html += `<option value="${u.id}" ${isSelected ? 'selected' : ''}>${u.nome}</option>`;
             });
 
             select.innerHTML = html;
             select.disabled = false;
 
-            // Se o usuário que eu estava vendo não tem dados neste novo período, reseta o alvo
-            if (!mantemSelecao) {
-                this.usuarioAlvoId = null;
+            // Se a pessoa selecionada anteriormente não está na lista nova, reseta
+            if (mantemSelecao) {
+                this.usuarioAlvoId = parseInt(idAnterior);
+                return true;
             } else {
-                this.usuarioAlvoId = idAnterior; // Garante o tipo numérico
+                this.usuarioAlvoId = null;
+                this.limparTelas(); // Limpa a tela pois perdeu o alvo
+                return false;
             }
 
-            return true; // Lista carregada com sucesso
-
         } catch (err) {
-            console.error("Erro ao atualizar lista de assistentes:", err);
-            select.innerHTML = `<option>Erro ao carregar</option>`;
+            console.error("Erro no seletor:", err);
+            select.innerHTML = `<option value="">Erro ao carregar</option>`;
+            select.disabled = false;
             return false;
         }
+    },
+
+    limparTelas: function() {
+        // Função auxiliar para limpar dados visuais quando não há usuário selecionado
+        if (this.Geral) this.Geral.zerarKPIs();
+        const tbody = document.getElementById('tabela-extrato');
+        if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma assistente</p></td></tr>';
     },
 
     mudarUsuarioAlvo: function(novoId) {
         if (!novoId) return;
         this.usuarioAlvoId = parseInt(novoId);
         
-        // Atualiza apenas os dados da aba, sem recarregar a lista de usuários (pois a data não mudou)
+        // Atualiza a aba ativa
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -130,20 +161,23 @@ const MinhaArea = {
         return this.usuarioAlvoId;
     },
 
-    // --- CONTROLES DE DATA ---
+    // --- DATAS E FILTROS ---
 
     popularSeletoresIniciais: function() {
         const anoSelect = document.getElementById('sel-ano');
-        const anoAtual = new Date().getFullYear();
-        let htmlAnos = '';
-        for (let i = anoAtual + 1; i >= anoAtual - 2; i--) {
-            htmlAnos += `<option value="${i}" ${i === anoAtual ? 'selected' : ''}>${i}</option>`;
+        if (anoSelect && anoSelect.options.length === 0) {
+            const anoAtual = new Date().getFullYear();
+            let htmlAnos = '';
+            for (let i = anoAtual + 1; i >= anoAtual - 2; i--) {
+                htmlAnos += `<option value="${i}" ${i === anoAtual ? 'selected' : ''}>${i}</option>`;
+            }
+            anoSelect.innerHTML = htmlAnos;
         }
-        if(anoSelect) anoSelect.innerHTML = htmlAnos;
         
         const mesSelect = document.getElementById('sel-mes');
-        const mesAtual = new Date().getMonth();
-        if(mesSelect) mesSelect.value = mesAtual;
+        if (mesSelect && !mesSelect.value) {
+            mesSelect.value = new Date().getMonth();
+        }
     },
 
     salvarEAtualizar: function() {
@@ -167,20 +201,24 @@ const MinhaArea = {
                 if(document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
                 if(document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
                 if(document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
+                
                 this.mudarPeriodo(s.tipo, false);
                 return;
             } catch(e) { console.error(e); }
         }
+        // Padrão
         this.mudarPeriodo('mes', false);
     },
 
     mudarPeriodo: function(tipo, salvar = true) {
         this.filtroPeriodo = tipo;
+        
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
-                if(t === tipo) btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
-                else btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
+                btn.className = (t === tipo) 
+                    ? "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition"
+                    : "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
             }
         });
 
@@ -203,58 +241,73 @@ const MinhaArea = {
     },
 
     getDatasFiltro: function() {
-        const ano = parseInt(document.getElementById('sel-ano').value);
-        const mes = parseInt(document.getElementById('sel-mes').value);
+        const anoEl = document.getElementById('sel-ano');
+        const mesEl = document.getElementById('sel-mes');
+        
+        // Proteção contra elementos não carregados
+        if (!anoEl || !mesEl) return { inicio: null, fim: null };
+
+        const ano = parseInt(anoEl.value);
+        const mes = parseInt(mesEl.value);
+        
         let inicio, fim;
 
-        if (this.filtroPeriodo === 'mes') {
-            inicio = new Date(ano, mes, 1);
-            fim = new Date(ano, mes + 1, 0);
-        } else if (this.filtroPeriodo === 'semana') {
-            const semanaIndex = parseInt(document.getElementById('sel-semana').value);
-            const diaInicio = (semanaIndex - 1) * 7 + 1;
-            let diaFim = diaInicio + 6;
-            const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
-            if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
-            if (diaInicio > ultimoDiaMes) {
-                inicio = new Date(ano, mes, ultimoDiaMes);
-                fim = new Date(ano, mes, ultimoDiaMes);
-            } else {
-                inicio = new Date(ano, mes, diaInicio);
-                fim = new Date(ano, mes, diaFim);
+        try {
+            if (this.filtroPeriodo === 'mes') {
+                inicio = new Date(ano, mes, 1);
+                fim = new Date(ano, mes + 1, 0);
+            } else if (this.filtroPeriodo === 'semana') {
+                const semanaIndex = parseInt(document.getElementById('sel-semana').value);
+                const diaInicio = (semanaIndex - 1) * 7 + 1;
+                let diaFim = diaInicio + 6;
+                const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
+                
+                if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
+                
+                if (diaInicio > ultimoDiaMes) {
+                    // Semana inexistente no mês (ex: dia 30 em Fev)
+                    inicio = new Date(ano, mes, ultimoDiaMes);
+                    fim = new Date(ano, mes, ultimoDiaMes);
+                } else {
+                    inicio = new Date(ano, mes, diaInicio);
+                    fim = new Date(ano, mes, diaFim);
+                }
+            } else if (this.filtroPeriodo === 'ano') {
+                const sub = document.getElementById('sel-subperiodo-ano').value;
+                if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
+                else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
+                else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
+                else if (sub.startsWith('T')) {
+                    const tri = parseInt(sub.replace('T', ''));
+                    const mesInicio = (tri - 1) * 3;
+                    const mesFim = mesInicio + 3;
+                    inicio = new Date(ano, mesInicio, 1);
+                    fim = new Date(ano, mesFim, 0);
+                }
             }
-        } else if (this.filtroPeriodo === 'ano') {
-            const sub = document.getElementById('sel-subperiodo-ano').value;
-            if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
-            else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
-            else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
-            else if (sub.startsWith('T')) {
-                const tri = parseInt(sub.replace('T', ''));
-                const mesInicio = (tri - 1) * 3;
-                const mesFim = mesInicio + 3;
-                inicio = new Date(ano, mesInicio, 1);
-                fim = new Date(ano, mesFim, 0);
-            }
-        }
 
-        const fmt = (d) => {
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
-        return { inicio: fmt(inicio), fim: fmt(fim) };
+            const fmt = (d) => {
+                const year = d.getFullYear();
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            
+            return { inicio: fmt(inicio), fim: fmt(fim) };
+
+        } catch (e) {
+            console.error("Erro ao calcular datas:", e);
+            return { inicio: null, fim: null };
+        }
     },
 
-    // --- CICLO DE ATUALIZAÇÃO ---
-
     atualizarTudo: async function() {
-        // 1. Se for admin, primeiro atualiza a lista de usuários disponíveis para este período
+        // 1. Atualiza seletor se for admin
         if (this.isAdmin()) {
             await this.atualizarListaAssistentes();
         }
 
-        // 2. Carrega a aba ativa
+        // 2. Atualiza aba
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -265,26 +318,18 @@ const MinhaArea = {
     mudarAba: function(abaId) {
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-        
+
         const aba = document.getElementById(`ma-tab-${abaId}`);
         const btn = document.getElementById(`btn-ma-${abaId}`);
         
         if(aba) aba.classList.remove('hidden');
         if(btn) btn.classList.add('active');
 
-        // Se estiver trocando de aba, apenas carrega os dados (não precisa recarregar lista de usuários se a data não mudou)
-        // Porém, se for a inicialização, a data pode ter sido setada agora. 
-        // Para simplificar, chamamos carregarDadosAba, pois atualizarLista já foi chamado no init ou no change date
         this.carregarDadosAba(abaId);
     },
 
     carregarDadosAba: function(abaId) {
-        // Se for admin e não tiver ninguém selecionado (ou lista vazia), não carrega gráficos
-        if (this.isAdmin() && !this.usuarioAlvoId) {
-            // Pode limpar os dados visuais aqui se quiser
-            if (abaId === 'diario' && this.Geral) this.Geral.zerarKPIs();
-            return;
-        }
+        if (this.isAdmin() && !this.usuarioAlvoId) return;
 
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
@@ -295,5 +340,8 @@ const MinhaArea = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
+    // Inicialização atrasada para garantir carregamento de libs
+    setTimeout(() => { 
+        if(typeof MinhaArea !== 'undefined') MinhaArea.init(); 
+    }, 100);
 });
