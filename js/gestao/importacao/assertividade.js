@@ -7,32 +7,28 @@ Importacao.Assertividade = {
         if (!arquivo) return;
 
         const statusEl = document.getElementById('status-importacao');
-        statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo e analisando colunas...</span>`;
+        statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo base de dados...</span>`;
 
         Papa.parse(arquivo, {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
-            // IMPORTANTE: Essa função limpa espaços em branco dos nomes das colunas (ex: "Data " vira "Data")
             transformHeader: function(header) {
                 return header.trim();
             },
             complete: async (results) => {
-                console.log("Colunas detectadas:", results.meta.fields); // Para debug no console
-                
                 if (results.data.length === 0) {
-                    alert("O arquivo parece estar vazio ou não foi lido corretamente.");
+                    alert("Arquivo vazio ou ilegível.");
                     statusEl.innerText = "";
                     return;
                 }
-                
                 await this.enviarParaBanco(results.data);
                 input.value = ""; 
             },
             error: (err) => {
                 console.error("Erro CSV:", err);
-                alert("Erro ao ler CSV: " + err.message);
-                statusEl.innerText = "Erro na leitura.";
+                alert("Erro na leitura: " + err.message);
+                statusEl.innerText = "Erro.";
             }
         });
     },
@@ -41,34 +37,47 @@ Importacao.Assertividade = {
         const statusEl = document.getElementById('status-importacao');
         let sucesso = 0;
         let erros = 0;
-        const TAMANHO_LOTE = 50;
+        const TAMANHO_LOTE = 100; // Aumentei o lote para ir mais rápido com 200k linhas
 
-        // Mapeamento Inteligente
-        // Procura variações comuns de nomes de colunas
         const dadosFormatados = linhas.map(linha => {
-            // Tenta encontrar a coluna de data em várias versões possíveis
-            const valData = linha['Data da Auditoria'] || linha['Data'] || linha['data_auditoria'];
+            // LÓGICA DE DATA: Prioridade para 'Data da Auditoria', fallback para 'end_time'
+            // O 'end_time' é nossa base segura (ex: 2025-12-02T12:17:04.332Z)
+            let valData = linha['Data da Auditoria'] || linha['Data'] || linha['data_auditoria'];
+            let dataOrigem = 'AUDITORIA';
+
+            // Se não tiver data de auditoria, usa o end_time
+            if (!valData || valData.trim() === '') {
+                valData = linha['end_time'];
+                dataOrigem = 'SISTEMA';
+            }
             
-            // Se não tiver data, pulamos esta linha (regra de negócio: sem data = lixo)
+            // Se ainda assim não tiver data, descarta
             if (!valData) return null;
 
-            // Tratamento de Data (DD/MM/YYYY -> YYYY-MM-DD)
+            // TRATAMENTO DE FORMATOS DE DATA
             let dataFormatada = null;
-            if (valData.includes('/')) {
+            
+            // 1. Formato ISO do end_time (YYYY-MM-DDTHH:mm:ss...)
+            if (valData.includes('T')) {
+                dataFormatada = valData.split('T')[0];
+            } 
+            // 2. Formato Brasileiro (DD/MM/YYYY)
+            else if (valData.includes('/')) {
                 const partes = valData.split('/');
                 if (partes.length === 3) dataFormatada = `${partes[2]}-${partes[1]}-${partes[0]}`;
-            } else if (valData.includes('-')) {
-                dataFormatada = valData; // Já está em formato ISO ou YYYY-MM-DD
+            } 
+            // 3. Formato Padrão ISO Simples (YYYY-MM-DD)
+            else if (valData.includes('-')) {
+                dataFormatada = valData;
             }
 
             if (!dataFormatada) return null;
 
-            // Tratamento de Números (Converte texto "10" para número 10)
+            // Tratamento de Números
             const campos = parseInt(linha['nº Campos']) || 0;
             const ok = parseInt(linha['Ok']) || 0;
             const nok = parseInt(linha['Nok']) || 0;
 
-            // Retorna objeto formatado para o Supabase
             return {
                 data_auditoria: dataFormatada,
                 company_id: linha['Company_id'] || null,
@@ -76,36 +85,41 @@ Importacao.Assertividade = {
                 assistente: linha['Assistente'] || linha['id_assistente'],
                 doc_name: linha['doc_name'] || linha['DOCUMENTO'] || linha['nome_documento'],
                 status: linha['STATUS'] || 'PENDENTE',
-                obs: linha['Apontamentos/obs'] || linha['obs'] || '',
+                // Adiciona aviso na obs se a data foi inferida pelo sistema
+                obs: (linha['Apontamentos/obs'] || linha['obs'] || '') + (dataOrigem === 'SISTEMA' ? ' [Data via System]' : ''),
                 campos: campos,
                 ok: ok,
                 nok: nok,
                 porcentagem: linha['% Assert'] || '0%',
                 auditora: linha['Auditora'] || 'Sistema'
             };
-        }).filter(item => item !== null); // Remove os nulos (linhas inválidas)
+        }).filter(item => item !== null);
 
-        // Validação de Segurança antes de enviar
-        if (dadosFormatados.length === 0) {
-            alert("Nenhuma linha válida encontrada!\nVerifique se a coluna 'Data da Auditoria' existe no CSV.");
-            statusEl.innerText = "Falha: Colunas não identificadas.";
+        const total = dadosFormatados.length;
+        
+        if (total === 0) {
+            alert("Nenhum registro válido encontrado (nem Data da Auditoria, nem end_time).");
+            statusEl.innerText = "Falha: Dados insuficientes.";
             return;
         }
 
-        const total = dadosFormatados.length;
-        statusEl.innerHTML = `<span class="text-orange-500">Importando ${total} registros...</span>`;
+        statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total.toLocaleString('pt-BR')} registros... (Pode demorar)</span>`;
 
-        // Loop de Envio em Lotes
+        // Envio em Lotes
         for (let i = 0; i < total; i += TAMANHO_LOTE) {
             const lote = dadosFormatados.slice(i, i + TAMANHO_LOTE);
-            statusEl.innerText = `Processando... (${i + lote.length}/${total})`;
+            
+            // Atualiza status a cada 5 lotes para não piscar muito
+            if (i % (TAMANHO_LOTE * 5) === 0) {
+                statusEl.innerText = `Processando... ${Math.round((i/total)*100)}% (${i.toLocaleString('pt-BR')}/${total.toLocaleString('pt-BR')})`;
+            }
             
             const { error } = await Sistema.supabase
                 .from('assertividade')
                 .insert(lote);
 
             if (error) {
-                console.error("Erro no lote:", error);
+                console.error("Erro lote:", error);
                 erros += lote.length;
             } else {
                 sucesso += lote.length;
@@ -114,11 +128,11 @@ Importacao.Assertividade = {
 
         // Relatório Final
         if (erros > 0) {
-            statusEl.innerHTML = `<span class="text-red-600 font-bold"><i class="fas fa-exclamation-triangle"></i> Sucesso: ${sucesso} | Erros: ${erros}</span>`;
+            statusEl.innerHTML = `<span class="text-red-600 font-bold">Concluído com ressalvas. Sucesso: ${sucesso} | Falhas: ${erros}</span>`;
         } else {
-            statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Concluído: ${sucesso} registros.</span>`;
+            statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Importação Finalizada: ${sucesso.toLocaleString('pt-BR')} registros.</span>`;
             if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
-            alert(`Sucesso! ${sucesso} registros importados.`);
+            alert(`Processo concluído!\n${sucesso.toLocaleString('pt-BR')} registros importados com sucesso.`);
         }
     }
 };
