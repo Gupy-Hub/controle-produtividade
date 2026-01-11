@@ -1,24 +1,13 @@
 Gestao.Assertividade = {
     timerBusca: null,
-    
-    // Estado Centralizado da Tela
     estado: {
         pagina: 0,
         limite: 50,
         total: 0,
         termo: '',
-        filtros: {
-            data: '',
-            empresa: '',
-            assistente: '',
-            doc: '',
-            status: '',
-            obs: '',
-            auditora: ''
-        }
+        filtros: { data: '', empresa: '', assistente: '', doc: '', status: '', obs: '', auditora: '' }
     },
 
-    // --- CARREGAMENTO INICIAL ---
     carregar: async function() {
         this.estado.pagina = 0;
         this.limparCamposUI();
@@ -32,11 +21,8 @@ Gestao.Assertividade = {
         });
     },
 
-    // --- GATILHO DE BUSCA UNIFICADO ---
     atualizarFiltrosEBuscar: function() {
-        // 1. Coleta dados
         this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
-        
         this.estado.filtros.data = document.getElementById('filtro-data')?.value || '';
         this.estado.filtros.empresa = document.getElementById('filtro-empresa')?.value.trim() || '';
         this.estado.filtros.assistente = document.getElementById('filtro-assistente')?.value.trim() || '';
@@ -45,10 +31,7 @@ Gestao.Assertividade = {
         this.estado.filtros.obs = document.getElementById('filtro-obs')?.value.trim() || '';
         this.estado.filtros.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
 
-        // 2. Reseta paginação
         this.estado.pagina = 0;
-
-        // 3. Debounce
         clearTimeout(this.timerBusca);
         
         const tbody = document.getElementById('lista-assertividade');
@@ -71,7 +54,6 @@ Gestao.Assertividade = {
         }
     },
 
-    // --- COMUNICAÇÃO COM O SERVIDOR (SUPABASE) ---
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
@@ -83,7 +65,6 @@ Gestao.Assertividade = {
         if(btnProx) btnProx.disabled = true;
 
         try {
-            // CHAMADA V5 (SUPORTA STATUS 'EMPTY')
             const { data, error } = await Sistema.supabase.rpc('buscar_auditorias_v5', {
                 p_termo: this.estado.termo,
                 p_data: this.estado.filtros.data,
@@ -100,7 +81,6 @@ Gestao.Assertividade = {
             if (error) throw error;
 
             const lista = data || [];
-            
             this.estado.total = lista.length > 0 ? lista[0].total_registros : 0;
             if(lista.length === 0 && this.estado.pagina === 0) this.estado.total = 0;
 
@@ -116,7 +96,6 @@ Gestao.Assertividade = {
         }
     },
 
-    // --- RENDERIZAÇÃO ---
     atualizarControlesPaginacao: function() {
         const infoPag = document.getElementById('info-paginacao');
         const btnAnt = document.getElementById('btn-ant');
@@ -151,15 +130,19 @@ Gestao.Assertividade = {
 
         let html = '';
         lista.forEach(item => {
+            // SEGURANÇA: Sanitização de TODOS os campos de texto
+            const empresaSafe = Sistema.escapar(item.empresa || '-');
+            const nomeUserSafe = Sistema.escapar(item.usuario_nome || `ID: ${item.usuario_id}`);
+            const docSafe = Sistema.escapar(item.nome_documento || '-');
+            const obsSafe = Sistema.escapar(item.observacao || '-');
+            const auditoraSafe = Sistema.escapar(item.auditora || '-');
+
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             const horaFmt = item.hora ? item.hora.substring(0, 5) : '';
-            const nomeUser = item.usuario_nome || `ID: ${item.usuario_id}`;
-            
-            // CORREÇÃO: Usando a propriedade correta retornada pelo SQL V5
             const empIdDisplay = item.empresa_id ? `#${item.empresa_id}` : '<span class="text-slate-200">-</span>';
 
             // Status Badge
-            const stRaw = item.status || '-';     
+            const stRaw = Sistema.escapar(item.status || '-');     
             const stUp = stRaw.toUpperCase();     
             
             let badgeClass = "bg-slate-100 text-slate-500 border-slate-200"; 
@@ -187,16 +170,16 @@ Gestao.Assertividade = {
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
                 <td class="px-3 py-2 text-slate-500 font-mono">${dataFmt} <span class="text-[10px] text-slate-300 ml-1">${horaFmt}</span></td>
                 <td class="px-3 py-2 text-center font-mono text-slate-400 font-bold bg-slate-50/50">${empIdDisplay}</td>
-                <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${item.empresa}">${item.empresa || '-'}</td>
-                <td class="px-3 py-2 text-slate-600 max-w-[150px] truncate" title="${nomeUser}">${nomeUser}</td>
-                <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${item.nome_documento}">${item.nome_documento || '-'}</td>
+                <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${empresaSafe}">${empresaSafe}</td>
+                <td class="px-3 py-2 text-slate-600 max-w-[150px] truncate" title="${nomeUserSafe}">${nomeUserSafe}</td>
+                <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${docSafe}">${docSafe}</td>
                 <td class="px-3 py-2 text-center">${statusBadge}</td>
-                <td class="px-3 py-2 text-slate-500 max-w-[200px] truncate cursor-help" title="${item.observacao}">${item.observacao || '-'}</td>
+                <td class="px-3 py-2 text-slate-500 max-w-[200px] truncate cursor-help" title="${obsSafe}">${obsSafe}</td>
                 <td class="px-3 py-2 text-center text-slate-400">${item.num_campos || 0}</td>
                 <td class="px-3 py-2 text-center text-emerald-600 font-bold">${item.qtd_ok || 0}</td>
                 <td class="px-3 py-2 text-center text-rose-600 font-bold">${item.nok || 0}</td>
                 <td class="px-3 py-2 text-center ${assertColor}">${item.assertividade || '-'}</td>
-                <td class="px-3 py-2 text-slate-500 italic text-[10px]">${item.auditora || '-'}</td>
+                <td class="px-3 py-2 text-slate-500 italic text-[10px]">${auditoraSafe}</td>
             </tr>`;
         });
 

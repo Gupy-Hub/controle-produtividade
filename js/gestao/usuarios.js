@@ -1,21 +1,17 @@
 Gestao.Usuarios = {
-    listaCompleta: [], // Cache local para filtro rápido
+    listaCompleta: [],
 
-    // --- CARREGAMENTO INICIAL ---
     carregar: async function() {
         const tbody = document.getElementById('lista-usuarios');
         if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8"><i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i></td></tr>';
         
-        // Busca dados no Banco
         const { data, error } = await Sistema.supabase.from('usuarios').select('*').order('nome');
         if (error) { console.error(error); return; }
 
-        // Salva na memória e aplica filtros
         this.listaCompleta = data || [];
         this.filtrar(); 
     },
 
-    // --- FILTROS DE TELA ---
     filtrar: function() {
         const inputBusca = document.getElementById('search-usuarios');
         const checkInativos = document.getElementById('toggle-inativos');
@@ -50,37 +46,40 @@ Gestao.Usuarios = {
 
         let html = '';
         lista.forEach(u => {
+            // SEGURANÇA: Sanitização dos dados antes de criar o HTML
+            const nomeSafe = Sistema.escapar(u.nome);
+            const contratoSafe = Sistema.escapar(u.contrato || '').toUpperCase();
+            
             const isAtivo = u.ativo;
             const statusClass = isAtivo ? 'bg-emerald-100 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-500 border-slate-200';
             const statusLabel = isAtivo ? 'ATIVO' : 'INATIVO';
 
             let contratoClass = 'bg-slate-50 text-slate-600 border-slate-200';
-            const contrato = (u.contrato || '').toUpperCase();
             
-            if (contrato === 'CLT') contratoClass = 'bg-blue-50 text-blue-700 border-blue-200';
-            else if (contrato === 'PJ') contratoClass = 'bg-sky-50 text-sky-700 border-sky-200';
-            else if (contrato === 'AUDITORA') contratoClass = 'bg-purple-50 text-purple-700 border-purple-200';
-            else if (contrato === 'GESTORA') contratoClass = 'bg-pink-50 text-pink-700 border-pink-200';
-            else if (contrato === 'FINALIZADO') contratoClass = 'bg-gray-100 text-gray-500 border-gray-200';
+            if (contratoSafe === 'CLT') contratoClass = 'bg-blue-50 text-blue-700 border-blue-200';
+            else if (contratoSafe === 'PJ') contratoClass = 'bg-sky-50 text-sky-700 border-sky-200';
+            else if (contratoSafe === 'AUDITORA') contratoClass = 'bg-purple-50 text-purple-700 border-purple-200';
+            else if (contratoSafe === 'GESTORA') contratoClass = 'bg-pink-50 text-pink-700 border-pink-200';
+            else if (contratoSafe === 'FINALIZADO') contratoClass = 'bg-gray-100 text-gray-500 border-gray-200';
 
-            const userString = JSON.stringify(u).replace(/"/g, '&quot;');
+            // Preparamos o objeto para o botão editar (escapando aspas para não quebrar o HTML do onclick)
+            const userJson = JSON.stringify(u).replace(/"/g, '&quot;');
 
-            // Ajuste de classes para alinhar com o HTML (px-4)
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-sm group">
                 <td class="px-4 py-3 font-mono text-slate-500 font-bold group-hover:text-blue-600 transition">#${u.id}</td>
                 <td class="px-4 py-3 font-bold text-slate-700">
-                    ${u.nome}
+                    ${nomeSafe}
                     ${!isAtivo ? '<span class="ml-2 text-[10px] text-slate-400 font-normal italic">(Inativo)</span>' : ''}
                 </td>
                 <td class="px-4 py-3">
-                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${contratoClass}">${contrato}</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${contratoClass}">${contratoSafe}</span>
                 </td>
                 <td class="px-4 py-3 text-center">
                     <span class="px-2 py-1 rounded text-xs font-bold border ${statusClass}">${statusLabel}</span>
                 </td>
                 <td class="px-4 py-3 text-right flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onclick="Gestao.Usuarios.abrirModal(${userString})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
+                    <button onclick="Gestao.Usuarios.abrirModal(${userJson})" class="p-1.5 text-blue-500 hover:bg-blue-50 rounded transition" title="Editar"><i class="fas fa-edit"></i></button>
                     <button onclick="Gestao.Usuarios.excluir(${u.id})" class="p-1.5 text-red-400 hover:bg-red-50 rounded transition" title="Excluir"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>`;
@@ -90,11 +89,14 @@ Gestao.Usuarios = {
         if(contador) contador.innerText = `${lista.length} Registros listados`;
     },
 
-    // --- MODAL DE CADASTRO/EDIÇÃO ---
     abrirModal: function(usuario = null) {
         const isEdit = !!usuario;
         const modalAntigo = document.getElementById('modal-usuario');
         if(modalAntigo) modalAntigo.remove();
+
+        // SEGURANÇA: Inputs também precisam exibir dados sanitizados
+        const nomeVal = usuario ? Sistema.escapar(usuario.nome) : '';
+        const idVal = usuario ? usuario.id : '';
 
         const modalHtml = `
         <div id="modal-usuario" class="fixed inset-0 bg-slate-900/40 z-[70] flex items-center justify-center backdrop-blur-sm animate-fade">
@@ -107,12 +109,12 @@ Gestao.Usuarios = {
                 <div class="p-6 space-y-4">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">ID (Único)</label>
-                        <input type="number" id="inp-id" value="${usuario?.id || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" ${isEdit ? 'disabled class="bg-slate-100 text-slate-500 w-full border border-slate-200 rounded-lg p-2.5 text-sm"' : ''} placeholder="Ex: 102030">
+                        <input type="number" id="inp-id" value="${idVal}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" ${isEdit ? 'disabled class="bg-slate-100 text-slate-500 w-full border border-slate-200 rounded-lg p-2.5 text-sm"' : ''} placeholder="Ex: 102030">
                         ${!isEdit ? '<p class="text-[10px] text-slate-400 mt-1">O ID será usado para login e não pode ser alterado depois.</p>' : ''}
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nome Completo</label>
-                        <input type="text" id="inp-nome" value="${usuario?.nome || ''}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Nome do colaborador">
+                        <input type="text" id="inp-nome" value="${nomeVal}" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm outline-none focus:border-blue-500 transition" placeholder="Nome do colaborador">
                     </div>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
@@ -175,12 +177,21 @@ Gestao.Usuarios = {
             perfil: (funcao === 'GESTORA' ? 'admin' : 'user')
         };
 
-        if (!isEdit || resetSenha) payload.senha = await Sistema.gerarHash('gupy123');
+        // NOTA DO BOARD: A senha aqui agora é tratada apenas como hash para update.
+        // O ideal seria que o backend (RPC) fizesse isso, mas vamos manter o fluxo simples.
+        if (!isEdit || resetSenha) {
+             // Reutilizando uma função local de hash para o update (temporário até Fase 2 completa)
+             const msgBuffer = new TextEncoder().encode('gupy123');
+             const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+             const hashArray = Array.from(new Uint8Array(hashBuffer));
+             payload.senha = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
 
         const { error } = await Sistema.supabase.from('usuarios').upsert(payload);
         if (error) alert("Erro: " + error.message);
         else {
-            document.getElementById('modal-usuario').remove();
+            const modal = document.getElementById('modal-usuario');
+            if(modal) modal.remove();
             this.carregar();
         }
     },

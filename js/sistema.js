@@ -22,8 +22,17 @@ const Sistema = {
         }
     },
 
-    // A função gerarHash foi removida daqui por segurança.
-    // A verificação agora ocorre dentro do banco de dados (RPC).
+    // --- FUNÇÃO DE SEGURANÇA (NOVA) ---
+    // Transforma caracteres perigosos em texto inofensivo
+    escapar: function(texto) {
+        if (texto === null || texto === undefined) return '';
+        return texto.toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    },
 
     sair: function() {
         if(confirm("Deseja realmente sair?")) {
@@ -34,6 +43,5 @@ const Sistema = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Inicializa a conexão (false = não redireciona se estiver na tela de login)
     Sistema.inicializar(false);
 });
