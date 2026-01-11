@@ -1,138 +1,231 @@
-window.Importacao = window.Importacao || {};
-
-Importacao.Assertividade = {
+Gestao.Assertividade = {
+    timerBusca: null,
     
-    processarArquivo: function(input) {
-        const arquivo = input.files[0];
-        if (!arquivo) return;
+    estado: {
+        pagina: 0,
+        limite: 50,
+        total: 0,
+        termo: '',
+        filtros: {
+            data: '',
+            empresa: '',
+            assistente: '', // Filtro específico para assistente
+            auditora: '',
+            status: '',
+            doc: '',
+            obs: ''
+        }
+    },
 
-        const statusEl = document.getElementById('status-importacao');
-        statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo base de dados...</span>`;
+    // --- CARREGAMENTO INICIAL ---
+    carregar: async function() {
+        this.estado.pagina = 0;
+        this.limparCamposUI();
+        this.buscarDados(); 
+    },
 
-        Papa.parse(arquivo, {
-            header: true,
-            skipEmptyLines: true,
-            encoding: "UTF-8",
-            transformHeader: function(header) {
-                return header.trim();
-            },
-            complete: async (results) => {
-                if (results.data.length === 0) {
-                    alert("Arquivo vazio ou ilegível.");
-                    statusEl.innerText = "";
-                    return;
-                }
-                await this.enviarParaBanco(results.data);
-                input.value = ""; 
-            },
-            error: (err) => {
-                console.error("Erro CSV:", err);
-                alert("Erro na leitura: " + err.message);
-                statusEl.innerText = "Erro.";
-            }
+    limparCamposUI: function() {
+        const ids = ['search-assert', 'filtro-data', 'filtro-empresa', 'filtro-assistente', 'filtro-auditora', 'filtro-status', 'filtro-doc', 'filtro-obs'];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
         });
     },
 
-    enviarParaBanco: async function(linhas) {
-        const statusEl = document.getElementById('status-importacao');
-        let sucesso = 0;
-        let erros = 0;
-        const TAMANHO_LOTE = 100; // Aumentei o lote para ir mais rápido com 200k linhas
+    // --- GATILHO DE BUSCA ---
+    atualizarFiltrosEBuscar: function() {
+        // Coleta valores da tela
+        this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
+        this.estado.filtros.data = document.getElementById('filtro-data')?.value || '';
+        this.estado.filtros.empresa = document.getElementById('filtro-empresa')?.value.trim() || '';
+        this.estado.filtros.assistente = document.getElementById('filtro-assistente')?.value.trim() || '';
+        this.estado.filtros.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
+        this.estado.filtros.status = document.getElementById('filtro-status')?.value || '';
+        this.estado.filtros.doc = document.getElementById('filtro-doc')?.value.trim() || '';
+        this.estado.filtros.obs = document.getElementById('filtro-obs')?.value.trim() || '';
 
-        const dadosFormatados = linhas.map(linha => {
-            // LÓGICA DE DATA: Prioridade para 'Data da Auditoria', fallback para 'end_time'
-            // O 'end_time' é nossa base segura (ex: 2025-12-02T12:17:04.332Z)
-            let valData = linha['Data da Auditoria'] || linha['Data'] || linha['data_auditoria'];
-            let dataOrigem = 'AUDITORIA';
-
-            // Se não tiver data de auditoria, usa o end_time
-            if (!valData || valData.trim() === '') {
-                valData = linha['end_time'];
-                dataOrigem = 'SISTEMA';
-            }
-            
-            // Se ainda assim não tiver data, descarta
-            if (!valData) return null;
-
-            // TRATAMENTO DE FORMATOS DE DATA
-            let dataFormatada = null;
-            
-            // 1. Formato ISO do end_time (YYYY-MM-DDTHH:mm:ss...)
-            if (valData.includes('T')) {
-                dataFormatada = valData.split('T')[0];
-            } 
-            // 2. Formato Brasileiro (DD/MM/YYYY)
-            else if (valData.includes('/')) {
-                const partes = valData.split('/');
-                if (partes.length === 3) dataFormatada = `${partes[2]}-${partes[1]}-${partes[0]}`;
-            } 
-            // 3. Formato Padrão ISO Simples (YYYY-MM-DD)
-            else if (valData.includes('-')) {
-                dataFormatada = valData;
-            }
-
-            if (!dataFormatada) return null;
-
-            // Tratamento de Números
-            const campos = parseInt(linha['nº Campos']) || 0;
-            const ok = parseInt(linha['Ok']) || 0;
-            const nok = parseInt(linha['Nok']) || 0;
-
-            return {
-                data_auditoria: dataFormatada,
-                company_id: linha['Company_id'] || null,
-                empresa: linha['Empresa'] || linha['Nome da PPC'] || 'Desconhecida',
-                assistente: linha['Assistente'] || linha['id_assistente'],
-                doc_name: linha['doc_name'] || linha['DOCUMENTO'] || linha['nome_documento'],
-                status: linha['STATUS'] || 'PENDENTE',
-                // Adiciona aviso na obs se a data foi inferida pelo sistema
-                obs: (linha['Apontamentos/obs'] || linha['obs'] || '') + (dataOrigem === 'SISTEMA' ? ' [Data via System]' : ''),
-                campos: campos,
-                ok: ok,
-                nok: nok,
-                porcentagem: linha['% Assert'] || '0%',
-                auditora: linha['Auditora'] || 'Sistema'
-            };
-        }).filter(item => item !== null);
-
-        const total = dadosFormatados.length;
+        // Reset e Debounce
+        this.estado.pagina = 0;
+        clearTimeout(this.timerBusca);
         
+        const tbody = document.getElementById('lista-assertividade');
+        if(tbody && tbody.rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-circle-notch fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Atualizando Grid...</p></td></tr>`;
+        }
+
+        this.timerBusca = setTimeout(() => {
+            this.buscarDados();
+        }, 500);
+    },
+
+    mudarPagina: function(delta) {
+        const novaPagina = this.estado.pagina + delta;
+        if (novaPagina >= 0) {
+            this.estado.pagina = novaPagina;
+            this.buscarDados(); 
+        }
+    },
+
+    // --- CONSULTA AO BANCO (VIEW INTELIGENTE) ---
+    buscarDados: async function() {
+        const tbody = document.getElementById('lista-assertividade');
+        const infoPag = document.getElementById('info-paginacao');
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
+        const contador = document.getElementById('contador-assert');
+
+        if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-sync fa-spin"></i> Carregando...</span>`;
+
+        try {
+            // Usa a View 'vw_assertividade_completa'
+            let query = Sistema.supabase
+                .from('vw_assertividade_completa')
+                .select('*', { count: 'exact' });
+
+            // APLICAÇÃO DE FILTROS
+            if (this.estado.termo) {
+                query = query.ilike('search_vector', `%${this.estado.termo}%`);
+            }
+            if (this.estado.filtros.data) {
+                query = query.eq('data_referencia', this.estado.filtros.data);
+            }
+            if (this.estado.filtros.empresa) {
+                query = query.ilike('empresa_nome', `%${this.estado.filtros.empresa}%`);
+            }
+            // NOVO: Filtro de Assistente
+            if (this.estado.filtros.assistente) {
+                query = query.ilike('nome_assistente', `%${this.estado.filtros.assistente}%`);
+            }
+            if (this.estado.filtros.auditora) {
+                query = query.ilike('nome_auditora_raw', `%${this.estado.filtros.auditora}%`);
+            }
+            if (this.estado.filtros.status) {
+                query = query.ilike('status', `%${this.estado.filtros.status}%`);
+            }
+            if (this.estado.filtros.doc) {
+                query = query.ilike('nome_documento', `%${this.estado.filtros.doc}%`);
+            }
+            if (this.estado.filtros.obs) {
+                query = query.ilike('observacao', `%${this.estado.filtros.obs}%`);
+            }
+
+            // PAGINAÇÃO
+            const inicio = this.estado.pagina * this.estado.limite;
+            const fim = inicio + this.estado.limite - 1;
+            
+            query = query.order('data_referencia', { ascending: false }) // Mais recentes primeiro
+                         .range(inicio, fim);
+
+            const { data, error, count } = await query;
+
+            if (error) throw error;
+
+            this.estado.total = count || 0;
+            this.renderizarTabela(data || []);
+            this.atualizarControlesPaginacao();
+
+        } catch (e) {
+            console.error("Erro na busca:", e);
+            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold"><i class="fas fa-bug mr-2"></i> Erro visual: ${e.message}</td></tr>`;
+        }
+    },
+
+    atualizarControlesPaginacao: function() {
+        const infoPag = document.getElementById('info-paginacao');
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
+        const contador = document.getElementById('contador-assert');
+
+        const total = this.estado.total;
+        const inicio = (this.estado.pagina * this.estado.limite) + 1;
+        let fim = (this.estado.pagina + 1) * this.estado.limite;
+        if (fim > total) fim = total;
+
+        if(contador) contador.innerText = `${total.toLocaleString('pt-BR')} registros`;
+
         if (total === 0) {
-            alert("Nenhum registro válido encontrado (nem Data da Auditoria, nem end_time).");
-            statusEl.innerText = "Falha: Dados insuficientes.";
+            if(infoPag) infoPag.innerHTML = "Sem resultados.";
+            if(btnAnt) btnAnt.disabled = true;
+            if(btnProx) btnProx.disabled = true;
+        } else {
+            if(infoPag) infoPag.innerHTML = `${inicio}-${fim} de ${total}`;
+            if(btnAnt) btnAnt.disabled = this.estado.pagina === 0;
+            if(btnProx) btnProx.disabled = fim >= total;
+        }
+    },
+
+    // --- RENDERIZAÇÃO CORRIGIDA ---
+    renderizarTabela: function(lista) {
+        const tbody = document.getElementById('lista-assertividade');
+        
+        if (!lista || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-folder-open text-3xl opacity-20"></i><span>Nada encontrado.</span></div></td></tr>';
             return;
         }
 
-        statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total.toLocaleString('pt-BR')} registros... (Pode demorar)</span>`;
-
-        // Envio em Lotes
-        for (let i = 0; i < total; i += TAMANHO_LOTE) {
-            const lote = dadosFormatados.slice(i, i + TAMANHO_LOTE);
+        let html = '';
+        lista.forEach(item => {
+            // SANITIZAÇÃO (Segurança XSS)
+            const empresaSafe = Sistema.escapar(item.empresa_nome || '-');
+            const assistenteSafe = Sistema.escapar(item.nome_assistente || '-'); // CORREÇÃO: Campo Assistente
+            const auditoraSafe = Sistema.escapar(item.nome_auditora_raw || '-');
+            const docSafe = Sistema.escapar(item.nome_documento || '-');
+            const obsSafe = Sistema.escapar(item.observacao || '-');
             
-            // Atualiza status a cada 5 lotes para não piscar muito
-            if (i % (TAMANHO_LOTE * 5) === 0) {
-                statusEl.innerText = `Processando... ${Math.round((i/total)*100)}% (${i.toLocaleString('pt-BR')}/${total.toLocaleString('pt-BR')})`;
-            }
+            // FORMATAÇÃO DE DATA (YYYY-MM-DD -> DD/MM)
+            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             
-            const { error } = await Sistema.supabase
-                .from('assertividade')
-                .insert(lote);
+            // FORMATAÇÃO DO ID
+            const empIdDisplay = item.empresa_id ? `<span class="text-slate-500">#${item.empresa_id}</span>` : '<span class="text-slate-200">-</span>';
 
-            if (error) {
-                console.error("Erro lote:", error);
-                erros += lote.length;
-            } else {
-                sucesso += lote.length;
-            }
-        }
+            // STATUS BADGE
+            const stRaw = Sistema.escapar(item.status || '-');     
+            const stUp = stRaw.toUpperCase();     
+            let badgeClass = "bg-slate-100 text-slate-500 border-slate-200"; 
+            if (stUp === 'OK' || stUp === 'VALIDO') badgeClass = "bg-emerald-100 text-emerald-700 border-emerald-200";
+            else if (stUp.includes('NOK')) badgeClass = "bg-rose-100 text-rose-700 border-rose-200";
+            else if (stUp.includes('REV')) badgeClass = "bg-amber-100 text-amber-700 border-amber-200";
+            else if (stUp.includes('PEND')) badgeClass = "bg-blue-50 text-blue-600 border-blue-100";
 
-        // Relatório Final
-        if (erros > 0) {
-            statusEl.innerHTML = `<span class="text-red-600 font-bold">Concluído com ressalvas. Sucesso: ${sucesso} | Falhas: ${erros}</span>`;
-        } else {
-            statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Importação Finalizada: ${sucesso.toLocaleString('pt-BR')} registros.</span>`;
-            if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
-            alert(`Processo concluído!\n${sucesso.toLocaleString('pt-BR')} registros importados com sucesso.`);
-        }
-    }
+            const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
+
+            // ASSERTIVIDADE (Cálculo)
+            const assertVal = parseFloat(item.indice_assertividade || 0);
+            let assertColor = 'text-slate-600';
+            if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
+            else if (assertVal < 90 && assertVal > 0) assertColor = 'text-rose-600 font-bold';
+
+            // MONTAGEM DO HTML (ORDEM SOLICITADA)
+            html += `
+            <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
+                <td class="px-3 py-2 text-slate-600 font-mono">${dataFmt}</td>
+                
+                <td class="px-3 py-2 text-center font-mono text-xs">${empIdDisplay}</td>
+                
+                <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${empresaSafe}">${empresaSafe}</td>
+                
+                <td class="px-3 py-2 text-slate-600 max-w-[120px] truncate font-medium" title="${assistenteSafe}">${assistenteSafe}</td>
+                
+                <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${docSafe}">${docSafe}</td>
+                
+                <td class="px-3 py-2 text-center">${statusBadge}</td>
+                
+                <td class="px-3 py-2 text-slate-400 max-w-[180px] truncate cursor-help border-l border-slate-100 pl-4 italic" title="${obsSafe}">${obsSafe}</td>
+                
+                <td class="px-3 py-2 text-center font-mono bg-slate-50/50 text-slate-500">${item.num_campos}</td>
+                
+                <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50/30">${item.qtd_ok}</td>
+                
+                <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50/30">${item.qtd_nok}</td>
+                
+                <td class="px-3 py-2 text-center ${assertColor} text-sm bg-slate-50/50">${assertVal}%</td>
+                
+                <td class="px-3 py-2 text-slate-500 text-[10px] uppercase">${auditoraSafe}</td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+    },
+
+    salvarMeta: function() { }
 };
