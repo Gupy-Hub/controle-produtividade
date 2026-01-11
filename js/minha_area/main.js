@@ -1,7 +1,7 @@
 const MinhaArea = {
     usuario: null,
     usuarioAlvoId: null,
-    filtroPeriodo: 'mes', // 'mes', 'semana', 'ano'
+    filtroPeriodo: 'mes',
 
     init: async function() {
         console.log("Minha Área Iniciada");
@@ -13,16 +13,17 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
-        // Permissão Admin
         await this.setupAdminAccess();
         if (!this.isAdmin()) {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // Popula os Selects de Ano/Mês
+        // 1. Popula Selects Iniciais
         this.popularSeletoresIniciais();
 
-        // Inicia
+        // 2. Carrega Estado Salvo (Persistência) ou usa padrão
+        this.carregarEstadoSalvo();
+
         this.mudarAba('diario');
     },
 
@@ -38,16 +39,10 @@ const MinhaArea = {
                 container.classList.remove('hidden');
                 try {
                     const { data: users, error } = await Sistema.supabase
-                        .from('usuarios')
-                        .select('id, nome')
-                        .eq('ativo', true)
-                        .order('nome');
-
+                        .from('usuarios').select('id, nome').eq('ativo', true).order('nome');
                     if (!error && users) {
                         let options = `<option value="" disabled selected>👉 Selecionar Colaboradora...</option>`;
-                        users.forEach(u => {
-                            if (u.id !== this.usuario.id) options += `<option value="${u.id}">${u.nome}</option>`;
-                        });
+                        users.forEach(u => { if (u.id !== this.usuario.id) options += `<option value="${u.id}">${u.nome}</option>`; });
                         select.innerHTML = options;
                     }
                 } catch (e) { console.error(e); }
@@ -61,14 +56,9 @@ const MinhaArea = {
         this.atualizarTudo();
     },
 
-    getUsuarioAlvo: function() {
-        return this.usuarioAlvoId;
-    },
-
-    // --- LOGICA DE SELETORES E DATAS ---
+    getUsuarioAlvo: function() { return this.usuarioAlvoId; },
 
     popularSeletoresIniciais: function() {
-        // Popula Ano (Ano atual +/- 2 anos)
         const anoSelect = document.getElementById('sel-ano');
         const anoAtual = new Date().getFullYear();
         let htmlAnos = '';
@@ -76,17 +66,53 @@ const MinhaArea = {
             htmlAnos += `<option value="${i}" ${i === anoAtual ? 'selected' : ''}>${i}</option>`;
         }
         if(anoSelect) anoSelect.innerHTML = htmlAnos;
-
-        // Seleciona o Mês Atual
+        
         const mesSelect = document.getElementById('sel-mes');
         const mesAtual = new Date().getMonth();
         if(mesSelect) mesSelect.value = mesAtual;
     },
 
-    mudarPeriodo: function(tipo) {
+    // --- PERSISTÊNCIA E EVENTOS ---
+
+    salvarEAtualizar: function() {
+        // Salva estado no LocalStorage
+        const estado = {
+            tipo: this.filtroPeriodo,
+            ano: document.getElementById('sel-ano').value,
+            mes: document.getElementById('sel-mes').value,
+            semana: document.getElementById('sel-semana').value,
+            sub: document.getElementById('sel-subperiodo-ano').value
+        };
+        localStorage.setItem('ma_filtro_state', JSON.stringify(estado));
+        
+        this.atualizarTudo();
+    },
+
+    carregarEstadoSalvo: function() {
+        const salvo = localStorage.getItem('ma_filtro_state');
+        if (salvo) {
+            try {
+                const s = JSON.parse(salvo);
+                
+                // Restaura valores dos inputs
+                if(document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
+                if(document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
+                if(document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
+                if(document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
+                
+                // Restaura o tipo e a UI
+                this.mudarPeriodo(s.tipo, false); // false = não salvar de novo agora
+                return;
+            } catch(e) { console.error("Erro ao ler estado salvo", e); }
+        }
+        
+        // Padrão se não houver salvo
+        this.mudarPeriodo('mes', false);
+    },
+
+    mudarPeriodo: function(tipo, salvar = true) {
         this.filtroPeriodo = tipo;
         
-        // Estilo dos Botões
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
@@ -95,53 +121,39 @@ const MinhaArea = {
             }
         });
 
-        // Visibilidade dos Seletores
         const selMes = document.getElementById('sel-mes');
         const selSemana = document.getElementById('sel-semana');
         const selSubAno = document.getElementById('sel-subperiodo-ano');
 
-        // Reset visibility
         if(selMes) selMes.classList.remove('hidden');
         if(selSemana) selSemana.classList.add('hidden');
         if(selSubAno) selSubAno.classList.add('hidden');
 
         if (tipo === 'semana') {
-            // Mostra: Ano, Mês, Semana
             if(selSemana) selSemana.classList.remove('hidden');
         } else if (tipo === 'ano') {
-            // Mostra: Ano, Sub-periodo (Esconde Mês)
             if(selMes) selMes.classList.add('hidden');
             if(selSubAno) selSubAno.classList.remove('hidden');
         }
-        // Se tipo === 'mes', o padrão (Ano + Mês) já está ok
 
-        this.atualizarTudo();
+        if(salvar) this.salvarEAtualizar();
     },
 
     getDatasFiltro: function() {
-        // Recupera valores dos selects
         const ano = parseInt(document.getElementById('sel-ano').value);
-        const mes = parseInt(document.getElementById('sel-mes').value); // 0 a 11
-        
+        const mes = parseInt(document.getElementById('sel-mes').value);
         let inicio, fim;
 
         if (this.filtroPeriodo === 'mes') {
-            // Do dia 1 ao último dia do mês selecionado
             inicio = new Date(ano, mes, 1);
             fim = new Date(ano, mes + 1, 0);
-        
         } else if (this.filtroPeriodo === 'semana') {
-            const semanaIndex = parseInt(document.getElementById('sel-semana').value); // 1 a 5
-            
-            // Lógica simples de semana: divide o mês em blocos de 7 dias (ou resto)
-            // Semana 1: 1-7, S2: 8-14, S3: 15-21, S4: 22-28, S5: 29-Fim
+            const semanaIndex = parseInt(document.getElementById('sel-semana').value);
             const diaInicio = (semanaIndex - 1) * 7 + 1;
             let diaFim = diaInicio + 6;
-            
             const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
             if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
             
-            // Se a semana começar depois do fim do mês (ex: Fev não tem dia 30), ajusta
             if (diaInicio > ultimoDiaMes) {
                 inicio = new Date(ano, mes, ultimoDiaMes);
                 fim = new Date(ano, mes, ultimoDiaMes);
@@ -149,18 +161,13 @@ const MinhaArea = {
                 inicio = new Date(ano, mes, diaInicio);
                 fim = new Date(ano, mes, diaFim);
             }
-
         } else if (this.filtroPeriodo === 'ano') {
             const sub = document.getElementById('sel-subperiodo-ano').value;
-            
-            if (sub === 'full') {
-                inicio = new Date(ano, 0, 1);
-                fim = new Date(ano, 11, 31);
-            } else if (sub.startsWith('S')) { // Semestres
-                if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); } // Jan-Jun
-                else { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); } // Jul-Dez
-            } else if (sub.startsWith('T')) { // Trimestres
-                const tri = parseInt(sub.replace('T', '')); // 1, 2, 3, 4
+            if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
+            else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
+            else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
+            else if (sub.startsWith('T')) {
+                const tri = parseInt(sub.replace('T', ''));
                 const mesInicio = (tri - 1) * 3;
                 const mesFim = mesInicio + 3;
                 inicio = new Date(ano, mesInicio, 1);
@@ -168,15 +175,12 @@ const MinhaArea = {
             }
         }
 
-        // Formata para YYYY-MM-DD (ajusta fuso horário para não perder o dia)
-        // Usa UTC para garantir a string correta
         const fmt = (d) => {
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
         };
-
         return { inicio: fmt(inicio), fim: fmt(fim) };
     },
 
@@ -191,19 +195,15 @@ const MinhaArea = {
     mudarAba: function(abaId) {
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
         const aba = document.getElementById(`ma-tab-${abaId}`);
         const btn = document.getElementById(`btn-ma-${abaId}`);
-        
         if(aba) aba.classList.remove('hidden');
         if(btn) btn.classList.add('active');
-
         this.carregarDadosAba(abaId);
     },
 
     carregarDadosAba: function(abaId) {
         if (this.isAdmin() && !this.usuarioAlvoId) return;
-
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
         if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
@@ -213,7 +213,5 @@ const MinhaArea = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => { 
-        if(typeof MinhaArea !== 'undefined') MinhaArea.init(); 
-    }, 100);
+    setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
 });
