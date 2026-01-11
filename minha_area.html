@@ -72,23 +72,36 @@
                     <div class="w-px h-6 bg-slate-200 mx-1"></div>
 
                     <div class="flex gap-2">
-                        <select id="sel-ano" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500"></select>
+                        <select id="sel-ano" onchange="MinhaArea.atualizarTudo()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500">
+                            </select>
 
-                        <select id="sel-mes" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">
+                        <select id="sel-mes" onchange="MinhaArea.atualizarTudo()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">
                             <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option>
                             <option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option>
                             <option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option>
                             <option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
                         </select>
 
-                        <select id="sel-semana" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500">
-                            <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
+                        <select id="sel-semana" onchange="MinhaArea.atualizarTudo()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500">
+                            <option value="1">Semana 1</option>
+                            <option value="2">Semana 2</option>
+                            <option value="3">Semana 3</option>
+                            <option value="4">Semana 4</option>
+                            <option value="5">Semana 5</option>
                         </select>
 
-                        <select id="sel-subperiodo-ano" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-purple-500">
+                        <select id="sel-subperiodo-ano" onchange="MinhaArea.atualizarTudo()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-purple-500">
                             <option value="full">Ano Completo</option>
-                            <optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup>
-                            <optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup>
+                            <optgroup label="Semestres">
+                                <option value="S1">1º Semestre</option>
+                                <option value="S2">2º Semestre</option>
+                            </optgroup>
+                            <optgroup label="Trimestres">
+                                <option value="T1">1º Trimestre</option>
+                                <option value="T2">2º Trimestre</option>
+                                <option value="T3">3º Trimestre</option>
+                                <option value="T4">4º Trimestre</option>
+                            </optgroup>
                         </select>
                     </div>
                 </div>
@@ -98,58 +111,14 @@
     </div>
 
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
-        
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-                
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Produção</span>
-                        <h3 class="text-xl font-black text-blue-600 leading-none" id="kpi-total">--</h3>
-                    </div>
-                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Meta</span>
-                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-acumulada">--</h3>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center relative">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Atingimento</span>
-                        <h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3>
-                        <div class="absolute bottom-0 left-0 w-full h-1 bg-slate-100"><div id="bar-progress" class="h-full bg-emerald-500" style="width: 0%"></div></div>
-                    </div>
-                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</span>
-                        <h3 class="text-xs font-black text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 uppercase" id="kpi-status">Análise</h3>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Prod.</span>
-                        <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias">--</h3>
-                    </div>
-                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Úteis</span>
-                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-dias-uteis">--</h3>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Sua Média</span>
-                        <h3 class="text-xl font-black text-indigo-600 leading-none" id="kpi-media">--</h3>
-                    </div>
-                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Ideal</span>
-                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-dia">650</h3>
-                    </div>
-                </div>
-
+             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Produção Total</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-blue-600 leading-none" id="kpi-total">--</h3></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Atingimento</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-1"><div id="bar-progress" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Dias Produtivos</p><div class="flex items-center gap-2"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias">--</h3></div></div>
+                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Média Diária</p><h3 class="text-xl font-black text-indigo-600 leading-none" id="kpi-media">--</h3></div>
+                 <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Meta Acumulada</p><h3 class="text-xl font-black text-slate-500 leading-none" id="kpi-meta-acumulada">--</h3></div>
             </div>
-
             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse"><thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm"><tr class="divide-x divide-slate-200 border-b border-slate-300"><th class="px-3 py-3 w-[12%] text-left">Data</th><th class="px-2 py-3 w-[8%] text-center">Fator</th><th class="px-2 py-3 w-[8%] text-center">FIFO</th><th class="px-2 py-3 w-[8%] text-center">G. Total</th><th class="px-2 py-3 w-[8%] text-center">G. Parcial</th><th class="px-2 py-3 w-[10%] text-center bg-blue-50/50 text-blue-700 border-x border-blue-100">Produção</th><th class="px-2 py-3 w-[10%] text-center">Meta Dia</th><th class="px-2 py-3 w-[8%] text-center">% Ating.</th><th class="px-3 py-3 text-left">Justificativa / Obs</th></tr></thead><tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody></table>
@@ -157,7 +126,6 @@
                 <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">0</span></span></div>
             </div>
         </div>
-
         <div id="ma-tab-metas" class="ma-view hidden animate-enter"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]"><h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Anual</h3><div class="h-[400px] w-full"><canvas id="graficoEvolucao"></canvas></div></div></div>
         <div id="ma-tab-auditoria" class="ma-view hidden animate-enter space-y-4"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center min-h-[400px]"><div class="text-center"><div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-500 mb-4"><i class="fas fa-clipboard-check text-2xl"></i></div><h3 class="text-lg font-bold text-slate-700">Painel de Auditoria</h3><p class="text-sm text-slate-500 mt-2">Visualize aqui seus erros, acertos e pontos de atenção validados pela auditoria.</p><div id="auditoria-content" class="mt-8 w-full text-left"></div></div></div></div>
         <div id="ma-tab-comparativo" class="ma-view hidden animate-enter"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]"><h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-users text-blue-500"></i> Comparativo no Período</h3><div class="h-[400px] w-full"><canvas id="graficoComparativo"></canvas></div></div></div>

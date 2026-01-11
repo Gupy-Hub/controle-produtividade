@@ -2,6 +2,7 @@ MinhaArea.Metas = {
     chart: null,
 
     carregar: async function() {
+        // CORREÇÃO: Usa ID dinâmico
         const uid = MinhaArea.getUsuarioAlvo();
         if (!uid) return;
 
@@ -24,14 +25,11 @@ MinhaArea.Metas = {
 
             const labels = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
             const dadosProducao = new Array(12).fill(0);
-            
-            // Padrão 650 * 22 dias se não houver meta
             const dadosMeta = new Array(12).fill(650 * 22);
 
             if (metas) {
                 metas.forEach(m => {
-                    // CORREÇÃO: Multiplica meta diária (ex: 450) por 22 para projetar o mês no gráfico
-                    if(m.mes >= 1 && m.mes <= 12) dadosMeta[m.mes - 1] = m.meta * 22;
+                    if(m.mes >= 1 && m.mes <= 12) dadosMeta[m.mes - 1] = m.meta;
                 });
             }
 
@@ -60,14 +58,14 @@ MinhaArea.Metas = {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'Produção Realizada',
+                        label: 'Produção',
                         data: prod,
                         backgroundColor: '#2563eb',
                         borderRadius: 4,
                         order: 2
                     },
                     {
-                        label: 'Meta Projetada (x22 dias)',
+                        label: 'Meta',
                         data: metas,
                         type: 'line',
                         borderColor: '#059669',
