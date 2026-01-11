@@ -1,6 +1,6 @@
 const MenuGlobal = {
     renderizar: function() {
-        // Fallback: Cria o container se não existir na página
+        // Cria o container se não existir (fallback)
         let container = document.getElementById('global-menu');
         if (!container) {
             container = document.createElement('div');
@@ -8,28 +8,26 @@ const MenuGlobal = {
             document.body.prepend(container);
         }
 
-        // Dados do Usuário (Recuperação Segura)
+        // Dados do Usuário
         const user = JSON.parse(localStorage.getItem('usuario_logado') || '{}');
-        
-        // Regra de Permissão Centralizada
-        const isGestao = ['GESTORA', 'AUDITORA', 'ADMIN'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
+        // Regra de Permissão (Mesma do sistema)
+        const isGestao = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
 
-        // Links do Menu - Array de Objetos para fácil manutenção (Engenharia de Software)
+        // Links do Menu
         const links = [
             { nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' },
             { nome: 'Painel Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' },
             { nome: 'Ferramentas', url: 'ferramentas.html', icon: 'fas fa-toolbox' }
         ];
 
-        // Adiciona módulo de gestão condicionalmente
+        // Adiciona Gestão se tiver permissão
         if (isGestao) {
-            // CORREÇÃO AQUI: Aponta para usuarios.html, pois gestao.html não existe
-            links.push({ nome: 'Gestão', url: 'gestao/usuarios.html', icon: 'fas fa-cogs' });
+            links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
         }
 
         const currentPath = window.location.pathname;
 
-        // Construção do HTML usando Template Strings
+        // HTML do Menu
         let html = `
         <nav class="bg-slate-900 text-slate-300 shadow-md fixed top-0 left-0 w-full z-[60] h-12">
             <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
@@ -45,8 +43,8 @@ const MenuGlobal = {
         links.forEach(link => {
             const ativo = currentPath.includes(link.url);
             const classe = ativo 
-                ? 'bg-slate-800 text-white font-bold pointer-events-none' 
-                : 'hover:bg-slate-800 hover:text-white transition-colors cursor-pointer';
+                ? 'bg-slate-800 text-white font-bold' 
+                : 'hover:bg-slate-800 hover:text-white transition-colors';
             
             html += `
                 <a href="${link.url}" class="px-3 py-1.5 rounded text-xs flex items-center gap-2 ${classe}">
@@ -61,7 +59,7 @@ const MenuGlobal = {
 
                 <div class="flex items-center gap-4 text-xs">
                     <span class="hidden md:inline">Olá, <strong class="text-white">${user.nome || 'Visitante'}</strong></span>
-                    <button onclick="Sistema.sair()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition flex items-center gap-2">
+                    <button onclick="Sistema.sair()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition">
                         <i class="fas fa-sign-out-alt"></i> Sair
                     </button>
                 </div>
@@ -70,15 +68,18 @@ const MenuGlobal = {
 
         container.innerHTML = html;
 
-        // Ajustes de Layout para evitar sobreposição (CSS in JS)
-        document.body.style.paddingTop = '0px'; 
+        // --- AJUSTES AUTOMÁTICOS DE LAYOUT ---
+        // 1. Empurra o conteúdo do corpo para baixo (para não ficar escondido atrás do menu)
+        // Se já tiver padding, soma. Se não, define.
+        document.body.style.paddingTop = '0px'; // Reseta para controle via classes, mas o menu ocupa 48px (3rem)
         
-        // Compatibilidade com outros headers fixos
+        // 2. Se houver OUTRO header fixo (como o da Minha Área), empurra ele para baixo
         const subHeader = document.querySelector('.fixed.top-0:not(nav)');
         if (subHeader) {
-            subHeader.style.top = '3rem'; 
+            subHeader.style.top = '3rem'; // 48px (altura do menu novo)
         }
     }
 };
 
+// Auto-executa ao carregar
 document.addEventListener('DOMContentLoaded', MenuGlobal.renderizar);
