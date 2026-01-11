@@ -1,6 +1,6 @@
 /**
- * Gestão de Assertividade - v2.0
- * Responsável pela visualização e filtragem dos dados de auditoria.
+ * Gestão de Assertividade - v2.1 (Sincronizada)
+ * Responsável pelo controle de qualidade e métricas de auditoria.
  */
 Gestao.Assertividade = {
     paginaAtual: 1,
@@ -9,51 +9,59 @@ Gestao.Assertividade = {
     filtrosAtivos: {},
     timeoutBusca: null,
     
-    // Configurações de Estado
-    filtroPeriodo: 'mes', // 'mes', 'semana', 'ano'
+    // Estado Inicial
+    filtroPeriodo: 'mes', 
     assistentesCarregados: false,
 
+    /**
+     * Inicializa os ouvintes de eventos da página
+     */
     initListeners: function() {
-        // Listeners para inputs de busca em tempo real (debounce)
-        const inputs = ['filtro-status'];
-        inputs.forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.oninput = () => this.atualizarFiltrosEBuscar();
-        });
+        // Monitora mudanças nos selects de filtro e data
+        const ids = [
+            'sel-assert-assistente', 'sel-assert-ano', 'sel-assert-mes', 
+            'sel-assert-semana', 'sel-assert-subano', 'filtro-status'
+        ];
 
-        const selects = ['sel-assert-assistente', 'sel-assert-ano', 'sel-assert-mes', 'sel-assert-semana', 'sel-assert-subano'];
-        selects.forEach(id => {
+        ids.forEach(id => {
             const el = document.getElementById(id);
-            if(el) el.onchange = () => {
-                this.paginaAtual = 1;
-                this.capturarFiltros();
-                this.buscarDados();
-            };
+            if (el) {
+                el.onchange = () => {
+                    this.paginaAtual = 1;
+                    this.capturarFiltros();
+                    this.buscarDados();
+                };
+            }
         });
     },
 
+    /**
+     * Ponto de entrada chamado pelo main.js
+     */
     carregar: async function() {
+        console.log("📊 Assertividade: Carregando módulo...");
         this.popularSeletoresIniciais();
         
-        // Carrega lista de assistentes se ainda não fez
         if (!this.assistentesCarregados) {
             await this.carregarAssistentes();
             this.assistentesCarregados = true;
         }
 
-        this.mudarPeriodo('mes', false); // Default para Mês atual
+        this.mudarPeriodo('mes', false);
         this.paginaAtual = 1;
         this.capturarFiltros();
         this.buscarDados();
         this.initListeners();
     },
 
+    /**
+     * Busca lista de assistentes para o filtro dropdown 
+     */
     carregarAssistentes: async function() {
         const select = document.getElementById('sel-assert-assistente');
         if (!select) return;
 
         try {
-            // Busca apenas quem não é gestor/auditor para a lista de produção
             const { data, error } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome')
@@ -70,12 +78,11 @@ Gestao.Assertividade = {
             select.innerHTML = html;
 
         } catch (e) {
-            console.error("Erro ao carregar assistentes:", e);
-            select.innerHTML = '<option value="">Erro ao carregar</option>';
+            console.error("❌ Erro ao carregar assistentes:", e);
         }
     },
 
-    // --- LÓGICA DE DATAS E PERÍODOS ---
+    // --- GESTÃO DE DATAS ---
 
     popularSeletoresIniciais: function() {
         const anoSelect = document.getElementById('sel-assert-ano');
@@ -97,7 +104,7 @@ Gestao.Assertividade = {
     mudarPeriodo: function(tipo, buscar = true) {
         this.filtroPeriodo = tipo;
         
-        // Estilo visual dos botões de período
+        // Estilização dos botões (Toggle visual)
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-assert-${t}`);
             if(btn) {
@@ -107,7 +114,7 @@ Gestao.Assertividade = {
             }
         });
 
-        // Visibilidade dos seletores conforme o tipo
+        // Alterna visibilidade dos selects específicos
         const selMes = document.getElementById('sel-assert-mes');
         const selSemana = document.getElementById('sel-assert-semana');
         const selSubAno = document.getElementById('sel-assert-subano');
@@ -123,82 +130,41 @@ Gestao.Assertividade = {
             if(selSubAno) selSubAno.classList.remove('hidden');
         }
 
-        if(buscar) this.atualizarPeriodo();
-    },
-
-    atualizarPeriodo: function() {
-        this.paginaAtual = 1;
-        this.buscarDados();
+        if(buscar) this.buscarDados();
     },
 
     getDatasFiltro: function() {
-        const anoEl = document.getElementById('sel-assert-ano');
-        const mesEl = document.getElementById('sel-assert-mes');
-        if (!anoEl || !mesEl) return { inicio: null, fim: null };
-
-        const ano = parseInt(anoEl.value);
-        const mes = parseInt(mesEl.value);
-        
+        const ano = parseInt(document.getElementById('sel-assert-ano').value);
+        const mes = parseInt(document.getElementById('sel-assert-mes').value);
         let inicio, fim;
 
-        try {
-            if (this.filtroPeriodo === 'mes') {
-                inicio = new Date(ano, mes, 1);
-                fim = new Date(ano, mes + 1, 0);
-            } else if (this.filtroPeriodo === 'semana') {
-                const semanaIndex = parseInt(document.getElementById('sel-assert-semana').value);
-                const diaInicio = (semanaIndex - 1) * 7 + 1;
-                let diaFim = diaInicio + 6;
-                const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
-                if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
-                inicio = new Date(ano, mes, diaInicio);
-                fim = new Date(ano, mes, diaFim);
-            } else if (this.filtroPeriodo === 'ano') {
-                const sub = document.getElementById('sel-assert-subano').value;
-                if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
-                else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
-                else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
-                else if (sub.startsWith('T')) {
-                    const tri = parseInt(sub.replace('T', ''));
-                    const mesInicio = (tri - 1) * 3;
-                    const mesFim = mesInicio + 3;
-                    inicio = new Date(ano, mesInicio, 1);
-                    fim = new Date(ano, mesFim, 0);
-                }
-            }
+        const fmt = (d) => d.toISOString().split('T')[0];
 
-            const fmt = (d) => {
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const day = String(d.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            };
-            
-            return { inicio: fmt(inicio), fim: fmt(fim) };
-        } catch (e) {
-            console.error("Erro ao processar datas:", e);
-            return { inicio: null, fim: null };
+        if (this.filtroPeriodo === 'mes') {
+            inicio = new Date(ano, mes, 1);
+            fim = new Date(ano, mes + 1, 0);
+        } else if (this.filtroPeriodo === 'semana') {
+            const sem = parseInt(document.getElementById('sel-assert-semana').value);
+            inicio = new Date(ano, mes, (sem - 1) * 7 + 1);
+            fim = new Date(ano, mes, (sem - 1) * 7 + 7);
+        } else {
+            const sub = document.getElementById('sel-assert-subano').value;
+            if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
+            else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
+            else { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
         }
+
+        return { inicio: fmt(inicio), fim: fmt(fim) };
     },
 
-    // --- BUSCA E INTEGRAÇÃO COM SUPABASE ---
+    // --- LÓGICA DE BUSCA (ÁREA CRÍTICA) ---
 
     capturarFiltros: function() {
-        const get = (id) => { const el = document.getElementById(id); return el && el.value.trim() ? el.value.trim() : null; };
-        
+        const get = (id) => { const el = document.getElementById(id); return el && el.value ? el.value : null; };
         this.filtrosAtivos = {
             assistenteId: get('sel-assert-assistente'),
             status: get('filtro-status')
         };
-    },
-
-    atualizarFiltrosEBuscar: function() {
-        if (this.timeoutBusca) clearTimeout(this.timeoutBusca);
-        this.timeoutBusca = setTimeout(() => {
-            this.paginaAtual = 1;
-            this.capturarFiltros();
-            this.buscarDados();
-        }, 400);
     },
 
     buscarDados: async function() {
@@ -207,32 +173,38 @@ Gestao.Assertividade = {
         if(!tbody) return;
 
         const { inicio, fim } = this.getDatasFiltro();
-        const labelData = `${inicio.split('-').reverse().join('/')} - ${fim.split('-').reverse().join('/')}`;
 
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-20"><i class="fas fa-circle-notch fa-spin text-blue-500 text-3xl"></i><p class="text-slate-400 mt-2">Buscando assertividade...</p></td></tr>';
-        if(contador) contador.innerHTML = '';
+        // 1. Limpeza visual e Loading
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-20"><i class="fas fa-circle-notch fa-spin text-blue-500 text-3xl"></i><p class="mt-2 text-slate-400">Consultando Banco de Dados...</p></td></tr>';
+
+        // 2. Preparação do Payload (Objeto de parâmetros)
+        const params = {
+            p_pagina: parseInt(this.paginaAtual),
+            p_tamanho: parseInt(this.itensPorPagina),
+            p_data_inicio: inicio,
+            p_data_fim: fim,
+            p_assistente_id: this.filtrosAtivos.assistenteId ? parseInt(this.filtrosAtivos.assistenteId) : null,
+            p_filtro_status: this.filtrosAtivos.status || null
+        };
+
+        // --- DIAGNÓSTICO: LOGO PARA RASTREIO ---
+        console.log("🛠️ RPC Call: buscar_assertividade_v5");
+        console.log("📦 Parâmetros enviados:", params);
+        // ---------------------------------------
 
         try {
-            // Parâmetros sincronizados com a função SQL buscar_assertividade_v5
-            const params = {
-                p_pagina: parseInt(this.paginaAtual),
-                p_tamanho: parseInt(this.itensPorPagina),
-                p_data_inicio: inicio,
-                p_data_fim: fim,
-                p_assistente_id: this.filtrosAtivos.assistenteId ? parseInt(this.filtrosAtivos.assistenteId) : null,
-                p_filtro_status: this.filtrosAtivos.status || null
-            };
-
             const { data, error } = await Sistema.supabase.rpc('buscar_assertividade_v5', params);
 
-            if (error) throw error;
+            if (error) {
+                console.error("❌ Erro na Resposta do Supabase:", error);
+                throw error;
+            }
 
             this.renderizarTabela(data);
-            this.atualizarPaginacao(data, labelData);
+            this.atualizarPaginacao(data, `${inicio} a ${fim}`);
 
         } catch (e) {
-            console.error("Erro na busca de assertividade:", e);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-rose-500"><i class="fas fa-exclamation-triangle"></i> Erro ao carregar dados: ${e.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-rose-500"><i class="fas fa-exclamation-circle"></i> Erro: ${e.message}</td></tr>`;
         }
     },
 
@@ -241,30 +213,30 @@ Gestao.Assertividade = {
         tbody.innerHTML = '';
 
         if (!dados || dados.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-16 text-slate-400"><i class="far fa-folder-open text-3xl mb-3 block"></i>Nenhum registro de auditoria encontrado.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-16 text-slate-400">Nenhum registro encontrado para este filtro.</td></tr>`;
             return;
         }
 
         const fragment = document.createDocumentFragment();
         dados.forEach(row => {
             const tr = document.createElement('tr');
-            tr.className = "hover:bg-blue-50/50 transition border-b border-slate-50 text-xs group";
+            tr.className = "hover:bg-blue-50/50 transition border-b border-slate-50 text-xs";
             
-            const dataFmt = row.data_auditoria ? row.data_auditoria.split('-').reverse().join('/') : '-';
             const statusClass = this.getStatusColor(row.status);
+            const dataFmt = row.data_auditoria ? row.data_auditoria.split('-').reverse().join('/') : '-';
 
             tr.innerHTML = `
-                <td class="px-4 py-3 font-mono text-slate-500 whitespace-nowrap">${dataFmt}</td>
-                <td class="px-4 py-3 font-bold text-slate-700 truncate max-w-[200px]" title="${row.empresa}">${row.empresa || '-'}</td>
-                <td class="px-4 py-3 text-slate-600 truncate max-w-[150px]">${row.assistente || '-'}</td>
-                <td class="px-4 py-3 text-slate-600 truncate max-w-[150px]" title="${row.doc_name}">${row.doc_name || '-'}</td>
-                <td class="px-4 py-3 text-center"><span class="${statusClass} px-2 py-0.5 rounded text-[10px] font-bold border block w-full truncate">${row.status || '-'}</span></td>
-                <td class="px-4 py-3 text-slate-500 truncate max-w-[200px]" title="${row.obs}">${row.obs || '-'}</td>
-                <td class="px-4 py-3 text-center font-mono text-slate-400">${row.campos || 0}</td>
-                <td class="px-4 py-3 text-center text-emerald-600 font-bold bg-emerald-50 rounded">${row.ok || 0}</td>
-                <td class="px-4 py-3 text-center text-rose-600 font-bold bg-rose-50 rounded">${row.nok || 0}</td>
+                <td class="px-4 py-3 font-mono text-slate-500">${dataFmt}</td>
+                <td class="px-4 py-3 font-bold text-slate-700 truncate max-w-[180px]">${row.empresa || '-'}</td>
+                <td class="px-4 py-3 text-slate-600">${row.assistente || '-'}</td>
+                <td class="px-4 py-3 text-slate-600 truncate max-w-[150px]">${row.doc_name || '-'}</td>
+                <td class="px-4 py-3 text-center"><span class="${statusClass} px-2 py-0.5 rounded text-[10px] font-bold border">${row.status || '-'}</span></td>
+                <td class="px-4 py-3 text-slate-500 truncate max-w-[150px]">${row.obs || '-'}</td>
+                <td class="px-4 py-3 text-center font-mono">${row.campos || 0}</td>
+                <td class="px-4 py-3 text-center text-emerald-600 font-bold bg-emerald-50">${row.ok || 0}</td>
+                <td class="px-4 py-3 text-center text-rose-600 font-bold bg-rose-50">${row.nok || 0}</td>
                 <td class="px-4 py-3 text-center font-bold text-slate-700">${row.porcentagem || '-'}</td>
-                <td class="px-4 py-3 text-slate-500 truncate max-w-[100px]">${row.auditora || '-'}</td>
+                <td class="px-4 py-3 text-slate-400 text-[10px] italic">${row.auditora || '-'}</td>
             `;
             fragment.appendChild(tr);
         });
@@ -278,9 +250,7 @@ Gestao.Assertividade = {
         const elInfo = document.getElementById('info-paginacao');
         const elContador = document.getElementById('contador-assert');
         
-        const totalPaginas = Math.ceil(total / this.itensPorPagina) || 1;
-        if(elInfo) elInfo.innerText = `Pág ${this.paginaAtual} de ${totalPaginas}`;
-        
+        if(elInfo) elInfo.innerText = `Pág ${this.paginaAtual} de ${Math.ceil(total/this.itensPorPagina) || 1}`;
         if(elContador) elContador.innerHTML = `
             <span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-100 ml-2">Período: ${labelPeriodo}</span>
             <span class="bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold border border-slate-200 ml-1">Total: ${total}</span>
@@ -291,7 +261,7 @@ Gestao.Assertividade = {
         
         if(btnAnt) {
             btnAnt.disabled = this.paginaAtual === 1;
-            btnAnt.onclick = () => { if(this.paginaAtual > 1) { this.paginaAtual--; this.buscarDados(); } };
+            btnAnt.onclick = () => { this.paginaAtual--; this.buscarDados(); };
         }
         if(btnProx) {
             btnProx.disabled = (this.paginaAtual * this.itensPorPagina) >= total;
@@ -301,12 +271,10 @@ Gestao.Assertividade = {
 
     getStatusColor: function(status) {
         if(!status) return 'bg-slate-100 text-slate-400 border-slate-200';
-        const s = status.toString().toUpperCase();
+        const s = status.toUpperCase();
         if(s.includes('OK')) return 'bg-emerald-100 text-emerald-700 border-emerald-200';
         if(s.includes('NOK')) return 'bg-rose-100 text-rose-700 border-rose-200';
         if(s.includes('REV')) return 'bg-amber-100 text-amber-700 border-amber-200';
-        if(s.includes('JUST')) return 'bg-blue-100 text-blue-700 border-blue-200';
-        if(s.includes('IA')) return 'bg-indigo-100 text-indigo-700 border-indigo-200';
         return 'bg-slate-100 text-slate-600 border-slate-200';
     }
 };
