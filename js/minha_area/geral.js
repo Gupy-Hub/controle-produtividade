@@ -4,13 +4,13 @@ MinhaArea.Geral = {
         const tbody = document.getElementById('tabela-extrato');
         
         if (!uid) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
             this.zerarKPIs();
             return;
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
 
         try {
             // 1. Busca Produção
@@ -24,7 +24,8 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca Meta
+            // 2. Busca Meta (CORREÇÃO DE DATA SEGURA)
+            // Extrai mês e ano diretamente da string YYYY-MM-DD para evitar erro de fuso horário
             const [anoStr, mesStr] = inicio.split('-');
             const mesAtual = parseInt(mesStr);
             const anoAtual = parseInt(anoStr);
@@ -37,31 +38,10 @@ MinhaArea.Geral = {
                 .eq('ano', anoAtual)
                 .maybeSingle();
 
+            // CORREÇÃO CRÍTICA: Não divide mais por 22. Usa o valor direto do banco.
             const metaDiariaPadrao = metaData ? metaData.meta : 650;
 
-            // 3. NOVO: Busca Dados de Assertividade (Erros)
-            const { data: auditData } = await Sistema.supabase
-                .from('assertividade')
-                .select('data_referencia, status')
-                .eq('usuario_id', uid)
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim);
-
-            // Mapeia erros por dia: { '2024-01-01': { total: 10, erros: 2 } }
-            const auditMap = {};
-            if (auditData) {
-                auditData.forEach(a => {
-                    const d = a.data_referencia;
-                    if (!auditMap[d]) auditMap[d] = { total: 0, erros: 0 };
-                    auditMap[d].total++;
-                    // Considera erro se status não for OK
-                    if (a.status !== 'OK' && a.status !== 'EM BRANCO' && a.status !== 'EMPTY') {
-                        auditMap[d].erros++;
-                    }
-                });
-            }
-
-            // 4. Processamento
+            // 3. Processamento
             let totalProd = 0; let totalFifo = 0; let totalGT = 0; let totalGP = 0;
             let totalMeta = 0; let somaFator = 0; let diasUteis = 0;
 
@@ -75,6 +55,8 @@ MinhaArea.Geral = {
                 const gt = Number(item.gradual_total || 0);
                 const gp = Number(item.gradual_parcial || 0);
                 const fator = Number(item.fator);
+                
+                // Meta do dia proporcional ao fator
                 const metaDia = Math.round(metaDiariaPadrao * fator);
                 
                 totalProd += qtd; totalFifo += fifo; totalGT += gt; totalGP += gp;
@@ -84,11 +66,6 @@ MinhaArea.Geral = {
 
                 const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
                 let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
-                
-                // Dados de Auditoria para este dia
-                const auditDia = auditMap[item.data_referencia] || { total: 0, erros: 0 };
-                const pctAssert = auditDia.total > 0 ? ((auditDia.total - auditDia.erros) / auditDia.total) * 100 : 100;
-                let corAssert = pctAssert >= 98 ? 'text-emerald-600' : (pctAssert >= 90 ? 'text-amber-600' : 'text-rose-600');
                 
                 // Formata Data
                 const dateObj = new Date(item.data_referencia + 'T12:00:00');
@@ -107,13 +84,6 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${qtd}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center">${metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-bold ${corPct}">${fmtPct(pct)}</td>
-                        
-                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold bg-orange-50/30 ${corAssert}">
-                            ${auditDia.total > 0 ? fmtPct(pctAssert) : '<span class="text-slate-300">-</span>'}
-                        </td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold bg-rose-50/30 ${auditDia.erros > 0 ? 'text-rose-600' : 'text-slate-300'}">
-                            ${auditDia.erros > 0 ? auditDia.erros : '-'}
-                        </td>
                         <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate max-w-[200px]" title="${item.justificativa || ''}">${item.justificativa || '<span class="text-slate-300">-</span>'}</td>
                     </tr>`;
             });
@@ -123,7 +93,7 @@ MinhaArea.Geral = {
             // KPIs
             const diasUteisCalculados = Math.ceil(somaFator);
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
-            const mediaDiaria = diasUteisCalculados > 0 ? Math.round(totalProd / diasUteisCalculados) : 0;
+            const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
@@ -132,7 +102,7 @@ MinhaArea.Geral = {
             this.setTxt('kpi-dias', diasUteisCalculados);
             this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
             this.setTxt('kpi-media', mediaDiaria);
-            this.setTxt('kpi-meta-dia', metaDiariaPadrao);
+            this.setTxt('kpi-meta-dia', metaDiariaPadrao); // Mostra a meta diária usada (ex: 450)
 
             const bar = document.getElementById('bar-progress');
             if(bar) {
@@ -140,11 +110,11 @@ MinhaArea.Geral = {
                 bar.className = atingimentoGeral >= 100 ? "h-full bg-emerald-500" : "h-full bg-blue-500";
             }
 
-            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
+            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
 

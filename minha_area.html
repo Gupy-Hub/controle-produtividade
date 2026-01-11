@@ -102,69 +102,57 @@
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
             
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
+                
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Úteis</span>
-                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-dias-uteis">--</h3>
-                    </div>
-                    <div class="flex-1 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Prod.</span>
-                        <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias">--</h3>
-                    </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Meta</span>
-                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-acumulada">--</h3>
-                    </div>
-                    <div class="flex-1 p-2 flex flex-col justify-center items-center">
+                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
                         <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Produção</span>
                         <h3 class="text-xl font-black text-blue-600 leading-none" id="kpi-total">--</h3>
                     </div>
-                </div>
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Ideal</span>
-                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-dia">--</h3>
-                    </div>
-                    <div class="flex-1 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Sua Média</span>
-                        <h3 class="text-xl font-black text-indigo-600 leading-none" id="kpi-media">--</h3>
+                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Meta</span>
+                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-acumulada">--</h3>
                     </div>
                 </div>
+
                 <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
-                    <div class="flex-1 bg-slate-50 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
-                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</span>
-                        <h3 class="text-xs font-black text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 uppercase" id="kpi-status">Análise</h3>
-                    </div>
-                    <div class="flex-1 p-2 flex flex-col justify-center items-center relative">
+                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center relative">
                         <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Atingimento</span>
                         <h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3>
                         <div class="absolute bottom-0 left-0 w-full h-1 bg-slate-100"><div id="bar-progress" class="h-full bg-emerald-500" style="width: 0%"></div></div>
                     </div>
+                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Status</span>
+                        <h3 class="text-xs font-black text-slate-500 bg-white px-2 py-1 rounded border border-slate-200 uppercase" id="kpi-status">Análise</h3>
+                    </div>
                 </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
+                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Prod.</span>
+                        <h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias">--</h3>
+                    </div>
+                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Dias Úteis</span>
+                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-dias-uteis">--</h3>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex h-20">
+                    <div class="flex-1 border-r border-slate-100 p-2 flex flex-col justify-center items-center">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Sua Média</span>
+                        <h3 class="text-xl font-black text-indigo-600 leading-none" id="kpi-media">--</h3>
+                    </div>
+                    <div class="flex-1 bg-slate-50 p-2 flex flex-col justify-center items-center">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5">Ideal</span>
+                        <h3 class="text-xl font-bold text-slate-500 leading-none" id="kpi-meta-dia">650</h3>
+                    </div>
+                </div>
+
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
-                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-3 py-3 w-[12%] text-left">Data</th>
-                                <th class="px-2 py-3 w-[7%] text-center">Fator</th>
-                                <th class="px-2 py-3 w-[7%] text-center">FIFO</th>
-                                <th class="px-2 py-3 w-[7%] text-center">G. Total</th>
-                                <th class="px-2 py-3 w-[7%] text-center">G. Parcial</th>
-                                <th class="px-2 py-3 w-[9%] text-center bg-blue-50/50 text-blue-700 border-x border-blue-100">Produção</th>
-                                <th class="px-2 py-3 w-[8%] text-center">Meta Dia</th>
-                                <th class="px-2 py-3 w-[8%] text-center">% Ating.</th>
-                                <th class="px-2 py-3 w-[8%] text-center bg-orange-50/50 text-orange-700">% Assert.</th>
-                                <th class="px-2 py-3 w-[7%] text-center bg-rose-50/50 text-rose-700">Nº Erros</th>
-                                <th class="px-3 py-3 text-left">Justificativa / Obs</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody>
-                    </table>
+                    <table class="w-full text-sm text-left border-collapse"><thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm"><tr class="divide-x divide-slate-200 border-b border-slate-300"><th class="px-3 py-3 w-[12%] text-left">Data</th><th class="px-2 py-3 w-[8%] text-center">Fator</th><th class="px-2 py-3 w-[8%] text-center">FIFO</th><th class="px-2 py-3 w-[8%] text-center">G. Total</th><th class="px-2 py-3 w-[8%] text-center">G. Parcial</th><th class="px-2 py-3 w-[10%] text-center bg-blue-50/50 text-blue-700 border-x border-blue-100">Produção</th><th class="px-2 py-3 w-[10%] text-center">Meta Dia</th><th class="px-2 py-3 w-[8%] text-center">% Ating.</th><th class="px-3 py-3 text-left">Justificativa / Obs</th></tr></thead><tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody></table>
                 </div>
                 <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">0</span></span></div>
             </div>
