@@ -2,252 +2,266 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 Gestao.Importacao.Assertividade = {
+    // Configurações de Performance
+    BATCH_SIZE: 500,        // Reduzido para evitar timeout
+    CONCURRENCY_LIMIT: 3,   // Máximo de requisições simultâneas
+
     executar: async function(input) {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
 
-        // --- 1. Feedback Visual (Botão) ---
-        const btnLabel = input.parentElement;
-        const originalHtml = btnLabel.innerHTML;
-        const atualizarStatus = (texto) => {
-            btnLabel.innerHTML = `<i class="fas fa-circle-notch fa-spin"></i> ${texto}`;
-        };
+        // 1. UI Feedback
+        const lblImportar = document.getElementById('lbl-importar');
+        const originalText = lblImportar ? lblImportar.innerHTML : 'Importar';
         
-        btnLabel.classList.add('opacity-50', 'cursor-not-allowed');
-        atualizarStatus("Lendo arquivo...");
+        const setStatus = (msg, icon = 'fa-circle-notch fa-spin') => {
+            if(lblImportar) lblImportar.innerHTML = `<i class="fas ${icon}"></i> ${msg}`;
+        };
 
-        // Pequeno delay para a interface atualizar
-        await new Promise(r => setTimeout(r, 50));
+        setStatus("Lendo arquivo...");
+        input.disabled = true;
 
         try {
-            // --- 2. Carrega dados Auxiliares do Banco ---
-            // Precisamos dos Usuários para validar e das Empresas para o nome oficial
-            const { data: usersData } = await Sistema.supabase.from('usuarios').select('id, nome');
-            const { data: empData } = await Sistema.supabase.from('empresas').select('id, nome, subdominio');
+            await new Promise(r => setTimeout(r, 50)); // Render UI
 
-            // Mapa de Usuários (Busca rápida por ID e Nome)
-            const mapUsuariosID = new Map();
-            const mapUsuariosNome = new Map();
-            usersData.forEach(u => {
-                mapUsuariosID.set(u.id, u.id);
-                mapUsuariosNome.set(this.normalizar(u.nome), u.id);
-            });
+            // 2. Carregar Dados Auxiliares
+            // Nota: Se a tabela de empresas for gigante (+20k), isso deve virar busca sob demanda
+            const [resUsers, resEmpresas] = await Promise.all([
+                Sistema.supabase.from('usuarios').select('id, nome'),
+                Sistema.supabase.from('empresas').select('id, nome, subdominio')
+            ]);
 
-            // Mapa de Empresas (Nome -> {id, nome})
-            // Usado como fallback caso a planilha não tenha o ID da empresa em alguma linha
+            if(resUsers.error) throw resUsers.error;
+            if(resEmpresas.error) throw resEmpresas.error;
+
+            // Indexação para O(1)
+            const mapUsuariosID = new Map(resUsers.data.map(u => [u.id, u.id]));
+            const mapUsuariosNome = new Map(resUsers.data.map(u => [this.normalizar(u.nome), u.id]));
+            
             const mapEmpresas = new Map();
-            empData.forEach(e => {
+            resEmpresas.data.forEach(e => {
                 const info = { id: e.id, nome: e.nome };
                 mapEmpresas.set(this.normalizar(e.nome), info);
                 if(e.subdominio) mapEmpresas.set(this.normalizar(e.subdominio), info);
             });
 
-            // --- 3. Leitura do Arquivo (Excel ou CSV) ---
+            // 3. Parse Arquivo
             const linhas = await Gestao.lerArquivo(file);
-            
-            atualizarStatus(`Processando ${linhas.length} linhas...`);
-            await new Promise(r => setTimeout(r, 10));
+            setStatus(`Processando ${linhas.length}...`);
 
             const inserts = [];
-            
-            // Variáveis de Relatório
+            const logErros = new Set();
             let stats = { total: linhas.length, sucesso: 0, ignorados: 0 };
-            const logNaoEncontrados = new Set(); 
 
-            // --- 4. Loop de Processamento (Linha a Linha) ---
-            for (const row of linhas) {
+            // 4. Transformação de Dados
+            for (const [index, row] of linhas.entries()) {
                 const c = {};
-                // Normaliza as chaves (remove espaços e acentos dos cabeçalhos)
-                // Ex: "Company_id" vira "companyid", "ID Assistente" vira "idassistente"
+                // Normaliza chaves para evitar "Company ID" vs "company_id"
                 for (const k in row) c[this.normalizarKey(k)] = row[k];
 
-                // A. IDENTIFICAÇÃO DO USUÁRIO
-                // Prioridade: ID direto > Nome
-                let idPlanilha = parseInt(c['idassistente'] || c['id'] || c['idusuario'] || 0);
-                let nomePlanilha = c['assistente'] || c['usuario'] || c['nome'] || 'Sem Nome';
+                // Validação Usuário
                 let usuarioId = null;
-
-                if (idPlanilha && mapUsuariosID.has(idPlanilha)) {
-                    usuarioId = idPlanilha;
-                } else {
-                    if (nomePlanilha) usuarioId = mapUsuariosNome.get(this.normalizar(nomePlanilha));
+                // Tenta ID primeiro
+                let rawId = c['idassistente'] || c['idusuario'] || c['id'];
+                if (rawId && mapUsuariosID.has(parseInt(rawId))) {
+                    usuarioId = parseInt(rawId);
+                } 
+                // Tenta Nome depois
+                else {
+                    let rawNome = c['assistente'] || c['usuario'] || c['nome'];
+                    if(rawNome) usuarioId = mapUsuariosNome.get(this.normalizar(rawNome));
                 }
 
-                // Se não achou usuário, pula e loga o erro
                 if (!usuarioId) {
+                    const nomeParaLog = c['assistente'] || c['usuario'] || `Linha ${index+2}`;
+                    logErros.add(`Usuário não encontrado: "${nomeParaLog}"`);
                     stats.ignorados++;
-                    if(nomePlanilha !== 'Sem Nome') {
-                        logNaoEncontrados.add(`Assistente não cadastrado: "${nomePlanilha}" (ID CSV: ${idPlanilha || 'N/A'})`);
-                    }
-                    continue; 
-                }
-
-                // B. IDENTIFICAÇÃO DA EMPRESA (O Ponto Principal)
-                const nomeEmpresaRaw = c['empresa'] || '';
-                
-                // 1. Tenta pegar o ID direto da coluna 'Company_id' (normalizada para 'companyid')
-                let empresaId = parseInt(c['companyid'] || c['company_id'] || c['idempresa'] || 0);
-                
-                let empresaOficialNome = nomeEmpresaRaw;
-
-                // 2. Se não veio ID na planilha, tenta achar pelo nome no cadastro do sistema
-                if (!empresaId) {
-                    const match = mapEmpresas.get(this.normalizar(nomeEmpresaRaw));
-                    if (match) {
-                        empresaId = match.id;
-                        empresaOficialNome = match.nome; // Usa o nome bonitinho do cadastro
-                    }
-                }
-
-                // Garante que se for 0 ou NaN, vire null para o banco
-                if (!empresaId) empresaId = null;
-
-                // C. TRATAMENTO DE DATA
-                let dataRef = null;
-                let horaRef = null;
-                // Tenta pegar data/hora completa (end_time) ou só data (datadaauditoria)
-                const rawDate = c['endtime'] || c['datadaauditoria'] || c['data'] || c['date'];
-                
-                if (rawDate) {
-                    if (typeof rawDate === 'object') {
-                        // Se o Excel já devolveu objeto Date
-                        dataRef = rawDate.toISOString().split('T')[0];
-                        horaRef = rawDate.toLocaleTimeString('pt-BR');
-                    } else {
-                        // Se veio String
-                        try {
-                            const dObj = new Date(rawDate);
-                            if (!isNaN(dObj)) {
-                                dataRef = dObj.toISOString().split('T')[0];
-                                horaRef = dObj.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
-                            }
-                        } catch(e) {}
-                    }
-                }
-
-                if (!dataRef) {
-                    stats.ignorados++; // Sem data não dá pra salvar
                     continue;
                 }
 
-                // D. PREPARAÇÃO DO OBJETO PARA O BANCO
+                // Validação Empresa
+                let empresaId = parseInt(c['companyid'] || c['company_id'] || c['idempresa'] || 0);
+                let nomeEmpresa = c['empresa'] || '';
+
+                if (!empresaId) {
+                    const match = mapEmpresas.get(this.normalizar(nomeEmpresa));
+                    if (match) {
+                        empresaId = match.id;
+                        nomeEmpresa = match.nome; // Normaliza nome oficial
+                    } else {
+                        empresaId = null; // Salva sem ID, mas com o nome que veio
+                    }
+                }
+
+                // Validação Data (Crítico)
+                const rawDate = c['endtime'] || c['datadaauditoria'] || c['data'] || c['date'];
+                const dataObj = this.parseDate(rawDate);
+                
+                if (!dataObj) {
+                    stats.ignorados++;
+                    // Opcional: logar que faltou data
+                    continue;
+                }
+
                 inserts.push({
                     usuario_id: usuarioId,
-                    data_referencia: dataRef,
-                    hora: horaRef,
-                    empresa: empresaOficialNome,
-                    empresa_id: empresaId, // Aqui vai o ID recuperado da planilha
-                    
-                    nome_documento: c['docname'] || c['documento'] || '',
-                    status: c['status'] || '',
-                    observacao: c['apontamentosobs'] || c['obs'] || c['apontamentos'] || '',
-                    
-                    // Converte para Inteiro, se falhar vira 0
+                    data_referencia: dataObj.data, // YYYY-MM-DD
+                    hora: dataObj.hora,           // HH:MM
+                    empresa: nomeEmpresa,
+                    empresa_id: empresaId,
+                    nome_documento: String(c['docname'] || c['documento'] || '').substring(0, 255),
+                    status: c['status'] || null,
+                    observacao: String(c['apontamentosobs'] || c['obs'] || '').substring(0, 500),
                     num_campos: parseInt(c['ncampos'] || c['numerocampos'] || 0),
                     qtd_ok: parseInt(c['ok'] || 0),
                     nok: parseInt(c['nok'] || 0),
-                    
-                    // Texto (ex: "98%")
-                    assertividade: c['assert'] || c['assertividade'] || c['%assert'] || '',
-                    
-                    auditora: c['auditora'] || '',
-                    quantidade: 1, 
+                    assertividade: c['assert'] || c['assertividade'] || null,
+                    auditora: c['auditora'] || null,
+                    quantidade: 1,
                     fator: 1
                 });
             }
 
-            // --- 5. Envio em Lotes Paralelos (Alta Performance) ---
+            // 5. Envio em Lotes Controlados
             if (inserts.length > 0) {
-                const totalRegistros = inserts.length;
-                const batchSize = 2000; // Tamanho do lote
+                const totalLotes = Math.ceil(inserts.length / this.BATCH_SIZE);
+                let lotesProcessados = 0;
+
+                // Função auxiliar para processar um lote
+                const processarLote = async (lote) => {
+                    const { error } = await Sistema.supabase.from('producao').insert(lote);
+                    if (error) throw error;
+                    lotesProcessados++;
+                    const pct = Math.round((lotesProcessados / totalLotes) * 100);
+                    setStatus(`Salvando ${pct}%...`);
+                };
+
+                // Gerenciador de Concorrência
                 const lotes = [];
-
-                // Divide o array gigante em fatias
-                for (let i = 0; i < totalRegistros; i += batchSize) {
-                    lotes.push(inserts.slice(i, i + batchSize));
+                for (let i = 0; i < inserts.length; i += this.BATCH_SIZE) {
+                    lotes.push(inserts.slice(i, i + this.BATCH_SIZE));
                 }
 
-                let processados = 0;
-                const limiteConcorrencia = 5; // Quantos lotes envia ao mesmo tempo
-                
-                // Envia os lotes
-                for (let i = 0; i < lotes.length; i += limiteConcorrencia) {
-                    const chunk = lotes.slice(i, i + limiteConcorrencia);
-                    
-                    // Cria as promessas de envio
-                    const promessas = chunk.map(async (lote) => {
-                        const { error } = await Sistema.supabase.from('producao').insert(lote);
-                        if (error) throw error;
-                    });
-                    
-                    // Espera esse grupo terminar antes de mandar o próximo (evita travar o navegador)
-                    await Promise.all(promessas);
-                    
-                    processados += chunk.reduce((acc, curr) => acc + curr.length, 0);
-                    const pct = Math.round((processados / totalRegistros) * 100);
-                    atualizarStatus(`Salvando... ${pct}%`);
+                // Executa em chunks de promises
+                for (let i = 0; i < lotes.length; i += this.CONCURRENCY_LIMIT) {
+                    const chunk = lotes.slice(i, i + this.CONCURRENCY_LIMIT);
+                    await Promise.all(chunk.map(l => processarLote(l)));
                 }
 
-                stats.sucesso = processados;
+                stats.sucesso = inserts.length;
+                this.showToast(`Sucesso! ${stats.sucesso} registros importados.`, 'success');
                 
-                // Mensagem Final
-                let msg = `Importação Concluída!\n✅ Registros salvos: ${stats.sucesso}`;
-                
-                if (logNaoEncontrados.size > 0) {
-                    msg += `\n⚠️ Atenção: ${logNaoEncontrados.size} assistentes da planilha não foram encontrados no sistema.\nUm arquivo de erro será baixado.`;
-                    this.baixarLog(logNaoEncontrados);
-                } else if (stats.ignorados > 0) {
-                    msg += `\n⚠️ Alguns registros foram ignorados por falta de data.`;
+                if (logErros.size > 0) {
+                    this.baixarLog(logErros);
+                    this.showToast(`Atenção: ${logErros.size} erros encontrados (download iniciado).`, 'warning');
                 }
-                
-                alert(msg);
 
-                // Atualiza a tabela na tela
+                // Atualiza tela
                 if (Gestao.Assertividade) Gestao.Assertividade.carregar();
+
             } else {
-                if (logNaoEncontrados.size > 0) {
-                    alert(`Nenhum registro foi salvo.\n${logNaoEncontrados.size} assistentes não foram encontrados.\nBaixando lista de erros...`);
-                    this.baixarLog(logNaoEncontrados);
-                } else {
-                    alert("A planilha parece estar vazia ou não consegui ler as colunas principais (ID Assistente, Company ID, End Time).");
-                }
+                this.showToast("Nenhum dado válido encontrado na planilha.", 'error');
+                if(logErros.size > 0) this.baixarLog(logErros);
             }
 
         } catch (e) {
             console.error(e);
-            alert("Erro durante a importação: " + e.message);
+            this.showToast(`Erro fatal: ${e.message}`, 'error');
         } finally {
-            // Restaura o botão
-            btnLabel.innerHTML = originalHtml;
-            btnLabel.classList.remove('opacity-50', 'cursor-not-allowed');
+            if(lblImportar) lblImportar.innerHTML = originalText;
+            input.disabled = false;
             input.value = "";
         }
     },
 
-    // --- Função para gerar TXT de Erros ---
-    baixarLog: function(setErros) {
-        const lista = Array.from(setErros).join('\n');
-        const conteudo = `RELATÓRIO DE ERROS DE IMPORTAÇÃO - ${new Date().toLocaleString()}\n\nOs seguintes assistentes constam na planilha mas NÃO existem no cadastro de Usuários:\n\n${lista}\n\nDICA: Cadastre-os na aba 'Usuários' e tente importar novamente.`;
+    // --- Utilitários ---
+
+    // Parser de data inteligente (Excel Serial, ISO, BR)
+    parseDate: function(val) {
+        if (!val) return null;
         
+        let dateObj = null;
+
+        // 1. Se for numérico (Excel Serial Date)
+        if (typeof val === 'number') {
+            // Ajuste básico para Excel Windows (epoch 1900)
+            dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
+        } 
+        // 2. Se for string
+        else if (typeof val === 'string') {
+            const clean = val.trim();
+            // Formato BR (DD/MM/YYYY)
+            if (clean.match(/^\d{2}\/\d{2}\/\d{4}/)) {
+                const parts = clean.split('/');
+                // Mês em JS é 0-indexado
+                dateObj = new Date(parts[2], parts[1] - 1, parts[0]); 
+            } else {
+                // Tenta ISO direto
+                dateObj = new Date(clean);
+            }
+        } 
+        // 3. Se já for objeto Date
+        else if (val instanceof Date) {
+            dateObj = val;
+        }
+
+        if (!dateObj || isNaN(dateObj.getTime())) return null;
+
+        // Retorna formato ISO string "YYYY-MM-DD" e hora "HH:MM"
+        // Importante: usar métodos locais para não alterar o dia por fuso
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        
+        const h = String(dateObj.getHours()).padStart(2, '0');
+        const min = String(dateObj.getMinutes()).padStart(2, '0');
+
+        return {
+            data: `${y}-${m}-${d}`,
+            hora: `${h}:${min}`
+        };
+    },
+
+    normalizar: function(str) {
+        return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, '');
+    },
+
+    normalizarKey: function(k) {
+        return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    },
+
+    baixarLog: function(setErros) {
+        const conteudo = `ERROS DE IMPORTAÇÃO - ${new Date().toLocaleString()}\n\n${Array.from(setErros).join('\n')}`;
         const blob = new Blob([conteudo], { type: 'text/plain' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `erros_importacao_${new Date().toISOString().slice(0,10)}.txt`;
+        a.download = `erros_importacao_${Date.now()}.txt`;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
     },
 
-    // --- Utilitários de Texto ---
-    normalizar: function(str) {
-        return String(str || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").replace(/ /g, '');
-    },
+    showToast: function(msg, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if(!container) return alert(msg); // Fallback
 
-    normalizarKey: function(k) {
-        // Remove tudo que não for letra ou numero para garantir match das colunas
-        // Ex: "Company_id" -> "companyid", "nº Campos" -> "ncampos"
-        return String(k).trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        const el = document.createElement('div');
+        const colors = {
+            success: 'bg-emerald-600',
+            error: 'bg-rose-600',
+            warning: 'bg-amber-600',
+            info: 'bg-blue-600'
+        };
+        const colorClass = colors[type] || colors.info;
+
+        el.className = `${colorClass} text-white px-4 py-3 rounded shadow-lg flex items-center gap-3 min-w-[300px] animate-bounce-in text-sm font-bold`;
+        el.innerHTML = `
+            <i class="fas ${type === 'success' ? 'fa-check' : type === 'error' ? 'fa-times' : 'fa-info-circle'}"></i>
+            <span>${msg}</span>
+        `;
+        
+        container.appendChild(el);
+        setTimeout(() => el.remove(), 5000);
     }
 };

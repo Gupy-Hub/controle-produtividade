@@ -2,58 +2,83 @@ Gestao.Assertividade = {
     paginaAtual: 1,
     itensPorPagina: 50,
     totalRegistros: 0,
-    filtrosAtivos: {}, // Armazena o estado atual dos filtros
+    filtrosAtivos: {},
+    timeoutBusca: null,
 
-    // Inicializa a tela
+    // Inicializa listeners para remover lógica do HTML
+    initListeners: function() {
+        const inputs = [
+            'search-assert', 'filtro-data', 'filtro-empresa', 
+            'filtro-assistente', 'filtro-doc', 'filtro-obs', 'filtro-auditora'
+        ];
+        
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('keyup', () => this.atualizarFiltrosEBuscar());
+            if(el && (el.type === 'date' || el.tagName === 'SELECT')) {
+                el.addEventListener('change', () => this.atualizarFiltrosEBuscar());
+            }
+        });
+
+        const selectStatus = document.getElementById('filtro-status');
+        if(selectStatus) selectStatus.addEventListener('change', () => this.atualizarFiltrosEBuscar());
+    },
+
     carregar: function() {
         this.paginaAtual = 1;
-        this.capturarFiltros(); // Pega os filtros iniciais (geralmente vazios)
+        this.capturarFiltros();
         this.buscarDados();
     },
 
-    // Função central que lê os inputs do HTML e atualiza o estado
+    limparFiltros: function() {
+        const ids = [
+            'search-assert', 'filtro-data', 'filtro-empresa', 
+            'filtro-assistente', 'filtro-doc', 'filtro-obs', 'filtro-auditora'
+        ];
+        ids.forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
+        });
+        document.getElementById('filtro-status').value = '';
+        
+        this.carregar();
+    },
+
     capturarFiltros: function() {
         const getVal = (id) => {
             const el = document.getElementById(id);
             return el ? el.value.trim() : null;
         };
 
-        // Mapeia os IDs do HTML para o objeto de filtros
         this.filtrosAtivos = {
-            global: getVal('search-assert'),       // Busca Geral
-            data: getVal('filtro-data'),           // Data
-            empresa: getVal('filtro-empresa'),     // Coluna Empresa
-            assistente: getVal('filtro-assistente'), // Coluna Assistente
-            doc: getVal('filtro-doc'),             // Coluna Documento
-            status: getVal('filtro-status'),       // Coluna Status
-            obs: getVal('filtro-obs'),             // Coluna Obs
-            auditora: getVal('filtro-auditora')    // Coluna Auditora
+            global: getVal('search-assert'),
+            data: getVal('filtro-data'),
+            empresa: getVal('filtro-empresa'),
+            assistente: getVal('filtro-assistente'),
+            doc: getVal('filtro-doc'),
+            status: getVal('filtro-status'),
+            obs: getVal('filtro-obs'),
+            auditora: getVal('filtro-auditora')
         };
     },
 
-    // Acionado pelo "onkeyup" ou "onchange" dos inputs
     atualizarFiltrosEBuscar: function() {
-        // Debounce simples: espera o usuário parar de digitar por 300ms
         if (this.timeoutBusca) clearTimeout(this.timeoutBusca);
-        
         this.timeoutBusca = setTimeout(() => {
-            this.paginaAtual = 1; // Sempre volta pra página 1 ao filtrar
+            this.paginaAtual = 1;
             this.capturarFiltros();
             this.buscarDados();
-        }, 400);
+        }, 400); // 400ms debounce
     },
 
-    // Chama o Supabase
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         if(!tbody) return;
 
-        // Feedback de carregamento
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2">Buscando dados no servidor...</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-20"><i class="fas fa-circle-notch fa-spin text-blue-500 text-3xl"></i><p class="text-slate-400 mt-3 font-medium">Buscando registros...</p></td></tr>';
 
         try {
-            // Prepara os parâmetros para a função SQL (RPC)
-            // IMPORTANTE: Tratamento de vazio para NULL
+            // Nota: Se buscar_assertividade_v5 não existir, verifique os parâmetros no backend
             const params = {
                 p_pagina: this.paginaAtual,
                 p_tamanho: this.itensPorPagina,
@@ -75,8 +100,8 @@ Gestao.Assertividade = {
             this.atualizarPaginacao(data);
 
         } catch (e) {
-            console.error("Erro na busca:", e);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-red-500"><i class="fas fa-exclamation-triangle"></i> Erro ao buscar: ${e.message}</td></tr>`;
+            console.error("Erro busca:", e);
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-rose-500"><div class="flex flex-col items-center"><i class="fas fa-exclamation-triangle text-2xl mb-2"></i><span>Erro ao carregar dados.</span><span class="text-xs text-rose-400 mt-1">${e.message}</span></div></td></tr>`;
         }
     },
 
@@ -85,39 +110,45 @@ Gestao.Assertividade = {
         tbody.innerHTML = '';
 
         if (!dados || dados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400">Nenhum registro encontrado com esses filtros.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-16 text-slate-400"><i class="far fa-folder-open text-2xl mb-2 block"></i>Nenhum registro encontrado.</td></tr>';
             return;
         }
 
-        let html = '';
+        const fragment = document.createDocumentFragment();
+
         dados.forEach(row => {
-            // Formatação de cor e estilo
-            const statusClass = this.getStatusColor(row.status);
-            const dataFormatada = row.data_auditoria ? new Date(row.data_auditoria).toLocaleDateString('pt-BR', {timeZone: 'UTC'}) : '-';
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-blue-50/50 transition border-b border-slate-50 text-xs group";
             
-            html += `
-            <tr class="hover:bg-slate-50 transition border-b border-slate-50 text-xs">
-                <td class="px-3 py-2 whitespace-nowrap font-mono text-slate-500">${dataFormatada}</td>
-                <td class="px-3 py-2 text-center text-slate-400">${row.company_id || '-'}</td>
-                <td class="px-3 py-2 font-bold text-slate-700">${row.empresa || '-'}</td>
-                <td class="px-3 py-2 text-slate-600">${row.assistente || '-'}</td>
-                <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${row.doc_name}">${row.doc_name || '-'}</td>
-                <td class="px-3 py-2 text-center"><span class="${statusClass} px-2 py-0.5 rounded text-[10px] font-bold border">${row.status || '-'}</span></td>
-                <td class="px-3 py-2 text-slate-500 truncate max-w-[200px]" title="${row.obs}">${row.obs || '-'}</td>
-                <td class="px-3 py-2 text-center font-mono">${row.campos || 0}</td>
-                <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50 rounded">${row.ok || 0}</td>
-                <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50 rounded">${row.nok || 0}</td>
-                <td class="px-3 py-2 text-center font-bold text-slate-700">${row.porcentagem || '-'}</td>
-                <td class="px-3 py-2 text-slate-500">${row.auditora || '-'}</td>
-            </tr>`;
+            // Tratamento de Data Seguro (Evita problema de fuso -1 dia)
+            let dataFormatada = '-';
+            if(row.data_auditoria) {
+                const [ano, mes, dia] = row.data_auditoria.split('-'); // Assume YYYY-MM-DD do banco
+                dataFormatada = `${dia}/${mes}/${ano}`;
+            }
+
+            const statusClass = this.getStatusColor(row.status);
+            
+            tr.innerHTML = `
+                <td class="px-4 py-3 font-mono text-slate-500">${dataFormatada}</td>
+                <td class="px-4 py-3 font-bold text-slate-700 truncate max-w-[250px]" title="${row.empresa}">${row.empresa || '-'}</td>
+                <td class="px-4 py-3 text-slate-600 truncate max-w-[200px]" title="${row.assistente}">${row.assistente || '-'}</td>
+                <td class="px-4 py-3 text-slate-600 truncate max-w-[200px]" title="${row.doc_name}">${row.doc_name || '-'}</td>
+                <td class="px-4 py-3 text-center"><span class="${statusClass} px-2 py-0.5 rounded text-[10px] font-bold border block w-full">${row.status || '-'}</span></td>
+                <td class="px-4 py-3 text-slate-500 truncate max-w-[300px]" title="${row.obs}">${row.obs || '-'}</td>
+                <td class="px-4 py-3 text-center font-mono text-slate-400">${row.campos || 0}</td>
+                <td class="px-4 py-3 text-center text-emerald-600 font-bold bg-emerald-50/50 rounded">${row.ok || 0}</td>
+                <td class="px-4 py-3 text-center text-rose-600 font-bold bg-rose-50/50 rounded">${row.nok || 0}</td>
+                <td class="px-4 py-3 text-center font-bold text-slate-700">${row.porcentagem || '-'}</td>
+                <td class="px-4 py-3 text-slate-500">${row.auditora || '-'}</td>
+            `;
+            fragment.appendChild(tr);
         });
 
-        tbody.innerHTML = html;
+        tbody.appendChild(fragment);
     },
 
     atualizarPaginacao: function(dados) {
-        // O total de registros vem na própria query (coluna total_registros)
-        // Pegamos do primeiro item (se existir)
         const total = (dados && dados.length > 0) ? dados[0].total_registros : 0;
         this.totalRegistros = total;
 
@@ -126,48 +157,38 @@ Gestao.Assertividade = {
         const btnAnt = document.getElementById('btn-ant');
         const btnProx = document.getElementById('btn-prox');
 
-        if(elInfo) elInfo.innerText = `Página ${this.paginaAtual}`;
-        if(elContador) elContador.innerHTML = `<span class="bg-slate-100 px-2 py-0.5 rounded text-slate-600 border border-slate-200 text-[10px] ml-2">Total: ${total}</span>`;
+        if(elInfo) elInfo.innerText = `Página ${this.paginaAtual} de ${Math.ceil(total / this.itensPorPagina) || 1}`;
+        if(elContador) elContador.innerHTML = `<span class="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-[10px] font-bold">Total: ${total}</span>`;
 
-        // Controle dos botões
         if(btnAnt) {
             btnAnt.disabled = this.paginaAtual === 1;
-            btnAnt.onclick = () => this.mudarPagina(-1);
+            // Remove listeners antigos clonando o nó (hack rápido) ou apenas reatribuindo
+            btnAnt.onclick = () => { this.paginaAtual--; this.buscarDados(); };
         }
 
         if(btnProx) {
-            // Se trouxe menos itens que o tamanho da página, é a última
             const temMais = (this.paginaAtual * this.itensPorPagina) < total;
             btnProx.disabled = !temMais;
-            btnProx.onclick = () => this.mudarPagina(1);
+            btnProx.onclick = () => { this.paginaAtual++; this.buscarDados(); };
         }
     },
 
-    mudarPagina: function(delta) {
-        this.paginaAtual += delta;
-        if(this.paginaAtual < 1) this.paginaAtual = 1;
-        this.buscarDados();
-    },
-
-    // Utilitário de Estilo
     getStatusColor: function(status) {
-        if(!status) return 'bg-slate-100 text-slate-500 border-slate-200';
-        const s = status.toUpperCase();
-        if(s === 'OK') return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-        if(s === 'NOK') return 'bg-rose-100 text-rose-700 border-rose-200';
-        if(s.includes('REV')) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-        if(s.includes('JUST')) return 'bg-blue-100 text-blue-700 border-blue-200';
-        if(s.includes('DUPL')) return 'bg-purple-100 text-purple-700 border-purple-200';
+        if(!status) return 'bg-slate-100 text-slate-400 border-slate-200';
+        const s = status.toString().toUpperCase().trim();
+        const map = {
+            'OK': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+            'NOK': 'bg-rose-100 text-rose-700 border-rose-200',
+            'REV': 'bg-amber-100 text-amber-700 border-amber-200',
+            'JUST': 'bg-blue-100 text-blue-700 border-blue-200',
+            'DUPL': 'bg-purple-100 text-purple-700 border-purple-200',
+            'IA': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+            'EMPR': 'bg-gray-200 text-gray-700 border-gray-300'
+        };
+        // Busca parcial (ex: "OK (Obs)")
+        for (const k in map) {
+            if (s.includes(k)) return map[k];
+        }
         return 'bg-slate-100 text-slate-600 border-slate-200';
     }
 };
-
-// Se estivermos na página correta, inicializa
-document.addEventListener('DOMContentLoaded', () => {
-    // Pequeno delay para garantir que o menu carregou
-    setTimeout(() => {
-        if(window.location.pathname.includes('assertividade')) {
-            Gestao.Assertividade.carregar();
-        }
-    }, 100);
-});
