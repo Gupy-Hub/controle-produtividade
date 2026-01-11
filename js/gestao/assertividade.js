@@ -10,9 +10,7 @@ Gestao.Assertividade = {
     assistentesCarregados: false,
 
     initListeners: function() {
-        // Listener Busca Global
-        const search = document.getElementById('search-assert');
-        if(search) search.addEventListener('keyup', () => this.atualizarFiltrosEBuscar());
+        // Não há mais listeners de inputs de busca antigos
     },
 
     carregar: async function() {
@@ -169,7 +167,6 @@ Gestao.Assertividade = {
         const get = (id) => { const el = document.getElementById(id); return el && el.value.trim() ? el.value.trim() : null; };
         
         this.filtrosAtivos = {
-            global: get('search-assert'),
             assistenteId: get('sel-assert-assistente'), // Pega o ID
             status: get('filtro-status')
         };
@@ -199,13 +196,13 @@ Gestao.Assertividade = {
             // Conversão segura do ID do assistente (string vazia vira null)
             const idAssistente = this.filtrosAtivos.assistenteId ? parseInt(this.filtrosAtivos.assistenteId) : null;
 
+            // Parâmetros exatamente compatíveis com a nova função SQL
             const params = {
                 p_pagina: this.paginaAtual,
                 p_tamanho: this.itensPorPagina,
-                p_busca_global: this.filtrosAtivos.global,
                 p_data_inicio: inicio,
                 p_data_fim: fim,
-                p_assistente_id: idAssistente, // Agora envia o ID numérico!
+                p_assistente_id: idAssistente,
                 p_filtro_status: this.filtrosAtivos.status
             };
 
