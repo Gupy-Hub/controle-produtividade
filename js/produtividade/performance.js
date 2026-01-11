@@ -1,5 +1,7 @@
 Produtividade.Performance = {
     initialized: false,
+    chartInstance: null,
+    dadosCache: [], 
     
     init: function() {
         if (!this.initialized) {
@@ -31,17 +33,13 @@ Produtividade.Performance = {
                 selS.value = m <= 6 ? 1 : 2;
             }
         }
-        
         this.carregar(); 
     },
 
     carregar: async function() {
-        const tbody = document.getElementById('ranking-body');
-        const podium = document.getElementById('podium-container');
+        const listContainer = document.getElementById('ranking-list-container');
+        listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
         
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando ranking...</td></tr>';
-        
-        // 1. Definição de Datas (Igual Consolidado)
         const t = document.getElementById('perf-period-type').value; 
         const dateInput = document.getElementById('global-date');
         let val = dateInput ? dateInput.value : new Date().toISOString().split('T')[0];
@@ -66,138 +64,242 @@ Produtividade.Performance = {
         }
 
         try {
-            // 2. Buscar Dados
             const { data, error } = await Sistema.supabase
                 .from('producao')
-                .select(`
-                    quantidade, fator,
-                    usuario:usuarios ( id, nome, perfil, funcao )
-                `)
+                .select(`id, quantidade, fator, data_referencia, usuario:usuarios ( id, nome, perfil, funcao )`)
                 .gte('data_referencia', s)
-                .lte('data_referencia', e);
+                .lte('data_referencia', e)
+                .order('data_referencia', { ascending: true });
 
             if (error) throw error;
 
-            // 3. Processar Ranking
-            let ranking = {};
-            
-            data.forEach(r => {
-                // REGRA: Excluir Gestão/Auditoria do Ranking
-                const cargo = r.usuario && r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-                if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
-
-                const uid = r.usuario.id;
-                if (!ranking[uid]) {
-                    ranking[uid] = {
-                        nome: r.usuario.nome,
-                        producao: 0,
-                        dias: 0
-                    };
-                }
-                
-                ranking[uid].producao += (Number(r.quantidade) || 0);
-                ranking[uid].dias += (Number(r.fator) || 0);
-            });
-
-            let lista = Object.values(ranking).map(u => {
-                const metaDiaria = 650;
-                const metaTotal = u.dias * metaDiaria;
-                const pct = metaTotal > 0 ? (u.producao / metaTotal) * 100 : 0;
-                const media = u.dias > 0 ? u.producao / u.dias : 0;
-                
-                return { ...u, pct, media, metaTotal };
-            });
-
-            // Ordenar por % de Atingimento (Performance)
-            lista.sort((a, b) => b.pct - a.pct);
-
-            this.renderizar(lista, tbody, podium);
+            this.dadosCache = data;
+            this.renderizarVisaoGeral();
 
         } catch (err) {
             console.error(err);
-            tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-red-500">Erro: ${err.message}</td></tr>`;
+            listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro: ${err.message}</div>`;
         }
     },
 
-    renderizar: function(lista, tbody, podium) {
-        tbody.innerHTML = '';
-        podium.innerHTML = '';
+    renderizarVisaoGeral: function() {
+        document.getElementById('btn-reset-chart').classList.add('hidden');
+        document.getElementById('chart-title').innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
+        document.getElementById('chart-subtitle').innerText = 'Soma da produção diária de toda a equipe';
 
-        if (lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-12 text-slate-400 italic">Sem dados de performance para este período.</td></tr>';
+        const data = this.dadosCache;
+        if (!data || data.length === 0) {
+            this.destroyChart();
+            document.getElementById('ranking-list-container').innerHTML = '<div class="text-center text-slate-400 py-10 text-xs">Sem dados no período.</div>';
             return;
         }
 
-        // --- 1. RENDERIZAR PÓDIO (Top 3) ---
-        const top3 = lista.slice(0, 3);
-        const medals = [
-            { color: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-200', label: '1º Lugar', icon: 'fa-trophy' },
-            { color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200', label: '2º Lugar', icon: 'fa-medal' },
-            { color: 'text-amber-700', bg: 'bg-orange-50', border: 'border-orange-200', label: '3º Lugar', icon: 'fa-medal' }
-        ];
+        const producaoPorDia = {};
+        const diasSet = new Set();
+        const producaoPorUser = {};
 
-        top3.forEach((u, i) => {
-            const style = medals[i];
-            const html = `
-                <div class="rounded-xl border ${style.border} ${style.bg} p-4 flex items-center justify-between shadow-sm relative overflow-hidden">
-                    <div class="flex items-center gap-4 z-10">
-                        <div class="w-12 h-12 rounded-full bg-white flex items-center justify-center border ${style.border} shadow-sm">
-                            <i class="fas ${style.icon} ${style.color} text-xl"></i>
-                        </div>
-                        <div>
-                            <span class="text-[10px] uppercase font-bold ${style.color} tracking-wider block mb-0.5">${style.label}</span>
-                            <h4 class="font-bold text-slate-800 text-sm leading-tight truncate max-w-[120px]">${u.nome}</h4>
-                            <span class="text-xs font-bold text-slate-500">${Math.round(u.pct)}% Atingimento</span>
+        data.forEach(r => {
+            const date = r.data_referencia;
+            const qtd = Number(r.quantidade) || 0;
+            const uid = r.usuario.id;
+            
+            const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
+
+            diasSet.add(date);
+
+            if (!producaoPorDia[date]) producaoPorDia[date] = 0;
+            producaoPorDia[date] += qtd;
+
+            if (!producaoPorUser[uid]) producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid };
+            producaoPorUser[uid].total += qtd;
+        });
+
+        const labels = Array.from(diasSet).sort();
+        const values = labels.map(d => producaoPorDia[d]);
+
+        this.renderChart(labels, [
+            {
+                label: 'Produção Total do Time',
+                data: values,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 6
+            }
+        ]);
+
+        this.renderRankingList(Object.values(producaoPorUser));
+    },
+
+    // --- CORREÇÃO APLICADA AQUI ---
+    renderizarVisaoIndividual: function(userId, userNameRaw) {
+        const userName = userNameRaw.replace(/'/g, ""); 
+        
+        document.getElementById('btn-reset-chart').classList.remove('hidden');
+        document.getElementById('chart-title').innerHTML = `<i class="fas fa-user text-emerald-500 mr-2"></i> ${userName}`;
+        document.getElementById('chart-subtitle').innerText = 'Comparativo: Individual vs Média do Time';
+
+        const data = this.dadosCache;
+        const diasSet = new Set();
+        const userProd = {};
+        const teamProd = {};
+        const teamCount = {}; 
+
+        data.forEach(r => {
+            const date = r.data_referencia;
+            const qtd = Number(r.quantidade) || 0;
+            const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            
+            if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
+
+            diasSet.add(date);
+
+            // Time
+            if (!teamProd[date]) { teamProd[date] = 0; teamCount[date] = new Set(); }
+            teamProd[date] += qtd;
+            teamCount[date].add(r.usuario.id);
+
+            // CORREÇÃO: Forçar conversão para String em ambos os lados para garantir igualdade
+            if (String(r.usuario.id) === String(userId)) {
+                if (!userProd[date]) userProd[date] = 0;
+                userProd[date] += qtd;
+            }
+        });
+
+        const labels = Array.from(diasSet).sort();
+        
+        // Se usuário não trabalhou no dia, valor é 0
+        const userValues = labels.map(d => userProd[d] || 0);
+        
+        // Média do time no dia (Produção Total / Pessoas Ativas naquele dia)
+        const avgValues = labels.map(d => {
+            const total = teamProd[d] || 0;
+            const count = teamCount[d] ? teamCount[d].size : 1;
+            return count > 0 ? Math.round(total / count) : 0;
+        });
+
+        this.renderChart(labels, [
+            {
+                label: 'Produção de ' + userName.split(' ')[0],
+                data: userValues,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                borderWidth: 3,
+                tension: 0.3,
+                fill: true
+            },
+            {
+                label: 'Média do Time',
+                data: avgValues,
+                borderColor: '#94a3b8',
+                borderDash: [5, 5],
+                borderWidth: 2,
+                tension: 0.3,
+                fill: false,
+                pointRadius: 0
+            }
+        ]);
+    },
+
+    renderRankingList: function(usersArray) {
+        const container = document.getElementById('ranking-list-container');
+        usersArray.sort((a, b) => b.total - a.total);
+
+        let html = '';
+        usersArray.forEach((u, index) => {
+            let medal = `<div class="w-6 text-center text-xs font-bold text-slate-400">#${index + 1}</div>`;
+            if (index === 0) medal = `<i class="fas fa-crown text-yellow-500 w-6 text-center"></i>`;
+            if (index === 1) medal = `<i class="fas fa-medal text-slate-400 w-6 text-center"></i>`;
+            if (index === 2) medal = `<i class="fas fa-medal text-amber-700 w-6 text-center"></i>`;
+
+            const safeName = u.nome.replace(/'/g, "\\'");
+
+            html += `
+                <div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${safeName}')" 
+                     class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 group transition">
+                    <div class="flex items-center gap-2">
+                        ${medal}
+                        <div class="flex flex-col">
+                            <span class="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition truncate w-32">${u.nome}</span>
                         </div>
                     </div>
-                    <div class="text-right z-10">
-                        <span class="block text-2xl font-black ${style.color}">${u.producao.toLocaleString('pt-BR')}</span>
-                        <span class="text-[9px] text-slate-400 font-bold uppercase">Produção Total</span>
-                    </div>
-                    <i class="fas ${style.icon} absolute -right-4 -bottom-4 text-8xl opacity-10 ${style.color}"></i>
+                    <span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span>
                 </div>
             `;
-            podium.innerHTML += html;
         });
+        container.innerHTML = html;
+    },
 
-        // --- 2. RENDERIZAR TABELA ---
-        const commonCell = "px-4 py-3 text-center text-xs text-slate-600 border-b border-slate-100";
+    renderChart: function(labels, datasets) {
+        this.destroyChart();
         
-        lista.forEach((u, index) => {
-            const pos = index + 1;
-            let rankIcon = `<span class="font-bold text-slate-400">#${pos}</span>`;
-            
-            if(pos === 1) rankIcon = '<i class="fas fa-crown text-yellow-500"></i>';
-            if(pos === 2) rankIcon = '<i class="fas fa-medal text-slate-400"></i>';
-            if(pos === 3) rankIcon = '<i class="fas fa-medal text-amber-700"></i>';
-
-            // Cores da Barra de Progresso
-            let barColor = 'bg-emerald-500';
-            let txtColor = 'text-emerald-700';
-            if (u.pct < 90) { barColor = 'bg-amber-500'; txtColor = 'text-amber-700'; }
-            if (u.pct < 70) { barColor = 'bg-rose-500'; txtColor = 'text-rose-700'; }
-
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-slate-50 transition";
-            tr.innerHTML = `
-                <td class="${commonCell} font-bold">${rankIcon}</td>
-                <td class="px-4 py-3 text-left border-b border-slate-100">
-                    <span class="font-bold text-slate-700 text-sm">${u.nome}</span>
-                </td>
-                <td class="${commonCell} font-bold text-blue-700 bg-blue-50/30">${u.producao.toLocaleString('pt-BR')}</td>
-                <td class="${commonCell}">${u.dias}</td>
-                <td class="${commonCell}">${Math.round(u.media).toLocaleString('pt-BR')}</td>
-                <td class="${commonCell} bg-slate-50">${Math.round(u.metaTotal).toLocaleString('pt-BR')}</td>
-                <td class="px-4 py-3 border-b border-slate-100 w-[15%]">
-                    <div class="flex items-center gap-2">
-                        <span class="text-xs font-black ${txtColor} w-10 text-right">${Math.round(u.pct)}%</span>
-                        <div class="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
-                            <div class="h-full ${barColor} rounded-full" style="width: ${Math.min(u.pct, 100)}%"></div>
-                        </div>
-                    </div>
-                </td>
-            `;
-            tbody.appendChild(tr);
+        const ctx = document.getElementById('evolutionChart').getContext('2d');
+        
+        const formattedLabels = labels.map(d => {
+            const parts = d.split('-');
+            return `${parts[2]}/${parts[1]}`;
         });
+
+        this.chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: formattedLabels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 500 },
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { boxWidth: 12, font: { size: 11, family: "'Nunito', sans-serif" } }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                        titleFont: { size: 13 },
+                        bodyFont: { size: 12 },
+                        padding: 10,
+                        displayColors: true,
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: '#f1f5f9' },
+                        ticks: { font: { size: 10 } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { 
+                            font: { size: 10 },
+                            maxTicksLimit: 15,
+                            maxRotation: 0
+                        }
+                    }
+                }
+            }
+        });
+    },
+
+    destroyChart: function() {
+        if (this.chartInstance) {
+            this.chartInstance.destroy();
+            this.chartInstance = null;
+        }
+    },
+
+    resetChart: function() {
+        this.renderizarVisaoGeral();
     }
 };
