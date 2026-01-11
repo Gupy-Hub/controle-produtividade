@@ -44,11 +44,13 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
-        // Popula Selects
+        // 1. Popula Selects Iniciais (Ano/Mês)
         this.popularSeletoresIniciais();
+        
+        // 2. Carrega Estado Salvo (Persistência)
         this.carregarEstadoSalvo();
 
-        // Admin
+        // 3. Configura Permissão Admin
         if (this.isAdmin()) {
             const container = document.getElementById('admin-selector-container');
             if (container) container.classList.remove('hidden');
@@ -56,7 +58,7 @@ const MinhaArea = {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // Inicia
+        // 4. Inicia ciclo de atualização
         setTimeout(() => this.atualizarTudo(), 100);
     },
 
@@ -80,10 +82,12 @@ const MinhaArea = {
 
         const idAnterior = this.usuarioAlvoId;
         
+        // Estado de Loading Visual
         select.innerHTML = `<option value="" disabled selected>🔄 Buscando...</option>`;
         select.disabled = true;
 
         try {
+            // 1. Busca IDs de quem produziu no período
             const { data: prodData, error: prodError } = await Sistema.supabase
                 .from('producao')
                 .select('usuario_id')
@@ -92,6 +96,7 @@ const MinhaArea = {
 
             if (prodError) throw prodError;
 
+            // Filtra IDs únicos e remove nulos
             const idsComProducao = [...new Set(prodData.map(item => item.usuario_id))].filter(id => id);
 
             if (idsComProducao.length === 0) {
@@ -102,6 +107,7 @@ const MinhaArea = {
                 return false;
             }
 
+            // 2. Busca nomes, EXCLUINDO Gestão/Auditoria
             const { data: users, error: userError } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, funcao')
@@ -113,6 +119,7 @@ const MinhaArea = {
 
             if (userError) throw userError;
 
+            // 3. Monta o HTML do Select
             let html = `<option value="" disabled ${!idAnterior ? 'selected' : ''}>👉 Selecionar Assistente...</option>`;
             let mantemSelecao = false;
 
@@ -125,6 +132,7 @@ const MinhaArea = {
             select.innerHTML = html;
             select.disabled = false;
 
+            // Se a pessoa selecionada anteriormente ainda está na lista, mantém. Senão, reseta.
             if (mantemSelecao) {
                 this.usuarioAlvoId = parseInt(idAnterior);
                 return true;
@@ -144,8 +152,13 @@ const MinhaArea = {
 
     limparTelas: function() {
         if (this.Geral && this.Geral.zerarKPIs) this.Geral.zerarKPIs();
-        const tbody = document.getElementById('tabela-extrato');
-        if(tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma assistente</p></td></tr>';
+        if (this.Assertividade && this.Assertividade.zerarKPIs) this.Assertividade.zerarKPIs();
+        
+        const tbodyProd = document.getElementById('tabela-extrato');
+        if(tbodyProd) tbodyProd.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma assistente</p></td></tr>';
+        
+        const tbodyAudit = document.getElementById('tabela-audit');
+        if(tbodyAudit) tbodyAudit.innerHTML = '<tr><td colspan="4" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma assistente</p></td></tr>';
     },
 
     mudarUsuarioAlvo: function(novoId) {
@@ -319,15 +332,19 @@ const MinhaArea = {
 
     carregarDadosAba: function(abaId) {
         if (this.isAdmin() && !this.usuarioAlvoId) return;
+
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
-        if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
+        
+        // Nova aba de Assertividade
+        if (abaId === 'assertividade' && this.Assertividade) this.Assertividade.carregar();
+        
         if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
         if (abaId === 'feedback' && this.Feedback) this.Feedback.carregar();
     }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Timeout maior para garantir carregamento de todas as bibliotecas
+    // Timeout para garantir que bibliotecas carregaram
     setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
 });
