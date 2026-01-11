@@ -1,67 +1,103 @@
-// js/produtividade/main.js
-const Produtividade = {
-    supabase: null, // Será injetado pelo sistema principal se necessário, mas aqui usamos Sistema.supabase globalmente
+// Garante que o objeto global exista
+window.Produtividade = window.Produtividade || {};
 
-    init: async function() {
-        console.log("Módulo Produtividade Iniciado");
-        this.configurarDataGlobal();
+Produtividade.Main = {
+    init: function() {
+        // 1. Recupera e aplica a DATA salva
+        const lastDate = localStorage.getItem('lastGlobalDate');
+        if (lastDate) {
+            document.getElementById('global-date').value = lastDate;
+        } else {
+            document.getElementById('global-date').value = new Date().toISOString().split('T')[0];
+        }
+
+        this.setupTabs();
         
-        // Carrega a aba padrão (Geral)
-        this.mudarAba('geral');
-    },
-
-    configurarDataGlobal: function() {
-        const dateInput = document.getElementById('global-date');
-        if (dateInput && !dateInput.value) {
-            dateInput.value = new Date().toISOString().split('T')[0];
+        // 2. Recupera a última ABA salva
+        const lastTab = localStorage.getItem('lastActiveTab');
+        if (lastTab) {
+            setTimeout(() => this.mudarAba(lastTab), 50);
+        } else {
+            // Padrão: Geral
+            if(Produtividade.Geral && typeof Produtividade.Geral.init === 'function') {
+                Produtividade.Geral.init();
+            }
         }
     },
 
-    atualizarDataGlobal: function(novaData) {
-        // Quando a data global muda, recarrega a aba ativa
-        this.atualizarTodasAbas();
+    setupTabs: function() {
+        const btns = document.querySelectorAll('.tab-btn');
+        btns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                btns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
+                const targetId = btn.id.replace('btn-', 'tab-');
+                const targetEl = document.getElementById(targetId);
+                if(targetEl) targetEl.classList.remove('hidden');
+
+                const sectionName = btn.id.replace('btn-', '');
+                this.toggleTopBarControls(sectionName);
+
+                // Salva a aba
+                localStorage.setItem('lastActiveTab', sectionName);
+
+                this.loadModule(sectionName);
+            });
+        });
     },
 
-    mudarAba: function(abaId) {
-        // 1. Esconde todas as abas
-        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-
-        // 2. Mostra a aba selecionada
-        const abaAlvo = document.getElementById(`tab-${abaId}`);
-        const btnAlvo = document.getElementById(`btn-${abaId}`);
-        
-        if (abaAlvo) abaAlvo.classList.remove('hidden');
-        if (btnAlvo) btnAlvo.classList.add('active');
-
-        // 3. Atualiza controles superiores (Filtros contextuais)
-        document.getElementById('ctrl-geral').classList.add('hidden');
-        document.getElementById('ctrl-consolidado').classList.add('hidden');
-        document.getElementById('ctrl-performance').classList.add('hidden');
-        
-        const ctrlAlvo = document.getElementById(`ctrl-${abaId}`);
-        if(ctrlAlvo) ctrlAlvo.classList.remove('hidden');
-
-        // 4. Carrega os dados da aba específica
-        if (abaId === 'geral' && this.Geral) this.Geral.init();
-        if (abaId === 'consolidado' && this.Consolidado) this.Consolidado.init();
-        if (abaId === 'performance' && this.Performance) this.Performance.init();
-        if (abaId === 'matriz' && this.Matriz) this.Matriz.init();
+    toggleTopBarControls: function(section) {
+        const controls = ['geral', 'consolidado', 'performance', 'matriz'];
+        controls.forEach(c => {
+            const el = document.getElementById(`ctrl-${c}`);
+            if(el) {
+                if(c === section) el.classList.remove('hidden');
+                else el.classList.add('hidden');
+            }
+        });
     },
-    
-    // Função auxiliar chamada pelos listeners globais
-    atualizarTodasAbas: function() {
-        if(this.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) this.Geral.carregarTela();
-        if(this.Consolidado && !document.getElementById('tab-consolidado').classList.contains('hidden')) this.Consolidado.carregar();
-        if(this.Performance && !document.getElementById('tab-performance').classList.contains('hidden')) this.Performance.carregar();
-        if(this.Matriz && !document.getElementById('tab-matriz').classList.contains('hidden')) this.Matriz.carregar();
+
+    loadModule: function(section) {
+        switch(section) {
+            case 'geral':
+                if(Produtividade.Geral) Produtividade.Geral.init();
+                break;
+            case 'consolidado':
+                if(Produtividade.Consolidado) Produtividade.Consolidado.init();
+                break;
+            case 'performance':
+                if(Produtividade.Performance) {
+                    Produtividade.Performance.togglePeriodo();
+                }
+                break;
+            case 'matriz':
+                if(Produtividade.Matriz) Produtividade.Matriz.carregarMatriz();
+                break;
+        }
+    },
+
+    mudarAba: function(aba) {
+        const btn = document.getElementById(`btn-${aba}`);
+        if(btn) btn.click();
     }
 };
 
-// Inicialização automática ao carregar o script
 document.addEventListener('DOMContentLoaded', () => {
-    // Pequeno delay para garantir que o Sistema.supabase esteja pronto
-    setTimeout(() => {
-        if(typeof Produtividade !== 'undefined') Produtividade.init();
-    }, 100);
+    Produtividade.Main.init();
 });
+
+// Atalhos Globais
+Produtividade.mudarAba = (aba) => Produtividade.Main.mudarAba(aba);
+
+Produtividade.atualizarDataGlobal = function(valor) {
+    // SALVA A DATA NO NAVEGADOR
+    localStorage.setItem('lastGlobalDate', valor);
+
+    const activeBtn = document.querySelector('.tab-btn.active');
+    if(activeBtn) {
+        const section = activeBtn.id.replace('btn-', '');
+        Produtividade.Main.loadModule(section);
+    }
+};
