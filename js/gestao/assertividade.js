@@ -17,12 +17,8 @@ Gestao.Assertividade = {
         }
     },
 
-    // --- INICIALIZAÇÃO ---
     carregar: async function() {
         this.estado.pagina = 0;
-        // Não limpamos os filtros ao recarregar a aba para manter o contexto do usuário
-        // Se quiser limpar sempre que entrar, descomente a linha abaixo:
-        // this.limparCamposUI(); 
         this.buscarDados(); 
     },
 
@@ -32,12 +28,10 @@ Gestao.Assertividade = {
             const el = document.getElementById(id);
             if(el) el.value = '';
         });
-        this.atualizarFiltrosEBuscar(); // Recarrega após limpar
+        this.atualizarFiltrosEBuscar();
     },
 
-    // --- CONTROLE DE FILTROS (Debounce) ---
     atualizarFiltrosEBuscar: function() {
-        // Coleta os valores atuais dos inputs
         this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
         this.estado.filtros.data = document.getElementById('filtro-data')?.value || '';
         this.estado.filtros.empresa = document.getElementById('filtro-empresa')?.value.trim() || '';
@@ -47,14 +41,11 @@ Gestao.Assertividade = {
         this.estado.filtros.doc = document.getElementById('filtro-doc')?.value.trim() || '';
         this.estado.filtros.obs = document.getElementById('filtro-obs')?.value.trim() || '';
 
-        // Reseta página para a primeira
         this.estado.pagina = 0;
         
-        // Feedback visual imediato na tabela
         const tbody = document.getElementById('lista-assertividade');
         if(tbody) tbody.style.opacity = '0.5';
 
-        // Debounce: Aguarda 600ms após parar de digitar para buscar (performance)
         clearTimeout(this.timerBusca);
         this.timerBusca = setTimeout(() => {
             this.buscarDados();
@@ -69,7 +60,6 @@ Gestao.Assertividade = {
         }
     },
 
-    // --- BUSCA INTELIGENTE ---
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
@@ -77,7 +67,7 @@ Gestao.Assertividade = {
         const btnProx = document.getElementById('btn-prox');
         const contador = document.getElementById('contador-assert');
 
-        if(tbody) tbody.style.opacity = '1'; // Restaura opacidade
+        if(tbody) tbody.style.opacity = '1';
         if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-circle-notch fa-spin"></i> Filtrando...</span>`;
 
         try {
@@ -85,42 +75,31 @@ Gestao.Assertividade = {
                 .from('vw_assertividade_completa')
                 .select('*', { count: 'exact' });
 
-            // 1. Busca Geral (No Search Vector turbinado pela View)
+            // 1. Busca Geral (Contém)
             if (this.estado.termo) {
                 query = query.ilike('search_vector', `%${this.estado.termo}%`);
             }
 
-            // 2. Filtros Específicos (Coluna por Coluna)
-            if (this.estado.filtros.data) {
-                query = query.eq('data_referencia', this.estado.filtros.data);
-            }
-            if (this.estado.filtros.empresa) {
-                // Busca no nome da empresa (ilike ignora maiuscula/minuscula)
-                query = query.ilike('empresa_nome', `%${this.estado.filtros.empresa}%`);
-            }
-            if (this.estado.filtros.assistente) {
-                query = query.ilike('nome_assistente', `%${this.estado.filtros.assistente}%`);
-            }
-            if (this.estado.filtros.auditora) {
-                query = query.ilike('nome_auditora_raw', `%${this.estado.filtros.auditora}%`);
-            }
+            // 2. Filtros Específicos
+            if (this.estado.filtros.data) query = query.eq('data_referencia', this.estado.filtros.data);
+            if (this.estado.filtros.empresa) query = query.ilike('empresa_nome', `%${this.estado.filtros.empresa}%`);
+            if (this.estado.filtros.assistente) query = query.ilike('nome_assistente', `%${this.estado.filtros.assistente}%`);
+            if (this.estado.filtros.auditora) query = query.ilike('nome_auditora_raw', `%${this.estado.filtros.auditora}%`);
+            
+            // CORREÇÃO AQUI: Removemos os % para fazer busca exata no Status (sem diferenciar maiúsculas)
             if (this.estado.filtros.status) {
-                // status pode ser 'OK', 'Ok', 'ok' - ilike resolve
-                query = query.ilike('status', `%${this.estado.filtros.status}%`);
+                query = query.ilike('status', this.estado.filtros.status); 
             }
-            if (this.estado.filtros.doc) {
-                query = query.ilike('nome_documento', `%${this.estado.filtros.doc}%`);
-            }
-            if (this.estado.filtros.obs) {
-                query = query.ilike('observacao', `%${this.estado.filtros.obs}%`);
-            }
+            
+            if (this.estado.filtros.doc) query = query.ilike('nome_documento', `%${this.estado.filtros.doc}%`);
+            if (this.estado.filtros.obs) query = query.ilike('observacao', `%${this.estado.filtros.obs}%`);
 
-            // 3. Paginação e Ordenação
+            // 3. Paginação
             const inicio = this.estado.pagina * this.estado.limite;
             const fim = inicio + this.estado.limite - 1;
             
             query = query.order('data_referencia', { ascending: false })
-                         .order('id', { ascending: false }) // Desempate por ID
+                         .order('id', { ascending: false })
                          .range(inicio, fim);
 
             const { data, error, count } = await query;
@@ -171,13 +150,11 @@ Gestao.Assertividade = {
 
         let html = '';
         lista.forEach(item => {
-            // Sanitização
             const empresaSafe = Sistema.escapar(item.empresa_nome || '-');
             const assistenteSafe = Sistema.escapar(item.nome_assistente || '-');
             const auditoraSafe = Sistema.escapar(item.nome_auditora_raw || '-');
             const docSafe = Sistema.escapar(item.nome_documento || '-');
             const obsSafe = Sistema.escapar(item.observacao || '-');
-            
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
             const empIdDisplay = item.empresa_id ? `<span class="text-slate-400 font-mono text-[10px]">#${item.empresa_id}</span>` : '';
 
@@ -186,8 +163,9 @@ Gestao.Assertividade = {
             const stUp = stRaw.toUpperCase();     
             let badgeClass = "bg-slate-100 text-slate-500 border-slate-200"; 
             if (stUp === 'OK' || stUp === 'VALIDO') badgeClass = "bg-emerald-100 text-emerald-700 border-emerald-200";
-            else if (stUp.includes('NOK')) badgeClass = "bg-rose-100 text-rose-700 border-rose-200";
+            else if (stUp === 'NOK' || stUp.includes('NOK')) badgeClass = "bg-rose-100 text-rose-700 border-rose-200";
             else if (stUp.includes('REV')) badgeClass = "bg-amber-100 text-amber-700 border-amber-200";
+            else if (stUp === 'PROCESSADO') badgeClass = "bg-indigo-50 text-indigo-600 border-indigo-100"; 
             else if (stUp.includes('PEND')) badgeClass = "bg-blue-50 text-blue-600 border-blue-100";
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;

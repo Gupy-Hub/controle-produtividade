@@ -111,7 +111,36 @@
                      <table class="w-full min-w-[1500px] text-sm text-left">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-100 tracking-wider">
                             <tr><th class="px-3 py-2 w-[8%]">Data</th><th class="px-3 py-2 w-[5%] text-center">ID Emp</th><th class="px-3 py-2 w-[12%]">Empresa</th><th class="px-3 py-2 w-[12%]">Assistente</th><th class="px-3 py-2 w-[12%]">Doc Name</th><th class="px-3 py-2 w-[6%] text-center">Status</th><th class="px-3 py-2 w-[15%]">Obs</th><th class="px-3 py-2 w-[5%] text-center">Campos</th><th class="px-3 py-2 w-[5%] text-center text-emerald-600">OK</th><th class="px-3 py-2 w-[5%] text-center text-rose-600">NOK</th><th class="px-3 py-2 w-[5%] text-center">%</th><th class="px-3 py-2 w-[10%]">Auditora</th></tr>
-                            <tr class="bg-slate-100/50 border-b border-slate-200"><td class="p-1"><input type="date" id="filtro-data" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td><td class="p-1"><input type="text" id="filtro-empresa" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"><input type="text" id="filtro-assistente" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"><input type="text" id="filtro-doc" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"><select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600"><option value="">TODOS</option><option value="EMPTY">(Em Branco)</option><option value="OK">OK</option><option value="NOK">NOK</option><option value="REV">REV</option><option value="JUST">JUST</option><option value="DUPL">DUPL</option><option value="IA">IA</option><option value="EMPR">EMPR</option><option value="REC">REC</option></select></td><td class="p-1"><input type="text" id="filtro-obs" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1 text-center text-xs text-slate-300">-</td><td class="p-1 text-center text-xs text-slate-300">-</td><td class="p-1 text-center text-xs text-slate-300">-</td><td class="p-1 text-center text-xs text-slate-300">-</td><td class="p-1"><input type="text" id="filtro-auditora" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Nome..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td></tr>
+                            <tr class="bg-slate-100/50 border-b border-slate-200">
+                                <td class="p-1"><input type="date" id="filtro-data" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td>
+                                <td class="p-1"><input type="text" id="filtro-empresa" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" id="filtro-assistente" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" id="filtro-doc" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                
+                                <td class="p-1">
+                                    <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
+                                        <option value="">TODOS</option>
+                                        <option value="PROCESSADO">PROCESSADO</option>
+                                        <option value="OK">OK</option>
+                                        <option value="NOK">NOK</option>
+                                        <option value="REV">REV</option>
+                                        <option value="JUST">JUST</option>
+                                        <option value="DUPL">DUPL</option>
+                                        <option value="IA">IA</option>
+                                        <option value="EMPR">EMPR</option>
+                                        <option value="REC">REC</option>
+                                        <option value="PENDENTE">PENDENTE</option>
+                                    </select>
+                                </td>
+                                
+                                <td class="p-1"><input type="text" id="filtro-obs" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1"><input type="text" id="filtro-auditora" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Nome..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            </tr>
                         </thead>
                         <tbody id="lista-assertividade" class="divide-y divide-slate-100 bg-white"></tbody>
                      </table>
