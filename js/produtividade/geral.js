@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Cruzamento Assertividade)...");
+        console.log("🔧 Produtividade: Iniciando (Modo Assertividade Ponderada)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -16,7 +16,7 @@ Produtividade.Geral = {
         if (el) el.innerText = valor;
     },
 
-    // Normaliza texto para cruzar nomes (remove acentos, minusculo)
+    // Remove acentos e deixa minúsculo para cruzar nomes (Assistente X Usuário)
     normalizar: function(str) {
         if(!str) return "";
         return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -31,10 +31,10 @@ Produtividade.Geral = {
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Cruzando Produção e Qualidade...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Assertividade...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO (QUANTIDADE)
+            // 1. BUSCA PRODUÇÃO (Tabela producao)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -51,24 +51,27 @@ Produtividade.Geral = {
             
             if (errUser) throw errUser;
             
-            // Mapas de Usuário (ID -> Obj e NomeNormalizado -> ID)
+            // Mapas de Usuário
             const mapaUsuarios = {};
             const mapaNomeParaId = {};
             usuarios.forEach(u => {
                 mapaUsuarios[u.id] = u;
-                mapaNomeParaId[this.normalizar(u.nome)] = u.id;
+                if(u.nome) mapaNomeParaId[this.normalizar(u.nome)] = u.id;
             });
 
-            // 3. BUSCA ASSERTIVIDADE (QUALIDADE REAL)
-            // Aqui pegamos o OK e NOK validados pelas auditoras
+            // 3. BUSCA ASSERTIVIDADE (QUALIDADE REAL - Tabela assertividade)
+            // Trazemos tudo do período para calcular a média exata
             const { data: qualidade, error: errQuali } = await Sistema.supabase
                 .from('assertividade')
                 .select('assistente, data_auditoria, ok, nok')
                 .gte('data_auditoria', dataInicio)
                 .lte('data_auditoria', dataFim);
 
-            // Mapa de Qualidade: Chave = "ID_DATA" -> Valor = { ok, nok }
-            const mapaQualidadeDiaria = {};
+            if (errQuali) throw errQuali;
+
+            // Mapas de Qualidade
+            const mapaQualidadeDiaria = {}; // Chave: "ID_DATA" -> { ok: 10, nok: 2 }
+            const mapaQualidadeTotal = {};  // Chave: "ID" -> { ok: 500, nok: 10 } (Para o consolidado do mês)
 
             if (qualidade) {
                 qualidade.forEach(q => {
@@ -76,15 +79,20 @@ Produtividade.Geral = {
                     const uid = mapaNomeParaId[nomeNorm];
                     
                     if (uid && q.data_auditoria) {
-                        const chave = `${uid}_${q.data_auditoria}`; // Ex: 123_2025-12-01
-                        
-                        if (!mapaQualidadeDiaria[chave]) {
-                            mapaQualidadeDiaria[chave] = { ok: 0, nok: 0 };
-                        }
-                        
-                        // Soma OK e NOK (pois pode haver varias auditorias no dia)
-                        mapaQualidadeDiaria[chave].ok += (parseInt(q.ok) || 0);
-                        mapaQualidadeDiaria[chave].nok += (parseInt(q.nok) || 0);
+                        const qtdOk = parseInt(q.ok) || 0;
+                        const qtdNok = parseInt(q.nok) || 0;
+
+                        // A. Agrega por Dia (Para o Drill-down)
+                        const chaveDia = `${uid}_${q.data_auditoria}`;
+                        if (!mapaQualidadeDiaria[chaveDia]) mapaQualidadeDiaria[chaveDia] = { ok: 0, nok: 0 };
+                        mapaQualidadeDiaria[chaveDia].ok += qtdOk;
+                        mapaQualidadeDiaria[chaveDia].nok += qtdNok;
+
+                        // B. Agrega por Usuário (Para o Consolidado do Período)
+                        // Isso garante que a média do mês pegue TODOS os documentos, independente da produção
+                        if (!mapaQualidadeTotal[uid]) mapaQualidadeTotal[uid] = { ok: 0, nok: 0 };
+                        mapaQualidadeTotal[uid].ok += qtdOk;
+                        mapaQualidadeTotal[uid].nok += qtdNok;
                     }
                 });
             }
@@ -111,19 +119,28 @@ Produtividade.Geral = {
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 
                 if(!dadosAgrupados[uid]) {
+                    // Inicializa grupo do usuário
+                    // Pega a qualidade TOTAL do período que calculamos no passo 3B
+                    const qTotal = mapaQualidadeTotal[uid] || { ok: 0, nok: 0 };
+                    
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
-                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0, ok: 0, nok: 0 },
+                        totais: { 
+                            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0,
+                            // Usa a soma real de documentos auditados no período
+                            ok: qTotal.ok, 
+                            nok: qTotal.nok 
+                        },
                         meta_real: mapaMetas[uid] || 0
                     };
                 }
                 
-                // Busca qualidade cruzada para este dia/usuario
+                // Dados do Dia
                 const chaveQuali = `${uid}_${item.data_referencia}`;
                 const dadosQ = mapaQualidadeDiaria[chaveQuali] || { ok: 0, nok: 0 };
 
-                // Calcula % Assertividade do Dia
+                // Calcula % Assertividade do Dia (Weighted Average do Dia)
                 let assertPct = 0;
                 let assertTxt = "-";
                 const totalAuditado = dadosQ.ok + dadosQ.nok;
@@ -133,18 +150,16 @@ Produtividade.Geral = {
                     assertTxt = assertPct.toFixed(1) + "%";
                 }
 
-                // Insere registro enriquecido
                 dadosAgrupados[uid].registros.push({ 
                     ...item, 
                     usuario: userObj,
-                    // Sobrescreve os dados do CSV com os dados da tabela Assertividade
                     ok_real: dadosQ.ok,
                     nok_real: dadosQ.nok,
                     assertividade_real: assertTxt,
                     assertividade_valor: assertPct
                 });
                 
-                // Totais
+                // Acumula Produção
                 const d = dadosAgrupados[uid].totais;
                 const f = Number(item.fator || 1);
                 d.qty += (Number(item.quantidade) || 0); 
@@ -154,10 +169,8 @@ Produtividade.Geral = {
                 d.fc += (Number(item.perfil_fc) || 0);
                 d.dias += 1; 
                 d.diasUteis += f;
-                
-                // Acumula qualidade para o total
-                d.ok += dadosQ.ok;
-                d.nok += dadosQ.nok;
+                // Nota: Não acumulamos OK/NOK aqui linha a linha, usamos o mapaQualidadeTotal
+                // para garantir que a média do mês esteja correta mesmo se faltar produção em algum dia.
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -167,7 +180,7 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                this.atualizarKPIs(producao, mapaUsuarios); // KPIs mantem produção global
+                this.atualizarKPIs(producao, mapaUsuarios);
             }
         } catch (error) {
             console.error("Erro render:", error);
@@ -204,7 +217,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // DIA A DIA
+                // --- VISÃO DIÁRIA ---
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const metaCalc = metaBase * (r.fator || 1);
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -212,11 +225,9 @@ Produtividade.Geral = {
                     
                     let corFator = r.fator == 0.5 ? 'bg-amber-50 text-amber-700' : r.fator == 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
                     
-                    // Lógica de Cor da Assertividade (Usando dado calculado)
-                    let assertVal = r.assertividade_real; // Valor calculado (Ex: "98.5%")
-                    let assertNum = r.assertividade_valor; // Valor numérico (Ex: 98.5)
-                    
-                    // Cor baseada na meta padrão de 98% (pode ajustar)
+                    // Cor da Assertividade Diária
+                    let assertVal = r.assertividade_real;
+                    let assertNum = r.assertividade_valor;
                     let corAssert = 'text-slate-400';
                     if (assertNum > 0) {
                         corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
@@ -240,11 +251,11 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // CONSOLIDADO (TOTAL DO PERÍODO)
+                // --- VISÃO CONSOLIDADA (Média Ponderada do Período) ---
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 
-                // Calcula Assertividade Geral do Período
+                // Cálculo da Média Ponderada (Total OK / Total Docs do Período)
                 const totalAudit = d.totais.ok + d.totais.nok;
                 let assertGeralTxt = "-";
                 let corAssert = "text-slate-400 italic";
@@ -275,7 +286,6 @@ Produtividade.Geral = {
         });
     },
 
-    // ... (Mantém as funções auxiliares abaixo: filtrarUsuario, limparSelecao, etc.)
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
@@ -296,7 +306,6 @@ Produtividade.Geral = {
         data.forEach(r => {
             const qtd = Number(r.quantidade) || 0; 
             totalProdGeral += qtd; 
-            
             const u = r.usuario || (mapaUsuarios ? mapaUsuarios[r.usuario_id] : null);
             if (u) {
                 const cargo = u.funcao ? String(u.funcao).toUpperCase() : 'ASSISTENTE';
@@ -310,21 +319,6 @@ Produtividade.Geral = {
         this.setTxt('kpi-clt-val', `${usersCLT.size}`);
         this.setTxt('kpi-pj-val', `${usersPJ.size}`);
     },
-
-    excluirDadosDia: async function() {
-        const datas = Produtividade.getDatasFiltro();
-        const s = datas.inicio;
-        const e = datas.fim;
-        if(!s || !e) return alert("Período não definido.");
-        if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas os dados de QUANTIDADE. A assertividade (Qualidade) será mantida na outra aba.`)) return;
-        
-        try {
-            const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e });
-            if(error) throw error;
-            alert("Dados de produção excluídos com sucesso!");
-            this.carregarTela();
-        } catch(err) { alert("Erro: " + err.message); }
-    },
     
     mudarFator: async function(id, val) {
         const { error } = await Sistema.supabase.from('producao').update({ fator: val }).eq('id', id);
@@ -337,5 +331,20 @@ Produtividade.Geral = {
         const ids = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
         const { error } = await Sistema.supabase.from('producao').update({ fator: val }).in('id', ids);
         if(!error) this.carregarTela();
+    },
+
+    excluirDadosDia: async function() {
+        const datas = Produtividade.getDatasFiltro();
+        const s = datas.inicio;
+        const e = datas.fim;
+        if(!s || !e) return alert("Período não definido.");
+        if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas a PRODUÇÃO do período. A assertividade (Qualidade) é mantida.`)) return;
+        
+        try {
+            const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e });
+            if(error) throw error;
+            alert("Produção excluída com sucesso!");
+            this.carregarTela();
+        } catch(err) { alert("Erro: " + err.message); }
     }
 };
