@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Inicializando...");
+        console.log("🔧 Produtividade: Iniciando (Modo Cruzamento Assertividade)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -16,41 +16,80 @@ Produtividade.Geral = {
         if (el) el.innerText = valor;
     },
 
+    // Normaliza texto para cruzar nomes (remove acentos, minusculo)
+    normalizar: function(str) {
+        if(!str) return "";
+        return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+    },
+
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
-        // 1. Pega datas do filtro
         const datas = Produtividade.getDatasFiltro();
         const dataInicio = datas.inicio;
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Cruzando Produção e Qualidade...</td></tr>';
 
         try {
-            // 2. Busca Dados de Produção (SEM JOIN, só IDs)
+            // 1. BUSCA PRODUÇÃO (QUANTIDADE)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
-                .select('*') // Pega tudo
+                .select('*')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
                 .order('data_referencia', { ascending: true });
             
             if (errProd) throw errProd;
 
-            // 3. Busca Usuários (Separado)
+            // 2. BUSCA USUÁRIOS
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato');
             
             if (errUser) throw errUser;
             
-            // Mapa de Usuários
+            // Mapas de Usuário (ID -> Obj e NomeNormalizado -> ID)
             const mapaUsuarios = {};
-            usuarios.forEach(u => mapaUsuarios[u.id] = u);
+            const mapaNomeParaId = {};
+            usuarios.forEach(u => {
+                mapaUsuarios[u.id] = u;
+                mapaNomeParaId[this.normalizar(u.nome)] = u.id;
+            });
 
-            // 4. Busca Metas
+            // 3. BUSCA ASSERTIVIDADE (QUALIDADE REAL)
+            // Aqui pegamos o OK e NOK validados pelas auditoras
+            const { data: qualidade, error: errQuali } = await Sistema.supabase
+                .from('assertividade')
+                .select('assistente, data_auditoria, ok, nok')
+                .gte('data_auditoria', dataInicio)
+                .lte('data_auditoria', dataFim);
+
+            // Mapa de Qualidade: Chave = "ID_DATA" -> Valor = { ok, nok }
+            const mapaQualidadeDiaria = {};
+
+            if (qualidade) {
+                qualidade.forEach(q => {
+                    const nomeNorm = this.normalizar(q.assistente);
+                    const uid = mapaNomeParaId[nomeNorm];
+                    
+                    if (uid && q.data_auditoria) {
+                        const chave = `${uid}_${q.data_auditoria}`; // Ex: 123_2025-12-01
+                        
+                        if (!mapaQualidadeDiaria[chave]) {
+                            mapaQualidadeDiaria[chave] = { ok: 0, nok: 0 };
+                        }
+                        
+                        // Soma OK e NOK (pois pode haver varias auditorias no dia)
+                        mapaQualidadeDiaria[chave].ok += (parseInt(q.ok) || 0);
+                        mapaQualidadeDiaria[chave].nok += (parseInt(q.nok) || 0);
+                    }
+                });
+            }
+
+            // 4. BUSCA METAS
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
@@ -64,25 +103,46 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 5. Unifica os dados (Manual Join)
+            // 5. UNIFICAÇÃO DOS DADOS
             let dadosAgrupados = {};
             
             producao.forEach(item => {
                 const uid = item.usuario_id;
-                // Se não achou usuário, usa placeholder
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 
                 if(!dadosAgrupados[uid]) {
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
-                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0 },
+                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0, ok: 0, nok: 0 },
                         meta_real: mapaMetas[uid] || 0
                     };
                 }
                 
-                // Insere registro já com referência ao usuário
-                dadosAgrupados[uid].registros.push({ ...item, usuario: userObj });
+                // Busca qualidade cruzada para este dia/usuario
+                const chaveQuali = `${uid}_${item.data_referencia}`;
+                const dadosQ = mapaQualidadeDiaria[chaveQuali] || { ok: 0, nok: 0 };
+
+                // Calcula % Assertividade do Dia
+                let assertPct = 0;
+                let assertTxt = "-";
+                const totalAuditado = dadosQ.ok + dadosQ.nok;
+                
+                if (totalAuditado > 0) {
+                    assertPct = (dadosQ.ok / totalAuditado) * 100;
+                    assertTxt = assertPct.toFixed(1) + "%";
+                }
+
+                // Insere registro enriquecido
+                dadosAgrupados[uid].registros.push({ 
+                    ...item, 
+                    usuario: userObj,
+                    // Sobrescreve os dados do CSV com os dados da tabela Assertividade
+                    ok_real: dadosQ.ok,
+                    nok_real: dadosQ.nok,
+                    assertividade_real: assertTxt,
+                    assertividade_valor: assertPct
+                });
                 
                 // Totais
                 const d = dadosAgrupados[uid].totais;
@@ -93,7 +153,11 @@ Produtividade.Geral = {
                 d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0);
                 d.dias += 1; 
-                d.diasUteis += f; 
+                d.diasUteis += f;
+                
+                // Acumula qualidade para o total
+                d.ok += dadosQ.ok;
+                d.nok += dadosQ.nok;
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -103,7 +167,7 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                this.atualizarKPIs(producao, mapaUsuarios);
+                this.atualizarKPIs(producao, mapaUsuarios); // KPIs mantem produção global
             }
         } catch (error) {
             console.error("Erro render:", error);
@@ -145,10 +209,18 @@ Produtividade.Geral = {
                     const metaCalc = metaBase * (r.fator || 1);
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
                     const [ano, mes, dia] = r.data_referencia.split('-');
+                    
                     let corFator = r.fator == 0.5 ? 'bg-amber-50 text-amber-700' : r.fator == 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
-                    let assertVal = r.assertividade || '0%';
-                    let assertNum = parseFloat(assertVal.replace('%','').replace(',','.'));
-                    let corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : (assertNum > 0 ? 'text-rose-600 font-bold' : 'text-slate-400');
+                    
+                    // Lógica de Cor da Assertividade (Usando dado calculado)
+                    let assertVal = r.assertividade_real; // Valor calculado (Ex: "98.5%")
+                    let assertNum = r.assertividade_valor; // Valor numérico (Ex: 98.5)
+                    
+                    // Cor baseada na meta padrão de 98% (pode ajustar)
+                    let corAssert = 'text-slate-400';
+                    if (assertNum > 0) {
+                        corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
+                    }
 
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
@@ -168,10 +240,21 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // CONSOLIDADO
+                // CONSOLIDADO (TOTAL DO PERÍODO)
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 
+                // Calcula Assertividade Geral do Período
+                const totalAudit = d.totais.ok + d.totais.nok;
+                let assertGeralTxt = "-";
+                let corAssert = "text-slate-400 italic";
+                
+                if (totalAudit > 0) {
+                    const pctGeral = (d.totais.ok / totalAudit) * 100;
+                    assertGeralTxt = pctGeral.toFixed(1) + "%";
+                    corAssert = pctGeral >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
+                }
+
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                 tr.innerHTML = `
@@ -185,15 +268,14 @@ Produtividade.Geral = {
                     <td class="${commonCell} bg-slate-50 text-[10px] font-bold text-slate-700">${Math.round(metaTotalPeriodo)}</td>
                     <td class="px-2 py-2 text-center border-r border-slate-200 font-bold text-blue-700 bg-blue-50/30">${d.totais.qty}</td>
                     <td class="px-2 py-2 text-center border-r border-slate-200"><span class="${pct>=100?'text-emerald-700 font-black':'text-amber-600 font-bold'} text-xs">${Math.round(pct)}%</span></td>
-                    <td class="px-2 py-2 text-center text-xs text-slate-400 italic">-</td>
+                    <td class="px-2 py-2 text-center text-xs ${corAssert}">${assertGeralTxt}</td>
                 `;
                 tbody.appendChild(tr);
             }
         });
     },
 
-    // ... (Demais funções de apoio como filtrarUsuario, atualizarKPIs, excluirDadosDia, etc.)
-    // Mantenha as que já enviamos anteriormente, pois elas estão corretas (usando RPC).
+    // ... (Mantém as funções auxiliares abaixo: filtrarUsuario, limparSelecao, etc.)
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
@@ -205,7 +287,6 @@ Produtividade.Geral = {
         this.usuarioSelecionado = null;
         document.getElementById('selection-header').classList.add('hidden');
         this.renderizarTabela();
-        // Recalcular KPIs globais se necessário
     },
 
     atualizarKPIs: function(data, mapaUsuarios) { 
@@ -216,9 +297,7 @@ Produtividade.Geral = {
             const qtd = Number(r.quantidade) || 0; 
             totalProdGeral += qtd; 
             
-            // Precisa olhar no mapa se o objeto usuario não estiver aninhado
             const u = r.usuario || (mapaUsuarios ? mapaUsuarios[r.usuario_id] : null);
-            
             if (u) {
                 const cargo = u.funcao ? String(u.funcao).toUpperCase() : 'ASSISTENTE';
                 if (!['AUDITORA', 'GESTORA'].includes(cargo)) {
@@ -237,28 +316,24 @@ Produtividade.Geral = {
         const s = datas.inicio;
         const e = datas.fim;
         if(!s || !e) return alert("Período não definido.");
-        const msg = s === e ? `Excluir produção do dia ${s}?` : `Excluir produção de ${s} até ${e}?`;
-        if(!confirm(`⚠️ ${msg}\n\nIsso apagará TODOS os registros importados neste período.`)) return;
+        if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas os dados de QUANTIDADE. A assertividade (Qualidade) será mantida na outra aba.`)) return;
         
         try {
             const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e });
             if(error) throw error;
-            alert("Dados excluídos com sucesso!");
+            alert("Dados de produção excluídos com sucesso!");
             this.carregarTela();
         } catch(err) { alert("Erro: " + err.message); }
     },
     
     mudarFator: async function(id, val) {
-        // ... Logica de update ...
         const { error } = await Sistema.supabase.from('producao').update({ fator: val }).eq('id', id);
         if(!error) this.carregarTela();
     },
     
     mudarFatorTodos: async function(val) {
-        // ... Logica de update em massa ...
         if(!val) return;
         if(!confirm("Aplicar a todos?")) return;
-        
         const ids = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
         const { error } = await Sistema.supabase.from('producao').update({ fator: val }).in('id', ids);
         if(!error) this.carregarTela();
