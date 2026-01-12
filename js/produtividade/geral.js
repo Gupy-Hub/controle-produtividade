@@ -19,6 +19,7 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
+        // 1. Obtém as datas do Seletor Global (Main.js)
         const datas = Produtividade.getDatasFiltro();
         const dataInicio = datas.inicio;
         const dataFim = datas.fim;
@@ -26,6 +27,7 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
+            // 2. Busca Produção
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select(`id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator, justificativa, assertividade, nok, usuario:usuarios ( id, nome, perfil, funcao, contrato )`)
@@ -35,8 +37,9 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // Meta Mês
+            // 3. Busca Metas do Mês de Referência (Data Início)
             const [anoRef, mesRef] = dataInicio.split('-');
+            
             const { data: metasBanco, error: errMeta } = await Sistema.supabase
                 .from('metas')
                 .select('usuario_id, meta_producao')
@@ -49,6 +52,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
+            // 4. Agrupamento de Dados
             let dadosAgrupados = {};
             producao.forEach(item => {
                 const uid = item.usuario ? item.usuario.id : 'desconhecido';
@@ -83,7 +87,7 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                this.atualizarKPIs(producao, dataInicio, dataFim);
+                this.atualizarKPIs(producao);
             }
         } catch (error) {
             console.error(error);
@@ -114,6 +118,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
+                // VISÃO DETALHADA (DIÁRIA)
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const metaCalc = metaBase * r.fator;
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -141,6 +146,7 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
+                // VISÃO RESUMIDA (CONSOLIDADA)
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 
@@ -230,7 +236,7 @@ Produtividade.Geral = {
         } catch (e) { alert("Erro ao atualizar."); }
     },
 
-    // --- CORREÇÃO AQUI: USA RPC PARA EVITAR TIMEOUT ---
+    // --- CORREÇÃO DE EXCLUSÃO (RESOLVE O ERRO 500) ---
     excluirDadosDia: async function() {
         const datas = Produtividade.getDatasFiltro();
         const s = datas.inicio;
@@ -240,10 +246,15 @@ Produtividade.Geral = {
 
         const msg = s === e ? `Excluir produção do dia ${s}?` : `Excluir produção de ${s} até ${e}?`;
 
-        if(!confirm(`⚠️ ${msg}\n\nIsso apagará TODOS os registros importados neste período.`)) return;
+        if(!confirm(`⚠️ ${msg}\n\nIsso apagará TODOS os registros importados neste período (inclusive validação de qualidade).`)) return;
         
+        // Feedback visual
+        const btn = document.querySelector('button[title="Excluir"]');
+        const iconeOriginal = btn ? btn.innerHTML : '';
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
         try {
-            // Chama a função blindada no servidor, sem trafegar 200k linhas
+            // Chama a função blindada no servidor (RPC)
             const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { 
                 p_inicio: s, 
                 p_fim: e 
@@ -253,6 +264,11 @@ Produtividade.Geral = {
             
             alert("Dados excluídos com sucesso!");
             this.carregarTela();
-        } catch(err) { alert("Erro: " + err.message); }
+        } catch(err) { 
+            console.error(err);
+            alert("Erro: " + err.message); 
+        } finally {
+            if(btn) btn.innerHTML = iconeOriginal;
+        }
     }
 };
