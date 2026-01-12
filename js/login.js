@@ -9,7 +9,7 @@ const Login = {
         // Feedback visual
         btn.disabled = true;
         const textoOriginal = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
         this.ocultarErro();
 
         try {
@@ -17,8 +17,7 @@ const Login = {
                 throw new Error("Erro de conexão. Recarregue a página.");
             }
 
-            // CHAMADA SEGURA: Envia ID e Senha para o banco verificar
-            // O banco retorna o usuário se tudo estiver certo, ou erro se falhar.
+            // Chamada RPC corrigida (via p_id e p_senha)
             const { data: usuario, error } = await Sistema.supabase
                 .rpc('api_login', { 
                     p_id: parseInt(idInput), 
@@ -26,7 +25,7 @@ const Login = {
                 });
 
             if (error) {
-                // Tratamento de erros vindos do Banco
+                console.error("Erro SQL:", error);
                 throw new Error(error.message || "Erro ao verificar credenciais.");
             }
 
@@ -34,42 +33,13 @@ const Login = {
                 throw new Error("Usuário não retornado.");
             }
 
-            // 3. Verifica Fluxo de Primeiro Acesso (Sinalizado pelo banco)
-            if (usuario.observacao === 'TROCAR_SENHA') {
-                const novaSenha = prompt("PRIMEIRO ACESSO DETECTADO\nPor segurança, defina uma nova senha:");
-                
-                if (!novaSenha || novaSenha.length < 4) {
-                    throw new Error("Troca de senha obrigatória cancelada.");
-                }
-
-                // Precisamos gerar o hash da NOVA senha para salvar.
-                // Como removemos o hash do JS local, usamos uma chamada simples do banco ou 
-                // reativamos uma função utilitária apenas para update.
-                // SOLUÇÃO SIMPLES P/ INICIANTE: Envia a senha pura e deixa o banco tratar?
-                // Para manter simples agora, vamos fazer um update manual gerando hash via SQL ou
-                // (Temporary Fix) usamos uma função Web Crypto API nativa aqui só para o update.
-                
-                const novoHash = await this.gerarHashLocal(novaSenha);
-                
-                const { error: errUpdate } = await Sistema.supabase
-                    .from('usuarios')
-                    .update({ senha: novoHash })
-                    .eq('id', usuario.id);
-
-                if (errUpdate) throw new Error("Erro ao atualizar senha.");
-                
-                alert("Senha atualizada com sucesso! Use a nova senha no próximo login.");
-                usuario.observacao = null; // Limpa flag
-            }
-
-            // 4. Sucesso - Salva sessão e Redireciona
+            // Sucesso - Salva sessão
             localStorage.setItem('usuario_logado', JSON.stringify(usuario));
             
-            // Lógica de Redirecionamento baseada no Cargo/Função
+            // Redirecionamento Inteligente
             const funcao = (usuario.funcao || '').toUpperCase();
-            const perfil = (usuario.perfil || '').toLowerCase();
-
-            if (funcao === 'GESTORA' || funcao.includes('AUDITORA') || perfil === 'admin') {
+            
+            if (funcao === 'GESTORA' || funcao.includes('AUDITORA')) {
                 window.location.href = 'gestao.html';
             } else {
                 window.location.href = 'minha_area.html';
@@ -77,18 +47,15 @@ const Login = {
 
         } catch (err) {
             console.error(err);
-            this.mostrarErro(err.message);
+            // Tradução amigável de erros comuns
+            let msg = err.message;
+            if (msg.includes("incorretos")) msg = "ID ou Senha incorretos.";
+            if (msg.includes("inativo")) msg = "Seu acesso está inativo. Procure a gestão.";
+            
+            this.mostrarErro(msg);
             btn.disabled = false;
             btn.innerHTML = textoOriginal;
         }
-    },
-
-    // Função auxiliar apenas para a troca de senha (Update)
-    gerarHashLocal: async function(texto) {
-        const msgBuffer = new TextEncoder().encode(texto);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     },
 
     mostrarErro: function(texto) {
