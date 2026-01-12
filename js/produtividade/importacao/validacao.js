@@ -19,7 +19,6 @@ Produtividade.Importacao.Validacao = {
             let relatorioIgnorados = []; 
             let errosCriticos = [];
 
-            // Processa arquivo por arquivo
             for (let i = 0; i < input.files.length; i++) {
                 const arquivo = input.files[i];
                 try {
@@ -40,7 +39,6 @@ Produtividade.Importacao.Validacao = {
 
             this.exibirModalRelatorio(arquivosSucesso, totalRegistrosImportados, relatorioIgnorados, errosCriticos);
 
-            // Atualiza a tela se estiver na aba Geral
             if(Produtividade.Geral) Produtividade.Geral.carregarTela();
 
         } catch (erroGeral) {
@@ -75,15 +73,13 @@ Produtividade.Importacao.Validacao = {
 
     processarArquivoIndividual: function(arquivo) {
         return new Promise((resolve, reject) => {
-            // PapaParse lê o arquivo
             Papa.parse(arquivo, {
                 header: true,
                 skipEmptyLines: true, 
                 encoding: "UTF-8",
-                transformHeader: function(h) { return h.trim(); }, // Remove espaços dos cabeçalhos
+                transformHeader: function(h) { return h.trim(); }, 
                 complete: async (results) => {
                     try {
-                        // O segredo está aqui: processar os dados E descobrir a data
                         const resultadoBanco = await this.salvarDadosBanco(results.data);
                         resolve(resultadoBanco); 
                     } catch (e) {
@@ -96,20 +92,15 @@ Produtividade.Importacao.Validacao = {
     },
 
     salvarDadosBanco: async function(linhas) {
-        // Agrupa linhas por DATA (pois um arquivo pode ter vários dias, ou o nome do arquivo não importar)
         const payloadPorData = {}; 
         const ignoradosNesteArquivo = [];
 
         for (const row of linhas) {
-            // 1. Validação Básica de Linha
-            // Verifica colunas comuns do seu CSV
             if (!row['Assistente'] && !row['id_assistente']) continue;
             
             const nomeCsv = row['Assistente'] || 'Desconhecido';
-            // Ignora linhas de totalização do Excel
             if (nomeCsv.toLowerCase() === 'total' || nomeCsv.toLowerCase() === 'média') continue;
 
-            // 2. Identificação do Usuário
             const idCsv = row['id_assistente'] ? parseInt(row['id_assistente'].replace(/\D/g,'')) : null;
             let usuarioIdEncontrado = null;
 
@@ -127,15 +118,13 @@ Produtividade.Importacao.Validacao = {
                 continue; 
             }
 
-            // 3. Identificação da Data (Inteligente)
             let dataRef = null;
-            // Tenta Data da Auditoria primeiro
             let rawData = row['Data da Auditoria'] || row['Data'] || row['end_time'];
             
             if (rawData) {
-                if (rawData.includes('T')) { // Formato ISO do end_time
+                if (rawData.includes('T')) {
                     dataRef = rawData.split('T')[0];
-                } else if (rawData.includes('/')) { // Formato BR
+                } else if (rawData.includes('/')) {
                     const partes = rawData.split('/');
                     if(partes.length === 3) dataRef = `${partes[2]}-${partes[1]}-${partes[0]}`;
                 } else if (rawData.includes('-')) {
@@ -143,28 +132,41 @@ Produtividade.Importacao.Validacao = {
                 }
             }
 
-            if (!dataRef) continue; // Sem data, não tem como salvar produção diária
+            if (!dataRef) continue;
 
-            // 4. Extração de Valores Numéricos
             const limparNum = (val) => val ? (parseInt(String(val).replace(/\./g, '')) || 0) : 0;
             
-            // Mapeamento correto das colunas do seu CSV Dezembo.csv
             const qtd = limparNum(row['Quantidade_documentos_validados'] || row['quantidade']);
-            const fifo = limparNum(row['Fila'] === 'FIFO' ? qtd : 0); // Exemplo de lógica, ajuste conforme sua coluna real de FIFO
+            const fifo = limparNum(row['Fila'] === 'FIFO' ? qtd : 0);
             
-            // Se não tivermos colunas explícitas de gradual/parcial no CSV, assumimos 0 ou lógica customizada
-            // No seu CSV 'Dezembro.csv', não vi colunas explícitas 'gradual_total'. 
-            // Vamos focar na Quantidade Principal.
+            // CAPTURA DA QUALIDADE DO CSV (NOVO)
+            // Calculamos a % Assertividade baseada em Ok e Nok
+            const qtdOk = limparNum(row['Ok']);
+            const qtdNok = limparNum(row['Nok']);
+            let assertividade = '0%';
             
+            if (qtdOk > 0 || qtdNok > 0) {
+                const totalAuditado = qtdOk + qtdNok;
+                const pct = (qtdOk / totalAuditado) * 100;
+                assertividade = pct.toFixed(1) + '%';
+            } else {
+                // Se não tem dados de auditoria, assumimos 100% ou mantemos vazio?
+                // Vamos deixar 0% para não poluir se não houve auditoria
+                assertividade = '0%';
+            }
+
             const obj = {
                 usuario_id: usuarioIdEncontrado,
                 data_referencia: dataRef,
                 quantidade: qtd,
                 fifo: fifo,
-                gradual_total: 0, // Ajustar se tiver a coluna no CSV
+                gradual_total: 0, 
                 gradual_parcial: 0,
                 perfil_fc: 0,
-                fator: 1 // Começa com 100%
+                fator: 1,
+                // Salvamos a qualidade nas colunas existentes da tabela producao
+                nok: qtdNok.toString(),
+                assertividade: assertividade // Texto "98.5%"
             };
 
             if (!payloadPorData[dataRef]) payloadPorData[dataRef] = [];
@@ -173,12 +175,10 @@ Produtividade.Importacao.Validacao = {
 
         let totalImportados = 0;
 
-        // Salva no banco dia por dia (para evitar limpar o mês todo se importar só um dia)
         for (const dataKey in payloadPorData) {
             const listaDia = payloadPorData[dataKey];
             if (listaDia.length === 0) continue;
 
-            // Remove dados anteriores DESSE DIA ESPECÍFICO para evitar duplicação
             const { error: errDel } = await Sistema.supabase
                 .from('producao')
                 .delete()
@@ -186,7 +186,6 @@ Produtividade.Importacao.Validacao = {
             
             if (errDel) throw new Error(`Erro ao limpar dia ${dataKey}: ${errDel.message}`);
 
-            // Insere novos
             const { error: errIns } = await Sistema.supabase
                 .from('producao')
                 .insert(listaDia);
@@ -245,15 +244,8 @@ Produtividade.Importacao.Validacao = {
 
     limparBancoCompleto: async function() {
         if (!confirm("⚠️ ATENÇÃO: Isso apagará TODOS os dados de produção.\nDeseja continuar?")) return;
-        
-        // Chamada direta para limpar tabela (requer permissão no Supabase)
         const { error } = await Sistema.supabase.from('producao').delete().neq('id', 0);
-        
-        if (error) {
-            alert("Erro ao limpar banco: " + error.message);
-        } else {
-            alert("Banco limpo com sucesso!");
-            if(Produtividade.Geral) Produtividade.Geral.carregarTela();
-        }
+        if (error) { alert("Erro ao limpar banco: " + error.message); } 
+        else { alert("Banco limpo com sucesso!"); if(Produtividade.Geral) Produtividade.Geral.carregarTela(); }
     }
 };
