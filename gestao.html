@@ -117,7 +117,6 @@
                                 <td class="p-1"><input type="text" id="filtro-empresa" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
                                 <td class="p-1"><input type="text" id="filtro-assistente" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
                                 <td class="p-1"><input type="text" id="filtro-doc" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
-                                
                                 <td class="p-1">
                                     <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
                                         <option value="">TODOS</option>
@@ -133,7 +132,6 @@
                                         <option value="PENDENTE">PENDENTE</option>
                                     </select>
                                 </td>
-                                
                                 <td class="p-1"><input type="text" id="filtro-obs" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
                                 <td class="p-1 text-center text-xs text-slate-300">-</td>
                                 <td class="p-1 text-center text-xs text-slate-300">-</td>
@@ -162,32 +160,50 @@
                     <button onclick="Gestao.Metas.mudarMes(1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-white hover:shadow rounded transition"><i class="fas fa-chevron-right"></i></button>
                 </div>
 
-                <div class="flex items-center gap-3 bg-blue-50 p-2 rounded-lg border border-blue-100 w-full xl:w-auto">
-                    <span class="text-xs font-bold text-blue-700 uppercase hidden md:inline">Definição em Massa:</span>
-                    <input type="number" id="input-meta-massa" placeholder="Valor (ex: 650)" class="w-32 px-3 py-1.5 text-sm border border-blue-200 rounded text-center font-bold text-blue-800 placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300">
-                    <button onclick="Gestao.Metas.aplicarEmMassa()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition active:scale-95 whitespace-nowrap">
-                        <i class="fas fa-check-double mr-1.5"></i> Aplicar aos Selecionados
+                <div class="flex items-center gap-2 bg-blue-50 p-2 rounded-lg border border-blue-100 w-full xl:w-auto">
+                    <span class="text-[10px] font-bold text-blue-700 uppercase hidden md:inline mr-2">Em Massa:</span>
+                    
+                    <div class="relative">
+                        <input type="number" id="input-massa-prod" placeholder="Qtd (ex: 1000)" class="w-28 px-3 py-1.5 text-xs border border-blue-200 rounded text-center font-bold text-blue-800 placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                        <span class="absolute right-2 top-1.5 text-[10px] text-blue-300 font-bold">UN</span>
+                    </div>
+
+                    <div class="relative">
+                        <input type="number" id="input-massa-assert" placeholder="% (ex: 98)" class="w-24 px-3 py-1.5 text-xs border border-blue-200 rounded text-center font-bold text-blue-800 placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                        <span class="absolute right-2 top-1.5 text-[10px] text-blue-300 font-bold">%</span>
+                    </div>
+
+                    <button onclick="Gestao.Metas.aplicarEmMassa()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm transition active:scale-95 whitespace-nowrap" title="Aplicar aos selecionados">
+                        <i class="fas fa-check"></i>
                     </button>
                 </div>
 
                 <button onclick="Gestao.Metas.salvarTodas()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition transform active:scale-95 w-full xl:w-auto flex justify-center items-center gap-2">
-                    <i class="fas fa-save"></i> Salvar Alterações
+                    <i class="fas fa-save"></i> Salvar Metas
                 </button>
             </div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                 <div class="overflow-x-auto custom-scroll flex-1">
-                    <table class="w-full min-w-[800px] text-sm text-left">
+                    <table class="w-full min-w-[900px] text-sm text-left">
                         <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100">
                             <tr>
                                 <th class="px-6 py-4 w-[5%] text-center">
                                     <input type="checkbox" id="check-meta-todos" onclick="Gestao.Metas.toggleSelecionarTodos()" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
                                 </th>
-                                <th class="px-6 py-4 w-[10%]">ID</th>
+                                <th class="px-6 py-4 w-[5%]">ID</th>
                                 <th class="px-6 py-4 w-[30%]">Assistente</th>
-                                <th class="px-6 py-4 w-[15%]">Contrato</th>
-                                <th class="px-6 py-4 w-[25%] text-center">Meta do Mês</th>
-                                <th class="px-6 py-4 w-[15%] text-right">Histórico</th>
+                                <th class="px-6 py-4 w-[10%]">Contrato</th>
+                                
+                                <th class="px-4 py-4 w-[20%] text-center bg-blue-50/30 border-x border-slate-100">
+                                    <i class="fas fa-box-open text-blue-400 mr-1"></i> Meta Produção
+                                </th>
+                                
+                                <th class="px-4 py-4 w-[20%] text-center bg-emerald-50/30 border-r border-slate-100">
+                                    <i class="fas fa-check-circle text-emerald-400 mr-1"></i> Meta Assertividade
+                                </th>
+                                
+                                <th class="px-6 py-4 w-[10%] text-right">Histórico</th>
                             </tr>
                         </thead>
                         <tbody id="lista-metas" class="divide-y divide-slate-100 bg-white">
@@ -195,8 +211,8 @@
                     </table>
                 </div>
                 <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 font-medium">
-                    <span><i class="fas fa-info-circle mr-1"></i> Selecione as caixas para aplicar o valor em massa.</span>
-                    <span id="resumo-metas-footer">Total Previsto: 0</span>
+                    <span><i class="fas fa-info-circle mr-1"></i> Defina as metas e clique em Salvar.</span>
+                    <span id="resumo-metas-footer">Carregando...</span>
                 </div>
             </div>
         </div>

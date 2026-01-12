@@ -1,6 +1,6 @@
 Gestao.Metas = {
     estado: {
-        mes: new Date().getMonth() + 1, // Começa no mês atual
+        mes: new Date().getMonth() + 1, 
         ano: new Date().getFullYear(),
         lista: []
     },
@@ -32,7 +32,7 @@ Gestao.Metas = {
 
     carregar: async function() {
         const tbody = document.getElementById('lista-metas');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>';
 
         // 1. Busca Usuários Ativos
         const { data: usuarios, error: errUser } = await Sistema.supabase
@@ -43,20 +43,20 @@ Gestao.Metas = {
 
         if (errUser) { console.error(errUser); return; }
 
-        // 2. Busca Metas já definidas para o mês selecionado
+        // 2. Busca Metas do Mês
         const { data: metasExistentes, error: errMeta } = await Sistema.supabase
             .from('metas')
             .select('*')
             .eq('mes', this.estado.mes)
             .eq('ano', this.estado.ano);
 
-        // 3. Mescla os dados (Usuário + Meta se existir)
+        // 3. Mesclagem (Usuário + Metas)
         this.estado.lista = usuarios.map(u => {
-            const metaEncontrada = metasExistentes?.find(m => m.usuario_id === u.id);
+            const meta = metasExistentes?.find(m => m.usuario_id === u.id);
             return {
                 ...u,
-                meta_valor: metaEncontrada ? metaEncontrada.meta_assertividade : null,
-                meta_id: metaEncontrada ? metaEncontrada.id : null
+                meta_prod: meta ? meta.meta_producao : null,
+                meta_assert: meta ? meta.meta_assertividade : null
             };
         });
 
@@ -65,67 +65,82 @@ Gestao.Metas = {
 
     renderizar: function() {
         const tbody = document.getElementById('lista-metas');
+        const footer = document.getElementById('resumo-metas-footer');
         if (!tbody) return;
 
         let html = '';
         this.estado.lista.forEach(item => {
-            const metaVal = item.meta_valor !== null ? item.meta_valor : '';
+            const prodVal = item.meta_prod !== null ? item.meta_prod : '';
+            const assertVal = item.meta_assert !== null ? item.meta_assert : '';
+            
             const contratoClass = item.contrato === 'PJ' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200';
 
             html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-50 transition">
+            <tr class="hover:bg-slate-50 border-b border-slate-50 transition group">
                 <td class="px-6 py-4 text-center">
-                    <input type="checkbox" class="check-meta-item w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${item.id}">
+                    <input type="checkbox" class="check-meta-item w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" value="${item.id}">
                 </td>
                 <td class="px-6 py-4 font-mono text-slate-400 text-xs">#${item.id}</td>
                 <td class="px-6 py-4 font-bold text-slate-700">${item.nome}</td>
                 <td class="px-6 py-4">
                     <span class="px-2 py-1 rounded text-[10px] font-bold border ${contratoClass}">${item.contrato || 'ND'}</span>
                 </td>
-                <td class="px-6 py-4 text-center">
-                    <div class="flex items-center justify-center gap-2">
-                        <input type="number" 
-                               id="meta-input-${item.id}" 
-                               value="${metaVal}" 
-                               step="0.1" 
-                               class="w-24 text-center border border-slate-300 rounded-lg py-1.5 text-sm font-bold text-slate-700 focus:border-blue-500 outline-none focus:ring-2 focus:ring-blue-100 transition"
-                               placeholder="0.00">
-                        <span class="text-slate-400 font-bold">%</span>
+                
+                <td class="px-4 py-3 text-center bg-blue-50/10 group-hover:bg-blue-50/30 transition border-x border-slate-100">
+                    <div class="relative max-w-[120px] mx-auto">
+                        <input type="number" id="prod-${item.id}" value="${prodVal}" placeholder="0"
+                            class="w-full text-center border border-slate-300 rounded-lg py-1.5 text-sm font-bold text-blue-700 focus:border-blue-500 outline-none focus:ring-2 focus:ring-blue-100 transition">
+                        <span class="absolute right-2 top-2 text-[10px] text-slate-300 font-bold select-none">qtd</span>
                     </div>
                 </td>
+
+                <td class="px-4 py-3 text-center bg-emerald-50/10 group-hover:bg-emerald-50/30 transition border-r border-slate-100">
+                    <div class="relative max-w-[120px] mx-auto">
+                        <input type="number" id="assert-${item.id}" value="${assertVal}" step="0.1" placeholder="0.0"
+                            class="w-full text-center border border-slate-300 rounded-lg py-1.5 text-sm font-bold text-emerald-700 focus:border-emerald-500 outline-none focus:ring-2 focus:ring-emerald-100 transition">
+                        <span class="absolute right-2 top-2 text-[10px] text-slate-300 font-bold select-none">%</span>
+                    </div>
+                </td>
+
                 <td class="px-6 py-4 text-right">
-                    <button class="text-xs text-blue-500 hover:underline">Ver Histórico</button>
+                    <button class="text-xs text-blue-500 hover:underline opacity-50 hover:opacity-100">Ver</button>
                 </td>
             </tr>`;
         });
+
         tbody.innerHTML = html;
-        this.atualizarResumo();
+        if(footer) footer.innerText = `${this.estado.lista.length} assistentes ativos`;
     },
 
-    // Selecionar Todos
     toggleSelecionarTodos: function() {
         const master = document.getElementById('check-meta-todos');
         const checks = document.querySelectorAll('.check-meta-item');
         checks.forEach(c => c.checked = master.checked);
     },
 
-    // Aplica valor do input de massa para os selecionados
     aplicarEmMassa: function() {
-        const valorMassa = document.getElementById('input-meta-massa').value;
-        if (!valorMassa) return alert("Digite um valor para aplicar.");
+        const valProd = document.getElementById('input-massa-prod').value;
+        const valAssert = document.getElementById('input-massa-assert').value;
+
+        if (!valProd && !valAssert) return alert("Preencha ao menos um valor (Produção ou %) para aplicar.");
 
         const checks = document.querySelectorAll('.check-meta-item:checked');
-        if (checks.length === 0) return alert("Selecione pelo menos um usuário na lista.");
+        if (checks.length === 0) return alert("Selecione os assistentes na lista primeiro.");
 
         checks.forEach(chk => {
             const uid = chk.value;
-            const inputIndividual = document.getElementById(`meta-input-${uid}`);
-            if (inputIndividual) inputIndividual.value = valorMassa;
+            // Só sobrescreve se o input de massa tiver valor
+            if (valProd) {
+                const inp = document.getElementById(`prod-${uid}`);
+                if(inp) inp.value = valProd;
+            }
+            if (valAssert) {
+                const inp = document.getElementById(`assert-${uid}`);
+                if(inp) inp.value = valAssert;
+            }
         });
         
-        // Remove seleção após aplicar
-        document.getElementById('check-meta-todos').checked = false;
-        checks.forEach(c => c.checked = false);
+        alert(`Aplicado para ${checks.length} assistentes! Não esqueça de Salvar.`);
     },
 
     salvarTodas: async function() {
@@ -137,17 +152,18 @@ Gestao.Metas = {
         const upserts = [];
         
         this.estado.lista.forEach(item => {
-            const input = document.getElementById(`meta-input-${item.id}`);
-            const valor = input ? input.value : '';
+            const valProd = document.getElementById(`prod-${item.id}`)?.value;
+            const valAssert = document.getElementById(`assert-${item.id}`)?.value;
 
-            // Só salva se tiver valor preenchido
-            if (valor !== '' && valor !== null) {
+            // Se tiver qualquer dado preenchido, salva
+            if ((valProd !== '' && valProd !== null) || (valAssert !== '' && valAssert !== null)) {
                 upserts.push({
                     usuario_id: item.id,
                     usuario_nome: item.nome,
                     mes: this.estado.mes,
                     ano: this.estado.ano,
-                    meta_assertividade: parseFloat(valor)
+                    meta_producao: valProd ? parseInt(valProd) : 0,
+                    meta_assertividade: valAssert ? parseFloat(valAssert) : 0
                 });
             }
         });
@@ -155,10 +171,9 @@ Gestao.Metas = {
         if (upserts.length === 0) {
             btn.innerHTML = originalText;
             btn.disabled = false;
-            return alert("Nenhuma meta preenchida para salvar.");
+            return alert("Nada para salvar.");
         }
 
-        // Upsert no Supabase (Atualiza se existir, cria se não)
         const { error } = await Sistema.supabase
             .from('metas')
             .upsert(upserts, { onConflict: 'usuario_id, mes, ano' });
@@ -170,17 +185,8 @@ Gestao.Metas = {
             console.error(error);
             alert("Erro ao salvar: " + error.message);
         } else {
-            alert("Metas atualizadas com sucesso!");
-            this.carregar(); // Recarrega para confirmar
+            alert("Metas salvas com sucesso!");
+            this.carregar(); 
         }
-    },
-
-    atualizarResumo: function() {
-        const total = this.estado.lista.length;
-        const footer = document.getElementById('resumo-metas-footer');
-        if(footer) footer.innerText = `Total de Assistentes Listados: ${total}`;
     }
 };
-
-// Inicializa ao carregar a página se estiver na aba correta (opcional)
-// Mas geralmente é chamado pelo Gestao.mudarAba('metas')
