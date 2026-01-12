@@ -8,45 +8,59 @@ Produtividade.Importacao.Validacao = {
     processar: async function(input) {
         if (!input.files || input.files.length === 0) return;
 
-        const btnTextoOriginal = input.nextElementSibling ? input.nextElementSibling.innerHTML : "Importar";
-        if(input.nextElementSibling) input.nextElementSibling.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        const btn = input.nextElementSibling;
+        const textoOriginal = btn ? btn.innerHTML : "Importar";
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
 
         try {
             await this.carregarMapaUsuarios();
 
-            let arquivosSucesso = 0;
-            let totalRegistrosImportados = 0;
-            let relatorioIgnorados = []; 
-            let errosCriticos = [];
+            let totalSucesso = 0;
+            let totalIgnorados = 0;
+            let ultimaDataEncontrada = null; // Para redirecionar o calendário
 
             for (let i = 0; i < input.files.length; i++) {
                 const arquivo = input.files[i];
                 try {
-                    const resultado = await this.processarArquivoIndividual(arquivo);
-                    arquivosSucesso++;
-                    totalRegistrosImportados += resultado.importados;
-                    
-                    if (resultado.ignorados && resultado.ignorados.length > 0) {
-                        resultado.ignorados.forEach(item => {
-                            relatorioIgnorados.push(`${item.nome} (ID: ${item.id})`);
-                        });
-                    }
+                    const res = await this.processarArquivoIndividual(arquivo);
+                    totalSucesso += res.importados;
+                    totalIgnorados += res.ignorados.length;
+                    if(res.ultimaData) ultimaDataEncontrada = res.ultimaData;
                 } catch (err) {
-                    console.error(`Erro no arquivo ${arquivo.name}:`, err);
-                    errosCriticos.push(`${arquivo.name}: ${err.message}`);
+                    console.error("Erro arquivo:", err);
+                    alert(`Erro no arquivo ${arquivo.name}: ${err.message}`);
                 }
             }
 
-            this.exibirModalRelatorio(arquivosSucesso, totalRegistrosImportados, relatorioIgnorados, errosCriticos);
+            alert(`Importação concluída!\n\n✅ Sucesso: ${totalSucesso} registros.\n⚠️ Ignorados: ${totalIgnorados} (linhas sem nome/ID válido).`);
+            
+            // --- AUTO-NAVEGAÇÃO (CORREÇÃO DE UX) ---
+            if (ultimaDataEncontrada && Produtividade.mudarPeriodo) {
+                // Descobre ano e mês da importação
+                const [anoImp, mesImp] = ultimaDataEncontrada.split('-');
+                
+                // Atualiza os seletores da interface principal
+                const selAno = document.getElementById('sel-ano');
+                const selMes = document.getElementById('sel-mes');
+                
+                if(selAno && selMes) {
+                    selAno.value = anoImp;
+                    selMes.value = parseInt(mesImp) - 1; // JS usa meses 0-11
+                    
+                    // Força a atualização da tela
+                    console.log(`🔄 Redirecionando visão para: ${mesImp}/${anoImp}`);
+                    Produtividade.mudarPeriodo('mes'); 
+                }
+            } else if(Produtividade.Geral) {
+                Produtividade.Geral.carregarTela();
+            }
 
-            if(Produtividade.Geral) Produtividade.Geral.carregarTela();
-
-        } catch (erroGeral) {
-            console.error(erroGeral);
-            alert("Erro crítico: " + erroGeral.message);
+        } catch (erro) {
+            console.error(erro);
+            alert("Erro fatal: " + erro.message);
         } finally {
             input.value = ""; 
-            if(input.nextElementSibling) input.nextElementSibling.innerHTML = btnTextoOriginal;
+            if(btn) btn.innerHTML = textoOriginal;
         }
     },
 
@@ -56,121 +70,115 @@ Produtividade.Importacao.Validacao = {
     },
 
     carregarMapaUsuarios: async function() {
-        const { data, error } = await Sistema.supabase.from('usuarios').select('id, nome');
-        if (error) throw error;
-
+        const { data } = await Sistema.supabase.from('usuarios').select('id, nome');
         this.mapaUsuariosPorNome = {};
         this.mapaUsuariosPorId = {};
-        
-        data.forEach(u => {
-            this.mapaUsuariosPorId[u.id] = u.id; 
-            if(u.nome) {
-                const chave = this.normalizarTexto(u.nome);
-                this.mapaUsuariosPorNome[chave] = u.id;
-            }
-        });
+        if(data) {
+            data.forEach(u => {
+                this.mapaUsuariosPorId[u.id] = u.id; 
+                if(u.nome) this.mapaUsuariosPorNome[this.normalizarTexto(u.nome)] = u.id;
+            });
+        }
     },
 
     processarArquivoIndividual: function(arquivo) {
         return new Promise((resolve, reject) => {
             Papa.parse(arquivo, {
-                header: true,
-                skipEmptyLines: true, 
-                encoding: "UTF-8",
-                transformHeader: function(h) { return h.trim(); }, 
+                header: true, skipEmptyLines: true, encoding: "UTF-8",
+                transformHeader: h => h.trim(),
                 complete: async (results) => {
-                    try {
-                        const resultadoBanco = await this.salvarDadosBanco(results.data);
-                        resolve(resultadoBanco); 
-                    } catch (e) {
-                        reject(e);
-                    }
+                    try { resolve(await this.salvarDadosBanco(results.data)); } 
+                    catch (e) { reject(e); }
                 },
-                error: (err) => reject(new Error("Erro ao ler CSV"))
+                error: (err) => reject(new Error("Erro CSV"))
             });
         });
     },
 
     salvarDadosBanco: async function(linhas) {
-        const payloadPorData = {}; 
-        const ignoradosNesteArquivo = [];
+        const payload = [];
+        const ignorados = [];
+        let ultimaData = null;
 
         for (const row of linhas) {
-            if (!row['Assistente'] && !row['id_assistente']) continue;
-            const nomeCsv = row['Assistente'] || 'Desconhecido';
-            if (nomeCsv.toLowerCase() === 'total' || nomeCsv.toLowerCase() === 'média') continue;
+            const nomeCsv = row['Assistente'] || row['nome'] || 'Desconhecido';
+            const idCsvRaw = row['id_assistente'] || row['ID Usuario'];
+            
+            if (nomeCsv.toLowerCase().includes('total') || nomeCsv.toLowerCase().includes('média')) continue;
 
-            const idCsv = row['id_assistente'] ? parseInt(row['id_assistente'].replace(/\D/g,'')) : null;
-            let usuarioIdEncontrado = null;
-
-            if (idCsv && this.mapaUsuariosPorId[idCsv]) {
-                usuarioIdEncontrado = this.mapaUsuariosPorId[idCsv];
-            } else {
-                const nomeNormalizado = this.normalizarTexto(nomeCsv);
-                if (this.mapaUsuariosPorNome[nomeNormalizado]) {
-                    usuarioIdEncontrado = this.mapaUsuariosPorNome[nomeNormalizado];
-                }
+            let usuarioIdFinal = null;
+            if (idCsvRaw) {
+                const idNum = parseInt(String(idCsvRaw).replace(/\D/g, ''));
+                if (this.mapaUsuariosPorId[idNum]) usuarioIdFinal = idNum;
+            }
+            if (!usuarioIdFinal && nomeCsv !== 'Desconhecido') {
+                const nomeNorm = this.normalizarTexto(nomeCsv);
+                if (this.mapaUsuariosPorNome[nomeNorm]) usuarioIdFinal = this.mapaUsuariosPorNome[nomeNorm];
             }
 
-            if (!usuarioIdEncontrado) {
-                ignoradosNesteArquivo.push({ nome: nomeCsv, id: idCsv || 'S/ ID' });
+            if (!usuarioIdFinal) {
+                ignorados.push(nomeCsv);
                 continue; 
             }
 
             let dataRef = null;
-            let rawData = row['Data da Auditoria'] || row['Data'] || row['end_time'];
+            // Tenta detectar a coluna de data
+            let rawData = row['Data da Auditoria'] || row['Data'] || row['data'] || row['end_time'];
+            
             if (rawData) {
-                if (rawData.includes('T')) dataRef = rawData.split('T')[0];
-                else if (rawData.includes('/')) {
+                if (rawData.includes('T')) dataRef = rawData.split('T')[0]; // ISO
+                else if (rawData.includes('/')) { // BR DD/MM/AAAA
                     const partes = rawData.split('/');
                     if(partes.length === 3) dataRef = `${partes[2]}-${partes[1]}-${partes[0]}`;
-                } else if (rawData.includes('-')) dataRef = rawData;
+                } else if (rawData.includes('-')) {
+                    dataRef = rawData;
+                }
             }
-
+            
             if (!dataRef) continue;
+            ultimaData = dataRef;
 
-            const limparNum = (val) => val ? (parseInt(String(val).replace(/\./g, '')) || 0) : 0;
-            const qtd = limparNum(row['Quantidade_documentos_validados'] || row['quantidade']);
-            const fifo = limparNum(row['Fila'] === 'FIFO' ? qtd : 0);
+            const clean = (v) => v ? parseInt(String(v).replace(/\./g,'')) || 0 : 0;
+            const qtd = clean(row['Quantidade_documentos_validados'] || row['quantidade']);
+            const qtdOk = clean(row['Ok']);
+            const qtdNok = clean(row['Nok']);
             
-            const qtdOk = limparNum(row['Ok']);
-            const qtdNok = limparNum(row['Nok']);
-            let assertividade = '0%';
-            
-            if (qtdOk > 0 || qtdNok > 0) {
-                const totalAuditado = qtdOk + qtdNok;
-                const pct = (qtdOk / totalAuditado) * 100;
-                assertividade = pct.toFixed(1) + '%';
+            let assertTxt = '0%';
+            if (qtdOk + qtdNok > 0) {
+                assertTxt = ((qtdOk / (qtdOk + qtdNok)) * 100).toFixed(1) + '%';
             }
 
-            const obj = {
-                usuario_id: usuarioIdEncontrado, data_referencia: dataRef,
-                quantidade: qtd, fifo: fifo, gradual_total: 0, gradual_parcial: 0, perfil_fc: 0, fator: 1,
-                nok: qtdNok.toString(), assertividade: assertividade
-            };
-
-            if (!payloadPorData[dataRef]) payloadPorData[dataRef] = [];
-            payloadPorData[dataRef].push(obj);
+            payload.push({
+                usuario_id: usuarioIdFinal,
+                data_referencia: dataRef,
+                quantidade: qtd,
+                fifo: clean(row['Fila'] === 'FIFO' ? qtd : 0),
+                gradual_total: 0, gradual_parcial: 0, perfil_fc: 0, fator: 1,
+                nok: qtdNok.toString(),
+                assertividade: assertTxt
+            });
         }
 
-        let totalImportados = 0;
-        for (const dataKey in payloadPorData) {
-            const listaDia = payloadPorData[dataKey];
-            if (listaDia.length === 0) continue;
-            const { error: errDel } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dataKey);
-            if (errDel) throw new Error(`Erro ao limpar dia ${dataKey}: ${errDel.message}`);
-            const { error: errIns } = await Sistema.supabase.from('producao').insert(listaDia);
-            if (errIns) throw new Error(`Erro ao salvar dia ${dataKey}: ${errIns.message}`);
-            totalImportados += listaDia.length;
-        }
-        return { importados: totalImportados, ignorados: ignoradosNesteArquivo };
-    },
+        if (payload.length > 0) {
+            // Remove dados do dia para evitar duplicidade (Clean Insert)
+            // Agrupa datas para deletar em lote
+            const datasParaLimpar = [...new Set(payload.map(p => p.data_referencia))];
+            
+            // Deleta
+            await Sistema.supabase.from('producao').delete().in('data_referencia', datasParaLimpar);
 
-    exibirModalRelatorio: function(sucesso, totalReg, ignorados, errosCriticos) {
-        const modalAntigo = document.getElementById('modal-importacao-resultado');
-        if(modalAntigo) modalAntigo.remove();
-        // ... (HTML do modal igual) ...
-        const html = `<div id="modal-importacao-resultado" class="fixed inset-0 bg-slate-900/60 z-[70] flex items-center justify-center backdrop-blur-sm animate-fade-in"><div class="bg-white rounded-xl shadow-2xl w-full max-w-lg p-6 text-center"><h3 class="text-lg font-bold">Importação Concluída</h3><p>Sucesso: ${sucesso} arquivos (${totalReg} registros)</p><button onclick="document.getElementById('modal-importacao-resultado').remove()" class="mt-4 bg-slate-800 text-white px-4 py-2 rounded">Fechar</button></div></div>`;
-        document.body.insertAdjacentHTML('beforeend', html);
+            // Insere em lotes
+            const loteSize = 1000;
+            for (let i = 0; i < payload.length; i += loteSize) {
+                const lote = payload.slice(i, i + loteSize);
+                const { error } = await Sistema.supabase.from('producao').insert(lote);
+                if (error) {
+                    console.error("Erro insert:", error);
+                    throw new Error("Erro ao salvar dados no banco.");
+                }
+            }
+        }
+
+        return { importados: payload.length, ignorados: ignorados, ultimaData: ultimaData };
     }
 };
