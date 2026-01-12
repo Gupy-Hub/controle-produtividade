@@ -24,24 +24,23 @@ Produtividade.Importacao.Validacao = {
                 console.log(`📂 Processando arquivo: ${arquivo.name}`);
                 
                 try {
-                    // Passamos o nome do arquivo para tentar extrair a data de lá
                     const res = await this.processarArquivoIndividual(arquivo);
                     totalSucesso += res.importados;
                     totalIgnorados += res.ignorados.length;
                     if (res.ultimaData) ultimaData = res.ultimaData;
                     
                     if (res.ignorados.length > 0) {
-                        console.warn(`⚠️ Arquivo ${arquivo.name}: ${res.ignorados.length} linhas ignoradas.`);
+                        console.warn(`⚠️ Arquivo ${arquivo.name}: ${res.ignorados.length} linhas ignoradas (Totais ou desconhecidos).`);
                     }
                 } catch (err) {
                     console.error("Erro arquivo:", err);
+                    alert(`Erro no arquivo ${arquivo.name}: ${err.message}`);
                 }
             }
 
-            let msg = `Processamento concluído!\n\n✅ Importados: ${totalSucesso}\n⚠️ Ignorados: ${totalIgnorados}`;
-            alert(msg);
+            alert(`Processamento concluído!\n\n✅ Registros Salvos: ${totalSucesso}\n⚠️ Linhas Ignoradas: ${totalIgnorados}`);
             
-            // Auto-Navegação
+            // Auto-Navegação para a data do arquivo
             if (ultimaData && Produtividade.mudarPeriodo) {
                 const [anoImp, mesImp] = ultimaData.split('-');
                 const selAno = document.getElementById('sel-ano');
@@ -49,8 +48,8 @@ Produtividade.Importacao.Validacao = {
                 
                 if(selAno && selMes) {
                     selAno.value = anoImp;
-                    selMes.value = parseInt(mesImp) - 1;
-                    console.log(`🔄 Indo para: ${mesImp}/${anoImp}`);
+                    selMes.value = parseInt(mesImp) - 1; // Mês 0-11
+                    console.log(`🔄 Redirecionando para: ${mesImp}/${anoImp}`);
                     Produtividade.mudarPeriodo('mes'); 
                 }
             } else if(Produtividade.Geral) {
@@ -88,10 +87,9 @@ Produtividade.Importacao.Validacao = {
         return new Promise((resolve, reject) => {
             Papa.parse(arquivo, {
                 header: true, skipEmptyLines: true, encoding: "UTF-8",
-                transformHeader: h => h.trim().toLowerCase(),
+                transformHeader: h => h.trim().toLowerCase(), // Normaliza cabeçalhos
                 complete: async (results) => {
                     try { 
-                        // Envia o nome do arquivo junto para extrair a data
                         resolve(await this.salvarDadosBanco(results.data, arquivo.name)); 
                     } 
                     catch (e) { reject(e); }
@@ -101,16 +99,17 @@ Produtividade.Importacao.Validacao = {
         });
     },
 
-    // Função auxiliar para extrair data do nome do arquivo (Ex: "01122025.csv")
+    // Extrai data de formatos "01122025.csv" ou "01-12-2025.csv"
     extrairDataDoNome: function(nomeArquivo) {
         try {
-            // Procura padrao DDMMAAAA ou DD-MM-AAAA
+            // Regex para pegar 8 digitos seguidos (DDMMAAAA) ou com separadores
             const match = nomeArquivo.match(/(\d{2})[-/]?(\d{2})[-/]?(\d{4})/);
             if (match) {
                 const dia = match[1];
                 const mes = match[2];
                 const ano = match[3];
-                return `${ano}-${mes}-${dia}`; // Formato ISO YYYY-MM-DD
+                // Retorna ISO para o banco: YYYY-MM-DD
+                return `${ano}-${mes}-${dia}`; 
             }
         } catch (e) { console.error("Erro data filename", e); }
         return null;
@@ -120,97 +119,113 @@ Produtividade.Importacao.Validacao = {
         const payload = [];
         const ignorados = [];
         
-        // 1. Tenta pegar data do nome do arquivo (Prioridade Alta para arquivos diários)
+        // 1. Data via Nome do Arquivo (Prioridade Absoluta)
         const dataDoArquivo = this.extrairDataDoNome(nomeArquivo);
         let ultimaData = dataDoArquivo;
 
+        // Se não conseguiu extrair a data do nome, aborta o arquivo para não salvar lixo
+        if (!dataDoArquivo) {
+            throw new Error("Nome do arquivo deve conter a data (ex: 01122025.csv)");
+        }
+
+        console.log(`📅 Data detectada no arquivo: ${dataDoArquivo}`);
+
         for (const row of linhas) {
-            // Identificação do Usuário
-            let idCsvRaw = row['id'] || row['usuario_id'] || row['user_id'] || row['id_assistente'] || row['id_usuario'] || row['codigo'];
-            const nomeCsv = row['assistente'] || row['nome'] || row['usuario'] || 'Desconhecido';
+            // 2. Identificação do Usuário (Seu CSV usa 'id_assistente' e 'assistente')
+            let idCsvRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
+            const nomeCsv = row['assistente'] || row['nome'] || 'Desconhecido';
             
-            if (nomeCsv.toLowerCase().includes('total') || nomeCsv.toLowerCase().includes('média')) continue;
+            // Pula linha de Total
+            if (nomeCsv.toLowerCase() === 'total' || nomeCsv.toLowerCase().includes('média')) continue;
+            // Pula se não tiver ID nem Nome
+            if (!idCsvRaw && nomeCsv === 'Desconhecido') continue;
 
             let usuarioIdFinal = null;
+
+            // Tenta ID
             if (idCsvRaw) {
                 const idNum = parseInt(String(idCsvRaw).replace(/\D/g, ''));
                 if (this.mapaUsuariosPorId[idNum]) usuarioIdFinal = idNum;
             }
+            // Tenta Nome
             if (!usuarioIdFinal && nomeCsv !== 'Desconhecido') {
                 const nomeNorm = this.normalizarTexto(nomeCsv);
                 if (this.mapaUsuariosPorNome[nomeNorm]) usuarioIdFinal = this.mapaUsuariosPorNome[nomeNorm];
             }
 
             if (!usuarioIdFinal) {
-                ignorados.push(nomeCsv);
+                ignorados.push(`${nomeCsv} (${idCsvRaw})`);
                 continue; 
             }
 
-            // Identificação da Data (Arquivo > Coluna)
-            let dataRef = dataDoArquivo;
-            
-            // Se não pegou do nome, tenta na linha
-            if (!dataRef) {
-                let rawData = row['data da auditoria'] || row['data'] || row['date'] || row['data_referencia'] || row['end_time'];
-                if (rawData) {
-                    if (rawData.includes('T')) dataRef = rawData.split('T')[0];
-                    else if (rawData.includes('/')) {
-                        const partes = rawData.split('/');
-                        if(partes.length === 3) dataRef = `${partes[2]}-${partes[1]}-${partes[0]}`;
-                    } else if (rawData.includes('-')) {
-                        dataRef = rawData;
-                    }
-                }
-            }
-            
-            if (!dataRef) {
-                // Sem data, impossível importar
-                continue;
-            }
-            ultimaData = dataRef;
-
-            // Valores
+            // 3. Mapeamento das Colunas Específicas do seu CSV
             const clean = (v) => v ? parseInt(String(v).replace(/\./g,'')) || 0 : 0;
-            const qtd = clean(row['quantidade_documentos_validados'] || row['quantidade'] || row['qtd'] || row['producao']);
+
+            // Mapeamento Direto
+            const qtdTotal = clean(row['documentos_validados']); // Coluna principal
+            const qtdFifo = clean(row['documentos_validados_fifo']);
+            const qtdGT = clean(row['documentos_validados_gradual_total']);
+            const qtdGP = clean(row['documentos_validados_gradual_parcial']);
+            const qtdFC = clean(row['documentos_validados_perfil_fc']);
+
+            // Fallback para colunas genéricas caso o CSV mude
+            const finalQtd = qtdTotal > 0 ? qtdTotal : clean(row['quantidade']);
             
-            // Qualidade
+            // Qualidade (Seu CSV de produção NÃO tem isso, então mandamos null/0)
+            // Se tiver colunas 'ok' e 'nok' em outro arquivo, ele pega.
             const qtdOk = clean(row['ok']);
             const qtdNok = clean(row['nok']);
-            let assertTxt = '0%';
-            if (qtdOk + qtdNok > 0) {
-                assertTxt = ((qtdOk / (qtdOk + qtdNok)) * 100).toFixed(1) + '%';
+            let assertTxt = null; // Deixa null para não sobrescrever se já existir dados de qualidade
+            
+            if (row['ok'] !== undefined || row['nok'] !== undefined) {
+                 if (qtdOk + qtdNok > 0) {
+                    assertTxt = ((qtdOk / (qtdOk + qtdNok)) * 100).toFixed(1) + '%';
+                } else {
+                    assertTxt = '0%';
+                }
             }
-
-            // FIFO
-            const isFifo = (row['fila'] || '').toString().toLowerCase().includes('fifo');
-            const valFifo = isFifo ? qtd : clean(row['fifo']);
 
             payload.push({
                 usuario_id: usuarioIdFinal,
-                data_referencia: dataRef,
-                quantidade: qtd,
-                fifo: valFifo,
-                gradual_total: 0, gradual_parcial: 0, perfil_fc: 0, fator: 1,
-                nok: qtdNok.toString(),
-                assertividade: assertTxt
+                data_referencia: dataDoArquivo, // Usa a data do nome do arquivo
+                quantidade: finalQtd,
+                fifo: qtdFifo,
+                gradual_total: qtdGT,
+                gradual_parcial: qtdGP,
+                perfil_fc: qtdFC,
+                fator: 1,
+                // Só envia assertividade se existir no CSV, senão mantém o padrão do banco
+                ...(assertTxt !== null && { assertividade: assertTxt }),
+                ...(row['nok'] !== undefined && { nok: qtdNok.toString() })
             });
         }
 
         if (payload.length > 0) {
-            // Evita duplicidade limpando o dia antes de inserir
-            const datasParaLimpar = [...new Set(payload.map(p => p.data_referencia))];
+            // Upsert (Atualizar se existir) ou Delete+Insert?
+            // Como este arquivo é "a verdade" da produção do dia, melhor limpar a produção do dia e inserir a nova.
+            // MAS CUIDADO: Se você importar Qualidade separadamente depois, o Delete aqui apagaria a Qualidade.
+            // ESTRATÉGIA SEGURA: Upsert via conflito de ID seria ideal, mas não temos ID único do CSV.
+            // Vamos manter a estratégia: Limpar Produção deste dia para estes usuários e inserir.
             
-            // Tenta deletar (Se falhar não para o processo, pois o insert trata erros depois)
-            await Sistema.supabase.from('producao').delete().in('data_referencia', datasParaLimpar);
+            // Para não apagar dados de qualidade de OUTROS usuários ou se o arquivo for parcial,
+            // vamos deletar apenas onde data_referencia = dataDoArquivo.
+            
+            console.log(`💾 Salvando ${payload.length} registros para ${dataDoArquivo}...`);
 
-            // Insere
+            // Usa RPC de exclusão por data (rápido)
+            await Sistema.supabase.rpc('excluir_producao_periodo', { 
+                p_inicio: dataDoArquivo, 
+                p_fim: dataDoArquivo 
+            });
+
+            // Insere em lotes
             const loteSize = 1000;
             for (let i = 0; i < payload.length; i += loteSize) {
                 const lote = payload.slice(i, i + loteSize);
                 const { error } = await Sistema.supabase.from('producao').insert(lote);
                 if (error) {
                     console.error("Erro insert:", error);
-                    throw new Error("Falha de gravação no banco.");
+                    throw new Error("Erro ao gravar no banco.");
                 }
             }
         }
