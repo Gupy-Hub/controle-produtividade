@@ -10,45 +10,49 @@ Produtividade.Importacao.Validacao = {
 
         const btn = input.nextElementSibling;
         const textoOriginal = btn ? btn.innerHTML : "Importar";
-        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
 
         try {
             await this.carregarMapaUsuarios();
 
             let totalSucesso = 0;
             let totalIgnorados = 0;
-            let ultimaDataEncontrada = null; // Para redirecionar o calendário
+            let ultimaData = null;
 
             for (let i = 0; i < input.files.length; i++) {
                 const arquivo = input.files[i];
+                console.log(`📂 Processando arquivo: ${arquivo.name}`);
+                
                 try {
                     const res = await this.processarArquivoIndividual(arquivo);
                     totalSucesso += res.importados;
                     totalIgnorados += res.ignorados.length;
-                    if(res.ultimaData) ultimaDataEncontrada = res.ultimaData;
+                    if (res.ultimaData) ultimaData = res.ultimaData;
+                    
+                    if (res.ignorados.length > 0) {
+                        console.warn("⚠️ Linhas ignoradas neste arquivo:", res.ignorados);
+                    }
                 } catch (err) {
                     console.error("Erro arquivo:", err);
                     alert(`Erro no arquivo ${arquivo.name}: ${err.message}`);
                 }
             }
 
-            alert(`Importação concluída!\n\n✅ Sucesso: ${totalSucesso} registros.\n⚠️ Ignorados: ${totalIgnorados} (linhas sem nome/ID válido).`);
+            // Feedback
+            let msg = `Processamento concluído!\n\n✅ Importados: ${totalSucesso}\n⚠️ Ignorados: ${totalIgnorados}`;
+            if (totalIgnorados > 0) msg += `\n(Verifique o Console F12 para ver quais linhas falharam)`;
+            alert(msg);
             
-            // --- AUTO-NAVEGAÇÃO (CORREÇÃO DE UX) ---
-            if (ultimaDataEncontrada && Produtividade.mudarPeriodo) {
-                // Descobre ano e mês da importação
-                const [anoImp, mesImp] = ultimaDataEncontrada.split('-');
-                
-                // Atualiza os seletores da interface principal
+            // Auto-Navegação para a data do arquivo
+            if (ultimaData && Produtividade.mudarPeriodo) {
+                const [anoImp, mesImp] = ultimaData.split('-');
                 const selAno = document.getElementById('sel-ano');
                 const selMes = document.getElementById('sel-mes');
                 
                 if(selAno && selMes) {
                     selAno.value = anoImp;
-                    selMes.value = parseInt(mesImp) - 1; // JS usa meses 0-11
-                    
-                    // Força a atualização da tela
-                    console.log(`🔄 Redirecionando visão para: ${mesImp}/${anoImp}`);
+                    selMes.value = parseInt(mesImp) - 1;
+                    console.log(`🔄 Indo para data importada: ${mesImp}/${anoImp}`);
                     Produtividade.mudarPeriodo('mes'); 
                 }
             } else if(Produtividade.Geral) {
@@ -79,18 +83,19 @@ Produtividade.Importacao.Validacao = {
                 if(u.nome) this.mapaUsuariosPorNome[this.normalizarTexto(u.nome)] = u.id;
             });
         }
+        console.log(`👥 Mapa carregado: ${data.length} usuários encontrados no sistema.`);
     },
 
     processarArquivoIndividual: function(arquivo) {
         return new Promise((resolve, reject) => {
             Papa.parse(arquivo, {
                 header: true, skipEmptyLines: true, encoding: "UTF-8",
-                transformHeader: h => h.trim(),
+                transformHeader: h => h.trim().toLowerCase(), // Normaliza cabeçalhos para minúsculo
                 complete: async (results) => {
                     try { resolve(await this.salvarDadosBanco(results.data)); } 
                     catch (e) { reject(e); }
                 },
-                error: (err) => reject(new Error("Erro CSV"))
+                error: (err) => reject(new Error("Erro ao ler CSV"))
             });
         });
     },
@@ -100,81 +105,118 @@ Produtividade.Importacao.Validacao = {
         const ignorados = [];
         let ultimaData = null;
 
+        // Debug dos cabeçalhos encontrados na primeira linha
+        if (linhas.length > 0) {
+            console.log("📋 Cabeçalhos detectados no CSV:", Object.keys(linhas[0]));
+        }
+
         for (const row of linhas) {
-            const nomeCsv = row['Assistente'] || row['nome'] || 'Desconhecido';
-            const idCsvRaw = row['id_assistente'] || row['ID Usuario'];
+            // 1. ESTRATÉGIA DE ID (PRIORIDADE MÁXIMA)
+            // Procura em todas as variações possíveis de nome de coluna de ID
+            let idCsvRaw = row['id'] || row['usuario_id'] || row['user_id'] || row['id_assistente'] || row['id_usuario'] || row['codigo'] || row['matricula'];
             
+            // Estratégia de Nome (Fallback)
+            const nomeCsv = row['assistente'] || row['nome'] || row['usuario'] || row['funcionario'] || 'Desconhecido';
+            
+            // Pula linhas de lixo (totais, médias)
             if (nomeCsv.toLowerCase().includes('total') || nomeCsv.toLowerCase().includes('média')) continue;
 
             let usuarioIdFinal = null;
+
+            // Tenta validar o ID numérico encontrado
             if (idCsvRaw) {
-                const idNum = parseInt(String(idCsvRaw).replace(/\D/g, ''));
-                if (this.mapaUsuariosPorId[idNum]) usuarioIdFinal = idNum;
-            }
-            if (!usuarioIdFinal && nomeCsv !== 'Desconhecido') {
-                const nomeNorm = this.normalizarTexto(nomeCsv);
-                if (this.mapaUsuariosPorNome[nomeNorm]) usuarioIdFinal = this.mapaUsuariosPorNome[nomeNorm];
+                const idNum = parseInt(String(idCsvRaw).replace(/\D/g, '')); // Remove letras, deixa só números
+                
+                // Verifica se esse ID existe no banco
+                if (this.mapaUsuariosPorId[idNum]) {
+                    usuarioIdFinal = idNum;
+                } else {
+                    // ID existe no CSV, mas não no banco.
+                    // console.warn(`ID ${idNum} do CSV não encontrado no banco.`);
+                }
             }
 
+            // Se não achou por ID, tenta por Nome
+            if (!usuarioIdFinal && nomeCsv !== 'Desconhecido') {
+                const nomeNorm = this.normalizarTexto(nomeCsv);
+                if (this.mapaUsuariosPorNome[nomeNorm]) {
+                    usuarioIdFinal = this.mapaUsuariosPorNome[nomeNorm];
+                }
+            }
+
+            // SE FALHAR TUDO, IGNORA EAVISA
             if (!usuarioIdFinal) {
-                ignorados.push(nomeCsv);
+                ignorados.push(`Nome: ${nomeCsv} | ID: ${idCsvRaw || 'N/A'}`);
                 continue; 
             }
 
+            // 2. ESTRATÉGIA DE DATA
             let dataRef = null;
-            // Tenta detectar a coluna de data
-            let rawData = row['Data da Auditoria'] || row['Data'] || row['data'] || row['end_time'];
+            let rawData = row['data da auditoria'] || row['data'] || row['date'] || row['data_referencia'] || row['end_time'];
             
             if (rawData) {
-                if (rawData.includes('T')) dataRef = rawData.split('T')[0]; // ISO
-                else if (rawData.includes('/')) { // BR DD/MM/AAAA
-                    const partes = rawData.split('/');
+                if (rawData.includes('T')) dataRef = rawData.split('T')[0];
+                else if (rawData.includes('/')) {
+                    const partes = rawData.split('/'); // DD/MM/AAAA
                     if(partes.length === 3) dataRef = `${partes[2]}-${partes[1]}-${partes[0]}`;
                 } else if (rawData.includes('-')) {
                     dataRef = rawData;
                 }
             }
             
-            if (!dataRef) continue;
+            if (!dataRef) {
+                // Se não tem data na linha, tenta inferir (opcional, aqui pulamos)
+                continue;
+            }
             ultimaData = dataRef;
 
+            // 3. VALORES E QUALIDADE
             const clean = (v) => v ? parseInt(String(v).replace(/\./g,'')) || 0 : 0;
-            const qtd = clean(row['Quantidade_documentos_validados'] || row['quantidade']);
-            const qtdOk = clean(row['Ok']);
-            const qtdNok = clean(row['Nok']);
+            const qtd = clean(row['quantidade_documentos_validados'] || row['quantidade'] || row['qtd'] || row['producao']);
+            
+            // Colunas de Qualidade
+            const qtdOk = clean(row['ok']);
+            const qtdNok = clean(row['nok']);
             
             let assertTxt = '0%';
             if (qtdOk + qtdNok > 0) {
                 assertTxt = ((qtdOk / (qtdOk + qtdNok)) * 100).toFixed(1) + '%';
             }
 
+            // Coluna FIFO
+            const isFifo = (row['fila'] || '').toString().toLowerCase().includes('fifo');
+            const valFifo = isFifo ? qtd : clean(row['fifo']);
+
             payload.push({
                 usuario_id: usuarioIdFinal,
                 data_referencia: dataRef,
                 quantidade: qtd,
-                fifo: clean(row['Fila'] === 'FIFO' ? qtd : 0),
-                gradual_total: 0, gradual_parcial: 0, perfil_fc: 0, fator: 1,
+                fifo: valFifo,
+                gradual_total: 0,
+                gradual_parcial: 0,
+                perfil_fc: 0,
+                fator: 1,
                 nok: qtdNok.toString(),
                 assertividade: assertTxt
             });
         }
 
         if (payload.length > 0) {
-            // Remove dados do dia para evitar duplicidade (Clean Insert)
-            // Agrupa datas para deletar em lote
+            // Limpa dados anteriores das datas envolvidas (para não duplicar)
             const datasParaLimpar = [...new Set(payload.map(p => p.data_referencia))];
             
-            // Deleta
+            // IMPORTANTE: Deleta usando RPC para evitar timeout se for muito dado, 
+            // ou delete normal se for pouco. Vamos usar delete normal com filtro 'in' que é seguro para lotes.
             await Sistema.supabase.from('producao').delete().in('data_referencia', datasParaLimpar);
 
-            // Insere em lotes
+            // Insere em lotes de 1000
             const loteSize = 1000;
             for (let i = 0; i < payload.length; i += loteSize) {
                 const lote = payload.slice(i, i + loteSize);
                 const { error } = await Sistema.supabase.from('producao').insert(lote);
                 if (error) {
-                    console.error("Erro insert:", error);
-                    throw new Error("Erro ao salvar dados no banco.");
+                    console.error("Erro insert Supabase:", error);
+                    throw new Error("Falha ao gravar no banco de dados.");
                 }
             }
         }
