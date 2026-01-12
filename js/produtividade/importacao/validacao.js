@@ -139,8 +139,6 @@ Produtividade.Importacao.Validacao = {
             const qtd = limparNum(row['Quantidade_documentos_validados'] || row['quantidade']);
             const fifo = limparNum(row['Fila'] === 'FIFO' ? qtd : 0);
             
-            // CAPTURA DA QUALIDADE DO CSV (NOVO)
-            // Calculamos a % Assertividade baseada em Ok e Nok
             const qtdOk = limparNum(row['Ok']);
             const qtdNok = limparNum(row['Nok']);
             let assertividade = '0%';
@@ -149,10 +147,6 @@ Produtividade.Importacao.Validacao = {
                 const totalAuditado = qtdOk + qtdNok;
                 const pct = (qtdOk / totalAuditado) * 100;
                 assertividade = pct.toFixed(1) + '%';
-            } else {
-                // Se não tem dados de auditoria, assumimos 100% ou mantemos vazio?
-                // Vamos deixar 0% para não poluir se não houve auditoria
-                assertividade = '0%';
             }
 
             const obj = {
@@ -164,9 +158,8 @@ Produtividade.Importacao.Validacao = {
                 gradual_parcial: 0,
                 perfil_fc: 0,
                 fator: 1,
-                // Salvamos a qualidade nas colunas existentes da tabela producao
                 nok: qtdNok.toString(),
-                assertividade: assertividade // Texto "98.5%"
+                assertividade: assertividade
             };
 
             if (!payloadPorData[dataRef]) payloadPorData[dataRef] = [];
@@ -179,6 +172,7 @@ Produtividade.Importacao.Validacao = {
             const listaDia = payloadPorData[dataKey];
             if (listaDia.length === 0) continue;
 
+            // Remove e insere (Lógica padrão de update dia)
             const { error: errDel } = await Sistema.supabase
                 .from('producao')
                 .delete()
@@ -242,10 +236,22 @@ Produtividade.Importacao.Validacao = {
         document.body.insertAdjacentHTML('beforeend', html);
     },
 
+    // --- CORREÇÃO DO RESET (Usa RPC agora) ---
     limparBancoCompleto: async function() {
-        if (!confirm("⚠️ ATENÇÃO: Isso apagará TODOS os dados de produção.\nDeseja continuar?")) return;
-        const { error } = await Sistema.supabase.from('producao').delete().neq('id', 0);
-        if (error) { alert("Erro ao limpar banco: " + error.message); } 
-        else { alert("Banco limpo com sucesso!"); if(Produtividade.Geral) Produtividade.Geral.carregarTela(); }
+        if (!confirm("⚠️ PERIGO: Isso apagará TODOS os dados de produção.\n\nTem certeza absoluta?")) return;
+        
+        try {
+            // Chama a função SQL criada no Passo 1
+            const { error } = await Sistema.supabase.rpc('limpar_producao');
+            
+            if (error) throw error;
+
+            alert("Banco resetado com sucesso!");
+            if(Produtividade.Geral) Produtividade.Geral.carregarTela();
+
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao resetar: " + error.message);
+        }
     }
 };
