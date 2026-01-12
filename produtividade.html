@@ -47,6 +47,7 @@
                 
                 <div class="flex items-center gap-2">
                     <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                        <button onclick="Produtividade.mudarPeriodo('dia')" id="btn-periodo-dia" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Dia</button>
                         <button onclick="Produtividade.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
                         <button onclick="Produtividade.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Semana</button>
                         <button onclick="Produtividade.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Ano</button>
@@ -54,7 +55,9 @@
 
                     <div class="w-px h-6 bg-slate-200 mx-1"></div>
 
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 items-center">
+                        <input type="date" id="sel-data-dia" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 w-[110px]">
+
                         <select id="sel-ano" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500"></select>
 
                         <select id="sel-mes" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">

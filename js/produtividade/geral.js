@@ -19,12 +19,11 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
-        // USA O NOVO SELETOR GLOBAL
         const datas = Produtividade.getDatasFiltro();
         const dataInicio = datas.inicio;
         const dataFim = datas.fim;
 
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados e metas...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</td></tr>';
 
         try {
             const { data: producao, error: errProd } = await Sistema.supabase
@@ -36,9 +35,8 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // Busca metas do Mês do início do filtro (referência)
+            // Meta Mês
             const [anoRef, mesRef] = dataInicio.split('-');
-            
             const { data: metasBanco, error: errMeta } = await Sistema.supabase
                 .from('metas')
                 .select('usuario_id, meta_producao')
@@ -99,10 +97,6 @@ Produtividade.Geral = {
         
         const checkGestao = document.getElementById('check-gestao');
         const mostrarGestao = checkGestao ? checkGestao.checked : false;
-        
-        // Se estamos filtrando por dia (seletor data especifica) ou usuário
-        // No novo seletor, "Detalhes" aparece quando usuário é selecionado OU quando o período é curto?
-        // Vamos manter: Detalhes só quando clica no usuário. Visão padrão é Consolidada por Pessoa.
         const mostrarDetalhes = (this.usuarioSelecionado !== null);
 
         let lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) : this.dadosOriginais;
@@ -120,7 +114,6 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // VISÃO DIÁRIA DETALHADA DO USUÁRIO
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const metaCalc = metaBase * r.fator;
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -148,7 +141,6 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO GERAL (RESUMO POR PESSOA NO PERÍODO)
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 
@@ -173,22 +165,24 @@ Produtividade.Geral = {
         if(lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado neste período.</td></tr>';
     },
 
-    // ... Funções auxiliares (KPIs, Filtro Usuario, etc) mantidas idênticas ...
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
         document.getElementById('selected-name').textContent = nome;
         this.renderizarTabela();
+        const dadosFiltrados = this.cacheData.filter(r => r.usuario.id == id);
+        this.atualizarKPIs(dadosFiltrados);
     },
 
     limparSelecao: function() {
         this.usuarioSelecionado = null;
         document.getElementById('selection-header').classList.add('hidden');
         this.renderizarTabela();
+        this.atualizarKPIs(this.cacheData);
     },
 
-    atualizarKPIs: function(data) { // Simplificado pois não precisa calcular dias uteis aqui
-        let totalProdGeral = 0; let totalMetaCalculada = 0; 
+    atualizarKPIs: function(data) { 
+        let totalProdGeral = 0;
         let usersCLT = new Set(); let usersPJ = new Set();
 
         data.forEach(r => {
@@ -236,7 +230,7 @@ Produtividade.Geral = {
         } catch (e) { alert("Erro ao atualizar."); }
     },
 
-    // --- NOVA LÓGICA DE EXCLUSÃO ---
+    // --- CORREÇÃO AQUI: USA RPC PARA EVITAR TIMEOUT ---
     excluirDadosDia: async function() {
         const datas = Produtividade.getDatasFiltro();
         const s = datas.inicio;
@@ -244,17 +238,16 @@ Produtividade.Geral = {
 
         if(!s || !e) return alert("Período não definido.");
 
-        // Mensagem dinâmica (se for 1 dia ou intervalo)
         const msg = s === e ? `Excluir produção do dia ${s}?` : `Excluir produção de ${s} até ${e}?`;
 
         if(!confirm(`⚠️ ${msg}\n\nIsso apagará TODOS os registros importados neste período.`)) return;
         
         try {
-            const { error } = await Sistema.supabase
-                .from('producao')
-                .delete()
-                .gte('data_referencia', s)
-                .lte('data_referencia', e);
+            // Chama a função blindada no servidor, sem trafegar 200k linhas
+            const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { 
+                p_inicio: s, 
+                p_fim: e 
+            });
                 
             if(error) throw error;
             
