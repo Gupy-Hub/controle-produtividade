@@ -6,8 +6,21 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
+    // Lista de Feriados Nacionais (formato MM-DD)
+    feriados: [
+        "01-01", // Ano Novo
+        "04-21", // Tiradentes
+        "05-01", // Trabalho
+        "09-07", // Independência
+        "10-12", // Padroeira
+        "11-02", // Finados
+        "11-15", // República
+        "11-20", // Consciência Negra (Novo)
+        "12-25"  // Natal
+    ],
+    
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Novos KPIs + Split Cards)...");
+        console.log("🔧 Produtividade: Iniciando (Feriados + Justificativa)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -33,6 +46,21 @@ Produtividade.Geral = {
         return Number(val);
     },
 
+    // Verifica se é dia útil (Seg-Sex e não feriado)
+    isDiaUtil: function(dateObj) {
+        const day = dateObj.getDay();
+        if (day === 0 || day === 6) return false; // Sábado ou Domingo
+        
+        // Formata MM-DD para checar feriado
+        const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dia = String(dateObj.getDate()).padStart(2, '0');
+        const chave = `${mes}-${dia}`;
+        
+        if (this.feriados.includes(chave)) return false;
+        
+        return true;
+    },
+
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
@@ -49,7 +77,7 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO
+            // 1. BUSCA PRODUÇÃO (Incluindo motivo_abono)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -127,14 +155,12 @@ Produtividade.Geral = {
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 
                 if(!dadosAgrupados[uid]) {
-                    // Copia totais de qualidade para o objeto principal
                     const qTotal = mapaQualidadeTotal[uid] || { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
                         totais: { 
                             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0,
-                            // Importante: Passa os dados de qualidade para o totalizador
                             somaNotas: qTotal.somaNotas, 
                             qtdDocs: qTotal.qtdDocs
                         },
@@ -156,7 +182,8 @@ Produtividade.Geral = {
                     ...item, 
                     usuario: userObj,
                     assertividade_real: assertTxt, 
-                    assertividade_valor: assertPct
+                    assertividade_valor: assertPct,
+                    motivo_abono: item.motivo_abono // Passa o motivo para o front
                 });
                 
                 const d = dadosAgrupados[uid].totais;
@@ -168,7 +195,7 @@ Produtividade.Geral = {
                 d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0);
                 d.dias += 1; 
-                d.diasUteis += f; // Soma ponderada de dias (0, 0.5, 1)
+                d.diasUteis += f; // Soma 0 se abonado, 0.5 se parcial
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -178,7 +205,7 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                this.atualizarKPIs(this.dadosOriginais); // Agora passa os dados agrupados
+                this.atualizarKPIs(this.dadosOriginais); 
             }
         } catch (error) {
             console.error("Erro render:", error);
@@ -230,11 +257,24 @@ Produtividade.Geral = {
                     let corAssert = 'text-slate-400';
                     if (assertNum > 0) corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
 
+                    // Ícone de Motivo
+                    let motivoIcon = "";
+                    if (r.motivo_abono) {
+                        motivoIcon = `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>`;
+                    }
+
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                     tr.innerHTML = `
                         <td class="px-2 py-2 text-center border-r border-slate-200"><input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${r.id}" onchange="Produtividade.Geral.toggleSelection('${r.id}')"></td>
-                        <td class="px-2 py-2 text-center border-r border-slate-200"><select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-full text-center"><option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option><option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option><option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option></select></td>
+                        <td class="px-2 py-2 text-center border-r border-slate-200 flex items-center justify-center">
+                            <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-20 text-center">
+                                <option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option>
+                                <option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option>
+                                <option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option>
+                            </select>
+                            ${motivoIcon}
+                        </td>
                         <td class="px-3 py-2 border-r border-slate-200"><div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')"><div class="flex justify-between items-center"><span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span><span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 rounded border border-blue-100 ml-2">${dia}/${mes}</span></div><span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargo} • ${contrato}</span></div></td>
                         <td class="${commonCell}">${fatorReal}</td>
                         <td class="${commonCell}">${r.fifo}</td>
@@ -252,7 +292,6 @@ Produtividade.Geral = {
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic";
-                
                 if (d.totais.qtdDocs > 0) {
                     const mediaGeral = d.totais.somaNotas / d.totais.qtdDocs;
                     assertGeralTxt = mediaGeral.toFixed(2).replace('.', ',') + "%";
@@ -265,14 +304,16 @@ Produtividade.Geral = {
                     const r = d.registros[0];
                     const fatorReal = this.getFator(r.fator);
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
-                    
+                    let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
+
                     colunaAbonoHtml = `
-                        <td class="px-2 py-2 text-center border-r border-slate-200">
-                            <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-full text-center">
+                        <td class="px-2 py-2 text-center border-r border-slate-200 flex items-center justify-center">
+                            <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-20 text-center">
                                 <option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option>
                                 <option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option>
                                 <option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option>
                             </select>
+                            ${motivoIcon}
                         </td>`;
                 }
 
@@ -311,34 +352,47 @@ Produtividade.Geral = {
         });
     },
 
+    // AÇÃO EM MASSA (COM JUSTIFICATIVA)
     mudarFatorTodos: async function(val) { 
         if(val === "") return;
         
+        // Pergunta o motivo SE for abono
+        let motivo = null;
+        if (val !== '1') {
+            motivo = prompt("Qual o motivo deste abono? (Obrigatório)");
+            if (!motivo || motivo.trim().length < 3) {
+                alert("É obrigatório informar o motivo para abonar.");
+                document.getElementById('bulk-fator').value = ""; // Reseta
+                return;
+            }
+        }
+
         let idsParaAtualizar = [];
         
         if (this.selecionados.size > 0) {
              const selecao = Array.from(this.selecionados);
-             
              if (this.usuarioSelecionado === null) {
                  this.dadosOriginais.forEach(d => {
                      if (this.selecionados.has(d.usuario.id.toString())) {
                          d.registros.forEach(r => idsParaAtualizar.push(r.id));
                      }
                  });
-                 if(!confirm(`Aplicar Abono para ${this.selecionados.size} assistentes selecionadas?`)) return;
              } else {
                  idsParaAtualizar = selecao;
-                 if(!confirm(`Aplicar Abono para ${idsParaAtualizar.length} dias selecionados?`)) return;
              }
         } 
         else {
              idsParaAtualizar = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
-             if(!confirm(`Nenhum item selecionado.\n\nDeseja aplicar a TODOS os ${idsParaAtualizar.length} registros visíveis?`)) return;
+             if(!confirm(`Nenhum item selecionado.\n\nAplicar a TODOS os ${idsParaAtualizar.length} registros?`)) return;
         }
 
         if (idsParaAtualizar.length === 0) return;
 
-        const { error } = await Sistema.supabase.from('producao').update({ fator: val }).in('id', idsParaAtualizar); 
+        // Salva fator E motivo
+        const { error } = await Sistema.supabase
+            .from('producao')
+            .update({ fator: val, motivo_abono: motivo })
+            .in('id', idsParaAtualizar); 
         
         if(!error) {
             this.carregarTela(); 
@@ -347,127 +401,116 @@ Produtividade.Geral = {
         }
     },
 
-    // FUNÇÃO ATUALIZADA PARA OS NOVOS KPIs DIVIDIDOS
-    atualizarKPIs: function(dadosAgrupados) { 
-        let metaTotal = 0;
-        let producaoTotal = 0;
+    // AÇÃO INDIVIDUAL (COM JUSTIFICATIVA)
+    mudarFator: async function(id, val) { 
+        let motivo = null;
         
-        let somaNotasGeral = 0;
-        let qtdDocsGeral = 0;
+        if (val !== '1') {
+            motivo = prompt("Motivo do abono (Obrigatório):");
+            if (!motivo || motivo.trim().length < 3) {
+                alert("Cancelado: Motivo é obrigatório.");
+                this.carregarTela(); // Recarrega para voltar o select ao original
+                return;
+            }
+        }
 
-        let clt = { qtd: 0, prod: 0 };
-        let pj = { qtd: 0, prod: 0 };
+        const { error } = await Sistema.supabase
+            .from('producao')
+            .update({ fator: val, motivo_abono: motivo })
+            .eq('id', id); 
+        
+        if(!error) this.carregarTela(); 
+    },
 
-        let totalDiasUteisAgregado = 0; // Soma de dias úteis de todas as pessoas (Homen-Dia)
+    atualizarKPIs: function(dadosAgrupados) { 
+        let metaTotal = 0; let producaoTotal = 0;
+        let somaNotasGeral = 0; let qtdDocsGeral = 0;
+        let clt = { qtd: 0, prod: 0 }; let pj = { qtd: 0, prod: 0 };
+        let totalDiasUteisAgregado = 0;
 
         dadosAgrupados.forEach(d => {
             const cargo = (d.usuario.funcao || '').toUpperCase();
-            if (['AUDITORA', 'GESTORA'].includes(cargo)) return; // Ignora gestão nos KPIs de produção
+            if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
 
-            // 1. Produção e Meta
-            const metaUser = d.meta_real * d.totais.diasUteis;
-            metaTotal += metaUser;
+            metaTotal += (d.meta_real * d.totais.diasUteis);
             producaoTotal += d.totais.qty;
             totalDiasUteisAgregado += d.totais.diasUteis;
-
-            // 2. Qualidade
             somaNotasGeral += (d.totais.somaNotas || 0);
             qtdDocsGeral += (d.totais.qtdDocs || 0);
 
-            // 3. Equipe
-            if (d.usuario.contrato === 'CLT') {
-                clt.qtd++;
-                clt.prod += d.totais.qty;
-            } else {
-                pj.qtd++;
-                pj.prod += d.totais.qty;
-            }
+            if (d.usuario.contrato === 'CLT') { clt.qtd++; clt.prod += d.totais.qty; } 
+            else { pj.qtd++; pj.prod += d.totais.qty; }
         });
 
-        // --- Card 1: Produção ---
         this.setTxt('kpi-meta-esperada', Math.round(metaTotal).toLocaleString('pt-BR'));
         this.setTxt('kpi-producao-real', producaoTotal.toLocaleString('pt-BR'));
 
-        // --- Card 2: Atingimento ---
         const pctProd = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
-        let pctAssert = 0;
-        if (qtdDocsGeral > 0) pctAssert = somaNotasGeral / qtdDocsGeral;
+        let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
 
         this.setTxt('kpi-atingimento-pct', Math.round(pctProd) + '%');
         this.setTxt('kpi-assertividade-real', pctAssert.toFixed(2).replace('.', ',') + '%');
 
-        // --- Card 3: Equipe ---
         const pctClt = producaoTotal > 0 ? (clt.prod / producaoTotal) * 100 : 0;
         const pctPj = producaoTotal > 0 ? (pj.prod / producaoTotal) * 100 : 0;
         
         this.setHtml('kpi-clt-info', `<span class="font-bold text-lg">${clt.qtd}</span> <span class="text-[10px] text-slate-400">(${Math.round(pctClt)}%)</span>`);
         this.setHtml('kpi-pj-info', `<span class="font-bold text-lg">${pj.qtd}</span> <span class="text-[10px] text-slate-400">(${Math.round(pctPj)}%)</span>`);
 
-        // --- Card 4: Dias Úteis ---
-        // Calcula dias úteis do calendário (seg-sex) no período
+        // DIAS ÚTEIS COM FERIADOS
         const datas = Produtividade.getDatasFiltro();
         let diasUteisCalendario = 0;
         let curr = new Date(datas.inicio + "T00:00:00");
         const end = new Date(datas.fim + "T00:00:00");
         
-        // Simples contagem de dias úteis no período selecionado
         while (curr <= end) {
-            const day = curr.getDay();
-            if (day !== 0 && day !== 6) diasUteisCalendario++;
+            if (this.isDiaUtil(curr)) diasUteisCalendario++;
             curr.setDate(curr.getDate() + 1);
         }
         
-        // Média Esperada = Meta Total / Total Dias Úteis Trabalhados pela Equipe
-        // Média Real = Produção Total / Total Dias Úteis Trabalhados pela Equipe
         const mediaEsperada = totalDiasUteisAgregado > 0 ? metaTotal / totalDiasUteisAgregado : 0;
         const mediaReal = totalDiasUteisAgregado > 0 ? producaoTotal / totalDiasUteisAgregado : 0;
 
-        // Mostra quantos dias já passaram no filtro
-        // Ex: Se filtrei 01 a 07, diasUteisCalendario = 5.
-        // O label pede "Dias Trab / Dias Uteis". Vou colocar "X / Y" onde Y é o total do filtro.
-        // Como saber "Dias Trab"? Vamos usar a média de dias que a equipe trabalhou? Não, melhor usar o filtro.
-        // Vamos mostrar: "Filtro (dias)" | "Média/Dia"
-        
         this.setTxt('kpi-dias-uteis', `${diasUteisCalendario} dias`);
         this.setTxt('kpi-media-esperada', Math.round(mediaEsperada));
         this.setTxt('kpi-media-real', Math.round(mediaReal));
 
-        // --- Card 5: Top Performance ---
-        // Top 3 Produção
+        // TOP PERFORMANCE
         const topProd = [...dadosAgrupados]
             .filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()))
-            .sort((a, b) => b.totais.qty - a.totais.qty)
-            .slice(0, 3);
+            .sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
 
-        // Top 3 Assertividade (Minimo 10 docs para entrar no ranking)
         const topAssert = [...dadosAgrupados]
             .filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()) && d.totais.qtdDocs >= 10)
             .sort((a, b) => {
                 const medA = a.totais.somaNotas / a.totais.qtdDocs;
                 const medB = b.totais.somaNotas / b.totais.qtdDocs;
                 return medB - medA;
-            })
-            .slice(0, 3);
+            }).slice(0, 3);
 
         const renderTop = (list, isProd) => {
             if(list.length === 0) return '<span class="text-[8px] text-slate-400 text-center">-</span>';
             return list.map((d, i) => {
                 const val = isProd ? d.totais.qty : (d.totais.somaNotas/d.totais.qtdDocs).toFixed(1) + '%';
                 const color = i===0 ? 'text-amber-500' : 'text-slate-600';
-                return `<div class="flex justify-between items-center text-[9px] w-full px-1">
-                    <span class="truncate max-w-[60px] font-bold text-slate-500" title="${d.usuario.nome}">${d.usuario.nome.split(' ')[0]}</span>
-                    <span class="font-black ${color}">${val}</span>
-                </div>`;
+                return `<div class="flex justify-between items-center text-[9px] w-full px-1"><span class="truncate max-w-[60px] font-bold text-slate-500" title="${d.usuario.nome}">${d.usuario.nome.split(' ')[0]}</span><span class="font-black ${color}">${val}</span></div>`;
             }).join('');
         };
 
         this.setHtml('top-prod-list', renderTop(topProd, true));
         this.setHtml('top-assert-list', renderTop(topAssert, false));
     },
-    
-    // Demais funções mantidas...
-    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregarTela(); },
-    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.carregarTela(); },
-    mudarFator: async function(id, val) { const { error } = await Sistema.supabase.from('producao').update({ fator: val }).eq('id', id); if(!error) this.carregarTela(); },
-    excluirDadosDia: async function() { const datas = Produtividade.getDatasFiltro(); const s = datas.inicio; const e = datas.fim; if(!s || !e) return alert("Período não definido."); if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas a PRODUÇÃO do período. A assertividade (Qualidade) é mantida.`)) return; try { const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e }); if(error) throw error; alert("Produção excluída com sucesso!"); this.carregarTela(); } catch(err) { alert("Erro: " + err.message); } }
+
+    excluirDadosDia: async function() { 
+        const datas = Produtividade.getDatasFiltro(); 
+        const s = datas.inicio; const e = datas.fim; 
+        if(!s || !e) return alert("Período não definido."); 
+        if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas a PRODUÇÃO do período. A assertividade (Qualidade) é mantida.`)) return; 
+        try { 
+            const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e }); 
+            if(error) throw error; 
+            alert("Produção excluída com sucesso!"); 
+            this.carregarTela(); 
+        } catch(err) { alert("Erro: " + err.message); } 
+    }
 };
