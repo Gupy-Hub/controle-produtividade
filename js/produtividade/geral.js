@@ -11,8 +11,11 @@ Produtividade.Geral = {
     // Feriados Nacionais 2025
     feriados: ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
     
+    // STATUS NEUTROS (Contam Volume se tiver auditora, mas NÃO contam nota)
+    statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA'],
+
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Design HUD + Capacidade Operativa)...");
+        console.log("🔧 Produtividade: Iniciando (Neutros + HUD)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -25,12 +28,6 @@ Produtividade.Geral = {
     setHtml: function(id, html) {
         const el = document.getElementById(id);
         if (el) el.innerHTML = html;
-    },
-
-    parsePorcentagem: function(valorStr) {
-        if (!valorStr) return 0;
-        let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
-        return parseFloat(limpo) || 0;
     },
 
     getFator: function(val) {
@@ -74,79 +71,122 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando...</td></tr>';
 
         try {
-            const { data: producao, error: errProd } = await Sistema.supabase.from('producao').select('*').gte('data_referencia', dataInicio).lte('data_referencia', dataFim).range(0, 50000).order('data_referencia', { ascending: true });
+            // 1. Busca Produção Bruta
+            const { data: producao, error: errProd } = await Sistema.supabase
+                .from('producao')
+                .select('*')
+                .gte('data_referencia', dataInicio)
+                .lte('data_referencia', dataFim)
+                .range(0, 50000)
+                .order('data_referencia', { ascending: true });
+            
             if (errProd) throw errProd;
 
-            const { data: usuarios, error: errUser } = await Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao, contrato').range(0, 5000);
+            // 2. Busca Usuários
+            const { data: usuarios, error: errUser } = await Sistema.supabase
+                .from('usuarios')
+                .select('id, nome, perfil, funcao, contrato')
+                .range(0, 5000);
+            
             if (errUser) throw errUser;
             const mapaUsuarios = {};
             usuarios.forEach(u => mapaUsuarios[u.id] = u);
 
-            const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase.rpc('calcular_assertividade_periodo', { p_inicio: dataInicio, p_fim: dataFim });
-            if (errQuali) throw errQuali;
-
-            const mapaQualidadeDiaria = {}; 
-            
-            if (qualidadeResumo) {
-                qualidadeResumo.forEach(q => {
-                    const uid = q.usuario_id;
-                    if (!mapaUsuarios[uid]) return; 
-                    const somar = (obj) => {
-                        if (!obj) obj = { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
-                        obj.somaNotas += (Number(q.soma_notas) || 0);
-                        obj.qtdDocs += (Number(q.qtd_docs) || 0);
-                        return obj;
-                    };
-                    const chaveDia = `${uid}_${q.data_ref}`;
-                    mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
-                });
-            }
-
+            // 3. Busca Metas
             const [anoRef, mesRef] = dataInicio.split('-');
-            const { data: metasBanco } = await Sistema.supabase.from('metas').select('usuario_id, meta_producao').eq('mes', parseInt(mesRef)).eq('ano', parseInt(anoRef)).range(0, 2000);
+            const { data: metasBanco } = await Sistema.supabase
+                .from('metas')
+                .select('usuario_id, meta_producao')
+                .eq('mes', parseInt(mesRef))
+                .eq('ano', parseInt(anoRef))
+                .range(0, 2000);
+            
             const mapaMetas = {};
             if(metasBanco) metasBanco.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
 
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
+            // 4. Agrupamento e Cálculo com Regra de Neutros
             let dadosAgrupados = {};
+            
             producao.forEach(item => {
                 const uid = item.usuario_id;
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
+                
                 if(!dadosAgrupados[uid]) {
-                    const qTotal = { somaNotas: 0, qtdDocs: 0 };
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
-                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0, somaNotas: qTotal.somaNotas, qtdDocs: qTotal.qtdDocs },
+                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0, somaNotas: 0, qtdDocs: 0 },
                         meta_real: mapaMetas[uid] || 0
                     };
                 }
                 
-                const chaveQuali = `${uid}_${item.data_referencia}`;
-                const dadosQ = mapaQualidadeDiaria[chaveQuali] || { somaNotas: 0, qtdDocs: 0 };
+                const status = (item.status || '').toUpperCase();
+                const isOk = status === 'OK';
+                const isNok = status === 'NOK';
+                const isNeutro = this.statusNeutros.includes(status);
                 
-                // Acumula totais de qualidade no agrupado principal
-                dadosAgrupados[uid].totais.somaNotas += dadosQ.somaNotas;
-                dadosAgrupados[uid].totais.qtdDocs += dadosQ.qtdDocs;
+                // --- LÓGICA DE VOLUME (Quantidade) ---
+                // Conta se for OK, NOK ou (Neutro com Auditora)
+                // Se auditora estiver vazio em neutro, não conta volume
+                let contaVolume = false;
+                if (isOk || isNok) {
+                    contaVolume = true;
+                } else if (isNeutro && item.auditora && item.auditora.trim() !== '') {
+                    contaVolume = true;
+                }
 
-                let assertPct = dadosQ.qtdDocs > 0 ? dadosQ.somaNotas / dadosQ.qtdDocs : 0;
-                let assertTxt = dadosQ.qtdDocs > 0 ? assertPct.toFixed(2).replace('.', ',') + "%" : "-";
+                if (contaVolume) {
+                    const d = dadosAgrupados[uid].totais;
+                    d.qty += (Number(item.quantidade) || 0);
+                    d.fifo += (Number(item.fifo) || 0);
+                    d.gt += (Number(item.gradual_total) || 0);
+                    d.gp += (Number(item.gradual_parcial) || 0);
+                    d.fc += (Number(item.perfil_fc) || 0);
+                    
+                    const f = this.getFator(item.fator);
+                    d.diasUteis += f;
+                }
 
-                dadosAgrupados[uid].registros.push({ 
-                    ...item, usuario: userObj, assertividade_real: assertTxt, assertividade_valor: assertPct, motivo_abono: item.motivo_abono
-                });
+                // --- LÓGICA DE ASSERTIVIDADE (Qualidade) ---
+                // Neutros (REV, DUPL, etc) são ignorados aqui
+                let assertValor = 0; // Valor para exibir na linha
+                let entraNaMedia = false;
+
+                if (isOk) {
+                    dadosAgrupados[uid].totais.somaNotas += 100;
+                    dadosAgrupados[uid].totais.qtdDocs += 1;
+                    assertValor = 100;
+                    entraNaMedia = true;
+                } else if (isNok) {
+                    dadosAgrupados[uid].totais.somaNotas += 0;
+                    dadosAgrupados[uid].totais.qtdDocs += 1;
+                    assertValor = 0;
+                    entraNaMedia = true;
+                }
                 
-                const d = dadosAgrupados[uid].totais;
-                const f = this.getFator(item.fator); 
-                d.qty += (Number(item.quantidade) || 0); 
-                d.fifo += (Number(item.fifo) || 0); 
-                d.gt += (Number(item.gradual_total) || 0); 
-                d.gp += (Number(item.gradual_parcial) || 0); 
-                d.fc += (Number(item.perfil_fc) || 0);
-                d.dias += 1; 
-                d.diasUteis += f; 
+                // Texto para a coluna de assertividade na grade
+                let assertTxt = "-";
+                if (entraNaMedia) {
+                    assertTxt = assertValor + "%";
+                } else if (isNeutro) {
+                    assertTxt = "--"; // Neutro visualmente
+                }
+
+                // Adiciona registro para a grade detalhada
+                // Só adicionamos se contou volume OU se tem nota (para não sumir registros úteis)
+                if (contaVolume || entraNaMedia) {
+                    dadosAgrupados[uid].registros.push({ 
+                        ...item, 
+                        usuario: userObj, 
+                        assertividade_real: assertTxt, 
+                        assertividade_valor: assertValor,
+                        motivo_abono: item.motivo_abono,
+                        is_neutro: isNeutro // flag para ajudar na renderização
+                    });
+                }
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -199,9 +239,18 @@ Produtividade.Geral = {
 
                     const [ano, mes, dia] = r.data_referencia.split('-');
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
-                    let assertVal = r.assertividade_real; let assertNum = r.assertividade_valor;
+                    
+                    let assertVal = r.assertividade_real; 
                     let corAssert = 'text-slate-400';
-                    if (assertNum > 0) corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
+                    if (r.is_neutro) {
+                        assertVal = "--";
+                        corAssert = 'text-slate-300 italic'; // Visual mais apagado para neutros
+                    } else {
+                        // Se não é neutro, verifica valor
+                        if (r.assertividade_valor >= 98) corAssert = 'text-emerald-700 font-bold';
+                        else corAssert = 'text-rose-600 font-bold';
+                    }
+
                     let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
 
                     const tr = document.createElement('tr');
@@ -216,12 +265,14 @@ Produtividade.Geral = {
             } else {
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
+                
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic";
                 if (d.totais.qtdDocs > 0) {
                     const mediaGeral = d.totais.somaNotas / d.totais.qtdDocs;
                     assertGeralTxt = mediaGeral.toFixed(2).replace('.', ',') + "%";
                     corAssert = mediaGeral >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
                 }
+                
                 let colunaAbonoHtml = `<td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>`;
                 if (isDiaUnico && d.registros.length > 0) {
                     const r = d.registros[0];
@@ -266,69 +317,44 @@ Produtividade.Geral = {
         if(!error) this.carregarTela(); 
     },
 
-    // KPI INTELIGENTE (Com Capacidade Operativa)
     atualizarKPIs: function(dadosAgrupados, dadosBrutosProducao) { 
-        let metaTotalGeral = 0; // Inclui tudo
-        let producaoTotalGeral = 0; // Inclui tudo
-        let somaNotasGeral = 0; let qtdDocsGeral = 0;
-        
-        let countAssistentesAtivos = 0; // Apenas Operação
-        
-        let somaMetasOperacao = 0; 
-        let countPessoasMeta = 0;
-        let somaProdOperacao = 0;
-        let countPessoasProd = 0;
+        let metaTotalGeral = 0; let producaoTotalGeral = 0; let somaNotasGeral = 0; let qtdDocsGeral = 0;
+        let countAssistentesAtivos = 0; let somaMetasOperacao = 0; let countPessoasMeta = 0; let somaProdOperacao = 0; let countPessoasProd = 0;
 
         dadosAgrupados.forEach(d => {
             const cargo = (d.usuario.funcao || '').toUpperCase();
             const isGestao = ['AUDITORA', 'GESTORA'].includes(cargo);
 
-            // Soma Geral (Volume e Qualidade do Card 1 e 2)
+            // GERAL (INCLUI GESTÃO)
             metaTotalGeral += (d.meta_real * d.totais.diasUteis);
             producaoTotalGeral += d.totais.qty;
             somaNotasGeral += (d.totais.somaNotas || 0);
             qtdDocsGeral += (d.totais.qtdDocs || 0);
 
-            // Capacidade Operativa (Card 3 - Apenas Assistentes)
+            // OPERAÇÃO (EXCLUI GESTÃO)
             if (!isGestao) {
-                // Se teve dias úteis ou produção, conta como ativo no período
-                if (d.totais.diasUteis > 0 || d.totais.qty > 0) {
-                    countAssistentesAtivos++;
-                }
-
-                // Eficiência Média (Card 4 - Apenas Operação para não distorcer)
+                if (d.totais.diasUteis > 0 || d.totais.qty > 0) countAssistentesAtivos++;
                 if (d.meta_real > 0) { somaMetasOperacao += d.meta_real; countPessoasMeta++; }
                 if (d.totais.diasUteis > 0) { somaProdOperacao += (d.totais.qty / d.totais.diasUteis); countPessoasProd++; }
             }
         });
 
-        // 1. Volume (Geral)
         this.setTxt('kpi-validacao-esperado', Math.round(metaTotalGeral).toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-real', producaoTotalGeral.toLocaleString('pt-BR'));
         const pctVolume = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = Math.min(pctVolume || 0, 100) + '%';
 
-        // 2. Qualidade (Geral)
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
         this.setTxt('kpi-meta-assertividade-val', (pctAssert || 0).toFixed(2).replace('.', ',') + '%');
 
-        // 3. Capacidade Operativa (Novo)
-        const PADRAO_ASSISTENTES = 17;
-        const pctCapacidade = (countAssistentesAtivos / PADRAO_ASSISTENTES) * 100;
-        
-        this.setTxt('kpi-capacidade-pct', Math.round(pctCapacidade) + '%');
-        this.setTxt('kpi-capacidade-info', `${countAssistentesAtivos}/${PADRAO_ASSISTENTES} Ativos`);
-        
-        const barCap = document.getElementById('bar-capacidade'); 
-        if(barCap) {
-            barCap.style.width = Math.min(pctCapacidade || 0, 100) + '%';
-            // Cor dinâmica: Vermelho se < 70%, Roxo se normal
-            barCap.className = `h-full rounded-full transition-all duration-1000 ${(pctCapacidade || 0) < 70 ? 'bg-rose-500' : 'bg-purple-500'}`;
-        }
+        const PADRAO = 17;
+        const pctCap = (countAssistentesAtivos / PADRAO) * 100;
+        this.setTxt('kpi-capacidade-pct', Math.round(pctCap) + '%');
+        this.setTxt('kpi-capacidade-info', `${countAssistentesAtivos}/${PADRAO} Ativos`);
+        const barCap = document.getElementById('bar-capacidade'); if(barCap) { barCap.style.width = Math.min(pctCap || 0, 100) + '%'; barCap.className = `h-full rounded-full transition-all duration-1000 ${(pctCap || 0) < 70 ? 'bg-rose-500' : 'bg-purple-500'}`; }
 
-        // 4. Eficiência (Operação)
         const datas = Produtividade.getDatasFiltro();
         let diasUteisCalendario = 0;
         let curr = new Date(datas.inicio + "T00:00:00");
@@ -354,13 +380,11 @@ Produtividade.Geral = {
         const diasUteisMesTotal = this.getDiasUteisNoMes(parseInt(anoRef), parseInt(mesRef));
         this.setTxt('kpi-dias-uteis', `${diasUteisCalendario}/${diasUteisMesTotal}`);
 
-        // Médias (Apenas Operação)
         const mediaMetaDia = countPessoasMeta > 0 ? somaMetasOperacao / countPessoasMeta : 0;
         const mediaRealDia = countPessoasProd > 0 ? somaProdOperacao / countPessoasProd : 0;
         this.setTxt('kpi-media-esperada', Math.round(mediaMetaDia));
         this.setTxt('kpi-media-real', Math.round(mediaRealDia));
 
-        // 5. Ranking (Apenas Operação)
         const topProd = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase())).sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const topAssert = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()) && d.totais.qtdDocs >= 10).sort((a, b) => (b.totais.somaNotas/b.totais.qtdDocs) - (a.totais.somaNotas/a.totais.qtdDocs)).slice(0, 3);
         const medals = ['🥇', '🥈', '🥉'];
@@ -369,10 +393,7 @@ Produtividade.Geral = {
             return list.map((d, i) => {
                 const val = isProd ? d.totais.qty : (d.totais.somaNotas/d.totais.qtdDocs).toFixed(1) + '%';
                 const color = isProd ? 'text-blue-600' : 'text-emerald-600';
-                return `<div class="flex justify-between items-center text-[9px] w-full">
-                    <div class="flex items-center gap-1 overflow-hidden"><span class="text-[8px]">${medals[i]}</span><span class="truncate max-w-[45px] font-bold text-slate-600" title="${d.usuario.nome}">${d.usuario.nome.split(' ')[0]}</span></div>
-                    <span class="font-black ${color}">${val}</span>
-                </div>`;
+                return `<div class="flex justify-between items-center text-[9px] w-full"><div class="flex items-center gap-1 overflow-hidden"><span class="text-[8px]">${medals[i]}</span><span class="truncate max-w-[45px] font-bold text-slate-600" title="${d.usuario.nome}">${d.usuario.nome.split(' ')[0]}</span></div><span class="font-black ${color}">${val}</span></div>`;
             }).join('');
         };
         this.setHtml('top-prod-list', renderTop(topProd, true));
