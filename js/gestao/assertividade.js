@@ -63,8 +63,6 @@ Gestao.Assertividade = {
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
-        const btnAnt = document.getElementById('btn-ant');
-        const btnProx = document.getElementById('btn-prox');
         const contador = document.getElementById('contador-assert');
 
         if(tbody) tbody.style.opacity = '1';
@@ -86,7 +84,7 @@ Gestao.Assertividade = {
             if (this.estado.filtros.assistente) query = query.ilike('nome_assistente', `%${this.estado.filtros.assistente}%`);
             if (this.estado.filtros.auditora) query = query.ilike('nome_auditora_raw', `%${this.estado.filtros.auditora}%`);
             
-            // Busca exata no Status (sem diferenciar maiúsculas)
+            // Busca exata no Status
             if (this.estado.filtros.status) {
                 query = query.ilike('status', this.estado.filtros.status); 
             }
@@ -170,19 +168,26 @@ Gestao.Assertividade = {
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
 
-            // Assertividade - Ajuste para tratar NULL
+            // === CORREÇÃO DA EQUIPE DE DEV: TRATAMENTO DE NULOS ===
             let assertDisplay = '-';
-            let assertColor = 'text-slate-400 font-light'; // Cor padrão para nulos
+            let assertColor = 'text-slate-400 font-light'; // Cor padrão (cinza claro) para nulos
 
+            // Só processa se tiver valor real e não for string vazia
             if (item.indice_assertividade !== null && item.indice_assertividade !== undefined && item.indice_assertividade !== '') {
+                // Tenta converter para float
                 const assertVal = parseFloat(item.indice_assertividade);
-                assertDisplay = assertVal + '%';
                 
-                // Cores apenas se tiver valor numérico válido
-                assertColor = 'text-slate-600';
-                if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
-                else if (assertVal < 90 && assertVal > 0) assertColor = 'text-rose-600 font-bold';
+                // Se a conversão resultou em NaN (Not a Number), mantemos o traço
+                if (!isNaN(assertVal)) {
+                    assertDisplay = assertVal + '%';
+                    
+                    // Lógica de Cores
+                    assertColor = 'text-slate-600';
+                    if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
+                    else if (assertVal < 90 && assertVal >= 0) assertColor = 'text-rose-600 font-bold';
+                }
             }
+            // =======================================================
 
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
@@ -196,7 +201,9 @@ Gestao.Assertividade = {
                 <td class="px-3 py-2 text-center font-mono bg-slate-50/50 text-slate-500">${item.num_campos}</td>
                 <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50/30">${item.qtd_ok}</td>
                 <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50/30">${item.qtd_nok}</td>
+                
                 <td class="px-3 py-2 text-center ${assertColor} text-sm bg-slate-50/50">${assertDisplay}</td>
+                
                 <td class="px-3 py-2 text-slate-500 text-[10px] uppercase">${auditoraSafe}</td>
             </tr>`;
         });
