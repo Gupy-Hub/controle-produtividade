@@ -4,9 +4,10 @@ Produtividade.Geral = {
     cacheData: [],      
     cacheDatas: { start: null, end: null }, 
     usuarioSelecionado: null,
+    selecionados: new Set(), // Armazena os IDs selecionados
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Correção Abono + ID Match)...");
+        console.log("🔧 Produtividade: Iniciando (Com Checkboxes + Abono)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -22,11 +23,8 @@ Produtividade.Geral = {
         return parseFloat(limpo) || 0;
     },
 
-    // Helper para tratar o fator corretamente (0 deve ser 0, não 1)
     getFator: function(val) {
-        // Se for nulo ou indefinido, padrão é 1 (100%)
         if (val === null || val === undefined) return 1;
-        // Se for numérico (inclusive 0), retorna o número
         return Number(val);
     },
 
@@ -34,12 +32,18 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
+        // Limpa seleção ao recarregar
+        this.selecionados = new Set();
+        // Reseta o checkbox mestre
+        const checkMaster = document.getElementById('check-all-master');
+        if(checkMaster) checkMaster.checked = false;
+
         const datas = Produtividade.getDatasFiltro();
         const dataInicio = datas.inicio;
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando dados de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando...</td></tr>';
 
         try {
             // 1. BUSCA PRODUÇÃO
@@ -149,9 +153,8 @@ Produtividade.Geral = {
                     assertividade_valor: assertPct
                 });
                 
-                // CORREÇÃO CRÍTICA DO FATOR NA SOMA
                 const d = dadosAgrupados[uid].totais;
-                const f = this.getFator(item.fator); // Usa helper corrigido
+                const f = this.getFator(item.fator); 
                 
                 d.qty += (Number(item.quantidade) || 0); 
                 d.fifo += (Number(item.fifo) || 0); 
@@ -159,7 +162,7 @@ Produtividade.Geral = {
                 d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0);
                 d.dias += 1; 
-                d.diasUteis += f; // Agora soma 0 corretamente se for abonado
+                d.diasUteis += f;
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -173,7 +176,7 @@ Produtividade.Geral = {
             }
         } catch (error) {
             console.error("Erro render:", error);
-            tbody.innerHTML = `<tr><td colspan="11" class="text-center py-4 text-red-500">Erro: ${error.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500">Erro: ${error.message}</td></tr>`;
         }
     },
 
@@ -195,7 +198,7 @@ Produtividade.Geral = {
         lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
 
         if(lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
             return;
         }
 
@@ -208,14 +211,11 @@ Produtividade.Geral = {
             if (mostrarDetalhes) {
                 // VISÃO DIÁRIA
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
-                    // CORREÇÃO CRÍTICA DO FATOR NO CÁLCULO
                     const fatorReal = this.getFator(r.fator);
-                    const metaCalc = metaBase * fatorReal; // Multiplica por 0, 0.5 ou 1
-                    
+                    const metaCalc = metaBase * fatorReal;
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
                     const [ano, mes, dia] = r.data_referencia.split('-');
                     
-                    // Cores para o seletor de Abono
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
                     
                     let assertVal = r.assertividade_real; 
@@ -226,6 +226,9 @@ Produtividade.Geral = {
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                     tr.innerHTML = `
+                        <td class="px-2 py-2 text-center border-r border-slate-200">
+                            <input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${r.id}" onchange="Produtividade.Geral.toggleSelection('${r.id}')">
+                        </td>
                         <td class="px-2 py-2 text-center border-r border-slate-200">
                             <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-full text-center">
                                 <option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option>
@@ -247,7 +250,7 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO CONSOLIDADA
+                // VISÃO CONSOLIDADA (Lista de Usuários)
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic";
@@ -259,6 +262,9 @@ Produtividade.Geral = {
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                 tr.innerHTML = `
+                    <td class="px-2 py-2 text-center border-r border-slate-200">
+                         <input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${d.usuario.id}" onchange="Produtividade.Geral.toggleSelection('${d.usuario.id}')">
+                    </td>
                     <td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>
                     <td class="px-3 py-2 border-r border-slate-200"><div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')"><span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span><span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargo} • ${contrato}</span></div></td>
                     <td class="${commonCell} font-bold text-slate-700">${d.totais.diasUteis}</td>
@@ -276,8 +282,66 @@ Produtividade.Geral = {
         });
     },
 
-    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.renderizarTabela(); },
-    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.renderizarTabela(); },
+    // FUNÇÕES DE SELEÇÃO E BULK ACTION
+    toggleSelection: function(id) {
+        if(this.selecionados.has(id)) this.selecionados.delete(id);
+        else this.selecionados.add(id);
+    },
+
+    toggleAll: function(checked) {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = checked;
+            if(checked) this.selecionados.add(cb.value);
+            else this.selecionados.delete(cb.value);
+        });
+    },
+
+    mudarFatorTodos: async function(val) { 
+        if(val === "") return;
+        
+        let idsParaAtualizar = [];
+        
+        // Cenario 1: Tem seleção manual
+        if (this.selecionados.size > 0) {
+             const selecao = Array.from(this.selecionados);
+             
+             // Descobre se estamos na visão consolidada (ID Usuário) ou detalhada (ID Produção)
+             if (this.usuarioSelecionado === null) {
+                 // Visão Consolidada: checkbox vale como usuario_id
+                 // Precisamos pegar TODOS os registros de produção desses usuários visíveis
+                 this.dadosOriginais.forEach(d => {
+                     if (this.selecionados.has(d.usuario.id.toString())) {
+                         d.registros.forEach(r => idsParaAtualizar.push(r.id));
+                     }
+                 });
+                 if(!confirm(`Aplicar Abono para ${this.selecionados.size} assistentes selecionadas (Total de ${idsParaAtualizar.length} dias)?`)) return;
+             } else {
+                 // Visão Detalhada: checkbox vale como production_id
+                 idsParaAtualizar = selecao;
+                 if(!confirm(`Aplicar Abono para ${idsParaAtualizar.length} dias selecionados?`)) return;
+             }
+        } 
+        // Cenario 2: Nenhuma seleção (Aplica a TODOS visíveis)
+        else {
+             idsParaAtualizar = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
+             if(!confirm(`Nenhum item selecionado.\n\nDeseja aplicar a TODOS os ${idsParaAtualizar.length} registros visíveis na tela?`)) return;
+        }
+
+        if (idsParaAtualizar.length === 0) return;
+
+        const { error } = await Sistema.supabase.from('producao').update({ fator: val }).in('id', idsParaAtualizar); 
+        
+        if(!error) {
+            this.carregarTela(); 
+        } else {
+            alert("Erro ao atualizar: " + error.message);
+        }
+    },
+
+    // ... (filtrarUsuario, limparSelecao, atualizarKPIs, mudarFator, excluirDadosDia permanecem iguais)
+    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregarTela(); },
+    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.carregarTela(); },
     
     atualizarKPIs: function(data, mapaUsuarios) { 
         let totalProdGeral = 0; let usersCLT = new Set(); let usersPJ = new Set(); 
@@ -299,14 +363,6 @@ Produtividade.Geral = {
     
     mudarFator: async function(id, val) { 
         const { error } = await Sistema.supabase.from('producao').update({ fator: val }).eq('id', id); 
-        if(!error) this.carregarTela(); 
-    },
-    
-    mudarFatorTodos: async function(val) { 
-        if(val === "") return;
-        if(!confirm("Tem certeza que deseja aplicar este abono a todos os registros visíveis?")) return;
-        const ids = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
-        const { error } = await Sistema.supabase.from('producao').update({ fator: val }).in('id', ids); 
         if(!error) this.carregarTela(); 
     },
 
