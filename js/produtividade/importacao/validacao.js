@@ -1,5 +1,3 @@
-// ARQUIVO: js/produtividade/importacao/validacao.js
-
 window.Produtividade = window.Produtividade || {};
 window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 
@@ -49,7 +47,11 @@ window.Produtividade.Importacao.Validacao = {
             Papa.parse(content, {
                 header: true,
                 skipEmptyLines: true,
-                encoding: "UTF-8", 
+                encoding: "UTF-8",
+                // Normaliza cabeçalhos para minúsculo para aceitar 'Assistente' ou 'assistente'
+                transformHeader: function(h) {
+                    return h.trim().toLowerCase();
+                },
                 complete: (results) => {
                     this.analisarDados(results.data);
                 }
@@ -75,25 +77,54 @@ window.Produtividade.Importacao.Validacao = {
         let erros = 0;
         let importaveis = 0;
 
+        // Recupera a data selecionada na tela para usar caso o CSV não tenha data
+        const elDataTela = document.getElementById('sel-data-dia');
+        const dataTela = elDataTela ? elDataTela.value : null;
+
         if (Object.keys(this.mapaUsuarios).length === 0) await this.carregarUsuarios();
 
         for (let i = 0; i < linhas.length; i++) {
             const row = linhas[i];
             
-            const nomeRaw = row['Nome'] || row['Assistente'] || row['Colaborador'];
-            const dataRaw = row['Data'] || row['Data Referencia'];
-            const qtdRaw = row['Quantidade'] || row['Qtd'];
-            const statusRaw = row['Status'] || row['Classificação'] || 'OK';
-            const auditoraRaw = row['Auditora'] || row['Gestora'] || '';
+            // Mapeamento Flexível (Aceita Log Detalhado OU Sumário)
+            const nomeRaw = row['nome'] || row['assistente'] || row['colaborador'];
             
-            const fifo = row['FIFO'] || 0;
-            const gTotal = row['Gradual Total'] || 0;
-            const gParcial = row['Gradual Parcial'] || 0;
-            const perfilFc = row['Perfil FC'] || 0;
+            // Pula linha de totais ou vazias
+            if (!nomeRaw || nomeRaw.toLowerCase() === 'total') continue;
 
-            if (!nomeRaw || !dataRaw) continue; 
+            // Data: Tenta pegar do CSV, se não tiver, usa a da tela
+            let dataRaw = row['data'] || row['data referencia'] || row['data_referencia'];
+            if (!dataRaw && dataTela) {
+                dataRaw = dataTela; // Fallback para data da tela (Importante para o arquivo 01122025.csv)
+            }
+
+            // Quantidade: 'quantidade', 'qtd' ou 'documentos_validados' (formato novo)
+            const qtdRaw = row['quantidade'] || row['qtd'] || row['documentos_validados'];
+            
+            // Status: Se veio do sumário de validados, assumimos OK
+            let statusRaw = row['status'] || row['classificação'];
+            if (!statusRaw && row['documentos_validados']) {
+                statusRaw = 'OK';
+            }
+            if (!statusRaw) statusRaw = 'OK'; // Default
+
+            const auditoraRaw = row['auditora'] || row['gestora'] || '';
+            
+            // Colunas Específicas (Mapeando os underscores do novo CSV)
+            const fifo = row['fifo'] || row['documentos_validados_fifo'] || 0;
+            const gTotal = row['gradual total'] || row['gradual_total'] || row['documentos_validados_gradual_total'] || 0;
+            const gParcial = row['gradual parcial'] || row['gradual_parcial'] || row['documentos_validados_gradual_parcial'] || 0;
+            const perfilFc = row['perfil fc'] || row['perfil_fc'] || row['documentos_validados_perfil_fc'] || 0;
+
+            // Se não tiver data nem no CSV nem na tela, não dá para importar
+            if (!dataRaw) {
+                console.warn("Linha ignorada por falta de data:", row);
+                continue;
+            }
 
             const nomeNorm = this.normalizarTexto(nomeRaw);
+            // Tenta achar por nome. Se falhar e tiver id_assistente no CSV, poderíamos usar, 
+            // mas por segurança mantemos o match pelo cadastro do sistema.
             const usuarioId = this.mapaUsuarios[nomeNorm];
             
             let status = this.normalizarTexto(statusRaw);
@@ -133,6 +164,7 @@ window.Produtividade.Importacao.Validacao = {
         if(statusEl) statusEl.innerHTML = ""; 
 
         const msg = `Análise do Arquivo:\n\n` +
+                    `📅 Data atribuída: ${dataTela || 'Do Arquivo'}\n` +
                     `✅ Prontos para importar: ${importaveis}\n` +
                     `❌ Usuários não encontrados: ${erros}\n\n` +
                     `Deseja prosseguir com a importação?`;
@@ -144,6 +176,10 @@ window.Produtividade.Importacao.Validacao = {
 
     formatarDataBanco: function(dataStr) {
         if (!dataStr) return null;
+        // Se já for YYYY-MM-DD
+        if (dataStr.includes('-') && dataStr.length === 10) return dataStr;
+        
+        // Se for DD/MM/YYYY
         if (dataStr.includes('/')) {
             const parts = dataStr.split('/');
             if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
