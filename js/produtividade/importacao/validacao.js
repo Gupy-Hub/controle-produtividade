@@ -39,6 +39,10 @@ Produtividade.Importacao.Validacao = {
         const file = input.files[0];
         if (!file) return;
 
+        // Feedback Visual: Lendo
+        const statusEl = document.getElementById('status-importacao-prod');
+        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo CSV...</span>`;
+
         const reader = new FileReader();
         reader.onload = (e) => {
             const content = e.target.result;
@@ -46,54 +50,52 @@ Produtividade.Importacao.Validacao = {
             Papa.parse(content, {
                 header: true,
                 skipEmptyLines: true,
-                encoding: "UTF-8", // Garante acentuação
+                encoding: "UTF-8", 
                 complete: (results) => {
                     this.analisarDados(results.data);
                 }
             });
         };
-        reader.readAsText(file, "UTF-8"); // Força UTF-8 na leitura
+        reader.readAsText(file, "UTF-8"); 
         
-        // Reseta o input para permitir selecionar o mesmo arquivo novamente se falhar
         input.value = '';
     },
 
     analisarDados: async function(linhas) {
         this.dadosProcessados = [];
-        const container = document.getElementById('tabela-corpo'); // Reusa o grid principal temporariamente ou um modal
+        const statusEl = document.getElementById('status-importacao-prod');
         
-        // Se quisermos abrir um modal específico, teríamos que ter o HTML do modal. 
-        // Vou assumir que vamos jogar na tela principal para validação ou alertar.
-        // Para este código, vamos focar na lógica de processamento e salvar direto ou mostrar confirm.
+        if (linhas.length === 0) {
+            if(statusEl) statusEl.innerHTML = "";
+            return alert("Arquivo vazio.");
+        }
+
+        // Feedback Visual: Analisando
+        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600"><i class="fas fa-cog fa-spin"></i> Analisando...</span>`;
         
-        if (linhas.length === 0) return alert("Arquivo vazio.");
+        // Pequeno delay para a UI atualizar antes de travar no loop
+        await new Promise(r => setTimeout(r, 50));
 
         let erros = 0;
         let importaveis = 0;
 
-        // Limpa cache de usuários se necessário
         if (Object.keys(this.mapaUsuarios).length === 0) await this.carregarUsuarios();
-
-        const previewData = [];
 
         for (let i = 0; i < linhas.length; i++) {
             const row = linhas[i];
             
-            // Mapeamento das colunas do CSV (Ajuste conforme seu CSV real)
-            // Exemplo esperado: Data, Nome, Quantidade, Status, Auditora, ...
             const nomeRaw = row['Nome'] || row['Assistente'] || row['Colaborador'];
             const dataRaw = row['Data'] || row['Data Referencia'];
             const qtdRaw = row['Quantidade'] || row['Qtd'];
             const statusRaw = row['Status'] || row['Classificação'] || 'OK';
             const auditoraRaw = row['Auditora'] || row['Gestora'] || '';
             
-            // Colunas opcionais
             const fifo = row['FIFO'] || 0;
             const gTotal = row['Gradual Total'] || 0;
             const gParcial = row['Gradual Parcial'] || 0;
             const perfilFc = row['Perfil FC'] || 0;
 
-            if (!nomeRaw || !dataRaw) continue; // Pula linhas inválidas
+            if (!nomeRaw || !dataRaw) continue; 
 
             // 1. Valida Usuário
             const nomeNorm = this.normalizarTexto(nomeRaw);
@@ -101,30 +103,26 @@ Produtividade.Importacao.Validacao = {
             
             // 2. Normaliza Status
             let status = this.normalizarTexto(statusRaw);
-            // Mapeamentos comuns de erro de digitação
             if (status === 'ERRO') status = 'NOK';
             if (status === 'SUCESSO' || status === 'VALIDO') status = 'OK';
             
-            // 3. Regra de Neutralidade (Visual para Preview)
+            // 3. Regra de Neutralidade
             let assertVisual = '<span class="text-slate-400">--</span>';
-            let validaClass = "text-slate-600";
 
             if (status === 'OK') {
                 assertVisual = '<span class="text-emerald-600 font-bold">100%</span>';
             } else if (status === 'NOK') {
                 assertVisual = '<span class="text-rose-600 font-bold">0%</span>';
             } else if (this.statusNeutros.includes(status)) {
-                // É neutro (REV, DUPL, etc). 
                 assertVisual = '<span class="text-slate-400 italic">-- (Neutro)</span>';
             } else {
-                // Status desconhecido
                 assertVisual = '<span class="text-amber-500">?</span>';
             }
 
             const item = {
                 usuario_id: usuarioId,
                 nome_original: nomeRaw,
-                data_referencia: this.formatarDataBanco(dataRaw), // Converte DD/MM/YYYY para YYYY-MM-DD
+                data_referencia: this.formatarDataBanco(dataRaw), 
                 quantidade: parseInt(qtdRaw) || 0,
                 status: status,
                 auditora: auditoraRaw,
@@ -133,7 +131,6 @@ Produtividade.Importacao.Validacao = {
                 gradual_parcial: parseInt(gParcial) || 0,
                 perfil_fc: parseInt(perfilFc) || 0,
                 
-                // Dados visuais para preview
                 valido: !!usuarioId,
                 visual_assert: assertVisual
             };
@@ -142,10 +139,10 @@ Produtividade.Importacao.Validacao = {
             else importaveis++;
 
             this.dadosProcessados.push(item);
-            previewData.push(item);
         }
 
-        // Exibe confirmação simples (ou renderiza modal se o sistema tiver)
+        if(statusEl) statusEl.innerHTML = ""; // Limpa status temporário para mostrar confirm
+
         const msg = `Análise do Arquivo:\n\n` +
                     `✅ Prontos para importar: ${importaveis}\n` +
                     `❌ Usuários não encontrados: ${erros}\n\n` +
@@ -153,47 +150,56 @@ Produtividade.Importacao.Validacao = {
 
         if (confirm(msg)) {
             this.salvarNoBanco();
+        } else {
+            if(statusEl) statusEl.innerHTML = "";
         }
     },
 
     formatarDataBanco: function(dataStr) {
-        // Aceita DD/MM/YYYY ou YYYY-MM-DD
         if (!dataStr) return null;
         if (dataStr.includes('/')) {
             const parts = dataStr.split('/');
             if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
         }
-        return dataStr; // Assume que já está ISO ou deixa banco validar
+        return dataStr;
     },
 
     salvarNoBanco: async function() {
+        const statusEl = document.getElementById('status-importacao-prod');
+        const btn = document.querySelector('button[onclick*="Importar"]');
+        const oldTxt = btn ? btn.innerHTML : '';
+        
+        if(btn) { btn.disabled = true; } // Apenas desabilita o botão, o texto vai na div
+
         const payload = this.dadosProcessados
             .filter(d => d.valido)
             .map(d => ({
                 usuario_id: d.usuario_id,
                 data_referencia: d.data_referencia,
                 quantidade: d.quantidade,
-                status: d.status, // Salva REV, DUPL, OK, NOK como string
+                status: d.status, 
                 auditora: d.auditora,
                 fifo: d.fifo,
                 gradual_total: d.gradual_total,
                 gradual_parcial: d.gradual_parcial,
                 perfil_fc: d.perfil_fc,
-                fator: 1 // Default Importação é Fator 1
+                fator: 1 
             }));
 
-        if (payload.length === 0) return alert("Nada para importar.");
+        if (payload.length === 0) {
+            if(btn) { btn.disabled = false; }
+            return alert("Nada para importar.");
+        }
 
-        // Feedback visual
-        const btn = document.querySelector('button[onclick*="Importar"]');
-        const oldTxt = btn ? btn.innerHTML : '';
-        if(btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...'; }
-
-        // Batch insert (Supabase limite seguro ~1000 por vez)
         const BATCH_SIZE = 1000;
+        const total = payload.length;
+        let enviados = 0;
         let erroTotal = null;
 
-        for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+        // Feedback Inicial
+        if(statusEl) statusEl.innerHTML = `<span class="text-orange-500 font-bold"><i class="fas fa-cloud-upload-alt"></i> Iniciando...</span>`;
+
+        for (let i = 0; i < total; i += BATCH_SIZE) {
             const chunk = payload.slice(i, i + BATCH_SIZE);
             const { error } = await Sistema.supabase
                 .from('producao')
@@ -203,15 +209,28 @@ Produtividade.Importacao.Validacao = {
                 erroTotal = error;
                 break;
             }
+            
+            enviados += chunk.length;
+            
+            // Atualiza porcentagem na UI
+            if (statusEl) {
+                const pct = Math.round((enviados / total) * 100);
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold"><i class="fas fa-circle-notch fa-spin"></i> Enviando: ${pct}%</span>`;
+            }
         }
 
-        if (btn) { btn.disabled = false; btn.innerHTML = oldTxt; }
+        if (btn) { btn.disabled = false; }
 
         if (erroTotal) {
+            if(statusEl) statusEl.innerHTML = `<span class="text-red-500 font-bold">Erro!</span>`;
             alert("Erro ao salvar no banco: " + erroTotal.message);
         } else {
+            if(statusEl) statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Concluído!</span>`;
+            
+            // Remove a mensagem de "Concluído" após 3 segundos
+            setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 3000);
+
             alert("Importação concluída com sucesso!");
-            // Recarrega a tela atual para mostrar dados novos
             if (Produtividade.Geral && Produtividade.Geral.carregarTela) {
                 Produtividade.Geral.carregarTela();
             }
