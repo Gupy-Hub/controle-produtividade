@@ -63,36 +63,30 @@ Gestao.Assertividade = {
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
         const contador = document.getElementById('contador-assert');
 
         if(tbody) tbody.style.opacity = '1';
         if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-circle-notch fa-spin"></i> Filtrando...</span>`;
 
         try {
+            // 1. QUERY PRINCIPAL (VIEW): Traz nomes e estrutura
             let query = Sistema.supabase
                 .from('vw_assertividade_completa')
                 .select('*', { count: 'exact' });
 
-            // 1. Busca Geral (Contém)
-            if (this.estado.termo) {
-                query = query.ilike('search_vector', `%${this.estado.termo}%`);
-            }
-
-            // 2. Filtros Específicos
+            // Filtros
+            if (this.estado.termo) query = query.ilike('search_vector', `%${this.estado.termo}%`);
             if (this.estado.filtros.data) query = query.eq('data_referencia', this.estado.filtros.data);
             if (this.estado.filtros.empresa) query = query.ilike('empresa_nome', `%${this.estado.filtros.empresa}%`);
             if (this.estado.filtros.assistente) query = query.ilike('nome_assistente', `%${this.estado.filtros.assistente}%`);
             if (this.estado.filtros.auditora) query = query.ilike('nome_auditora_raw', `%${this.estado.filtros.auditora}%`);
-            
-            // Busca exata no Status
-            if (this.estado.filtros.status) {
-                query = query.ilike('status', this.estado.filtros.status); 
-            }
-            
+            if (this.estado.filtros.status) query = query.ilike('status', this.estado.filtros.status); 
             if (this.estado.filtros.doc) query = query.ilike('nome_documento', `%${this.estado.filtros.doc}%`);
             if (this.estado.filtros.obs) query = query.ilike('observacao', `%${this.estado.filtros.obs}%`);
 
-            // 3. Paginação
+            // Paginação
             const inicio = this.estado.pagina * this.estado.limite;
             const fim = inicio + this.estado.limite - 1;
             
@@ -100,12 +94,44 @@ Gestao.Assertividade = {
                          .order('id', { ascending: false })
                          .range(inicio, fim);
 
-            const { data, error, count } = await query;
+            const { data: dadosView, error, count } = await query;
 
             if (error) throw error;
 
             this.estado.total = count || 0;
-            this.renderizarTabela(data || []);
+
+            // 2. QUERY SECUNDÁRIA (TABELA REAL): Traz a porcentagem bruta (Search & Merge)
+            // Isso garante que leremos exatamente o que foi importado, ignorando cálculos da View.
+            let listaFinal = [];
+            
+            if (dadosView && dadosView.length > 0) {
+                const ids = dadosView.map(d => d.id);
+                
+                // Busca na tabela original usando os IDs recuperados
+                const { data: dadosRaw, error: errorRaw } = await Sistema.supabase
+                    .from('assertividade')
+                    .select('id, porcentagem')
+                    .in('id', ids);
+
+                if (!errorRaw && dadosRaw) {
+                    // Cria mapa para acesso rápido: { 101: "100%", 102: null }
+                    const mapaPorcentagem = {};
+                    dadosRaw.forEach(r => mapaPorcentagem[r.id] = r.porcentagem);
+
+                    // Funde os dados
+                    listaFinal = dadosView.map(item => {
+                        return { 
+                            ...item, 
+                            porcentagem_real: mapaPorcentagem[item.id] // Aqui vem o dado fiel à planilha
+                        };
+                    });
+                } else {
+                    console.error("Erro ao buscar dados brutos:", errorRaw);
+                    listaFinal = dadosView; // Fallback
+                }
+            }
+
+            this.renderizarTabela(listaFinal);
             this.atualizarControlesPaginacao();
 
         } catch (e) {
@@ -168,23 +194,15 @@ Gestao.Assertividade = {
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
 
-            // === LÓGICA HÍBRIDA: Tenta Raw > Tenta Calculado > Aplica Segurança ===
+            // === LÓGICA FINAL: Usa 'porcentagem_real' que veio da tabela ===
+            // Se veio null da tabela, é null aqui. Não há cálculo automático.
+            // Se falhar o merge (undefined), usa indice_assertividade como fallback.
             
-            // 1. Tenta pegar o valor bruto (se um dia a View passar a enviar)
-            let valorParaExibir = item.porcentagem; 
+            let valorParaExibir = item.porcentagem_real;
 
-            // 2. Se não veio bruto (undefined), usamos o calculado (para não exibir "-")
-            if (valorParaExibir === undefined || valorParaExibir === null) {
+            if (valorParaExibir === undefined) {
+                // Se por algum motivo o merge falhou, fallback para o calculado
                 valorParaExibir = item.indice_assertividade;
-                
-                // 3. TRAVA DE SEGURANÇA:
-                // Já que estamos usando o valor calculado, precisamos nos proteger dos "falsos positivos".
-                // Se o status for de revisão (REV, NA), sabemos que o 100% calculado é falso (era vazio na planilha).
-                // Isso garante a fidelidade aos dados, mesmo sem a coluna bruta.
-                const statusInvalidos = ['REV', 'NA', 'N/A', 'REVALIDA'];
-                if (statusInvalidos.some(s => stUp.includes(s))) {
-                    valorParaExibir = null; // Força vazio
-                }
             }
 
             let assertDisplay = '-';
@@ -201,7 +219,6 @@ Gestao.Assertividade = {
                     else if (assertVal < 90 && assertVal >= 0) assertColor = 'text-rose-600 font-bold';
                 }
             }
-            // =======================================================
 
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
@@ -222,4 +239,4 @@ Gestao.Assertividade = {
 
         tbody.innerHTML = html;
     }
-};  
+};
