@@ -25,6 +25,14 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Estilo para dividir os cards */
+        .card-split { display: flex; height: 100%; }
+        .card-half { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 4px; }
+        .card-divider { width: 1px; background-color: #e2e8f0; height: 70%; align-self: center; }
+        .kpi-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px; text-align: center; line-height: 1.1; }
+        .kpi-value { font-size: 14px; font-weight: 800; color: #334155; line-height: 1.1; }
+        .kpi-sub { font-size: 9px; font-weight: 600; color: #64748b; }
     </style>
 </head>
 <body class="bg-slate-100">
@@ -98,12 +106,100 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-28">
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
+            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Produção</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-total">--</h3><span class="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100" id="kpi-meta-total">Meta: --</span></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Atingimento</p><div class="flex justify-between items-end"><h3 class="text-xl font-black text-emerald-600 leading-none" id="kpi-pct">--%</h3></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden mt-1"><div id="kpi-pct-bar" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Equipe</p><div class="space-y-1"><div class="flex justify-between items-center text-[9px]"><span class="font-bold text-slate-500">CLT</span><span class="font-bold text-blue-600" id="kpi-clt-val">0</span></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="kpi-clt-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div><div class="flex justify-between items-center text-[9px]"><span class="font-bold text-slate-500">PJ</span><span class="font-bold text-purple-600" id="kpi-pj-val">0</span></div><div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="kpi-pj-bar" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Dias Úteis</p><div class="flex items-center gap-2"><h3 class="text-xl font-black text-slate-700 leading-none" id="kpi-dias-val">--</h3></div></div>
-                <div class="bg-white p-2.5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between h-20"><p class="text-[9px] font-bold text-slate-400 uppercase">Média / Dia</p><h3 class="text-xl font-black text-slate-800 leading-none" id="kpi-media-todas">--</h3></div>
+                
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                    <div class="card-split">
+                        <div class="card-half">
+                            <span class="kpi-label">Meta Esperada</span>
+                            <span class="kpi-value text-slate-400" id="kpi-meta-esperada">--</span>
+                        </div>
+                        <div class="card-divider"></div>
+                        <div class="card-half bg-blue-50/30">
+                            <span class="kpi-label text-blue-600">Realizada</span>
+                            <span class="kpi-value text-blue-700" id="kpi-producao-real">--</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                    <div class="card-split">
+                        <div class="card-half">
+                            <span class="kpi-label">Meta % / Real %</span>
+                            <div class="flex items-baseline gap-1">
+                                <span class="kpi-value text-slate-400 text-[11px]">100%</span>
+                                <span class="text-[10px] text-slate-300">/</span>
+                                <span class="kpi-value text-emerald-600" id="kpi-atingimento-pct">--%</span>
+                            </div>
+                        </div>
+                        <div class="card-divider"></div>
+                        <div class="card-half bg-emerald-50/30">
+                            <span class="kpi-label text-emerald-700">Assert. (Meta/Real)</span>
+                            <div class="flex items-baseline gap-1">
+                                <span class="kpi-value text-emerald-400 text-[11px]">98%</span>
+                                <span class="text-[10px] text-emerald-300">/</span>
+                                <span class="kpi-value text-emerald-700" id="kpi-assertividade-real">--%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                    <div class="card-split">
+                        <div class="card-half">
+                            <span class="kpi-label">CLT (Qtd + %)</span>
+                            <span class="kpi-value text-slate-700" id="kpi-clt-info">0 <span class="text-[10px] text-slate-400 font-normal">(0%)</span></span>
+                        </div>
+                        <div class="card-divider"></div>
+                        <div class="card-half">
+                            <span class="kpi-label">PJ (Qtd + %)</span>
+                            <span class="kpi-value text-purple-700" id="kpi-pj-info">0 <span class="text-[10px] text-purple-400 font-normal">(0%)</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
+                    <div class="card-split">
+                        <div class="card-half">
+                            <span class="kpi-label">Dias (Trab/Úteis)</span>
+                            <span class="kpi-value text-slate-700" id="kpi-dias-uteis">--/--</span>
+                        </div>
+                        <div class="card-divider"></div>
+                        <div class="card-half">
+                            <span class="kpi-label">Média (Meta/Real)</span>
+                            <div class="flex items-baseline gap-1">
+                                <span class="kpi-value text-slate-400 text-[11px]" id="kpi-media-esperada">--</span>
+                                <span class="text-[10px] text-slate-300">/</span>
+                                <span class="kpi-value text-amber-600" id="kpi-media-real">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
+                    <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
+                    <div class="card-split">
+                        <div class="card-half px-1">
+                            <span class="kpi-label text-blue-600 mb-1"><i class="fas fa-trophy text-[8px]"></i> Top Produção</span>
+                            <div id="top-prod-list" class="flex flex-col w-full gap-0.5">
+                                <span class="text-[8px] text-slate-400 text-center">-</span>
+                            </div>
+                        </div>
+                        <div class="card-divider"></div>
+                        <div class="card-half px-1">
+                            <span class="kpi-label text-emerald-600 mb-1"><i class="fas fa-check text-[8px]"></i> Top Assert.</span>
+                            <div id="top-assert-list" class="flex flex-col w-full gap-0.5">
+                                <span class="text-[8px] text-slate-400 text-center">-</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
