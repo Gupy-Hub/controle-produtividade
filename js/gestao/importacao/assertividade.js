@@ -14,12 +14,12 @@ Importacao.Assertividade = {
             skipEmptyLines: true,
             encoding: "UTF-8",
             transformHeader: function(header) {
-                // Remove caracteres estranhos e espaços dos nomes das colunas
-                return header.trim().replace(/"/g, '');
+                // Transforma tudo em minúsculo e remove aspas para evitar erro de 'Status' vs 'STATUS'
+                return header.trim().replace(/"/g, '').toLowerCase();
             },
             complete: async (results) => {
                 if (results.data.length === 0) {
-                    alert("Arquivo vazio.");
+                    alert("Arquivo vazio ou ilegível.");
                     statusEl.innerText = "";
                     return;
                 }
@@ -37,27 +37,19 @@ Importacao.Assertividade = {
     enviarParaBanco: async function(linhas) {
         const statusEl = document.getElementById('status-importacao');
         let sucesso = 0;
-        let ignorados = 0;
         let erros = 0;
-        const TAMANHO_LOTE = 200; // Lote maior para performance
+        const TAMANHO_LOTE = 200;
 
-        // --- FILTRAGEM E PADRONIZAÇÃO ---
+        // Mapeamento dos dados
         const dadosFormatados = linhas.map(linha => {
             
-            // 1. PADRONIZAÇÃO DA DATA (Golden Rule)
-            // Prioridade: Data da Auditoria (Manual) > end_time (Sistema)
-            let valData = linha['Data da Auditoria'] || linha['Data'] || linha['data_auditoria'];
+            // 1. DATA (Procura por varias colunas possíveis)
+            let valData = linha['data da auditoria'] || linha['data'] || linha['data_auditoria'] || linha['end_time'];
             let origemData = 'AUDITORIA';
 
-            if (!valData || valData.trim() === '') {
-                valData = linha['end_time'];
-                origemData = 'SISTEMA';
-            }
-            
-            // Se não tem data nenhuma, é lixo
-            if (!valData) return null;
+            if (!valData) return null; // Sem data = Lixo
 
-            // Tratamento de Formatos (ISO vs BR)
+            // Tratamento de Data
             let dataFormatada = null;
             if (valData.includes('T')) dataFormatada = valData.split('T')[0];
             else if (valData.includes('/')) {
@@ -68,77 +60,46 @@ Importacao.Assertividade = {
 
             if (!dataFormatada) return null;
 
+            // 2. EMPRESA (Agora opcional, para não perder dados)
+            const idEmpresa = linha['company_id'] || linha['company id'] || '0';
+            let nomeEmpresa = linha['empresa'] || linha['nome da ppc'] || 'Empresa não informada';
 
-            // 2. PADRONIZAÇÃO DA EMPRESA (Obrigatoriedade do ID)
-            const idEmpresa = linha['Company_id'] || linha['company_id'];
+            // 3. ASSISTENTE & AUDITORA
+            const assistente = linha['assistente'] || linha['id_assistente'] || 'Desconhecido';
+            const auditora = linha['auditora'] || 'Sistema';
+
+            // 4. STATUS & RESULTADOS
+            // Importante: Pega 'status' (minusculo) pois o header foi transformado
+            const statusFinal = linha['status'] || 'PROCESSADO'; 
             
-            // REGRA CRÍTICA: Sem ID de empresa, ignoramos a linha.
-            // Isso evita criar "empresas fantasmas" ou registros órfãos.
-            if (!idEmpresa || idEmpresa.toString().trim() === '' || idEmpresa === '0') {
-                return null;
-            }
-
-            // Tenta resgatar o nome de várias colunas possíveis
-            let nomeEmpresa = linha['Empresa'] || 
-                              linha['empresa'] || 
-                              linha['Nome da PPC'] || 
-                              linha[' Nome da PPC'] || 
-                              '';
-
-            // Se o nome estiver vazio, usa o ID como identificador provisório
-            if (!nomeEmpresa || nomeEmpresa.trim() === '') {
-                nomeEmpresa = `ID ${idEmpresa}`;
-            }
-
-            // 3. PADRONIZAÇÃO DE AUDITORA
-            let auditora = linha['Auditora'];
-            // Se auditora vazia, mas tem end_time, assume 'Sistema'
-            if ((!auditora || auditora.trim() === '') && origemData === 'SISTEMA') {
-                auditora = 'Sistema Automático';
-            } else if (!auditora) {
-                auditora = 'Não Identificado';
-            }
-
-            // Retorno do Objeto Limpo
             return {
                 data_auditoria: dataFormatada,
-                company_id: idEmpresa.toString().trim(), // ID sempre como String
+                company_id: idEmpresa.toString().trim(),
                 empresa: nomeEmpresa.trim(),
-                assistente: linha['Assistente'] || linha['id_assistente'] || 'Desconhecido',
-                doc_name: linha['doc_name'] || linha['DOCUMENTO'] || linha['nome_documento'] || '-',
-                status: linha['STATUS'] || 'PROCESSADO', // Se status vazio, mas tem dados, assumimos processado
-                obs: (linha['Apontamentos/obs'] || linha['obs'] || '') + (origemData === 'SISTEMA' ? ' [Auto]' : ''),
-                campos: parseInt(linha['nº Campos']) || 0,
-                ok: parseInt(linha['Ok']) || 0,
-                nok: parseInt(linha['Nok']) || 0,
-                porcentagem: linha['% Assert'] || '0%',
+                assistente: assistente,
+                doc_name: linha['doc_name'] || linha['documento'] || linha['nome_documento'] || '-',
+                status: statusFinal, 
+                obs: (linha['apontamentos/obs'] || linha['obs'] || ''),
+                campos: parseInt(linha['nº campos']) || 0,
+                ok: parseInt(linha['ok']) || 0,
+                nok: parseInt(linha['nok']) || 0,
+                porcentagem: linha['% assert'] || linha['assertividade'] || '0%',
                 auditora: auditora
             };
-        }).filter(item => item !== null); // Remove os nulos (linhas inválidas/sem ID)
+        }).filter(item => item !== null);
 
         const total = dadosFormatados.length;
-        ignorados = linhas.length - total; // Contabiliza quantos foram descartados
-
         if (total === 0) {
-            alert("Nenhum registro válido encontrado (Verifique se a coluna Company_id existe).");
-            statusEl.innerText = "Falha: Dados insuficientes.";
+            alert("Nenhum registro válido identificado.");
             return;
         }
 
-        statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total.toLocaleString('pt-BR')} registros... (${ignorados} ignorados por falta de ID)</span>`;
+        statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total} registros...</span>`;
 
-        // Envio em Lotes
+        // Lote
         for (let i = 0; i < total; i += TAMANHO_LOTE) {
             const lote = dadosFormatados.slice(i, i + TAMANHO_LOTE);
-            
-            // Feedback visual de progresso
-            if (i % (TAMANHO_LOTE * 5) === 0) {
-                const progresso = Math.round((i/total)*100);
-                statusEl.innerText = `Processando... ${progresso}%`;
-            }
-            
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
-
             if (error) {
                 console.error("Erro lote:", error);
                 erros += lote.length;
@@ -147,17 +108,12 @@ Importacao.Assertividade = {
             }
         }
 
-        // Relatório Final
-        let msgFinal = `Sucesso: ${sucesso.toLocaleString('pt-BR')}`;
-        if (erros > 0) msgFinal += ` | Falhas: ${erros}`;
-        if (ignorados > 0) msgFinal += ` | Ignorados (Sem ID): ${ignorados}`;
-
-        if (erros > 0) {
-            statusEl.innerHTML = `<span class="text-red-600 font-bold">${msgFinal}</span>`;
-        } else {
-            statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Importação Concluída!</span>`;
-            if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
-            alert(`Processo Finalizado!\n\n${msgFinal}\n\nNota: Linhas sem 'Company_id' foram ignoradas para evitar empresas 'sem dados'.`);
-        }
+        // Final
+        let msg = `Sucesso: ${sucesso}`;
+        if(erros > 0) msg += ` | Erros: ${erros}`;
+        statusEl.innerHTML = `<span class="text-emerald-600 font-bold">${msg}</span>`;
+        
+        if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
+        alert("Importação Concluída!\nRecomendado: Atualize a tela de Produtividade.");
     }
 };
