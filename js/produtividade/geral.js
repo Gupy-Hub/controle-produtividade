@@ -6,11 +6,11 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Feriados 2025
+    // Feriados Nacionais 2025
     feriados: ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Novo Visual Premium)...");
+        console.log("🔧 Produtividade: Iniciando (Design HUD 2026)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -83,8 +83,8 @@ Produtividade.Geral = {
             const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase.rpc('calcular_assertividade_periodo', { p_inicio: dataInicio, p_fim: dataFim });
             if (errQuali) throw errQuali;
 
+            const mapaQualidadeDiaria = {}; 
             const mapaQualidadeTotal = {};
-            const mapaQualidadeDiaria = {};
             
             if (qualidadeResumo) {
                 qualidadeResumo.forEach(q => {
@@ -267,10 +267,10 @@ Produtividade.Geral = {
         let somaNotasGeral = 0; let qtdDocsGeral = 0;
         let clt = { qtd: 0, prod: 0 }; let pj = { qtd: 0, prod: 0 };
         
-        let somaMetasUnitarias = 0; // Para calcular média da meta dia
-        let somaProducaoUnitarias = 0; // Para calcular média da produção dia
-        let countPessoasComMeta = 0; // Denominador da média meta
-        let countPessoasProduziram = 0; // Denominador da média real
+        let somaMetasUnitarias = 0; 
+        let somaProducaoUnitarias = 0; 
+        let countPessoasComMeta = 0; 
+        let countPessoasProduziram = 0; 
 
         dadosAgrupados.forEach(d => {
             const cargo = (d.usuario.funcao || '').toUpperCase();
@@ -281,39 +281,38 @@ Produtividade.Geral = {
             somaNotasGeral += (d.totais.somaNotas || 0);
             qtdDocsGeral += (d.totais.qtdDocs || 0);
 
-            // Lógica para Média Dia (Card 4)
-            if (d.meta_real > 0) {
-                somaMetasUnitarias += d.meta_real; 
-                countPessoasComMeta++;
-            }
-            if (d.totais.diasUteis > 0) {
-                // Se trabalhou, soma a média dele (Produção / Dias Trabalhados)
-                somaProducaoUnitarias += (d.totais.qty / d.totais.diasUteis);
-                countPessoasProduziram++;
-            }
+            if (d.meta_real > 0) { somaMetasUnitarias += d.meta_real; countPessoasComMeta++; }
+            if (d.totais.diasUteis > 0) { somaProducaoUnitarias += (d.totais.qty / d.totais.diasUteis); countPessoasProduziram++; }
 
             if (d.usuario.contrato === 'CLT') { clt.qtd++; clt.prod += d.totais.qty; } 
             else { pj.qtd++; pj.prod += d.totais.qty; }
         });
 
-        // Card 1
+        // 1. Validação (Com Barra)
         this.setTxt('kpi-validacao-esperado', Math.round(metaTotal).toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-real', producaoTotal.toLocaleString('pt-BR'));
+        const pctVolume = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
+        const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = Math.min(pctVolume, 100) + '%';
 
-        // Card 2
+        // 2. Qualidade
         const pctProd = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
         let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
         this.setTxt('kpi-meta-assertividade-val', pctAssert.toFixed(2).replace('.', ',') + '%');
 
-        // Card 3
-        const pctClt = producaoTotal > 0 ? (clt.prod / producaoTotal) * 100 : 0;
-        const pctPj = producaoTotal > 0 ? (pj.prod / producaoTotal) * 100 : 0;
+        // 3. Equipe (Barrinhas CLT/PJ)
+        const totalPessoas = clt.qtd + pj.qtd;
+        const pctCltBar = totalPessoas > 0 ? (clt.qtd / totalPessoas) * 100 : 0;
+        const pctPjBar = totalPessoas > 0 ? (pj.qtd / totalPessoas) * 100 : 0;
         this.setTxt('kpi-clt-count', clt.qtd);
         this.setTxt('kpi-pj-count', pj.qtd);
-        this.setHtml('kpi-share-info', `<span class="text-blue-500 font-bold">${Math.round(pctClt)}% CLT</span> / <span class="text-purple-500 font-bold">${Math.round(pctPj)}% PJ</span>`);
+        const barClt = document.getElementById('bar-clt'); if(barClt) barClt.style.width = pctCltBar + '%';
+        const barPj = document.getElementById('bar-pj'); if(barPj) barPj.style.width = pctPjBar + '%';
+        const pctCltShare = producaoTotal > 0 ? (clt.prod / producaoTotal) * 100 : 0;
+        const pctPjShare = producaoTotal > 0 ? (pj.prod / producaoTotal) * 100 : 0;
+        this.setHtml('kpi-share-info', `<span class="text-blue-500 font-bold">${Math.round(pctCltShare)}% CLT</span> vs <span class="text-purple-500 font-bold">${Math.round(pctPjShare)}% PJ</span>`);
 
-        // Card 4: Dias e Média
+        // 4. Eficiência (Dias e Média)
         const datas = Produtividade.getDatasFiltro();
         let diasUteisCalendario = 0;
         let curr = new Date(datas.inicio + "T00:00:00");
@@ -339,24 +338,24 @@ Produtividade.Geral = {
         const diasUteisMesTotal = this.getDiasUteisNoMes(parseInt(anoRef), parseInt(mesRef));
         this.setTxt('kpi-dias-uteis', `${diasUteisCalendario}/${diasUteisMesTotal}`);
 
-        // Cálculo das Médias (Meta vs Real)
-        // Média Esperada = Soma das Metas Individuais / Pessoas (ex: (650+650)/2 = 650)
-        // Média Real = Soma das Médias Individuais / Pessoas que trabalharam
         const mediaMetaDia = countPessoasComMeta > 0 ? somaMetasUnitarias / countPessoasComMeta : 0;
         const mediaRealDia = countPessoasProduziram > 0 ? somaProducaoUnitarias / countPessoasProduziram : 0;
-
         this.setTxt('kpi-media-esperada', Math.round(mediaMetaDia));
         this.setTxt('kpi-media-real', Math.round(mediaRealDia));
 
-        // Card 5
+        // 5. Ranking
         const topProd = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase())).sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const topAssert = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()) && d.totais.qtdDocs >= 10).sort((a, b) => (b.totais.somaNotas/b.totais.qtdDocs) - (a.totais.somaNotas/a.totais.qtdDocs)).slice(0, 3);
+        const medals = ['🥇', '🥈', '🥉'];
         const renderTop = (list, isProd) => {
-            if(list.length === 0) return '<span class="text-[8px] text-slate-400 text-center">-</span>';
+            if(list.length === 0) return '<span class="text-[8px] text-slate-300 text-center">-</span>';
             return list.map((d, i) => {
                 const val = isProd ? d.totais.qty : (d.totais.somaNotas/d.totais.qtdDocs).toFixed(1) + '%';
-                const color = i===0 ? 'text-amber-500' : 'text-slate-600';
-                return `<div class="flex justify-between items-center text-[9px] w-full px-1"><span class="truncate max-w-[60px] font-bold text-slate-500" title="${d.usuario.nome}">${d.usuario.nome.split(' ')[0]}</span><span class="font-black ${color}">${val}</span></div>`;
+                const color = isProd ? 'text-blue-600' : 'text-emerald-600';
+                return `<div class="flex justify-between items-center text-[9px] w-full">
+                    <div class="flex items-center gap-1 overflow-hidden"><span class="text-[8px]">${medals[i]}</span><span class="truncate max-w-[45px] font-bold text-slate-600" title="${d.usuario.nome}">${d.usuario.nome.split(' ')[0]}</span></div>
+                    <span class="font-black ${color}">${val}</span>
+                </div>`;
             }).join('');
         };
         this.setHtml('top-prod-list', renderTop(topProd, true));

@@ -27,7 +27,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Estilo Novo dos Cards */
+        /* Estilo Novo dos Cards - HUD Design */
         .kpi-card { 
             background: white; 
             border-radius: 16px; 
@@ -37,17 +37,17 @@
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            height: 90px;
+            height: 100px;
             position: relative;
             overflow: hidden;
             transition: transform 0.2s, box-shadow 0.2s;
         }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
-        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 3.5rem; opacity: 0.05; transform: rotate(-10deg); pointer-events: none; }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
         
-        .kpi-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 2px; }
-        .kpi-main-val { font-size: 1.5rem; font-weight: 800; line-height: 1; color: #1e293b; }
-        .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.75rem; font-weight: 600; }
+        .kpi-title { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+        .kpi-main-val { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #1e293b; }
+        .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; }
         .badge { padding: 2px 6px; border-radius: 6px; font-size: 0.65rem; font-weight: 700; }
     </style>
 </head>
@@ -123,10 +123,13 @@
                 <div class="kpi-card border-l-4 border-l-blue-500">
                     <i class="fas fa-file-invoice kpi-icon-bg text-blue-500"></i>
                     <div>
-                        <div class="kpi-title text-blue-600">Volumetria Total</div>
+                        <div class="kpi-title text-blue-600">Validação Total</div>
                         <div class="kpi-main-val text-slate-800" id="kpi-validacao-real">--</div>
                     </div>
-                    <div class="kpi-sub-row text-slate-500">
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div id="bar-volume" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500 mt-1">
                         <span>Esperado:</span>
                         <span id="kpi-validacao-esperado" class="font-bold text-blue-600">--</span>
                     </div>
@@ -135,11 +138,14 @@
                 <div class="kpi-card border-l-4 border-l-emerald-500">
                     <i class="fas fa-check-circle kpi-icon-bg text-emerald-500"></i>
                     <div>
-                        <div class="kpi-title text-emerald-600">Qualidade (Assertividade)</div>
-                        <div class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</div>
+                        <div class="kpi-title text-emerald-600">Assertividade</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</span>
+                            <span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span>
+                        </div>
                     </div>
                     <div class="kpi-sub-row text-slate-500">
-                        <span>Meta Atingida:</span>
+                        <span>Atingimento Prod.:</span>
                         <span id="kpi-meta-producao-val" class="font-bold text-emerald-600">--%</span>
                     </div>
                 </div>
@@ -147,36 +153,41 @@
                 <div class="kpi-card border-l-4 border-l-purple-500">
                     <i class="fas fa-users kpi-icon-bg text-purple-500"></i>
                     <div>
-                        <div class="kpi-title text-purple-600">Força de Trabalho</div>
-                        <div class="flex gap-3 mt-1">
-                            <div class="flex flex-col">
-                                <span class="text-[10px] text-slate-400 font-bold uppercase">CLT</span>
-                                <span class="text-lg font-black text-slate-700 leading-none" id="kpi-clt-count">0</span>
+                        <div class="kpi-title text-purple-600">Equipe</div>
+                        <div class="flex gap-4 mt-1">
+                            <div class="flex flex-col w-1/2">
+                                <div class="flex justify-between items-baseline">
+                                    <span class="text-lg font-black text-slate-700" id="kpi-clt-count">0</span>
+                                    <span class="text-[8px] font-bold text-blue-500">CLT</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="bar-clt" class="h-full bg-blue-500" style="width: 0%"></div></div>
                             </div>
-                            <div class="w-px h-8 bg-slate-200"></div>
-                            <div class="flex flex-col">
-                                <span class="text-[10px] text-slate-400 font-bold uppercase">PJ</span>
-                                <span class="text-lg font-black text-purple-700 leading-none" id="kpi-pj-count">0</span>
+                            <div class="flex flex-col w-1/2">
+                                <div class="flex justify-between items-baseline">
+                                    <span class="text-lg font-black text-purple-700" id="kpi-pj-count">0</span>
+                                    <span class="text-[8px] font-bold text-purple-500">PJ</span>
+                                </div>
+                                <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="bar-pj" class="h-full bg-purple-500" style="width: 0%"></div></div>
                             </div>
                         </div>
                     </div>
                     <div class="kpi-sub-row text-slate-400">
-                        <span class="text-[9px]">Share: <span id="kpi-share-info">--</span></span>
+                        <span class="text-[9px]" id="kpi-share-info">--</span>
                     </div>
                 </div>
 
                 <div class="kpi-card border-l-4 border-l-amber-500">
                     <i class="fas fa-tachometer-alt kpi-icon-bg text-amber-500"></i>
                     <div>
-                        <div class="kpi-title text-amber-600">Eficiência Média / Dia</div>
+                        <div class="kpi-title text-amber-600">Eficiência (Dia)</div>
                         <div class="flex items-end gap-1">
                             <span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span>
-                            <span class="text-xs text-slate-400 font-bold mb-1 ml-1">docs/dia</span>
+                            <span class="text-[10px] text-slate-400 font-bold mb-1">/ <span id="kpi-media-esperada">--</span> (Meta)</span>
                         </div>
                     </div>
                     <div class="kpi-sub-row text-slate-500">
-                        <span>Meta Dia: <span id="kpi-media-esperada" class="font-bold text-amber-600">--</span></span>
-                        <span id="kpi-dias-uteis" class="badge bg-amber-50 text-amber-700 border border-amber-100">--/--</span>
+                        <span>Dias Úteis:</span>
+                        <span id="kpi-dias-uteis" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--/--</span>
                     </div>
                 </div>
 
