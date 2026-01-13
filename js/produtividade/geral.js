@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Enterprise - 200k+ rows)...");
+        console.log("🔧 Produtividade: Iniciando (Modo ID Match Direto)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -16,62 +16,42 @@ Produtividade.Geral = {
         if (el) el.innerText = valor;
     },
 
-    // Normalização agressiva para garantir match
-    normalizar: function(str) {
-        if(!str) return "";
-        return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, ' ').trim();
-    },
-
-    parsePorcentagem: function(valorStr) {
-        if (!valorStr) return 0;
-        let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
-        return parseFloat(limpo) || 0;
-    },
-
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
         const datas = Produtividade.getDatasFiltro();
-        let dataInicio = datas.inicio;
-        let dataFim = datas.fim;
+        const dataInicio = datas.inicio;
+        const dataFim = datas.fim;
 
-        // CORREÇÃO DE SEGURANÇA: Se dataInicio == dataFim, verifica se o usuário queria o MÊS
-        // (Isso depende de como o filtro é setado, mas aqui garantimos o log correto)
-        console.log(`📅 FILTRO ATIVO: De ${dataInicio} até ${dataFim}`);
-        
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-server fa-spin mr-2"></i> Processando Big Data (Server-Side)...</td></tr>';
+        console.log(`📅 Buscando dados de ${dataInicio} até ${dataFim}`);
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando via ID...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO
+            // 1. BUSCA PRODUÇÃO (Tabela producao já usa usuario_id)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
-                .range(0, 50000) 
+                .range(0, 50000)
                 .order('data_referencia', { ascending: true });
             
             if (errProd) throw errProd;
 
-            // 2. BUSCA USUÁRIOS (Todos, para garantir match)
+            // 2. BUSCA USUÁRIOS
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato')
-                .range(0, 5000); // Garante pegar todos os usuários
+                .range(0, 5000);
             
             if (errUser) throw errUser;
             
+            // Mapa ID -> Usuário
             const mapaUsuarios = {};
-            // Cria mapa normalizado para busca exata
-            const mapaNomeExato = {};
-            
-            usuarios.forEach(u => {
-                mapaUsuarios[u.id] = u;
-                if(u.nome) mapaNomeExato[this.normalizar(u.nome)] = u.id;
-            });
+            usuarios.forEach(u => mapaUsuarios[u.id] = u);
 
-            // 3. BUSCA ASSERTIVIDADE VIA RPC (Alta Performance)
+            // 3. BUSCA ASSERTIVIDADE (RPC retorna agrupado por usuario_id)
             const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase
                 .rpc('calcular_assertividade_periodo', { 
                     p_inicio: dataInicio, 
@@ -80,32 +60,20 @@ Produtividade.Geral = {
 
             if (errQuali) throw errQuali;
 
-            console.log(`⚡ RPC Retornou: ${qualidadeResumo.length} linhas agrupadas.`);
+            console.log(`⚡ RPC Assertividade: ${qualidadeResumo.length} linhas (Match por ID).`);
 
-            // 4. SMART MATCHER (Algoritmo de Cruzamento Inteligente)
+            // 4. MAPAS DE QUALIDADE (Indexado por ID NUMÉRICO)
             const mapaQualidadeDiaria = {}; 
             const mapaQualidadeTotal = {};
-            let nomesSemMatch = new Set();
-
+            
             if (qualidadeResumo) {
                 qualidadeResumo.forEach(q => {
-                    const nomeCsv = this.normalizar(q.assistente);
-                    let uid = mapaNomeExato[nomeCsv];
+                    const uid = q.usuario_id; // ID direto! Sem normalizar nome.
 
-                    // TENTATIVA 2: Busca por "Contém" (Fuzzy Match simples)
-                    if (!uid) {
-                        const partesCsv = nomeCsv.split(' ');
-                        // Tenta achar um usuário no banco que contenha o primeiro e ultimo nome do CSV
-                        const match = usuarios.find(u => {
-                            const uNorm = this.normalizar(u.nome);
-                            return uNorm.includes(partesCsv[0]) && (partesCsv.length > 1 ? uNorm.includes(partesCsv[partesCsv.length-1]) : true);
-                        });
-                        if (match) uid = match.id;
-                    }
-
-                    if (!uid) {
-                        nomesSemMatch.add(q.assistente);
-                        return;
+                    if (!mapaUsuarios[uid]) {
+                        // Se tem ID na auditoria mas não no cadastro, é um usuário demitido ou novo
+                        // console.warn(`ID ${uid} tem auditoria mas não está no cadastro.`);
+                        return; 
                     }
 
                     const somar = (obj) => {
@@ -117,17 +85,10 @@ Produtividade.Geral = {
                         return obj;
                     };
 
-                    // Agrega no Dia
                     const chaveDia = `${uid}_${q.data_ref}`;
                     mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
-
-                    // Agrega no Total
                     mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
                 });
-            }
-
-            if (nomesSemMatch.size > 0) {
-                console.warn("⚠️ Nomes do CSV sem usuário no sistema (Top 10):", [...nomesSemMatch].slice(0, 10));
             }
 
             // 5. METAS
@@ -145,16 +106,16 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. AGRUPAMENTO FINAL
+            // 6. CRUZAMENTO E TABELA
             let dadosAgrupados = {};
             
-            // A. Adiciona dados de Produção
+            // Começa pela produção (que guia a tabela hoje)
             producao.forEach(item => {
                 const uid = item.usuario_id;
+                // Busca usuário pelo ID no mapa
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 
                 if(!dadosAgrupados[uid]) {
-                    // Se já tem qualidade calculada, pega o total, senão zera
                     const qTotal = mapaQualidadeTotal[uid] || { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
                     dadosAgrupados[uid] = {
                         usuario: userObj,
@@ -167,7 +128,7 @@ Produtividade.Geral = {
                     };
                 }
                 
-                // Dados Diários
+                // Busca qualidade específica do dia pelo ID
                 const chaveQuali = `${uid}_${item.data_referencia}`;
                 const dadosQ = mapaQualidadeDiaria[chaveQuali] || { somaNotas: 0, qtdDocs: 0 };
 
@@ -179,8 +140,10 @@ Produtividade.Geral = {
                 }
 
                 dadosAgrupados[uid].registros.push({ 
-                    ...item, usuario: userObj,
-                    assertividade_real: assertTxt, assertividade_valor: assertPct
+                    ...item, 
+                    usuario: userObj,
+                    assertividade_real: assertTxt, 
+                    assertividade_valor: assertPct
                 });
                 
                 const d = dadosAgrupados[uid].totais;
@@ -189,10 +152,6 @@ Produtividade.Geral = {
                 d.gt += (Number(item.gradual_total) || 0); d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0); d.dias += 1; d.diasUteis += f;
             });
-
-            // B. (Opcional) Adiciona usuários que têm Qualidade mas NÃO têm produção no período
-            // Se quiser ver quem auditou mas não produziu, descomente a lógica abaixo, 
-            // mas isso pode poluir a tela se não for o foco.
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             
@@ -212,16 +171,24 @@ Produtividade.Geral = {
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
+        
         const checkGestao = document.getElementById('check-gestao');
         const mostrarGestao = checkGestao ? checkGestao.checked : false;
         const mostrarDetalhes = (this.usuarioSelecionado !== null);
+
         let lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) : this.dadosOriginais;
-        if (!mostrarGestao && !this.usuarioSelecionado) lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
+        
+        if (!mostrarGestao && !this.usuarioSelecionado) {
+            lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
+        }
 
         tbody.innerHTML = '';
         lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
 
-        if(lista.length === 0) { tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>'; return; }
+        if(lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
+            return;
+        }
 
         lista.forEach(d => {
             const cargo = (d.usuario.funcao || 'ND').toUpperCase();
@@ -261,6 +228,7 @@ Produtividade.Geral = {
         });
     },
 
+    // Funções auxiliares (Mantidas)
     filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.renderizarTabela(); },
     limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.renderizarTabela(); },
     atualizarKPIs: function(data, mapaUsuarios) { let totalProdGeral = 0; let usersCLT = new Set(); let usersPJ = new Set(); data.forEach(r => { const qtd = Number(r.quantidade) || 0; totalProdGeral += qtd; const u = r.usuario || (mapaUsuarios ? mapaUsuarios[r.usuario_id] : null); if (u) { const cargo = u.funcao ? String(u.funcao).toUpperCase() : 'ASSISTENTE'; if (!['AUDITORA', 'GESTORA'].includes(cargo)) { if(u.contrato === 'CLT') usersCLT.add(u.id); else usersPJ.add(u.id); } } }); this.setTxt('kpi-total', totalProdGeral.toLocaleString('pt-BR')); this.setTxt('kpi-clt-val', `${usersCLT.size}`); this.setTxt('kpi-pj-val', `${usersPJ.size}`); },
