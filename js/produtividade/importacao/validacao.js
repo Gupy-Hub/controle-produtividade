@@ -4,11 +4,11 @@ window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
     mapaUsuarios: {}, 
-    idsValidos: new Set(), // NOVO: Cache de IDs reais do sistema
+    idsValidos: new Set(),
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'], 
 
     init: async function() {
-        console.log("📥 Importação: Iniciando módulo de validação (Busca por ID + Nome)...");
+        console.log("📥 Importação: Iniciando módulo de validação (Suporte a end_time)...");
         await this.carregarUsuarios();
     },
 
@@ -23,14 +23,11 @@ window.Produtividade.Importacao.Validacao = {
         }
 
         this.mapaUsuarios = {};
-        this.idsValidos = new Set(); // Reseta cache
+        this.idsValidos = new Set();
         
         data.forEach(u => {
-            // Mapa de Nomes
             const nomeNorm = this.normalizarTexto(u.nome);
             this.mapaUsuarios[nomeNorm] = u.id;
-            
-            // Mapa de IDs (Converte para string para garantir match com CSV)
             if (u.id) this.idsValidos.add(u.id.toString());
         });
     },
@@ -95,10 +92,15 @@ window.Produtividade.Importacao.Validacao = {
             // Pula linha de totais
             if (!nomeRaw || nomeRaw.toLowerCase() === 'total') continue;
 
-            // DATA
-            let dataRaw = row['data'] || row['data referencia'] || row['data_referencia'];
+            // === DATA (CORREÇÃO AQUI) ===
+            // 1. Tenta pegar 'end_time' (comum no detalhado) ou 'data'
+            let dataRaw = row['end_time'] || row['data'] || row['data referencia'] || row['data_referencia'];
+            
+            // 2. Se não achou no CSV, usa a data da tela (fallback para arquivos de resumo)
+            let origemData = "CSV";
             if (!dataRaw && dataTela) {
-                dataRaw = dataTela; 
+                dataRaw = dataTela;
+                origemData = "Tela";
             }
 
             if (!dataRaw) {
@@ -110,6 +112,7 @@ window.Produtividade.Importacao.Validacao = {
             const qtdRaw = row['quantidade'] || row['qtd'] || row['documentos_validados'];
             
             let statusRaw = row['status'] || row['classificação'];
+            // Se não tem status mas tem coluna de validados (resumo), assume OK
             if (!statusRaw && row['documentos_validados']) statusRaw = 'OK';
             if (!statusRaw) statusRaw = 'OK'; 
 
@@ -120,22 +123,19 @@ window.Produtividade.Importacao.Validacao = {
 
             // === LÓGICA DE VÍNCULO DO USUÁRIO ===
             let usuarioId = null;
-            let metodoMatch = "Nenhum";
 
             // 1. Tenta pelo ID (Prioridade)
             let idCsv = row['id_assistente'] || row['id'] || '';
-            idCsv = idCsv.toString().replace(/\D/g, ''); // Remove não-números
+            idCsv = idCsv.toString().replace(/\D/g, ''); 
             
             if (idCsv && this.idsValidos.has(idCsv)) {
                 usuarioId = parseInt(idCsv);
-                metodoMatch = "ID";
             } 
 
             // 2. Se não achou por ID, tenta pelo Nome
             if (!usuarioId) {
                 const nomeNorm = this.normalizarTexto(nomeRaw);
                 usuarioId = this.mapaUsuarios[nomeNorm];
-                metodoMatch = "Nome";
             }
 
             // STATUS VISUAL
@@ -155,6 +155,7 @@ window.Produtividade.Importacao.Validacao = {
             const item = {
                 usuario_id: usuarioId,
                 nome_original: nomeRaw,
+                // Formata a data (trata end_time com T)
                 data_referencia: this.formatarDataBanco(dataRaw), 
                 quantidade: parseInt(qtdRaw) || 0,
                 status: status,
@@ -168,7 +169,6 @@ window.Produtividade.Importacao.Validacao = {
 
             if (!item.valido) {
                 erros++;
-                console.warn(`Usuário não encontrado (ID CSV: ${idCsv}, Nome: ${nomeRaw})`);
             } else {
                 importaveis++;
             }
@@ -178,8 +178,12 @@ window.Produtividade.Importacao.Validacao = {
 
         if(statusEl) statusEl.innerHTML = ""; 
 
+        // Analisa quantas datas diferentes foram encontradas para dar feedback
+        const datasUnicas = [...new Set(this.dadosProcessados.map(d => d.data_referencia))];
+        const resumoDatas = datasUnicas.length > 1 ? `${datasUnicas.length} dias diferentes` : (datasUnicas[0] || 'Nenhuma');
+
         const msg = `Análise do Arquivo:\n\n` +
-                    `📅 Data atribuída: ${dataTela || 'Do Arquivo'}\n` +
+                    `📅 Período identificado: ${resumoDatas}\n` +
                     `✅ Prontos para importar: ${importaveis}\n` +
                     `❌ Usuários não encontrados: ${erros}\n\n` +
                     `Deseja prosseguir com a importação?`;
@@ -191,7 +195,16 @@ window.Produtividade.Importacao.Validacao = {
 
     formatarDataBanco: function(dataStr) {
         if (!dataStr) return null;
+        
+        // Trata formato ISO (end_time): "2025-12-02T12:17:04..." -> "2025-12-02"
+        if (dataStr.includes('T')) {
+            return dataStr.split('T')[0];
+        }
+
+        // Se já for YYYY-MM-DD
         if (dataStr.includes('-') && dataStr.length === 10) return dataStr;
+        
+        // Se for DD/MM/YYYY
         if (dataStr.includes('/')) {
             const parts = dataStr.split('/');
             if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
@@ -212,7 +225,6 @@ window.Produtividade.Importacao.Validacao = {
                 data_referencia: d.data_referencia,
                 quantidade: d.quantidade,
                 status: d.status, 
-                // sem auditora
                 fifo: d.fifo,
                 gradual_total: d.gradual_total,
                 gradual_parcial: d.gradual_parcial,
