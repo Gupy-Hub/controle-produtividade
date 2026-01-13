@@ -43,18 +43,26 @@ Importacao.Assertividade = {
         // 1. MAPEAMENTO E LIMPEZA DOS DADOS
         const dadosFormatados = linhas.map(linha => {
             
-            // Data
-            let valData = linha['data da auditoria'] || linha['data'] || linha['data_auditoria'] || linha['end_time'];
-            if (!valData) return null;
+            // 1. DATA (REGRA ESTRITA: APENAS END_TIME)
+            // Ignoramos 'data da auditoria' pois pode conter erros manuais.
+            let valData = linha['end_time']; 
 
-            // Formatação de Data
+            if (!valData) return null; // Sem data de sistema = Inválido
+
+            // Tratamento de Formatação
+            // O end_time geralmente vem como "2025-12-01T14:30:00" ou "01/12/2025 14:30"
             let dataFormatada = null;
-            if (valData.includes('T')) dataFormatada = valData.split('T')[0];
-            else if (valData.includes('/')) {
-                const partes = valData.split('/'); // DD/MM/YYYY
+            
+            // Pega apenas a parte da data (antes do T ou do primeiro espaço)
+            let apenasData = valData.split('T')[0].split(' ')[0];
+
+            if (apenasData.includes('/')) {
+                const partes = apenasData.split('/'); // DD/MM/YYYY
                 if (partes.length === 3) dataFormatada = `${partes[2]}-${partes[1]}-${partes[0]}`;
             } 
-            else if (valData.includes('-')) dataFormatada = valData;
+            else if (apenasData.includes('-')) {
+                dataFormatada = apenasData; // Já está em YYYY-MM-DD
+            }
 
             if (!dataFormatada) return null;
 
@@ -84,19 +92,18 @@ Importacao.Assertividade = {
 
         const total = dadosFormatados.length;
         if (total === 0) {
-            alert("Nenhum registro válido encontrado no arquivo.");
+            alert("Nenhum registro válido encontrado. Verifique se a coluna 'end_time' existe no arquivo.");
             statusEl.innerHTML = "";
             return;
         }
 
         // 2. PREVENÇÃO DE DUPLICIDADE (CLEAN INSERT)
-        statusEl.innerHTML = `<span class="text-amber-500"><i class="fas fa-eraser"></i> Limpando dados antigos das datas importadas...</span>`;
+        // Apaga dados antigos baseados nas datas encontradas no END_TIME
+        statusEl.innerHTML = `<span class="text-amber-500"><i class="fas fa-eraser"></i> Atualizando dados (Data Ref: end_time)...</span>`;
         
-        // Identifica quais dias estão no arquivo
         const datasParaLimpar = [...new Set(dadosFormatados.map(d => d.data_auditoria))];
         
         try {
-            // Apaga TUDO dessas datas antes de inserir o novo
             const { error: errDel } = await Sistema.supabase
                 .from('assertividade')
                 .delete()
@@ -108,10 +115,10 @@ Importacao.Assertividade = {
             console.error("Erro ao limpar duplicidade:", e);
             alert("Erro ao limpar dados antigos: " + e.message);
             statusEl.innerHTML = "Erro na limpeza.";
-            return; // Aborta para não duplicar se a limpeza falhar
+            return;
         }
 
-        // 3. INSERÇÃO (LOTE)
+        // 3. INSERÇÃO
         statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total} registros...</span>`;
 
         for (let i = 0; i < total; i += TAMANHO_LOTE) {
@@ -134,6 +141,6 @@ Importacao.Assertividade = {
         
         if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
         
-        alert(`Importação Concluída!\n\nRegistros atualizados para as datas: ${datasParaLimpar.join(', ')}.\nNão há duplicidade.`);
+        alert(`Importação Concluída!\n\nDados atualizados com base na coluna 'end_time'.\nDatas afetadas: ${datasParaLimpar.join(', ')}`);
     }
 };
