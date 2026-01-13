@@ -7,20 +7,19 @@ Importacao.Assertividade = {
         if (!arquivo) return;
 
         const statusEl = document.getElementById('status-importacao');
-        statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo arquivo...</span>`;
+        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo arquivo CSV...</span>`;
 
         Papa.parse(arquivo, {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
             transformHeader: function(header) {
-                // Normaliza cabeçalhos para evitar erros de Case Sensitive
                 return header.trim().replace(/"/g, '').toLowerCase();
             },
             complete: async (results) => {
                 if (results.data.length === 0) {
                     alert("Arquivo vazio ou ilegível.");
-                    statusEl.innerText = "";
+                    if(statusEl) statusEl.innerText = "";
                     return;
                 }
                 await this.enviarParaBanco(results.data);
@@ -29,7 +28,7 @@ Importacao.Assertividade = {
             error: (err) => {
                 console.error("Erro CSV:", err);
                 alert("Erro leitura: " + err.message);
-                statusEl.innerText = "Erro.";
+                if(statusEl) statusEl.innerText = "Erro na leitura.";
             }
         });
     },
@@ -41,36 +40,31 @@ Importacao.Assertividade = {
         const TAMANHO_LOTE = 200;
 
         // 1. MAPEAMENTO E LIMPEZA DOS DADOS
+        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-filter"></i> Processando dados...</span>`;
+        
+        // Pequeno delay para a UI atualizar
+        await new Promise(r => setTimeout(r, 50));
+
         const dadosFormatados = linhas.map(linha => {
-            
-            // 1. DATA (REGRA ESTRITA: APENAS END_TIME)
-            // Ignoramos 'data da auditoria' pois pode conter erros manuais.
             let valData = linha['end_time']; 
+            if (!valData) return null; 
 
-            if (!valData) return null; // Sem data de sistema = Inválido
-
-            // Tratamento de Formatação
-            // O end_time geralmente vem como "2025-12-01T14:30:00" ou "01/12/2025 14:30"
+            // Formatação de Data
             let dataFormatada = null;
-            
-            // Pega apenas a parte da data (antes do T ou do primeiro espaço)
             let apenasData = valData.split('T')[0].split(' ')[0];
 
             if (apenasData.includes('/')) {
-                const partes = apenasData.split('/'); // DD/MM/YYYY
+                const partes = apenasData.split('/'); 
                 if (partes.length === 3) dataFormatada = `${partes[2]}-${partes[1]}-${partes[0]}`;
             } 
             else if (apenasData.includes('-')) {
-                dataFormatada = apenasData; // Já está em YYYY-MM-DD
+                dataFormatada = apenasData; 
             }
 
             if (!dataFormatada) return null;
 
-            // Empresa (Aceita falta de ID salvando como '0')
             const idEmpresa = linha['company_id'] || linha['company id'] || '0';
             let nomeEmpresa = linha['empresa'] || linha['nome da ppc'] || 'Empresa não informada';
-
-            // Status (Captura status para cálculo de média)
             const statusFinal = linha['status'] || 'PROCESSADO';
 
             return {
@@ -84,7 +78,6 @@ Importacao.Assertividade = {
                 campos: parseInt(linha['nº campos']) || 0,
                 ok: parseInt(linha['ok']) || 0,
                 nok: parseInt(linha['nok']) || 0,
-                // Captura a % Assert do arquivo para usar na média ponderada
                 porcentagem: linha['% assert'] || linha['assertividade'] || '0%',
                 auditora: linha['auditora'] || 'Sistema'
             };
@@ -92,14 +85,14 @@ Importacao.Assertividade = {
 
         const total = dadosFormatados.length;
         if (total === 0) {
-            alert("Nenhum registro válido encontrado. Verifique se a coluna 'end_time' existe no arquivo.");
-            statusEl.innerHTML = "";
+            alert("Nenhum registro válido encontrado (Verifique a coluna 'end_time').");
+            if(statusEl) statusEl.innerHTML = "";
             return;
         }
 
-        // 2. PREVENÇÃO DE DUPLICIDADE (CLEAN INSERT)
-        // Apaga dados antigos baseados nas datas encontradas no END_TIME
-        statusEl.innerHTML = `<span class="text-amber-500"><i class="fas fa-eraser"></i> Atualizando dados (Data Ref: end_time)...</span>`;
+        // 2. PREVENÇÃO DE DUPLICIDADE
+        if(statusEl) statusEl.innerHTML = `<span class="text-amber-600"><i class="fas fa-eraser"></i> Limpando dados anteriores...</span>`;
+        await new Promise(r => setTimeout(r, 50));
         
         const datasParaLimpar = [...new Set(dadosFormatados.map(d => d.data_auditoria))];
         
@@ -112,14 +105,14 @@ Importacao.Assertividade = {
             if (errDel) throw errDel;
 
         } catch (e) {
-            console.error("Erro ao limpar duplicidade:", e);
+            console.error("Erro ao limpar:", e);
             alert("Erro ao limpar dados antigos: " + e.message);
-            statusEl.innerHTML = "Erro na limpeza.";
+            if(statusEl) statusEl.innerHTML = "Erro na limpeza.";
             return;
         }
 
-        // 3. INSERÇÃO
-        statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total} registros...</span>`;
+        // 3. INSERÇÃO COM BARRA DE PROGRESSO
+        if(statusEl) statusEl.innerHTML = `<span class="text-orange-500 font-bold">Iniciando importação...</span>`;
 
         for (let i = 0; i < total; i += TAMANHO_LOTE) {
             const lote = dadosFormatados.slice(i, i + TAMANHO_LOTE);
@@ -131,16 +124,25 @@ Importacao.Assertividade = {
             } else {
                 sucesso += lote.length;
             }
+
+            // ATUALIZA O PROGRESSO NA TELA
+            if (statusEl) {
+                const percentual = Math.round(((i + lote.length) / total) * 100);
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold"><i class="fas fa-upload"></i> Importando: ${percentual}% (${i + lote.length}/${total})</span>`;
+            }
         }
 
         // 4. FINALIZAÇÃO
         let msg = `Sucesso: ${sucesso}`;
         if(erros > 0) msg += ` | Erros: ${erros}`;
         
-        statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> ${msg}</span>`;
+        if(statusEl) statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check-circle"></i> Concluído! ${msg}</span>`;
         
         if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
         
-        alert(`Importação Concluída!\n\nDados atualizados com base na coluna 'end_time'.\nDatas afetadas: ${datasParaLimpar.join(', ')}`);
+        // Pequeno delay antes do alert para ver o 100%
+        setTimeout(() => {
+            alert(`Importação Finalizada!\n\nDados atualizados para: ${datasParaLimpar.join(', ')}.\n${msg}`);
+        }, 500);
     }
 };
