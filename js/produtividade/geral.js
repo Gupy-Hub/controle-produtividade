@@ -14,7 +14,7 @@ Produtividade.Geral = {
     ],
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (KPIs Renovados)...");
+        console.log("🔧 Produtividade: Iniciando (Correção Abono Crítico)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -35,19 +35,18 @@ Produtividade.Geral = {
         return parseFloat(limpo) || 0;
     },
 
+    // Helper robusto para garantir número (0, 0.5, 1)
     getFator: function(val) {
-        if (val === null || val === undefined) return 1;
-        return Number(val);
+        if (val === null || val === undefined || val === "") return 1;
+        return parseFloat(val);
     },
 
     isDiaUtil: function(dateObj) {
         const day = dateObj.getDay();
         if (day === 0 || day === 6) return false;
-        
         const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
         const dia = String(dateObj.getDate()).padStart(2, '0');
         const chave = `${mes}-${dia}`;
-        
         if (this.feriados.includes(chave)) return false;
         return true;
     },
@@ -78,6 +77,7 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando...</td></tr>';
 
         try {
+            // 1. PRODUÇÃO
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -88,6 +88,7 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
+            // 2. USUÁRIOS
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato')
@@ -98,6 +99,7 @@ Produtividade.Geral = {
             const mapaUsuarios = {};
             usuarios.forEach(u => mapaUsuarios[u.id] = u);
 
+            // 3. ASSERTIVIDADE (RPC)
             const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase
                 .rpc('calcular_assertividade_periodo', { 
                     p_inicio: dataInicio, 
@@ -106,6 +108,7 @@ Produtividade.Geral = {
 
             if (errQuali) throw errQuali;
 
+            // 4. MAPAS DE QUALIDADE
             const mapaQualidadeDiaria = {}; 
             const mapaQualidadeTotal = {};
             
@@ -129,6 +132,7 @@ Produtividade.Geral = {
                 });
             }
 
+            // 5. METAS
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
@@ -143,6 +147,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
+            // 6. AGRUPAMENTO
             let dadosAgrupados = {};
             
             producao.forEach(item => {
@@ -190,7 +195,7 @@ Produtividade.Geral = {
                 d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0);
                 d.dias += 1; 
-                d.diasUteis += f; 
+                d.diasUteis += f; // Soma 0 se abonado, 0.5 se parcial
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -240,10 +245,24 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
+                // VISÃO DIÁRIA (Detalhe)
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
-                    const metaCalc = metaBase * fatorReal;
-                    const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
+                    const metaCalc = metaBase * fatorReal; // 0.5 * Meta ou 0 * Meta
+                    
+                    // Cálculo de %: Se meta é 0, mas produziu, mostra 100% ou um ícone
+                    let pct = 0;
+                    let pctClass = "text-amber-600 font-bold";
+                    
+                    if (metaCalc > 0) {
+                        pct = (r.quantidade / metaCalc) * 100;
+                        if(pct >= 100) pctClass = "text-emerald-700 font-black";
+                    } else if (r.quantidade > 0) {
+                        // Meta Zero (Abono) mas produziu algo
+                        pct = 100; 
+                        pctClass = "text-blue-600 font-black"; // Cor diferente para "Extra"
+                    }
+
                     const [ano, mes, dia] = r.data_referencia.split('-');
                     
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
@@ -274,12 +293,13 @@ Produtividade.Geral = {
                         <td class="${commonCell} bg-slate-50 text-[10px]">${metaBase}</td>
                         <td class="${commonCell} bg-slate-50 text-[10px] font-bold text-slate-700">${Math.round(metaCalc)}</td>
                         <td class="px-2 py-2 text-center border-r border-slate-200 font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td>
-                        <td class="px-2 py-2 text-center border-r border-slate-200"><span class="${pct>=100?'text-emerald-700 font-black':'text-amber-600 font-bold'} text-xs">${Math.round(pct)}%</span></td>
+                        <td class="px-2 py-2 text-center border-r border-slate-200"><span class="${pctClass} text-xs">${Math.round(pct)}%</span></td>
                         <td class="px-2 py-2 text-center text-xs ${corAssert}">${assertVal}</td>
                     `;
                     tbody.appendChild(tr);
                 });
             } else {
+                // VISÃO CONSOLIDADA
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic";
@@ -289,6 +309,7 @@ Produtividade.Geral = {
                     corAssert = mediaGeral >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
                 }
 
+                // Renderiza Seletor se for Dia Único
                 let colunaAbonoHtml = `<td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>`;
                 
                 if (isDiaUnico && d.registros.length > 0) {
@@ -379,7 +400,7 @@ Produtividade.Geral = {
 
         const { error } = await Sistema.supabase
             .from('producao')
-            .update({ fator: val, motivo_abono: motivo })
+            .update({ fator: parseFloat(val), motivo_abono: motivo })
             .in('id', idsParaAtualizar); 
         
         if(!error) {
@@ -400,9 +421,10 @@ Produtividade.Geral = {
             }
         }
 
+        // Garante envio como número decimal (parseFloat)
         const { error } = await Sistema.supabase
             .from('producao')
-            .update({ fator: val, motivo_abono: motivo })
+            .update({ fator: parseFloat(val), motivo_abono: motivo })
             .eq('id', id); 
         
         if(!error) this.carregarTela(); 
@@ -426,25 +448,22 @@ Produtividade.Geral = {
             else { pj.qtd++; pj.prod += d.totais.qty; }
         });
 
-        // --- Validação ---
         this.setTxt('kpi-validacao-esperado', Math.round(metaTotal).toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-real', producaoTotal.toLocaleString('pt-BR'));
 
-        // --- Meta ---
         const pctProd = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
         let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
 
         this.setHtml('kpi-meta-producao', `<span class="text-slate-400 text-[10px]">100%</span> <span class="text-slate-300">/</span> ${Math.round(pctProd)}%`);
         this.setHtml('kpi-meta-assertividade', `<span class="text-emerald-400 text-[10px]">98%</span> <span class="text-emerald-200">/</span> ${pctAssert.toFixed(1).replace('.', ',')}%`);
 
-        // --- Equipe ---
         const pctClt = producaoTotal > 0 ? (clt.prod / producaoTotal) * 100 : 0;
         const pctPj = producaoTotal > 0 ? (pj.prod / producaoTotal) * 100 : 0;
         
         this.setHtml('kpi-clt-info', `<span class="font-bold text-lg">${clt.qtd}</span> <span class="text-[10px] text-slate-400">(${Math.round(pctClt)}%)</span>`);
         this.setHtml('kpi-pj-info', `<span class="font-bold text-lg">${pj.qtd}</span> <span class="text-[10px] text-slate-400">(${Math.round(pctPj)}%)</span>`);
 
-        // --- Dias Úteis ---
+        // Dias Úteis (Contagem de 0.5 como útil se houve trabalho, mas não se abonado total)
         const datas = Produtividade.getDatasFiltro();
         let diasUteisCalendario = 0;
         let curr = new Date(datas.inicio + "T00:00:00");
@@ -475,7 +494,6 @@ Produtividade.Geral = {
         this.setTxt('kpi-dias-uteis', `${diasUteisCalendario}/${diasUteisMesTotal}`);
         this.setHtml('kpi-media-real', `<span class="text-[10px] text-slate-400">${Math.round(metaTotal)}</span> <span class="text-slate-300">/</span> <span class="text-amber-700">${Math.round(producaoTotal)}</span>`);
 
-        // --- Ranking ---
         const topProd = [...dadosAgrupados]
             .filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()))
             .sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
