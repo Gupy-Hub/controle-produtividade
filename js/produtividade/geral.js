@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Média Percentual)...");
+        console.log("🔧 Produtividade: Iniciando (Modo Assertividade Média Real)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -21,10 +21,9 @@ Produtividade.Geral = {
         return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     },
 
-    // Função auxiliar para limpar valor monetário/percentual (Ex: "88,89%" -> 88.89)
+    // Converte "88,89%" para 88.89 (float)
     parsePorcentagem: function(valorStr) {
         if (!valorStr) return 0;
-        // Remove % e troca vírgula por ponto
         let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
         return parseFloat(limpo) || 0;
     },
@@ -38,10 +37,10 @@ Produtividade.Geral = {
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Assertividade Média...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Qualidade Média...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO
+            // 1. BUSCA PRODUÇÃO (Volume)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -66,7 +65,7 @@ Produtividade.Geral = {
             });
 
             // 3. BUSCA ASSERTIVIDADE (QUALIDADE REAL)
-            // Agora trazemos 'porcentagem' e 'status' para fazer a média ponderada
+            // Trazemos 'porcentagem' e 'status' para o cálculo exato
             const { data: qualidade, error: errQuali } = await Sistema.supabase
                 .from('assertividade')
                 .select('assistente, data_auditoria, ok, nok, porcentagem, status')
@@ -75,12 +74,12 @@ Produtividade.Geral = {
 
             if (errQuali) throw errQuali;
 
-            // Lista de Status Válidos para a Média
+            // Status que entram na conta
             const statusValidos = ['OK', 'NOK', 'REV', 'JUST', 'DUPL', 'IA', 'EMPR', 'REC'];
 
-            // Mapas de Qualidade Agregada
-            const mapaQualidadeDiaria = {}; 
-            const mapaQualidadeTotal = {};  
+            // Acumuladores
+            const mapaQualidadeDiaria = {}; // Chave: "ID_DATA"
+            const mapaQualidadeTotal = {};  // Chave: "ID"
 
             if (qualidade) {
                 qualidade.forEach(q => {
@@ -88,29 +87,29 @@ Produtividade.Geral = {
                     const uid = mapaNomeParaId[nomeNorm];
                     
                     if (uid && q.data_auditoria) {
-                        // Verifica se o status é válido para a conta
                         const statusItem = (q.status || '').toUpperCase().trim();
-                        if (!statusValidos.includes(statusItem)) return; // Pula status irrelevantes (ex: PENDENTE)
+                        
+                        // Só processa se for status válido para média
+                        if (statusValidos.includes(statusItem)) {
+                            const notaDoc = this.parsePorcentagem(q.porcentagem); // Nota individual do doc
 
-                        // Pega a nota deste documento (Ex: "88,89%" -> 88.89)
-                        const notaDoc = this.parsePorcentagem(q.porcentagem);
+                            // Função helper para somar
+                            const somar = (obj) => {
+                                if (!obj) obj = { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
+                                obj.somaNotas += notaDoc;
+                                obj.qtdDocs += 1;
+                                obj.ok += (parseInt(q.ok) || 0);
+                                obj.nok += (parseInt(q.nok) || 0);
+                                return obj;
+                            };
 
-                        // Estrutura de acumulação
-                        const addDados = (mapa) => {
-                            if (!mapa) mapa = { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
-                            mapa.somaNotas += notaDoc;
-                            mapa.qtdDocs += 1;
-                            mapa.ok += (parseInt(q.ok) || 0); // Mantém contagem OK/NOK para KPI
-                            mapa.nok += (parseInt(q.nok) || 0);
-                            return mapa;
-                        };
+                            // Agrega no Dia
+                            const chaveDia = `${uid}_${q.data_auditoria}`;
+                            mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
 
-                        // A. Agrega por Dia
-                        const chaveDia = `${uid}_${q.data_auditoria}`;
-                        mapaQualidadeDiaria[chaveDia] = addDados(mapaQualidadeDiaria[chaveDia]);
-
-                        // B. Agrega por Usuário (Consolidado)
-                        mapaQualidadeTotal[uid] = addDados(mapaQualidadeTotal[uid]);
+                            // Agrega no Total do Período
+                            mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
+                        }
                     }
                 });
             }
@@ -137,6 +136,7 @@ Produtividade.Geral = {
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 
                 if(!dadosAgrupados[uid]) {
+                    // Pega o acumulado total de qualidade deste usuário no período
                     const qTotal = mapaQualidadeTotal[uid] || { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
                     
                     dadosAgrupados[uid] = {
@@ -144,34 +144,30 @@ Produtividade.Geral = {
                         registros: [],
                         totais: { 
                             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0,
-                            // Totais de Qualidade acumulados
+                            // Totais de Qualidade para o cálculo final
                             somaNotas: qTotal.somaNotas,
-                            qtdDocs: qTotal.qtdDocs,
-                            ok: qTotal.ok,
-                            nok: qTotal.nok
+                            qtdDocs: qTotal.qtdDocs
                         },
                         meta_real: mapaMetas[uid] || 0
                     };
                 }
                 
-                // Dados do Dia
+                // Dados do Dia Específico
                 const chaveQuali = `${uid}_${item.data_referencia}`;
-                const dadosQ = mapaQualidadeDiaria[chaveQuali] || { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
+                const dadosQ = mapaQualidadeDiaria[chaveQuali] || { somaNotas: 0, qtdDocs: 0 };
 
                 // Calcula % Média do Dia
                 let assertPct = 0;
                 let assertTxt = "-";
                 
                 if (dadosQ.qtdDocs > 0) {
-                    assertPct = dadosQ.somaNotas / dadosQ.qtdDocs; // Média Simples das Notas
+                    assertPct = dadosQ.somaNotas / dadosQ.qtdDocs;
                     assertTxt = assertPct.toFixed(2).replace('.', ',') + "%";
                 }
 
                 dadosAgrupados[uid].registros.push({ 
                     ...item, 
                     usuario: userObj,
-                    ok_real: dadosQ.ok,
-                    nok_real: dadosQ.nok,
                     assertividade_real: assertTxt,
                     assertividade_valor: assertPct
                 });
@@ -221,7 +217,7 @@ Produtividade.Geral = {
         lista.sort((a, b) => (a.usuario.nome || '').localeCompare(b.usuario.nome || ''));
 
         if(lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado para este período.</td></tr>';
             return;
         }
 
@@ -232,7 +228,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // VISÃO DIÁRIA
+                // --- VISÃO DIÁRIA ---
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const metaCalc = metaBase * (r.fator || 1);
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -240,6 +236,7 @@ Produtividade.Geral = {
                     
                     let corFator = r.fator == 0.5 ? 'bg-amber-50 text-amber-700' : r.fator == 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
                     
+                    // Exibe a média do DIA
                     let assertVal = r.assertividade_real;
                     let assertNum = r.assertividade_valor;
                     let corAssert = 'text-slate-400';
@@ -265,11 +262,11 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO CONSOLIDADA (Média Ponderada do Período)
+                // --- VISÃO CONSOLIDADA (Média Ponderada Real do Período) ---
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 
-                // Média = Soma de Todas as Notas / Quantidade de Documentos
+                // Média Geral = Soma de Todas as Notas / Quantidade Total de Docs
                 let assertGeralTxt = "-";
                 let corAssert = "text-slate-400 italic";
                 
@@ -299,7 +296,7 @@ Produtividade.Geral = {
         });
     },
 
-    // Funções auxiliares inalteradas (filtrarUsuario, KPIs, Exclusão...)
+    // --- Funções Auxiliares Inalteradas ---
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         document.getElementById('selection-header').classList.remove('hidden');
