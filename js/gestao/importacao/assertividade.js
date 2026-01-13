@@ -1,3 +1,8 @@
+/**
+ * ARQUIVO: gupy-hub/controle-produtividade/.../js/gestao/importacao/assertividade.js
+ * ALTERAÇÃO: Ajuste na leitura da coluna 'porcentagem' para permitir valores nulos.
+ */
+
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
@@ -36,13 +41,13 @@ Importacao.Assertividade = {
         const statusEl = document.getElementById('status-importacao');
         let sucesso = 0;
         let erros = 0;
-        const TAMANHO_LOTE = 1000; // Lote grande para 221k linhas
+        const TAMANHO_LOTE = 1000; 
 
         if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-filter"></i> Processando dados...</span>`;
         await new Promise(r => setTimeout(r, 50));
 
         const dadosFormatados = linhas.map(linha => {
-            // 1. DATA (End Time - Fonte da Verdade)
+            // 1. DATA
             let valData = linha['end_time']; 
             if (!valData) return null; 
 
@@ -56,17 +61,23 @@ Importacao.Assertividade = {
             }
             if (!dataFormatada) return null;
 
-            // 2. ID DO USUÁRIO (AQUI ESTÁ A CORREÇÃO)
-            // Pegamos o ID direto do CSV. Isso garante o match com a Gestão.
+            // 2. ID DO USUÁRIO
             let idAssistente = linha['id_assistente'] || linha['id assistente'];
-            
-            // Limpa o ID (remove letras se houver, garante numero)
             let usuarioIdFinal = null;
             if (idAssistente) {
                 usuarioIdFinal = parseInt(idAssistente.toString().replace(/\D/g, ''));
             }
 
-            // 3. Status e Outros
+            // 3. Tratamento da Porcentagem (Assertividade)
+            // LÓGICA CORRIGIDA: Se tiver valor, usa o valor. Se for vazio, usa null.
+            let rawPorcentagem = linha['% assert'] || linha['assertividade'];
+            let porcentagemFinal = null;
+
+            if (rawPorcentagem && rawPorcentagem.trim() !== '') {
+                porcentagemFinal = rawPorcentagem.trim();
+            }
+            // Nota: Removemos o "|| '0%'" para garantir que vazios sejam NULL
+
             const idEmpresa = linha['company_id'] || linha['company id'] || '0';
             const nomeEmpresa = linha['empresa'] || linha['nome da ppc'] || 'Empresa não informada';
             const statusFinal = linha['status'] || 'PROCESSADO';
@@ -76,7 +87,6 @@ Importacao.Assertividade = {
                 company_id: idEmpresa.toString().trim(),
                 empresa: nomeEmpresa.trim(),
                 
-                // Salva o ID (para vincular) e o Nome (para histórico)
                 usuario_id: usuarioIdFinal || null, 
                 assistente: linha['assistente'] || 'Desconhecido',
                 
@@ -86,7 +96,7 @@ Importacao.Assertividade = {
                 campos: parseInt(linha['nº campos']) || 0,
                 ok: parseInt(linha['ok']) || 0,
                 nok: parseInt(linha['nok']) || 0,
-                porcentagem: linha['% assert'] || linha['assertividade'] || '0%',
+                porcentagem: porcentagemFinal, // Agora aceita NULL
                 auditora: linha['auditora'] || 'Sistema'
             };
         }).filter(item => item !== null);
@@ -97,13 +107,12 @@ Importacao.Assertividade = {
             return;
         }
 
-        // 3. LIMPEZA SEGURA (Remove duplicidade do período importado)
+        // 3. LIMPEZA SEGURA
         if(statusEl) statusEl.innerHTML = `<span class="text-amber-600"><i class="fas fa-eraser"></i> Limpando período (Anti-Duplicidade)...</span>`;
         await new Promise(r => setTimeout(r, 50));
         
         const datasParaLimpar = [...new Set(dadosFormatados.map(d => d.data_auditoria))];
         
-        // Deleta em chunks para não travar se forem muitas datas
         try {
             await Sistema.supabase.from('assertividade').delete().in('data_auditoria', datasParaLimpar);
         } catch (e) {
