@@ -12,7 +12,7 @@ Produtividade.Geral = {
     feriados: ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
     
     // STATUS NEUTROS (Contam Volume se tiver auditora, mas NÃO contam nota)
-    statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA'],
+    statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
         console.log("🔧 Produtividade: Iniciando (Neutros + HUD)...");
@@ -124,13 +124,15 @@ Produtividade.Geral = {
                 }
                 
                 const status = (item.status || '').toUpperCase();
-                const isOk = status === 'OK';
-                const isNok = status === 'NOK';
-                const isNeutro = this.statusNeutros.includes(status);
+                
+                // === CORREÇÃO: LISTA EXPANDIDA DE STATUS POSITIVOS ===
+                // Antes aceitava só "OK". Agora aceita PROCESSADO, VALIDO, etc.
+                const isOk = ['OK', 'VALIDO', 'PROCESSADO', 'CONCLUIDO', 'DONE', 'FINALIZADO', 'SUCESSO'].some(s => status.includes(s));
+                const isNok = status.includes('NOK') || status.includes('ERRO') || status.includes('FALHA');
+                const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
                 // --- LÓGICA DE VOLUME (Quantidade) ---
-                // Conta se for OK, NOK ou (Neutro com Auditora)
-                // Se auditora estiver vazio em neutro, não conta volume
+                // Conta se for OK, NOK ou (Neutro com Auditora preenchida)
                 let contaVolume = false;
                 if (isOk || isNok) {
                     contaVolume = true;
@@ -151,8 +153,7 @@ Produtividade.Geral = {
                 }
 
                 // --- LÓGICA DE ASSERTIVIDADE (Qualidade) ---
-                // Neutros (REV, DUPL, etc) são ignorados aqui
-                let assertValor = 0; // Valor para exibir na linha
+                let assertValor = 0; 
                 let entraNaMedia = false;
 
                 if (isOk) {
@@ -167,24 +168,22 @@ Produtividade.Geral = {
                     entraNaMedia = true;
                 }
                 
-                // Texto para a coluna de assertividade na grade
                 let assertTxt = "-";
                 if (entraNaMedia) {
                     assertTxt = assertValor + "%";
                 } else if (isNeutro) {
-                    assertTxt = "--"; // Neutro visualmente
+                    assertTxt = "--"; 
                 }
 
-                // Adiciona registro para a grade detalhada
-                // Só adicionamos se contou volume OU se tem nota (para não sumir registros úteis)
-                if (contaVolume || entraNaMedia) {
+                // Adiciona registro se for relevante
+                if (contaVolume || entraNaMedia || isNeutro) {
                     dadosAgrupados[uid].registros.push({ 
                         ...item, 
                         usuario: userObj, 
                         assertividade_real: assertTxt, 
                         assertividade_valor: assertValor,
                         motivo_abono: item.motivo_abono,
-                        is_neutro: isNeutro // flag para ajudar na renderização
+                        is_neutro: isNeutro
                     });
                 }
             });
@@ -244,9 +243,8 @@ Produtividade.Geral = {
                     let corAssert = 'text-slate-400';
                     if (r.is_neutro) {
                         assertVal = "--";
-                        corAssert = 'text-slate-300 italic'; // Visual mais apagado para neutros
+                        corAssert = 'text-slate-300 italic';
                     } else {
-                        // Se não é neutro, verifica valor
                         if (r.assertividade_valor >= 98) corAssert = 'text-emerald-700 font-bold';
                         else corAssert = 'text-rose-600 font-bold';
                     }
@@ -325,13 +323,11 @@ Produtividade.Geral = {
             const cargo = (d.usuario.funcao || '').toUpperCase();
             const isGestao = ['AUDITORA', 'GESTORA'].includes(cargo);
 
-            // GERAL (INCLUI GESTÃO)
             metaTotalGeral += (d.meta_real * d.totais.diasUteis);
             producaoTotalGeral += d.totais.qty;
             somaNotasGeral += (d.totais.somaNotas || 0);
             qtdDocsGeral += (d.totais.qtdDocs || 0);
 
-            // OPERAÇÃO (EXCLUI GESTÃO)
             if (!isGestao) {
                 if (d.totais.diasUteis > 0 || d.totais.qty > 0) countAssistentesAtivos++;
                 if (d.meta_real > 0) { somaMetasOperacao += d.meta_real; countPessoasMeta++; }
@@ -400,7 +396,4 @@ Produtividade.Geral = {
         this.setHtml('top-assert-list', renderTop(topAssert, false));
     },
 
-    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregarTela(); },
-    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.carregarTela(); },
-    excluirDadosDia: async function() { const datas = Produtividade.getDatasFiltro(); const s = datas.inicio; const e = datas.fim; if(!s || !e) return alert("Período não definido."); if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas a PRODUÇÃO do período. A assertividade (Qualidade) é mantida.`)) return; try { const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e }); if(error) throw error; alert("Produção excluída com sucesso!"); this.carregarTela(); } catch(err) { alert("Erro: " + err.message); } }
-};
+    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregar
