@@ -69,7 +69,6 @@ Gestao.Assertividade = {
         if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-circle-notch fa-spin"></i> Filtrando...</span>`;
 
         try {
-            // OBS: A query seleciona tudo (*). Esperamos que a view traga a coluna 'porcentagem' original
             let query = Sistema.supabase
                 .from('vw_assertividade_completa')
                 .select('*', { count: 'exact' });
@@ -169,26 +168,30 @@ Gestao.Assertividade = {
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
 
-            // === LÓGICA PURA: USA A COLUNA 'porcentagem' (ORIGINAL DO CSV) ===
-            // Substituímos 'indice_assertividade' (calculado) por 'porcentagem' (bruto)
-            // Se na planilha estava vazio, aqui será null -> exibe '-'
-            // Se na planilha tinha '100%', aqui será '100%' -> exibe '100%'
+            // === LÓGICA HÍBRIDA: Tenta Raw > Tenta Calculado > Aplica Segurança ===
             
-            // Tenta pegar a coluna bruta 'porcentagem'. Se não existir (view antiga), tenta a calculada.
-            let valorOriginal = item.porcentagem; 
-            
-            // Fallback de segurança: se 'porcentagem' vier undefined do banco, usamos null para não mostrar dados falsos
-            if (valorOriginal === undefined) {
-               // Se quiser usar o calculado como último recurso: valorOriginal = item.indice_assertividade;
-               // Mas para garantir fidelidade à planilha, melhor manter null se não acharmos a coluna bruta.
-               valorOriginal = null; 
+            // 1. Tenta pegar o valor bruto (se um dia a View passar a enviar)
+            let valorParaExibir = item.porcentagem; 
+
+            // 2. Se não veio bruto (undefined), usamos o calculado (para não exibir "-")
+            if (valorParaExibir === undefined || valorParaExibir === null) {
+                valorParaExibir = item.indice_assertividade;
+                
+                // 3. TRAVA DE SEGURANÇA:
+                // Já que estamos usando o valor calculado, precisamos nos proteger dos "falsos positivos".
+                // Se o status for de revisão (REV, NA), sabemos que o 100% calculado é falso (era vazio na planilha).
+                // Isso garante a fidelidade aos dados, mesmo sem a coluna bruta.
+                const statusInvalidos = ['REV', 'NA', 'N/A', 'REVALIDA'];
+                if (statusInvalidos.some(s => stUp.includes(s))) {
+                    valorParaExibir = null; // Força vazio
+                }
             }
 
             let assertDisplay = '-';
             let assertColor = 'text-slate-400 font-light'; 
 
-            if (valorOriginal !== null && valorOriginal !== '' && valorOriginal !== undefined) {
-                const assertVal = parseFloat(valorOriginal);
+            if (valorParaExibir !== null && valorParaExibir !== '' && valorParaExibir !== undefined) {
+                const assertVal = parseFloat(valorParaExibir);
                 
                 if (!isNaN(assertVal)) {
                     assertDisplay = assertVal + '%';
@@ -219,4 +222,4 @@ Gestao.Assertividade = {
 
         tbody.innerHTML = html;
     }
-};
+};  
