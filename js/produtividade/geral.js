@@ -10,7 +10,7 @@ Produtividade.Geral = {
     feriados: ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Design HUD 2026)...");
+        console.log("🔧 Produtividade: Iniciando (Design HUD + Capacidade Operativa)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -261,58 +261,69 @@ Produtividade.Geral = {
         if(!error) this.carregarTela(); 
     },
 
-    // KPI PREMIUM + LÓGICA MÉDIA DIA
+    // KPI INTELIGENTE (Com Capacidade Operativa)
     atualizarKPIs: function(dadosAgrupados, dadosBrutosProducao) { 
-        let metaTotal = 0; let producaoTotal = 0;
+        let metaTotalGeral = 0; // Inclui tudo
+        let producaoTotalGeral = 0; // Inclui tudo
         let somaNotasGeral = 0; let qtdDocsGeral = 0;
-        let clt = { qtd: 0, prod: 0 }; let pj = { qtd: 0, prod: 0 };
         
-        let somaMetasUnitarias = 0; 
-        let somaProducaoUnitarias = 0; 
-        let countPessoasComMeta = 0; 
-        let countPessoasProduziram = 0; 
+        let countAssistentesAtivos = 0; // Apenas Operação
+        
+        let somaMetasOperacao = 0; 
+        let countPessoasMeta = 0;
+        let somaProdOperacao = 0;
+        let countPessoasProd = 0;
 
         dadosAgrupados.forEach(d => {
             const cargo = (d.usuario.funcao || '').toUpperCase();
-            if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
+            const isGestao = ['AUDITORA', 'GESTORA'].includes(cargo);
 
-            metaTotal += (d.meta_real * d.totais.diasUteis);
-            producaoTotal += d.totais.qty;
+            // Soma Geral (Volume e Qualidade do Card 1 e 2)
+            metaTotalGeral += (d.meta_real * d.totais.diasUteis);
+            producaoTotalGeral += d.totais.qty;
             somaNotasGeral += (d.totais.somaNotas || 0);
             qtdDocsGeral += (d.totais.qtdDocs || 0);
 
-            if (d.meta_real > 0) { somaMetasUnitarias += d.meta_real; countPessoasComMeta++; }
-            if (d.totais.diasUteis > 0) { somaProducaoUnitarias += (d.totais.qty / d.totais.diasUteis); countPessoasProduziram++; }
+            // Capacidade Operativa (Card 3 - Apenas Assistentes)
+            if (!isGestao) {
+                // Se teve dias úteis ou produção, conta como ativo no período
+                if (d.totais.diasUteis > 0 || d.totais.qty > 0) {
+                    countAssistentesAtivos++;
+                }
 
-            if (d.usuario.contrato === 'CLT') { clt.qtd++; clt.prod += d.totais.qty; } 
-            else { pj.qtd++; pj.prod += d.totais.qty; }
+                // Eficiência Média (Card 4 - Apenas Operação para não distorcer)
+                if (d.meta_real > 0) { somaMetasOperacao += d.meta_real; countPessoasMeta++; }
+                if (d.totais.diasUteis > 0) { somaProdOperacao += (d.totais.qty / d.totais.diasUteis); countPessoasProd++; }
+            }
         });
 
-        // 1. Validação (Com Barra)
-        this.setTxt('kpi-validacao-esperado', Math.round(metaTotal).toLocaleString('pt-BR'));
-        this.setTxt('kpi-validacao-real', producaoTotal.toLocaleString('pt-BR'));
-        const pctVolume = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
+        // 1. Volume (Geral)
+        this.setTxt('kpi-validacao-esperado', Math.round(metaTotalGeral).toLocaleString('pt-BR'));
+        this.setTxt('kpi-validacao-real', producaoTotalGeral.toLocaleString('pt-BR'));
+        const pctVolume = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = Math.min(pctVolume, 100) + '%';
 
-        // 2. Qualidade
-        const pctProd = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
+        // 2. Qualidade (Geral)
+        const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
         this.setTxt('kpi-meta-assertividade-val', pctAssert.toFixed(2).replace('.', ',') + '%');
 
-        // 3. Equipe (Barrinhas CLT/PJ)
-        const totalPessoas = clt.qtd + pj.qtd;
-        const pctCltBar = totalPessoas > 0 ? (clt.qtd / totalPessoas) * 100 : 0;
-        const pctPjBar = totalPessoas > 0 ? (pj.qtd / totalPessoas) * 100 : 0;
-        this.setTxt('kpi-clt-count', clt.qtd);
-        this.setTxt('kpi-pj-count', pj.qtd);
-        const barClt = document.getElementById('bar-clt'); if(barClt) barClt.style.width = pctCltBar + '%';
-        const barPj = document.getElementById('bar-pj'); if(barPj) barPj.style.width = pctPjBar + '%';
-        const pctCltShare = producaoTotal > 0 ? (clt.prod / producaoTotal) * 100 : 0;
-        const pctPjShare = producaoTotal > 0 ? (pj.prod / producaoTotal) * 100 : 0;
-        this.setHtml('kpi-share-info', `<span class="text-blue-500 font-bold">${Math.round(pctCltShare)}% CLT</span> vs <span class="text-purple-500 font-bold">${Math.round(pctPjShare)}% PJ</span>`);
+        // 3. Capacidade Operativa (Novo)
+        const PADRAO_ASSISTENTES = 17;
+        const pctCapacidade = (countAssistentesAtivos / PADRAO_ASSISTENTES) * 100;
+        
+        this.setTxt('kpi-capacidade-pct', Math.round(pctCapacidade) + '%');
+        this.setTxt('kpi-capacidade-info', `${countAssistentesAtivos}/${PADRAO_ASSISTENTES} Ativos`);
+        
+        const barCap = document.getElementById('bar-capacidade'); 
+        if(barCap) {
+            barCap.style.width = Math.min(pctCapacidade, 100) + '%';
+            // Cor dinâmica: Vermelho se < 70%, Roxo se normal
+            barCap.className = `h-full rounded-full transition-all duration-1000 ${pctCapacidade < 70 ? 'bg-rose-500' : 'bg-purple-500'}`;
+        }
 
-        // 4. Eficiência (Dias e Média)
+        // 4. Eficiência (Operação)
         const datas = Produtividade.getDatasFiltro();
         let diasUteisCalendario = 0;
         let curr = new Date(datas.inicio + "T00:00:00");
@@ -338,12 +349,13 @@ Produtividade.Geral = {
         const diasUteisMesTotal = this.getDiasUteisNoMes(parseInt(anoRef), parseInt(mesRef));
         this.setTxt('kpi-dias-uteis', `${diasUteisCalendario}/${diasUteisMesTotal}`);
 
-        const mediaMetaDia = countPessoasComMeta > 0 ? somaMetasUnitarias / countPessoasComMeta : 0;
-        const mediaRealDia = countPessoasProduziram > 0 ? somaProducaoUnitarias / countPessoasProduziram : 0;
+        // Médias (Apenas Operação)
+        const mediaMetaDia = countPessoasMeta > 0 ? somaMetasOperacao / countPessoasMeta : 0;
+        const mediaRealDia = countPessoasProd > 0 ? somaProdOperacao / countPessoasProd : 0;
         this.setTxt('kpi-media-esperada', Math.round(mediaMetaDia));
         this.setTxt('kpi-media-real', Math.round(mediaRealDia));
 
-        // 5. Ranking
+        // 5. Ranking (Apenas Operação)
         const topProd = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase())).sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const topAssert = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()) && d.totais.qtdDocs >= 10).sort((a, b) => (b.totais.somaNotas/b.totais.qtdDocs) - (a.totais.somaNotas/a.totais.qtdDocs)).slice(0, 3);
         const medals = ['🥇', '🥈', '🥉'];

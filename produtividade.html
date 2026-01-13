@@ -121,65 +121,57 @@
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 
                 <div class="kpi-card border-l-4 border-l-blue-500">
-                    <i class="fas fa-file-invoice kpi-icon-bg text-blue-500"></i>
+                    <i class="fas fa-cubes kpi-icon-bg text-blue-500"></i>
                     <div>
-                        <div class="kpi-title text-blue-600">Validação Total</div>
+                        <div class="kpi-title text-blue-600">Volume Total</div>
                         <div class="kpi-main-val text-slate-800" id="kpi-validacao-real">--</div>
                     </div>
                     <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
                         <div id="bar-volume" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
                     </div>
                     <div class="kpi-sub-row text-slate-500 mt-1">
-                        <span>Esperado:</span>
+                        <span>Meta Global:</span>
                         <span id="kpi-validacao-esperado" class="font-bold text-blue-600">--</span>
                     </div>
                 </div>
 
                 <div class="kpi-card border-l-4 border-l-emerald-500">
-                    <i class="fas fa-check-circle kpi-icon-bg text-emerald-500"></i>
+                    <i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i>
                     <div>
-                        <div class="kpi-title text-emerald-600">Assertividade</div>
+                        <div class="kpi-title text-emerald-600">Qualidade</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</span>
                             <span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span>
                         </div>
                     </div>
                     <div class="kpi-sub-row text-slate-500">
-                        <span>Atingimento Prod.:</span>
+                        <span>Atingimento Meta:</span>
                         <span id="kpi-meta-producao-val" class="font-bold text-emerald-600">--%</span>
                     </div>
                 </div>
 
                 <div class="kpi-card border-l-4 border-l-purple-500">
-                    <i class="fas fa-users kpi-icon-bg text-purple-500"></i>
+                    <i class="fas fa-users-cog kpi-icon-bg text-purple-500"></i>
                     <div>
-                        <div class="kpi-title text-purple-600">Equipe</div>
-                        <div class="flex gap-4 mt-1">
-                            <div class="flex flex-col w-1/2">
-                                <div class="flex justify-between items-baseline">
-                                    <span class="text-lg font-black text-slate-700" id="kpi-clt-count">0</span>
-                                    <span class="text-[8px] font-bold text-blue-500">CLT</span>
-                                </div>
-                                <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="bar-clt" class="h-full bg-blue-500" style="width: 0%"></div></div>
-                            </div>
-                            <div class="flex flex-col w-1/2">
-                                <div class="flex justify-between items-baseline">
-                                    <span class="text-lg font-black text-purple-700" id="kpi-pj-count">0</span>
-                                    <span class="text-[8px] font-bold text-purple-500">PJ</span>
-                                </div>
-                                <div class="w-full bg-slate-100 h-1 rounded-full overflow-hidden"><div id="bar-pj" class="h-full bg-purple-500" style="width: 0%"></div></div>
-                            </div>
+                        <div class="kpi-title text-purple-600">Capacidade Operativa</div>
+                        <div class="flex items-baseline gap-2 mt-1">
+                            <span class="kpi-main-val text-purple-700" id="kpi-capacidade-pct">--%</span>
+                            <span class="text-[9px] font-bold text-slate-400">do ideal</span>
                         </div>
                     </div>
-                    <div class="kpi-sub-row text-slate-400">
-                        <span class="text-[9px]" id="kpi-share-info">--</span>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div id="bar-capacidade" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500 mt-1">
+                        <span>Assistentes:</span>
+                        <span id="kpi-capacidade-info" class="font-bold text-purple-600">--/17</span>
                     </div>
                 </div>
 
                 <div class="kpi-card border-l-4 border-l-amber-500">
-                    <i class="fas fa-tachometer-alt kpi-icon-bg text-amber-500"></i>
+                    <i class="fas fa-bolt kpi-icon-bg text-amber-500"></i>
                     <div>
-                        <div class="kpi-title text-amber-600">Eficiência (Dia)</div>
+                        <div class="kpi-title text-amber-600">Velocidade (Média/Dia)</div>
                         <div class="flex items-end gap-1">
                             <span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span>
                             <span class="text-[10px] text-slate-400 font-bold mb-1">/ <span id="kpi-media-esperada">--</span> (Meta)</span>
@@ -193,8 +185,8 @@
 
                 <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2">
                     <div class="flex justify-between items-center mb-1">
-                        <div class="kpi-title text-indigo-600">Top Performance</div>
-                        <i class="fas fa-trophy text-indigo-300 text-xs"></i>
+                        <div class="kpi-title text-indigo-600">Destaques</div>
+                        <i class="fas fa-medal text-indigo-300 text-xs"></i>
                     </div>
                     <div class="grid grid-cols-2 gap-2 h-full">
                         <div class="border-r border-slate-100 pr-1">
