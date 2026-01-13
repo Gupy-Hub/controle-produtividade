@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Diagnóstico)...");
+        console.log("🔧 Produtividade: Iniciando (Modo Assertividade Cruzada)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -16,11 +16,13 @@ Produtividade.Geral = {
         if (el) el.innerText = valor;
     },
 
+    // Normaliza para cruzar nomes (Ex: "João Silva" == "joao silva")
     normalizar: function(str) {
         if(!str) return "";
         return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     },
 
+    // Converte "88,89%" para 88.89
     parsePorcentagem: function(valorStr) {
         if (!valorStr) return 0;
         let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
@@ -63,7 +65,7 @@ Produtividade.Geral = {
                 if(u.nome) mapaNomeParaId[this.normalizar(u.nome)] = u.id;
             });
 
-            // 3. BUSCA ASSERTIVIDADE
+            // 3. BUSCA ASSERTIVIDADE (Tabela Nova)
             const { data: qualidade, error: errQuali } = await Sistema.supabase
                 .from('assertividade')
                 .select('assistente, data_auditoria, ok, nok, porcentagem, status')
@@ -72,15 +74,13 @@ Produtividade.Geral = {
 
             if (errQuali) throw errQuali;
 
-            console.log(`🔎 Diagnóstico: ${qualidade.length} registros de auditoria encontrados.`);
+            console.log(`🔎 Auditoria: ${qualidade.length} registros encontrados.`);
 
             const statusValidos = ['OK', 'NOK', 'REV', 'JUST', 'DUPL', 'IA', 'EMPR', 'REC'];
             const mapaQualidadeDiaria = {}; 
             const mapaQualidadeTotal = {};
             
-            // Debug de nomes não encontrados
             let nomesSemMatch = new Set();
-            let statusInvalidos = new Set();
 
             if (qualidade) {
                 qualidade.forEach(q => {
@@ -88,7 +88,7 @@ Produtividade.Geral = {
                     const uid = mapaNomeParaId[nomeNorm];
                     
                     if (!uid) {
-                        nomesSemMatch.add(q.assistente); // Loga nomes que não bateram
+                        nomesSemMatch.add(q.assistente); // Nome na auditoria não existe no sistema
                         return;
                     }
 
@@ -110,17 +110,17 @@ Produtividade.Geral = {
                             const chaveDia = `${uid}_${q.data_auditoria}`;
                             mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
                             mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
-                        } else {
-                            statusInvalidos.add(statusItem); // Loga status ignorados
                         }
                     }
                 });
             }
 
-            if (nomesSemMatch.size > 0) console.warn("⚠️ Nomes na auditoria sem usuário correspondente:", [...nomesSemMatch]);
-            if (statusInvalidos.size > 0) console.warn("⚠️ Status ignorados (não estão na lista válida):", [...statusInvalidos]);
+            if (nomesSemMatch.size > 0) {
+                console.warn("⚠️ ALERTA: Estes nomes da auditoria não foram encontrados no cadastro de usuários:", [...nomesSemMatch]);
+                alert(`Atenção: ${nomesSemMatch.size} assistentes da auditoria não foram encontradas no sistema.\nVerifique o Console (F12) para ver os nomes.`);
+            }
 
-            // 4. METAS & UNIFICAÇÃO
+            // 4. METAS
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
@@ -209,6 +209,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
+                // DIA A DIA
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const metaCalc = metaBase * (r.fator || 1);
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -224,6 +225,7 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
+                // CONSOLIDADO
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic";
@@ -240,6 +242,7 @@ Produtividade.Geral = {
         });
     },
 
+    // Funções auxiliares (Mantidas)
     filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.renderizarTabela(); },
     limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.renderizarTabela(); },
     atualizarKPIs: function(data, mapaUsuarios) { let totalProdGeral = 0; let usersCLT = new Set(); let usersPJ = new Set(); data.forEach(r => { const qtd = Number(r.quantidade) || 0; totalProdGeral += qtd; const u = r.usuario || (mapaUsuarios ? mapaUsuarios[r.usuario_id] : null); if (u) { const cargo = u.funcao ? String(u.funcao).toUpperCase() : 'ASSISTENTE'; if (!['AUDITORA', 'GESTORA'].includes(cargo)) { if(u.contrato === 'CLT') usersCLT.add(u.id); else usersPJ.add(u.id); } } }); this.setTxt('kpi-total', totalProdGeral.toLocaleString('pt-BR')); this.setTxt('kpi-clt-val', `${usersCLT.size}`); this.setTxt('kpi-pj-val', `${usersPJ.size}`); },
