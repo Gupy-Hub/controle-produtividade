@@ -63,14 +63,13 @@ Gestao.Assertividade = {
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
-        const btnAnt = document.getElementById('btn-ant');
-        const btnProx = document.getElementById('btn-prox');
         const contador = document.getElementById('contador-assert');
 
         if(tbody) tbody.style.opacity = '1';
         if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-circle-notch fa-spin"></i> Filtrando...</span>`;
 
         try {
+            // OBS: A query seleciona tudo (*). Esperamos que a view traga a coluna 'porcentagem' original
             let query = Sistema.supabase
                 .from('vw_assertividade_completa')
                 .select('*', { count: 'exact' });
@@ -170,23 +169,30 @@ Gestao.Assertividade = {
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
 
-            // === CORREÇÃO BLINDADA: Lista de status que NÃO devem ter nota ===
-            // Se você encontrar outros status problemáticos, adicione na lista abaixo.
-            const statusSemNota = ['REV', 'NA', 'N/A', 'REVALIDA'];
-            const deveIgnorarNota = statusSemNota.some(s => stUp.includes(s));
+            // === LÓGICA PURA: USA A COLUNA 'porcentagem' (ORIGINAL DO CSV) ===
+            // Substituímos 'indice_assertividade' (calculado) por 'porcentagem' (bruto)
+            // Se na planilha estava vazio, aqui será null -> exibe '-'
+            // Se na planilha tinha '100%', aqui será '100%' -> exibe '100%'
+            
+            // Tenta pegar a coluna bruta 'porcentagem'. Se não existir (view antiga), tenta a calculada.
+            let valorOriginal = item.porcentagem; 
+            
+            // Fallback de segurança: se 'porcentagem' vier undefined do banco, usamos null para não mostrar dados falsos
+            if (valorOriginal === undefined) {
+               // Se quiser usar o calculado como último recurso: valorOriginal = item.indice_assertividade;
+               // Mas para garantir fidelidade à planilha, melhor manter null se não acharmos a coluna bruta.
+               valorOriginal = null; 
+            }
 
             let assertDisplay = '-';
-            let assertColor = 'text-slate-400 font-light'; // Cor padrão (cinza claro) para nulos
+            let assertColor = 'text-slate-400 font-light'; 
 
-            // Só processa a nota se NÃO estiver na lista de ignorados
-            // E se tiver um valor válido vindo do banco
-            if (!deveIgnorarNota && item.indice_assertividade !== null && item.indice_assertividade !== undefined && item.indice_assertividade !== '') {
-                const assertVal = parseFloat(item.indice_assertividade);
+            if (valorOriginal !== null && valorOriginal !== '' && valorOriginal !== undefined) {
+                const assertVal = parseFloat(valorOriginal);
                 
                 if (!isNaN(assertVal)) {
                     assertDisplay = assertVal + '%';
                     
-                    // Lógica de Cores
                     assertColor = 'text-slate-600';
                     if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
                     else if (assertVal < 90 && assertVal >= 0) assertColor = 'text-rose-600 font-bold';
@@ -206,9 +212,7 @@ Gestao.Assertividade = {
                 <td class="px-3 py-2 text-center font-mono bg-slate-50/50 text-slate-500">${item.num_campos}</td>
                 <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50/30">${item.qtd_ok}</td>
                 <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50/30">${item.qtd_nok}</td>
-                
                 <td class="px-3 py-2 text-center ${assertColor} text-sm bg-slate-50/50">${assertDisplay}</td>
-                
                 <td class="px-3 py-2 text-slate-500 text-[10px] uppercase">${auditoraSafe}</td>
             </tr>`;
         });
