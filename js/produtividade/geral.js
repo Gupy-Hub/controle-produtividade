@@ -4,10 +4,10 @@ Produtividade.Geral = {
     cacheData: [],      
     cacheDatas: { start: null, end: null }, 
     usuarioSelecionado: null,
-    selecionados: new Set(), // Armazena os IDs selecionados
+    selecionados: new Set(),
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Com Checkboxes + Abono)...");
+        console.log("🔧 Produtividade: Iniciando (Correção Abono em Grade)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -32,9 +32,7 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
-        // Limpa seleção ao recarregar
         this.selecionados = new Set();
-        // Reseta o checkbox mestre
         const checkMaster = document.getElementById('check-all-master');
         if(checkMaster) checkMaster.checked = false;
 
@@ -202,6 +200,10 @@ Produtividade.Geral = {
             return;
         }
 
+        // DETECTA SE ESTAMOS VENDO UM ÚNICO DIA
+        const datas = Produtividade.getDatasFiltro();
+        const isDiaUnico = (datas.inicio === datas.fim);
+
         lista.forEach(d => {
             const cargo = (d.usuario.funcao || 'ND').toUpperCase();
             const contrato = (d.usuario.contrato || 'ND').toUpperCase();
@@ -209,7 +211,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // VISÃO DIÁRIA
+                // VISÃO DIÁRIA (Detalhe do Usuário)
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
                     const metaCalc = metaBase * fatorReal;
@@ -217,25 +219,15 @@ Produtividade.Geral = {
                     const [ano, mes, dia] = r.data_referencia.split('-');
                     
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
-                    
-                    let assertVal = r.assertividade_real; 
-                    let assertNum = r.assertividade_valor;
+                    let assertVal = r.assertividade_real; let assertNum = r.assertividade_valor;
                     let corAssert = 'text-slate-400';
                     if (assertNum > 0) corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
 
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                     tr.innerHTML = `
-                        <td class="px-2 py-2 text-center border-r border-slate-200">
-                            <input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${r.id}" onchange="Produtividade.Geral.toggleSelection('${r.id}')">
-                        </td>
-                        <td class="px-2 py-2 text-center border-r border-slate-200">
-                            <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-full text-center">
-                                <option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option>
-                                <option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option>
-                                <option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option>
-                            </select>
-                        </td>
+                        <td class="px-2 py-2 text-center border-r border-slate-200"><input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${r.id}" onchange="Produtividade.Geral.toggleSelection('${r.id}')"></td>
+                        <td class="px-2 py-2 text-center border-r border-slate-200"><select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-full text-center"><option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option><option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option><option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option></select></td>
                         <td class="px-3 py-2 border-r border-slate-200"><div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')"><div class="flex justify-between items-center"><span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span><span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 rounded border border-blue-100 ml-2">${dia}/${mes}</span></div><span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargo} • ${contrato}</span></div></td>
                         <td class="${commonCell}">${fatorReal}</td>
                         <td class="${commonCell}">${r.fifo}</td>
@@ -259,13 +251,31 @@ Produtividade.Geral = {
                     assertGeralTxt = mediaGeral.toFixed(2).replace('.', ',') + "%";
                     corAssert = mediaGeral >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
                 }
+
+                // 🚨 LÓGICA DO ABONO NA GRADE
+                let colunaAbonoHtml = `<td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>`;
+                
+                // Se for DIA ÚNICO e tiver registro, mostra o Dropdown
+                if (isDiaUnico && d.registros.length > 0) {
+                    const r = d.registros[0]; // Pega o registro do dia
+                    const fatorReal = this.getFator(r.fator);
+                    let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
+                    
+                    colunaAbonoHtml = `
+                        <td class="px-2 py-2 text-center border-r border-slate-200">
+                            <select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-full text-center">
+                                <option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option>
+                                <option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option>
+                                <option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option>
+                            </select>
+                        </td>`;
+                }
+
                 const tr = document.createElement('tr');
                 tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
                 tr.innerHTML = `
-                    <td class="px-2 py-2 text-center border-r border-slate-200">
-                         <input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${d.usuario.id}" onchange="Produtividade.Geral.toggleSelection('${d.usuario.id}')">
-                    </td>
-                    <td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>
+                    <td class="px-2 py-2 text-center border-r border-slate-200"><input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${d.usuario.id}" onchange="Produtividade.Geral.toggleSelection('${d.usuario.id}')"></td>
+                    ${colunaAbonoHtml}
                     <td class="px-3 py-2 border-r border-slate-200"><div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')"><span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span><span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargo} • ${contrato}</span></div></td>
                     <td class="${commonCell} font-bold text-slate-700">${d.totais.diasUteis}</td>
                     <td class="${commonCell}">${d.totais.fifo}</td>
@@ -282,7 +292,6 @@ Produtividade.Geral = {
         });
     },
 
-    // FUNÇÕES DE SELEÇÃO E BULK ACTION
     toggleSelection: function(id) {
         if(this.selecionados.has(id)) this.selecionados.delete(id);
         else this.selecionados.add(id);
@@ -306,18 +315,15 @@ Produtividade.Geral = {
         if (this.selecionados.size > 0) {
              const selecao = Array.from(this.selecionados);
              
-             // Descobre se estamos na visão consolidada (ID Usuário) ou detalhada (ID Produção)
              if (this.usuarioSelecionado === null) {
                  // Visão Consolidada: checkbox vale como usuario_id
-                 // Precisamos pegar TODOS os registros de produção desses usuários visíveis
                  this.dadosOriginais.forEach(d => {
                      if (this.selecionados.has(d.usuario.id.toString())) {
                          d.registros.forEach(r => idsParaAtualizar.push(r.id));
                      }
                  });
-                 if(!confirm(`Aplicar Abono para ${this.selecionados.size} assistentes selecionadas (Total de ${idsParaAtualizar.length} dias)?`)) return;
+                 if(!confirm(`Aplicar Abono para ${this.selecionados.size} assistentes selecionadas?`)) return;
              } else {
-                 // Visão Detalhada: checkbox vale como production_id
                  idsParaAtualizar = selecao;
                  if(!confirm(`Aplicar Abono para ${idsParaAtualizar.length} dias selecionados?`)) return;
              }
@@ -325,7 +331,7 @@ Produtividade.Geral = {
         // Cenario 2: Nenhuma seleção (Aplica a TODOS visíveis)
         else {
              idsParaAtualizar = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
-             if(!confirm(`Nenhum item selecionado.\n\nDeseja aplicar a TODOS os ${idsParaAtualizar.length} registros visíveis na tela?`)) return;
+             if(!confirm(`Nenhum item selecionado.\n\nDeseja aplicar a TODOS os ${idsParaAtualizar.length} registros visíveis?`)) return;
         }
 
         if (idsParaAtualizar.length === 0) return;
@@ -339,9 +345,8 @@ Produtividade.Geral = {
         }
     },
 
-    // ... (filtrarUsuario, limparSelecao, atualizarKPIs, mudarFator, excluirDadosDia permanecem iguais)
-    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregarTela(); },
-    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.carregarTela(); },
+    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.renderizarTabela(); },
+    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.renderizarTabela(); },
     
     atualizarKPIs: function(data, mapaUsuarios) { 
         let totalProdGeral = 0; let usersCLT = new Set(); let usersPJ = new Set(); 
