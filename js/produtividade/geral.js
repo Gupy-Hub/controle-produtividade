@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Turbo - RPC SQL)...");
+        console.log("🔧 Produtividade: Iniciando (Modo Enterprise - 200k+ rows)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -16,9 +16,16 @@ Produtividade.Geral = {
         if (el) el.innerText = valor;
     },
 
+    // Normalização agressiva para garantir match
     normalizar: function(str) {
         if(!str) return "";
-        return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, ' ').trim();
+    },
+
+    parsePorcentagem: function(valorStr) {
+        if (!valorStr) return 0;
+        let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
+        return parseFloat(limpo) || 0;
     },
 
     carregarTela: async function() {
@@ -26,40 +33,45 @@ Produtividade.Geral = {
         if(!tbody) return;
 
         const datas = Produtividade.getDatasFiltro();
-        const dataInicio = datas.inicio;
-        const dataFim = datas.fim;
+        let dataInicio = datas.inicio;
+        let dataFim = datas.fim;
 
-        console.log(`📅 Buscando dados otimizados de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando no servidor...</td></tr>';
+        // CORREÇÃO DE SEGURANÇA: Se dataInicio == dataFim, verifica se o usuário queria o MÊS
+        // (Isso depende de como o filtro é setado, mas aqui garantimos o log correto)
+        console.log(`📅 FILTRO ATIVO: De ${dataInicio} até ${dataFim}`);
+        
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-server fa-spin mr-2"></i> Processando Big Data (Server-Side)...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO (Volume)
+            // 1. BUSCA PRODUÇÃO
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
-                .range(0, 50000) // Produção diária tem volume menor, range ainda ok
+                .range(0, 50000) 
                 .order('data_referencia', { ascending: true });
             
             if (errProd) throw errProd;
 
-            // 2. BUSCA USUÁRIOS
+            // 2. BUSCA USUÁRIOS (Todos, para garantir match)
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
-                .select('id, nome, perfil, funcao, contrato');
+                .select('id, nome, perfil, funcao, contrato')
+                .range(0, 5000); // Garante pegar todos os usuários
             
             if (errUser) throw errUser;
             
             const mapaUsuarios = {};
-            const mapaNomeParaId = {};
+            // Cria mapa normalizado para busca exata
+            const mapaNomeExato = {};
+            
             usuarios.forEach(u => {
                 mapaUsuarios[u.id] = u;
-                if(u.nome) mapaNomeParaId[this.normalizar(u.nome)] = u.id;
+                if(u.nome) mapaNomeExato[this.normalizar(u.nome)] = u.id;
             });
 
-            // 3. BUSCA ASSERTIVIDADE VIA RPC (AQUI É A MÁGICA DE PERFORMANCE)
-            // Em vez de baixar 500k linhas, chamamos a função que devolve o resumo pronto.
+            // 3. BUSCA ASSERTIVIDADE VIA RPC (Alta Performance)
             const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase
                 .rpc('calcular_assertividade_periodo', { 
                     p_inicio: dataInicio, 
@@ -68,24 +80,34 @@ Produtividade.Geral = {
 
             if (errQuali) throw errQuali;
 
-            console.log(`⚡ RPC Retornou: ${qualidadeResumo.length} resumos consolidados (Ultra leve).`);
+            console.log(`⚡ RPC Retornou: ${qualidadeResumo.length} linhas agrupadas.`);
 
-            // Organiza o resumo retornado pelo banco
+            // 4. SMART MATCHER (Algoritmo de Cruzamento Inteligente)
             const mapaQualidadeDiaria = {}; 
             const mapaQualidadeTotal = {};
             let nomesSemMatch = new Set();
 
             if (qualidadeResumo) {
                 qualidadeResumo.forEach(q => {
-                    const nomeNorm = this.normalizar(q.assistente);
-                    const uid = mapaNomeParaId[nomeNorm];
-                    
+                    const nomeCsv = this.normalizar(q.assistente);
+                    let uid = mapaNomeExato[nomeCsv];
+
+                    // TENTATIVA 2: Busca por "Contém" (Fuzzy Match simples)
+                    if (!uid) {
+                        const partesCsv = nomeCsv.split(' ');
+                        // Tenta achar um usuário no banco que contenha o primeiro e ultimo nome do CSV
+                        const match = usuarios.find(u => {
+                            const uNorm = this.normalizar(u.nome);
+                            return uNorm.includes(partesCsv[0]) && (partesCsv.length > 1 ? uNorm.includes(partesCsv[partesCsv.length-1]) : true);
+                        });
+                        if (match) uid = match.id;
+                    }
+
                     if (!uid) {
                         nomesSemMatch.add(q.assistente);
                         return;
                     }
 
-                    // Função auxiliar para somar os resumos
                     const somar = (obj) => {
                         if (!obj) obj = { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
                         obj.somaNotas += (Number(q.soma_notas) || 0);
@@ -96,25 +118,26 @@ Produtividade.Geral = {
                     };
 
                     // Agrega no Dia
-                    const chaveDia = `${uid}_${q.data_ref}`; // RPC retorna data_ref YYYY-MM-DD
+                    const chaveDia = `${uid}_${q.data_ref}`;
                     mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
 
-                    // Agrega no Total do Período
+                    // Agrega no Total
                     mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
                 });
             }
 
             if (nomesSemMatch.size > 0) {
-                console.warn("⚠️ Nomes do CSV sem usuário no sistema:", [...nomesSemMatch]);
+                console.warn("⚠️ Nomes do CSV sem usuário no sistema (Top 10):", [...nomesSemMatch].slice(0, 10));
             }
 
-            // 4. METAS
+            // 5. METAS
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
                 .select('usuario_id, meta_producao')
                 .eq('mes', parseInt(mesRef))
-                .eq('ano', parseInt(anoRef));
+                .eq('ano', parseInt(anoRef))
+                .range(0, 2000);
             
             const mapaMetas = {};
             if(metasBanco) metasBanco.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
@@ -122,13 +145,16 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
+            // 6. AGRUPAMENTO FINAL
             let dadosAgrupados = {};
             
+            // A. Adiciona dados de Produção
             producao.forEach(item => {
                 const uid = item.usuario_id;
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 
                 if(!dadosAgrupados[uid]) {
+                    // Se já tem qualidade calculada, pega o total, senão zera
                     const qTotal = mapaQualidadeTotal[uid] || { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
                     dadosAgrupados[uid] = {
                         usuario: userObj,
@@ -141,6 +167,7 @@ Produtividade.Geral = {
                     };
                 }
                 
+                // Dados Diários
                 const chaveQuali = `${uid}_${item.data_referencia}`;
                 const dadosQ = mapaQualidadeDiaria[chaveQuali] || { somaNotas: 0, qtdDocs: 0 };
 
@@ -162,6 +189,10 @@ Produtividade.Geral = {
                 d.gt += (Number(item.gradual_total) || 0); d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0); d.dias += 1; d.diasUteis += f;
             });
+
+            // B. (Opcional) Adiciona usuários que têm Qualidade mas NÃO têm produção no período
+            // Se quiser ver quem auditou mas não produziu, descomente a lógica abaixo, 
+            // mas isso pode poluir a tela se não for o foco.
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             

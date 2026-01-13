@@ -37,7 +37,7 @@ Importacao.Assertividade = {
         const statusEl = document.getElementById('status-importacao');
         let sucesso = 0;
         let erros = 0;
-        const TAMANHO_LOTE = 200;
+        const TAMANHO_LOTE = 1000;
 
         // 1. MAPEAMENTO E LIMPEZA DOS DADOS
         if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-filter"></i> Processando dados...</span>`;
