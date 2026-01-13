@@ -6,21 +6,27 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Lista de Feriados Nacionais (formato MM-DD)
+    // Lista de Feriados Nacionais 2025 (MM-DD)
     feriados: [
         "01-01", // Ano Novo
+        "03-03", // Carnaval (Seg)
+        "03-04", // Carnaval (Ter)
+        "04-18", // Sexta Feira Santa
         "04-21", // Tiradentes
-        "05-01", // Trabalho
+        "05-01", // Dia do Trabalho
+        "06-19", // Corpus Christi
         "09-07", // Independência
-        "10-12", // Padroeira
+        "10-12", // N. Sra. Aparecida
         "11-02", // Finados
-        "11-15", // República
-        "11-20", // Consciência Negra (Novo)
-        "12-25"  // Natal
+        "11-15", // Proclamação da República
+        "11-20", // Consciência Negra
+        "12-24", // Véspera Natal (Ponto Facultativo Comum)
+        "12-25", // Natal
+        "12-31"  // Véspera Ano Novo
     ],
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Feriados + Justificativa)...");
+        console.log("🔧 Produtividade: Iniciando (KPIs Dinâmicos + Abono)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -51,7 +57,6 @@ Produtividade.Geral = {
         const day = dateObj.getDay();
         if (day === 0 || day === 6) return false; // Sábado ou Domingo
         
-        // Formata MM-DD para checar feriado
         const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
         const dia = String(dateObj.getDate()).padStart(2, '0');
         const chave = `${mes}-${dia}`;
@@ -59,6 +64,17 @@ Produtividade.Geral = {
         if (this.feriados.includes(chave)) return false;
         
         return true;
+    },
+
+    // Conta dias úteis totais em um mês específico (para o denominador /22)
+    getDiasUteisNoMes: function(ano, mes) { // mes 1-12
+        let dias = 0;
+        const date = new Date(ano, mes - 1, 1);
+        while (date.getMonth() === mes - 1) {
+            if (this.isDiaUtil(date)) dias++;
+            date.setDate(date.getDate() + 1);
+        }
+        return dias;
     },
 
     carregarTela: async function() {
@@ -77,7 +93,7 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO (Incluindo motivo_abono)
+            // 1. PRODUÇÃO
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -88,7 +104,7 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. BUSCA USUÁRIOS
+            // 2. USUÁRIOS
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato')
@@ -99,7 +115,7 @@ Produtividade.Geral = {
             const mapaUsuarios = {};
             usuarios.forEach(u => mapaUsuarios[u.id] = u);
 
-            // 3. BUSCA ASSERTIVIDADE (RPC)
+            // 3. ASSERTIVIDADE
             const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase
                 .rpc('calcular_assertividade_periodo', { 
                     p_inicio: dataInicio, 
@@ -183,7 +199,7 @@ Produtividade.Geral = {
                     usuario: userObj,
                     assertividade_real: assertTxt, 
                     assertividade_valor: assertPct,
-                    motivo_abono: item.motivo_abono // Passa o motivo para o front
+                    motivo_abono: item.motivo_abono
                 });
                 
                 const d = dadosAgrupados[uid].totais;
@@ -195,7 +211,7 @@ Produtividade.Geral = {
                 d.gp += (Number(item.gradual_parcial) || 0); 
                 d.fc += (Number(item.perfil_fc) || 0);
                 d.dias += 1; 
-                d.diasUteis += f; // Soma 0 se abonado, 0.5 se parcial
+                d.diasUteis += f; // Soma 0.5 + 0.5 = 1 aqui automaticamente
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
@@ -205,7 +221,8 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                this.atualizarKPIs(this.dadosOriginais); 
+                // Passa a produção bruta também para checar dias abonados
+                this.atualizarKPIs(this.dadosOriginais, producao); 
             }
         } catch (error) {
             console.error("Erro render:", error);
@@ -257,11 +274,7 @@ Produtividade.Geral = {
                     let corAssert = 'text-slate-400';
                     if (assertNum > 0) corAssert = assertNum >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
 
-                    // Ícone de Motivo
-                    let motivoIcon = "";
-                    if (r.motivo_abono) {
-                        motivoIcon = `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>`;
-                    }
+                    let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
 
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
@@ -352,17 +365,15 @@ Produtividade.Geral = {
         });
     },
 
-    // AÇÃO EM MASSA (COM JUSTIFICATIVA)
     mudarFatorTodos: async function(val) { 
         if(val === "") return;
         
-        // Pergunta o motivo SE for abono
         let motivo = null;
         if (val !== '1') {
-            motivo = prompt("Qual o motivo deste abono? (Obrigatório)");
+            motivo = prompt("Motivo do abono em massa (Obrigatório):");
             if (!motivo || motivo.trim().length < 3) {
                 alert("É obrigatório informar o motivo para abonar.");
-                document.getElementById('bulk-fator').value = ""; // Reseta
+                document.getElementById('bulk-fator').value = "";
                 return;
             }
         }
@@ -383,12 +394,11 @@ Produtividade.Geral = {
         } 
         else {
              idsParaAtualizar = this.dadosOriginais.flatMap(d => d.registros.map(r => r.id));
-             if(!confirm(`Nenhum item selecionado.\n\nAplicar a TODOS os ${idsParaAtualizar.length} registros?`)) return;
+             if(!confirm(`Aplicar a TODOS os ${idsParaAtualizar.length} registros visíveis?`)) return;
         }
 
         if (idsParaAtualizar.length === 0) return;
 
-        // Salva fator E motivo
         const { error } = await Sistema.supabase
             .from('producao')
             .update({ fator: val, motivo_abono: motivo })
@@ -397,19 +407,17 @@ Produtividade.Geral = {
         if(!error) {
             this.carregarTela(); 
         } else {
-            alert("Erro ao atualizar: " + error.message);
+            alert("Erro: " + error.message);
         }
     },
 
-    // AÇÃO INDIVIDUAL (COM JUSTIFICATIVA)
     mudarFator: async function(id, val) { 
         let motivo = null;
-        
         if (val !== '1') {
             motivo = prompt("Motivo do abono (Obrigatório):");
             if (!motivo || motivo.trim().length < 3) {
                 alert("Cancelado: Motivo é obrigatório.");
-                this.carregarTela(); // Recarrega para voltar o select ao original
+                this.carregarTela(); 
                 return;
             }
         }
@@ -422,11 +430,11 @@ Produtividade.Geral = {
         if(!error) this.carregarTela(); 
     },
 
-    atualizarKPIs: function(dadosAgrupados) { 
+    // KPI INTELIGENTE (Considera dias abonados de TODO O TIME)
+    atualizarKPIs: function(dadosAgrupados, dadosBrutosProducao) { 
         let metaTotal = 0; let producaoTotal = 0;
         let somaNotasGeral = 0; let qtdDocsGeral = 0;
         let clt = { qtd: 0, prod: 0 }; let pj = { qtd: 0, prod: 0 };
-        let totalDiasUteisAgregado = 0;
 
         dadosAgrupados.forEach(d => {
             const cargo = (d.usuario.funcao || '').toUpperCase();
@@ -434,7 +442,6 @@ Produtividade.Geral = {
 
             metaTotal += (d.meta_real * d.totais.diasUteis);
             producaoTotal += d.totais.qty;
-            totalDiasUteisAgregado += d.totais.diasUteis;
             somaNotasGeral += (d.totais.somaNotas || 0);
             qtdDocsGeral += (d.totais.qtdDocs || 0);
 
@@ -442,51 +449,73 @@ Produtividade.Geral = {
             else { pj.qtd++; pj.prod += d.totais.qty; }
         });
 
+        // --- Card 1: Produção ---
         this.setTxt('kpi-meta-esperada', Math.round(metaTotal).toLocaleString('pt-BR'));
         this.setTxt('kpi-producao-real', producaoTotal.toLocaleString('pt-BR'));
 
+        // --- Card 2: Atingimento ---
         const pctProd = metaTotal > 0 ? (producaoTotal / metaTotal) * 100 : 0;
         let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
-
         this.setTxt('kpi-atingimento-pct', Math.round(pctProd) + '%');
         this.setTxt('kpi-assertividade-real', pctAssert.toFixed(2).replace('.', ',') + '%');
 
+        // --- Card 3: Equipe ---
         const pctClt = producaoTotal > 0 ? (clt.prod / producaoTotal) * 100 : 0;
         const pctPj = producaoTotal > 0 ? (pj.prod / producaoTotal) * 100 : 0;
-        
         this.setHtml('kpi-clt-info', `<span class="font-bold text-lg">${clt.qtd}</span> <span class="text-[10px] text-slate-400">(${Math.round(pctClt)}%)</span>`);
         this.setHtml('kpi-pj-info', `<span class="font-bold text-lg">${pj.qtd}</span> <span class="text-[10px] text-slate-400">(${Math.round(pctPj)}%)</span>`);
 
-        // DIAS ÚTEIS COM FERIADOS
+        // --- Card 4: Dias Úteis (Lógica de Abono Global) ---
         const datas = Produtividade.getDatasFiltro();
-        let diasUteisCalendario = 0;
+        let diasUteisCalendario = 0; // Numerador (Dias que contam)
+        
         let curr = new Date(datas.inicio + "T00:00:00");
         const end = new Date(datas.fim + "T00:00:00");
         
+        // Mapa de Dias onde TODOS foram abonados
+        // Data -> { total: 10, abonados: 10 }
+        const mapaDiasAbonados = {};
+        if (dadosBrutosProducao) {
+            dadosBrutosProducao.forEach(r => {
+                if(!mapaDiasAbonados[r.data_referencia]) mapaDiasAbonados[r.data_referencia] = { total: 0, abonados: 0 };
+                mapaDiasAbonados[r.data_referencia].total++;
+                if (Number(r.fator) === 0) mapaDiasAbonados[r.data_referencia].abonados++;
+            });
+        }
+
         while (curr <= end) {
-            if (this.isDiaUtil(curr)) diasUteisCalendario++;
+            if (this.isDiaUtil(curr)) {
+                // Checa se neste dia todo mundo foi abonado
+                const isoDate = curr.toISOString().split('T')[0];
+                const stats = mapaDiasAbonados[isoDate];
+                
+                // Se tiver registros e TODOS forem zero, subtrai (não conta como útil)
+                const abonoGeral = (stats && stats.total > 0 && stats.total === stats.abonados);
+                
+                if (!abonoGeral) {
+                    diasUteisCalendario++;
+                }
+            }
             curr.setDate(curr.getDate() + 1);
         }
         
-        const mediaEsperada = totalDiasUteisAgregado > 0 ? metaTotal / totalDiasUteisAgregado : 0;
-        const mediaReal = totalDiasUteisAgregado > 0 ? producaoTotal / totalDiasUteisAgregado : 0;
+        // Denominador: Dias Úteis Totais do Mês (1-31)
+        const [anoRef, mesRef] = datas.inicio.split('-');
+        const diasUteisMesTotal = this.getDiasUteisNoMes(parseInt(anoRef), parseInt(mesRef));
 
-        this.setTxt('kpi-dias-uteis', `${diasUteisCalendario} dias`);
-        this.setTxt('kpi-media-esperada', Math.round(mediaEsperada));
-        this.setTxt('kpi-media-real', Math.round(mediaReal));
+        this.setTxt('kpi-dias-uteis', `${diasUteisCalendario}/${diasUteisMesTotal}`);
+        this.setTxt('kpi-media-esperada', "Meta / Real"); 
+        this.setHtml('kpi-media-real', `<span class="text-[10px] text-slate-400">${Math.round(metaTotal)}</span> / <span class="text-amber-700">${Math.round(producaoTotal)}</span>`);
 
-        // TOP PERFORMANCE
+        // --- Card 5: Top Performance ---
         const topProd = [...dadosAgrupados]
             .filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()))
             .sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
 
         const topAssert = [...dadosAgrupados]
             .filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()) && d.totais.qtdDocs >= 10)
-            .sort((a, b) => {
-                const medA = a.totais.somaNotas / a.totais.qtdDocs;
-                const medB = b.totais.somaNotas / b.totais.qtdDocs;
-                return medB - medA;
-            }).slice(0, 3);
+            .sort((a, b) => (b.totais.somaNotas / b.totais.qtdDocs) - (a.totais.somaNotas / a.totais.qtdDocs))
+            .slice(0, 3);
 
         const renderTop = (list, isProd) => {
             if(list.length === 0) return '<span class="text-[8px] text-slate-400 text-center">-</span>';
