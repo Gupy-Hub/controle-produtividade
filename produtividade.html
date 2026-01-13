@@ -105,6 +105,8 @@
                         <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Gestão</span>
                     </label>
 
+                    <div id="status-importacao-prod" class="text-[10px] font-bold text-slate-500 hidden md:block mr-2 animate-pulse"></div>
+
                     <input type="file" id="input-excel" accept=".csv" multiple class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
                     <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar"><i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span></button>
                     

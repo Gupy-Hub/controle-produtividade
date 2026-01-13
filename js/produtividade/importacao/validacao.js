@@ -167,7 +167,6 @@ Produtividade.Importacao.Validacao = {
     salvarNoBanco: async function() {
         const statusEl = document.getElementById('status-importacao-prod');
         const btn = document.querySelector('button[onclick*="Importar"]');
-        const oldTxt = btn ? btn.innerHTML : '';
         
         if(btn) { btn.disabled = true; } // Apenas desabilita o botão, o texto vai na div
 
