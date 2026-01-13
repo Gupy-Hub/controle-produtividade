@@ -15,34 +15,50 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; color: #1e293b; } 
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
-        .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #334155; } 
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #64748b; }
+        .tab-btn:hover { background-color: #f1f5f9; color: #0f172a; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .custom-scrollbar::-webkit-scrollbar { height: 10px; width: 10px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* Estilo para dividir os cards */
-        .card-split { display: flex; height: 100%; }
-        .card-half { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 4px; }
-        .card-divider { width: 1px; background-color: #e2e8f0; height: 70%; align-self: center; }
-        .kpi-label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 2px; text-align: center; line-height: 1.1; }
-        .kpi-value { font-size: 14px; font-weight: 800; color: #334155; line-height: 1.1; }
-        .kpi-sub { font-size: 9px; font-weight: 600; color: #64748b; }
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Estilo Novo dos Cards */
+        .kpi-card { 
+            background: white; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #f1f5f9;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 90px;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
+        .kpi-icon-bg { position: absolute; right: -10px; bottom: -10px; font-size: 3.5rem; opacity: 0.05; transform: rotate(-10deg); pointer-events: none; }
+        
+        .kpi-title { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; margin-bottom: 2px; }
+        .kpi-main-val { font-size: 1.5rem; font-weight: 800; line-height: 1; color: #1e293b; }
+        .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.75rem; font-weight: 600; }
+        .badge { padding: 2px 6px; border-radius: 6px; font-size: 0.65rem; font-weight: 700; }
     </style>
 </head>
-<body class="bg-slate-100">
+<body class="bg-slate-50">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
     
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
-    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
+    <div class="bg-white/80 backdrop-blur-md border-b border-slate-200 fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
             <div class="flex gap-1 overflow-x-auto no-scrollbar">
                 <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Validação</button>
@@ -64,20 +80,16 @@
 
                     <div class="flex gap-2 items-center">
                         <input type="date" id="sel-data-dia" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 w-[110px]">
-
                         <select id="sel-ano" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500"></select>
-
                         <select id="sel-mes" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">
                             <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option>
                             <option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option>
                             <option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option>
                             <option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
                         </select>
-
                         <select id="sel-semana" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500">
                             <option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option>
                         </select>
-
                         <select id="sel-subperiodo-ano" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-purple-500">
                             <option value="full">Ano Completo</option>
                             <optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup>
@@ -106,101 +118,90 @@
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
             
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
-                    <div class="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
-                    <div class="card-split">
-                        <div class="card-half">
-                            <span class="kpi-label">Esperado</span>
-                            <span class="kpi-value text-slate-400" id="kpi-validacao-esperado">--</span>
-                        </div>
-                        <div class="card-divider"></div>
-                        <div class="card-half bg-blue-50/30">
-                            <span class="kpi-label text-blue-600">Realizada</span>
-                            <span class="kpi-value text-blue-700" id="kpi-validacao-real">--</span>
-                        </div>
+                <div class="kpi-card border-l-4 border-l-blue-500">
+                    <i class="fas fa-file-invoice kpi-icon-bg text-blue-500"></i>
+                    <div>
+                        <div class="kpi-title text-blue-600">Volumetria Total</div>
+                        <div class="kpi-main-val text-slate-800" id="kpi-validacao-real">--</div>
                     </div>
-                    <div class="absolute top-1 left-2 text-[9px] font-bold text-slate-300 uppercase tracking-wider">Validação</div>
+                    <div class="kpi-sub-row text-slate-500">
+                        <span>Esperado:</span>
+                        <span id="kpi-validacao-esperado" class="font-bold text-blue-600">--</span>
+                    </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
-                    <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
-                    <div class="card-split">
-                        <div class="card-half">
-                            <span class="kpi-label">Produção</span>
-                            <span class="kpi-sub text-[8px] text-slate-400 mb-0.5">Esperado / Real</span>
-                            <div class="flex items-baseline gap-1">
-                                <span class="kpi-value text-emerald-600" id="kpi-meta-producao">--%</span>
+                <div class="kpi-card border-l-4 border-l-emerald-500">
+                    <i class="fas fa-check-circle kpi-icon-bg text-emerald-500"></i>
+                    <div>
+                        <div class="kpi-title text-emerald-600">Qualidade (Assertividade)</div>
+                        <div class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500">
+                        <span>Meta Atingida:</span>
+                        <span id="kpi-meta-producao-val" class="font-bold text-emerald-600">--%</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card border-l-4 border-l-purple-500">
+                    <i class="fas fa-users kpi-icon-bg text-purple-500"></i>
+                    <div>
+                        <div class="kpi-title text-purple-600">Força de Trabalho</div>
+                        <div class="flex gap-3 mt-1">
+                            <div class="flex flex-col">
+                                <span class="text-[10px] text-slate-400 font-bold uppercase">CLT</span>
+                                <span class="text-lg font-black text-slate-700 leading-none" id="kpi-clt-count">0</span>
                             </div>
-                        </div>
-                        <div class="card-divider"></div>
-                        <div class="card-half bg-emerald-50/30">
-                            <span class="kpi-label text-emerald-700">Assertividade</span>
-                            <span class="kpi-sub text-[8px] text-emerald-400 mb-0.5">Esperado / Real</span>
-                            <div class="flex items-baseline gap-1">
-                                <span class="kpi-value text-emerald-700" id="kpi-meta-assertividade">--%</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="absolute top-1 left-2 text-[9px] font-bold text-slate-300 uppercase tracking-wider">Meta</div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
-                    <div class="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
-                    <div class="card-split">
-                        <div class="card-half">
-                            <span class="kpi-label">CLT (Qtd + %)</span>
-                            <span class="kpi-value text-slate-700" id="kpi-clt-info">0 <span class="text-[10px] text-slate-400 font-normal">(0%)</span></span>
-                        </div>
-                        <div class="card-divider"></div>
-                        <div class="card-half">
-                            <span class="kpi-label">PJ (Qtd + %)</span>
-                            <span class="kpi-value text-purple-700" id="kpi-pj-info">0 <span class="text-[10px] text-purple-400 font-normal">(0%)</span></span>
-                        </div>
-                    </div>
-                    <div class="absolute top-1 left-2 text-[9px] font-bold text-slate-300 uppercase tracking-wider">Equipe</div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
-                    <div class="absolute top-0 left-0 w-1 h-full bg-amber-500"></div>
-                    <div class="card-split">
-                        <div class="card-half">
-                            <span class="kpi-label">Dias (Trab/Mês)</span>
-                            <span class="kpi-value text-slate-700" id="kpi-dias-uteis">--/--</span>
-                        </div>
-                        <div class="card-divider"></div>
-                        <div class="card-half">
-                            <span class="kpi-label">Meta / Real</span>
-                            <div class="flex items-baseline gap-1">
-                                <span class="kpi-value text-amber-600" id="kpi-media-real">--</span>
+                            <div class="w-px h-8 bg-slate-200"></div>
+                            <div class="flex flex-col">
+                                <span class="text-[10px] text-slate-400 font-bold uppercase">PJ</span>
+                                <span class="text-lg font-black text-purple-700 leading-none" id="kpi-pj-count">0</span>
                             </div>
                         </div>
                     </div>
-                    <div class="absolute top-1 left-2 text-[9px] font-bold text-slate-300 uppercase tracking-wider">Dias Úteis</div>
+                    <div class="kpi-sub-row text-slate-400">
+                        <span class="text-[9px]">Share: <span id="kpi-share-info">--</span></span>
+                    </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-slate-200 h-20 overflow-hidden relative">
-                    <div class="absolute top-0 left-0 w-1 h-full bg-indigo-500"></div>
-                    <div class="card-split">
-                        <div class="card-half px-1">
-                            <span class="kpi-label text-blue-600 mb-1"><i class="fas fa-trophy text-[8px]"></i> Top Produção</span>
-                            <div id="top-prod-list" class="flex flex-col w-full gap-0.5"></div>
-                        </div>
-                        <div class="card-divider"></div>
-                        <div class="card-half px-1">
-                            <span class="kpi-label text-emerald-600 mb-1"><i class="fas fa-check text-[8px]"></i> Top Assert.</span>
-                            <div id="top-assert-list" class="flex flex-col w-full gap-0.5"></div>
+                <div class="kpi-card border-l-4 border-l-amber-500">
+                    <i class="fas fa-tachometer-alt kpi-icon-bg text-amber-500"></i>
+                    <div>
+                        <div class="kpi-title text-amber-600">Eficiência Média / Dia</div>
+                        <div class="flex items-end gap-1">
+                            <span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span>
+                            <span class="text-xs text-slate-400 font-bold mb-1 ml-1">docs/dia</span>
                         </div>
                     </div>
-                    <div class="absolute top-1 left-2 text-[9px] font-bold text-slate-300 uppercase tracking-wider">Ranking</div>
+                    <div class="kpi-sub-row text-slate-500">
+                        <span>Meta Dia: <span id="kpi-media-esperada" class="font-bold text-amber-600">--</span></span>
+                        <span id="kpi-dias-uteis" class="badge bg-amber-50 text-amber-700 border border-amber-100">--/--</span>
+                    </div>
+                </div>
+
+                <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2">
+                    <div class="flex justify-between items-center mb-1">
+                        <div class="kpi-title text-indigo-600">Top Performance</div>
+                        <i class="fas fa-trophy text-indigo-300 text-xs"></i>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 h-full">
+                        <div class="border-r border-slate-100 pr-1">
+                            <span class="text-[8px] font-bold text-blue-400 block mb-0.5 text-center">Volume</span>
+                            <div id="top-prod-list" class="flex flex-col gap-0.5"></div>
+                        </div>
+                        <div class="pl-1">
+                            <span class="text-[8px] font-bold text-emerald-400 block mb-0.5 text-center">Qualidade</span>
+                            <div id="top-assert-list" class="flex flex-col gap-0.5"></div>
+                        </div>
+                    </div>
                 </div>
 
             </div>
             
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
 
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-280px)]">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
@@ -257,15 +258,10 @@
             <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 <div class="col-span-8 flex flex-col gap-4">
                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
-                        <div>
-                            <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3>
-                            <p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p>
-                        </div>
+                        <div><h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3><p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p></div>
                         <button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button>
                     </div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]">
-                        <canvas id="evolutionChart"></canvas>
-                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]"><canvas id="evolutionChart"></canvas></div>
                 </div>
                 <div class="col-span-4 flex flex-col gap-4">
                     <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-start gap-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i><p class="text-xs text-blue-800">Clique em uma assistente abaixo para ver a <strong>evolução individual</strong>.</p></div>
@@ -282,16 +278,7 @@
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-xs text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-center border-b-2 border-slate-200">
-                            <tr>
-                                <th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[200px]">Assistente</th>
-                                <th class="px-3 py-4 min-w-[70px]">Jan</th><th class="px-3 py-4 min-w-[70px]">Fev</th><th class="px-3 py-4 min-w-[70px]">Mar</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">1º Tri</th>
-                                <th class="px-3 py-4 min-w-[70px]">Abr</th><th class="px-3 py-4 min-w-[70px]">Mai</th><th class="px-3 py-4 min-w-[70px]">Jun</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">2º Tri</th>
-                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">1º Sem</th>
-                                <th class="px-3 py-4 min-w-[70px]">Jul</th><th class="px-3 py-4 min-w-[70px]">Ago</th><th class="px-3 py-4 min-w-[70px]">Set</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">3º Tri</th>
-                                <th class="px-3 py-4 min-w-[70px]">Out</th><th class="px-3 py-4 min-w-[70px]">Nov</th><th class="px-3 py-4 min-w-[70px]">Dez</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">4º Tri</th>
-                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">2º Sem</th>
-                                <th class="px-4 py-4 bg-slate-100 text-slate-800 font-black min-w-[100px]">Total</th>
-                            </tr>
+                            <tr><th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[200px]">Assistente</th><th class="px-3 py-4 min-w-[70px]">Jan</th><th class="px-3 py-4 min-w-[70px]">Fev</th><th class="px-3 py-4 min-w-[70px]">Mar</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">1º Tri</th><th class="px-3 py-4 min-w-[70px]">Abr</th><th class="px-3 py-4 min-w-[70px]">Mai</th><th class="px-3 py-4 min-w-[70px]">Jun</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">2º Tri</th><th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">1º Sem</th><th class="px-3 py-4 min-w-[70px]">Jul</th><th class="px-3 py-4 min-w-[70px]">Ago</th><th class="px-3 py-4 min-w-[70px]">Set</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">3º Tri</th><th class="px-3 py-4 min-w-[70px]">Out</th><th class="px-3 py-4 min-w-[70px]">Nov</th><th class="px-3 py-4 min-w-[70px]">Dez</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">4º Tri</th><th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">2º Sem</th><th class="px-4 py-4 bg-slate-100 text-slate-800 font-black min-w-[100px]">Total</th></tr>
                         </thead>
                         <tbody id="matriz-body" class="divide-y divide-slate-100 bg-white"></tbody>
                     </table>
