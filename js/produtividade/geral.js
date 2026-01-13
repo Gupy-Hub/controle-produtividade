@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Assertividade Cruzada)...");
+        console.log("🔧 Produtividade: Iniciando (Modo Assertividade Ilimitada)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -16,13 +16,11 @@ Produtividade.Geral = {
         if (el) el.innerText = valor;
     },
 
-    // Normaliza para cruzar nomes (Ex: "João Silva" == "joao silva")
     normalizar: function(str) {
         if(!str) return "";
         return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     },
 
-    // Converte "88,89%" para 88.89
     parsePorcentagem: function(valorStr) {
         if (!valorStr) return 0;
         let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
@@ -38,15 +36,16 @@ Produtividade.Geral = {
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Calculando Qualidade...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando volume de dados...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO
+            // 1. BUSCA PRODUÇÃO (Aumentado limite para segurança)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
+                .limit(10000) // Garante pegar toda produção
                 .order('data_referencia', { ascending: true });
             
             if (errProd) throw errProd;
@@ -54,7 +53,8 @@ Produtividade.Geral = {
             // 2. BUSCA USUÁRIOS
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
-                .select('id, nome, perfil, funcao, contrato');
+                .select('id, nome, perfil, funcao, contrato')
+                .limit(1000);
             
             if (errUser) throw errUser;
             
@@ -65,16 +65,18 @@ Produtividade.Geral = {
                 if(u.nome) mapaNomeParaId[this.normalizar(u.nome)] = u.id;
             });
 
-            // 3. BUSCA ASSERTIVIDADE (Tabela Nova)
+            // 3. BUSCA ASSERTIVIDADE (CORREÇÃO AQUI: .limit(50000))
+            // Sem o limit, o Supabase traz apenas 1000 e corta o resto.
             const { data: qualidade, error: errQuali } = await Sistema.supabase
                 .from('assertividade')
                 .select('assistente, data_auditoria, ok, nok, porcentagem, status')
                 .gte('data_auditoria', dataInicio)
-                .lte('data_auditoria', dataFim);
+                .lte('data_auditoria', dataFim)
+                .limit(50000); // <--- AQUI ESTAVA O PROBLEMA (Agora traz até 50k linhas)
 
             if (errQuali) throw errQuali;
 
-            console.log(`🔎 Auditoria: ${qualidade.length} registros encontrados.`);
+            console.log(`🔎 Auditoria: ${qualidade.length} registros carregados (Limite: 50k).`);
 
             const statusValidos = ['OK', 'NOK', 'REV', 'JUST', 'DUPL', 'IA', 'EMPR', 'REC'];
             const mapaQualidadeDiaria = {}; 
@@ -88,7 +90,7 @@ Produtividade.Geral = {
                     const uid = mapaNomeParaId[nomeNorm];
                     
                     if (!uid) {
-                        nomesSemMatch.add(q.assistente); // Nome na auditoria não existe no sistema
+                        nomesSemMatch.add(q.assistente);
                         return;
                     }
 
@@ -116,15 +118,17 @@ Produtividade.Geral = {
             }
 
             if (nomesSemMatch.size > 0) {
-                console.warn("⚠️ ALERTA: Estes nomes da auditoria não foram encontrados no cadastro de usuários:", [...nomesSemMatch]);
-                alert(`Atenção: ${nomesSemMatch.size} assistentes da auditoria não foram encontradas no sistema.\nVerifique o Console (F12) para ver os nomes.`);
+                console.warn("⚠️ Nomes da auditoria não encontrados no cadastro:", [...nomesSemMatch]);
             }
 
             // 4. METAS
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
-                .select('usuario_id, meta_producao').eq('mes', parseInt(mesRef)).eq('ano', parseInt(anoRef));
+                .select('usuario_id, meta_producao')
+                .eq('mes', parseInt(mesRef))
+                .eq('ano', parseInt(anoRef))
+                .limit(1000);
             
             const mapaMetas = {};
             if(metasBanco) metasBanco.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
@@ -209,7 +213,6 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // DIA A DIA
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const metaCalc = metaBase * (r.fator || 1);
                     const pct = metaCalc > 0 ? (r.quantidade / metaCalc) * 100 : 0;
@@ -225,7 +228,6 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // CONSOLIDADO
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 const pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : 0;
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic";
