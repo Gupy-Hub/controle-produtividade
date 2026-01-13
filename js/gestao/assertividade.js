@@ -63,6 +63,8 @@ Gestao.Assertividade = {
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
+        const btnAnt = document.getElementById('btn-ant');
+        const btnProx = document.getElementById('btn-prox');
         const contador = document.getElementById('contador-assert');
 
         if(tbody) tbody.style.opacity = '1';
@@ -168,16 +170,19 @@ Gestao.Assertividade = {
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
 
-            // === CORREÇÃO DA EQUIPE DE DEV: TRATAMENTO DE NULOS ===
+            // === CORREÇÃO BLINDADA: Lista de status que NÃO devem ter nota ===
+            // Se você encontrar outros status problemáticos, adicione na lista abaixo.
+            const statusSemNota = ['REV', 'NA', 'N/A', 'REVALIDA'];
+            const deveIgnorarNota = statusSemNota.some(s => stUp.includes(s));
+
             let assertDisplay = '-';
             let assertColor = 'text-slate-400 font-light'; // Cor padrão (cinza claro) para nulos
 
-            // Só processa se tiver valor real e não for string vazia
-            if (item.indice_assertividade !== null && item.indice_assertividade !== undefined && item.indice_assertividade !== '') {
-                // Tenta converter para float
+            // Só processa a nota se NÃO estiver na lista de ignorados
+            // E se tiver um valor válido vindo do banco
+            if (!deveIgnorarNota && item.indice_assertividade !== null && item.indice_assertividade !== undefined && item.indice_assertividade !== '') {
                 const assertVal = parseFloat(item.indice_assertividade);
                 
-                // Se a conversão resultou em NaN (Not a Number), mantemos o traço
                 if (!isNaN(assertVal)) {
                     assertDisplay = assertVal + '%';
                     
