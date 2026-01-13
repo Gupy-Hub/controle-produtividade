@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo Assertividade Ilimitada)...");
+        console.log("🔧 Produtividade: Iniciando (Modo RANGE FORÇADO - Board Fix)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -36,16 +36,16 @@ Produtividade.Geral = {
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando volume de dados...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Baixando dados massivos...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO (Aumentado limite para segurança)
+            // 1. BUSCA PRODUÇÃO (USANDO RANGE PARA FORÇAR VOLUME)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
-                .limit(10000) // Garante pegar toda produção
+                .range(0, 50000) // FORÇA BRUTA: Linha 0 até 50.000
                 .order('data_referencia', { ascending: true });
             
             if (errProd) throw errProd;
@@ -54,7 +54,7 @@ Produtividade.Geral = {
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato')
-                .limit(1000);
+                .range(0, 2000);
             
             if (errUser) throw errUser;
             
@@ -65,18 +65,23 @@ Produtividade.Geral = {
                 if(u.nome) mapaNomeParaId[this.normalizar(u.nome)] = u.id;
             });
 
-            // 3. BUSCA ASSERTIVIDADE (CORREÇÃO AQUI: .limit(50000))
-            // Sem o limit, o Supabase traz apenas 1000 e corta o resto.
+            // 3. BUSCA ASSERTIVIDADE (AQUI ESTAVA O PROBLEMA DE 1000 LINHAS)
+            // Trocamos .limit() por .range(0, 50000)
             const { data: qualidade, error: errQuali } = await Sistema.supabase
                 .from('assertividade')
                 .select('assistente, data_auditoria, ok, nok, porcentagem, status')
                 .gte('data_auditoria', dataInicio)
                 .lte('data_auditoria', dataFim)
-                .limit(50000); // <--- AQUI ESTAVA O PROBLEMA (Agora traz até 50k linhas)
+                .range(0, 50000); // <--- SOLUÇÃO DO BOARD
 
             if (errQuali) throw errQuali;
 
-            console.log(`🔎 Auditoria: ${qualidade.length} registros carregados (Limite: 50k).`);
+            console.log(`🔎 Auditoria: ${qualidade.length} registros (RANGE 0-50k aplicado).`);
+            
+            // Validação visual no console se quebrou a barreira de 1000
+            if (qualidade.length === 1000) {
+                console.warn("⚠️ ALERTA DO BOARD: O retorno cravou em 1000 exatamente. Verifique se há mais dados ou se o banco limitou.");
+            }
 
             const statusValidos = ['OK', 'NOK', 'REV', 'JUST', 'DUPL', 'IA', 'EMPR', 'REC'];
             const mapaQualidadeDiaria = {}; 
@@ -118,7 +123,7 @@ Produtividade.Geral = {
             }
 
             if (nomesSemMatch.size > 0) {
-                console.warn("⚠️ Nomes da auditoria não encontrados no cadastro:", [...nomesSemMatch]);
+                console.warn("⚠️ Nomes da auditoria sem usuário correspondente:", [...nomesSemMatch]);
             }
 
             // 4. METAS
@@ -128,7 +133,7 @@ Produtividade.Geral = {
                 .select('usuario_id, meta_producao')
                 .eq('mes', parseInt(mesRef))
                 .eq('ano', parseInt(anoRef))
-                .limit(1000);
+                .range(0, 2000);
             
             const mapaMetas = {};
             if(metasBanco) metasBanco.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
@@ -244,7 +249,6 @@ Produtividade.Geral = {
         });
     },
 
-    // Funções auxiliares (Mantidas)
     filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.renderizarTabela(); },
     limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.renderizarTabela(); },
     atualizarKPIs: function(data, mapaUsuarios) { let totalProdGeral = 0; let usersCLT = new Set(); let usersPJ = new Set(); data.forEach(r => { const qtd = Number(r.quantidade) || 0; totalProdGeral += qtd; const u = r.usuario || (mapaUsuarios ? mapaUsuarios[r.usuario_id] : null); if (u) { const cargo = u.funcao ? String(u.funcao).toUpperCase() : 'ASSISTENTE'; if (!['AUDITORA', 'GESTORA'].includes(cargo)) { if(u.contrato === 'CLT') usersCLT.add(u.id); else usersPJ.add(u.id); } } }); this.setTxt('kpi-total', totalProdGeral.toLocaleString('pt-BR')); this.setTxt('kpi-clt-val', `${usersCLT.size}`); this.setTxt('kpi-pj-val', `${usersPJ.size}`); },
