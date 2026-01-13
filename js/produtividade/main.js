@@ -1,4 +1,9 @@
-const Produtividade = {
+// ARQUIVO: js/produtividade/main.js
+
+window.Produtividade = window.Produtividade || {};
+
+// Mesclamos as funções principais no objeto global existente
+Object.assign(window.Produtividade, {
     supabase: null, 
     usuario: null,
     filtroPeriodo: 'mes', // Padrão
@@ -62,16 +67,16 @@ const Produtividade = {
         if(selMes) selMes.classList.add('hidden');
         if(selSemana) selSemana.classList.add('hidden');
         if(selSubAno) selSubAno.classList.add('hidden');
-        if(selAno) selAno.classList.remove('hidden'); // Ano sempre visivel (exceto no dia)
+        if(selAno) selAno.classList.remove('hidden'); 
 
         if (tipo === 'dia') {
             if(selDia) selDia.classList.remove('hidden');
-            if(selAno) selAno.classList.add('hidden'); // No dia, o ano já está no input date
+            if(selAno) selAno.classList.add('hidden'); 
         } else if (tipo === 'mes') {
             if(selMes) selMes.classList.remove('hidden');
         } else if (tipo === 'semana') {
             if(selSemana) selSemana.classList.remove('hidden');
-            if(selMes) selMes.classList.remove('hidden'); // Semana precisa de Mês
+            if(selMes) selMes.classList.remove('hidden'); 
         } else if (tipo === 'ano') {
             if(selSubAno) selSubAno.classList.remove('hidden');
         }
@@ -155,7 +160,7 @@ const Produtividade = {
         }
 
         const fmt = (d) => {
-            if (typeof d === 'string') return d; // Já formatado
+            if (typeof d === 'string') return d; 
             const year = d.getFullYear();
             const month = String(d.getMonth() + 1).padStart(2, '0');
             const day = String(d.getDate()).padStart(2, '0');
@@ -189,10 +194,10 @@ const Produtividade = {
         if(this.Performance && !document.getElementById('tab-performance').classList.contains('hidden')) this.Performance.carregar();
         if(this.Matriz && !document.getElementById('tab-matriz').classList.contains('hidden')) this.Matriz.carregar();
     }
-};
+});
 
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
-        if(typeof Produtividade !== 'undefined') Produtividade.init();
+        if(window.Produtividade && window.Produtividade.init) window.Produtividade.init();
     }, 100);
 });

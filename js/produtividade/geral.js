@@ -1,3 +1,5 @@
+// ARQUIVO: js/produtividade/geral.js
+
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -125,14 +127,12 @@ Produtividade.Geral = {
                 
                 const status = (item.status || '').toUpperCase();
                 
-                // === CORREÇÃO: LISTA EXPANDIDA DE STATUS POSITIVOS ===
-                // Antes aceitava só "OK". Agora aceita PROCESSADO, VALIDO, etc.
+                // === STATUS POSITIVOS EXPANDIDOS ===
                 const isOk = ['OK', 'VALIDO', 'PROCESSADO', 'CONCLUIDO', 'DONE', 'FINALIZADO', 'SUCESSO'].some(s => status.includes(s));
                 const isNok = status.includes('NOK') || status.includes('ERRO') || status.includes('FALHA');
                 const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
                 // --- LÓGICA DE VOLUME (Quantidade) ---
-                // Conta se for OK, NOK ou (Neutro com Auditora preenchida)
                 let contaVolume = false;
                 if (isOk || isNok) {
                     contaVolume = true;
@@ -175,7 +175,6 @@ Produtividade.Geral = {
                     assertTxt = "--"; 
                 }
 
-                // Adiciona registro se for relevante
                 if (contaVolume || entraNaMedia || isNeutro) {
                     dadosAgrupados[uid].registros.push({ 
                         ...item, 
@@ -396,4 +395,7 @@ Produtividade.Geral = {
         this.setHtml('top-assert-list', renderTop(topAssert, false));
     },
 
-    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregar
+    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregarTela(); },
+    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.carregarTela(); },
+    excluirDadosDia: async function() { const datas = Produtividade.getDatasFiltro(); const s = datas.inicio; const e = datas.fim; if(!s || !e) return alert("Período não definido."); if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas a PRODUÇÃO do período. A assertividade (Qualidade) é mantida.`)) return; try { const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e }); if(error) throw error; alert("Produção excluída com sucesso!"); this.carregarTela(); } catch(err) { alert("Erro: " + err.message); } }
+};
