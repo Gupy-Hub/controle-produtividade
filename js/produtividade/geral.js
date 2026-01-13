@@ -1,3 +1,5 @@
+window.Produtividade = window.Produtividade || {};
+
 Produtividade.Geral = {
     initialized: false,
     dadosOriginais: [], 
@@ -84,7 +86,6 @@ Produtividade.Geral = {
             if (errQuali) throw errQuali;
 
             const mapaQualidadeDiaria = {}; 
-            const mapaQualidadeTotal = {};
             
             if (qualidadeResumo) {
                 qualidadeResumo.forEach(q => {
@@ -98,7 +99,6 @@ Produtividade.Geral = {
                     };
                     const chaveDia = `${uid}_${q.data_ref}`;
                     mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
-                    mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
                 });
             }
 
@@ -115,7 +115,7 @@ Produtividade.Geral = {
                 const uid = item.usuario_id;
                 const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
                 if(!dadosAgrupados[uid]) {
-                    const qTotal = mapaQualidadeTotal[uid] || { somaNotas: 0, qtdDocs: 0 };
+                    const qTotal = { somaNotas: 0, qtdDocs: 0 };
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
@@ -126,6 +126,11 @@ Produtividade.Geral = {
                 
                 const chaveQuali = `${uid}_${item.data_referencia}`;
                 const dadosQ = mapaQualidadeDiaria[chaveQuali] || { somaNotas: 0, qtdDocs: 0 };
+                
+                // Acumula totais de qualidade no agrupado principal
+                dadosAgrupados[uid].totais.somaNotas += dadosQ.somaNotas;
+                dadosAgrupados[uid].totais.qtdDocs += dadosQ.qtdDocs;
+
                 let assertPct = dadosQ.qtdDocs > 0 ? dadosQ.somaNotas / dadosQ.qtdDocs : 0;
                 let assertTxt = dadosQ.qtdDocs > 0 ? assertPct.toFixed(2).replace('.', ',') + "%" : "-";
 
@@ -301,13 +306,13 @@ Produtividade.Geral = {
         this.setTxt('kpi-validacao-esperado', Math.round(metaTotalGeral).toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-real', producaoTotalGeral.toLocaleString('pt-BR'));
         const pctVolume = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
-        const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = Math.min(pctVolume, 100) + '%';
+        const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = Math.min(pctVolume || 0, 100) + '%';
 
         // 2. Qualidade (Geral)
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         let pctAssert = qtdDocsGeral > 0 ? somaNotasGeral / qtdDocsGeral : 0;
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
-        this.setTxt('kpi-meta-assertividade-val', pctAssert.toFixed(2).replace('.', ',') + '%');
+        this.setTxt('kpi-meta-assertividade-val', (pctAssert || 0).toFixed(2).replace('.', ',') + '%');
 
         // 3. Capacidade Operativa (Novo)
         const PADRAO_ASSISTENTES = 17;
@@ -318,9 +323,9 @@ Produtividade.Geral = {
         
         const barCap = document.getElementById('bar-capacidade'); 
         if(barCap) {
-            barCap.style.width = Math.min(pctCapacidade, 100) + '%';
+            barCap.style.width = Math.min(pctCapacidade || 0, 100) + '%';
             // Cor dinâmica: Vermelho se < 70%, Roxo se normal
-            barCap.className = `h-full rounded-full transition-all duration-1000 ${pctCapacidade < 70 ? 'bg-rose-500' : 'bg-purple-500'}`;
+            barCap.className = `h-full rounded-full transition-all duration-1000 ${(pctCapacidade || 0) < 70 ? 'bg-rose-500' : 'bg-purple-500'}`;
         }
 
         // 4. Eficiência (Operação)
