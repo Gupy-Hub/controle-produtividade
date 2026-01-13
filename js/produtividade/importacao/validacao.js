@@ -4,10 +4,11 @@ window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
     mapaUsuarios: {}, 
+    idsValidos: new Set(), // NOVO: Cache de IDs reais do sistema
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'], 
 
     init: async function() {
-        console.log("📥 Importação: Iniciando módulo de validação...");
+        console.log("📥 Importação: Iniciando módulo de validação (Busca por ID + Nome)...");
         await this.carregarUsuarios();
     },
 
@@ -22,9 +23,15 @@ window.Produtividade.Importacao.Validacao = {
         }
 
         this.mapaUsuarios = {};
+        this.idsValidos = new Set(); // Reseta cache
+        
         data.forEach(u => {
+            // Mapa de Nomes
             const nomeNorm = this.normalizarTexto(u.nome);
             this.mapaUsuarios[nomeNorm] = u.id;
+            
+            // Mapa de IDs (Converte para string para garantir match com CSV)
+            if (u.id) this.idsValidos.add(u.id.toString());
         });
     },
 
@@ -79,43 +86,59 @@ window.Produtividade.Importacao.Validacao = {
         const elDataTela = document.getElementById('sel-data-dia');
         const dataTela = elDataTela ? elDataTela.value : null;
 
-        if (Object.keys(this.mapaUsuarios).length === 0) await this.carregarUsuarios();
+        if (this.idsValidos.size === 0) await this.carregarUsuarios();
 
         for (let i = 0; i < linhas.length; i++) {
             const row = linhas[i];
             
             const nomeRaw = row['nome'] || row['assistente'] || row['colaborador'];
-            
+            // Pula linha de totais
             if (!nomeRaw || nomeRaw.toLowerCase() === 'total') continue;
 
+            // DATA
             let dataRaw = row['data'] || row['data referencia'] || row['data_referencia'];
             if (!dataRaw && dataTela) {
                 dataRaw = dataTela; 
             }
-
-            const qtdRaw = row['quantidade'] || row['qtd'] || row['documentos_validados'];
-            
-            let statusRaw = row['status'] || row['classificação'];
-            if (!statusRaw && row['documentos_validados']) {
-                statusRaw = 'OK';
-            }
-            if (!statusRaw) statusRaw = 'OK'; 
-
-            // Nota: Removemos a leitura de auditora pois a tabela producao não suporta
-            
-            const fifo = row['fifo'] || row['documentos_validados_fifo'] || 0;
-            const gTotal = row['gradual total'] || row['gradual_total'] || row['documentos_validados_gradual_total'] || 0;
-            const gParcial = row['gradual parcial'] || row['gradual_parcial'] || row['documentos_validados_gradual_parcial'] || 0;
-            const perfilFc = row['perfil fc'] || row['perfil_fc'] || row['documentos_validados_perfil_fc'] || 0;
 
             if (!dataRaw) {
                 console.warn("Linha ignorada por falta de data:", row);
                 continue;
             }
 
-            const nomeNorm = this.normalizarTexto(nomeRaw);
-            const usuarioId = this.mapaUsuarios[nomeNorm];
+            // OUTROS CAMPOS
+            const qtdRaw = row['quantidade'] || row['qtd'] || row['documentos_validados'];
             
+            let statusRaw = row['status'] || row['classificação'];
+            if (!statusRaw && row['documentos_validados']) statusRaw = 'OK';
+            if (!statusRaw) statusRaw = 'OK'; 
+
+            const fifo = row['fifo'] || row['documentos_validados_fifo'] || 0;
+            const gTotal = row['gradual total'] || row['gradual_total'] || row['documentos_validados_gradual_total'] || 0;
+            const gParcial = row['gradual parcial'] || row['gradual_parcial'] || row['documentos_validados_gradual_parcial'] || 0;
+            const perfilFc = row['perfil fc'] || row['perfil_fc'] || row['documentos_validados_perfil_fc'] || 0;
+
+            // === LÓGICA DE VÍNCULO DO USUÁRIO ===
+            let usuarioId = null;
+            let metodoMatch = "Nenhum";
+
+            // 1. Tenta pelo ID (Prioridade)
+            let idCsv = row['id_assistente'] || row['id'] || '';
+            idCsv = idCsv.toString().replace(/\D/g, ''); // Remove não-números
+            
+            if (idCsv && this.idsValidos.has(idCsv)) {
+                usuarioId = parseInt(idCsv);
+                metodoMatch = "ID";
+            } 
+
+            // 2. Se não achou por ID, tenta pelo Nome
+            if (!usuarioId) {
+                const nomeNorm = this.normalizarTexto(nomeRaw);
+                usuarioId = this.mapaUsuarios[nomeNorm];
+                metodoMatch = "Nome";
+            }
+
+            // STATUS VISUAL
             let status = this.normalizarTexto(statusRaw);
             if (status === 'ERRO') status = 'NOK';
             if (status === 'SUCESSO' || status === 'VALIDO') status = 'OK';
@@ -143,8 +166,12 @@ window.Produtividade.Importacao.Validacao = {
                 visual_assert: assertVisual
             };
 
-            if (!item.valido) erros++;
-            else importaveis++;
+            if (!item.valido) {
+                erros++;
+                console.warn(`Usuário não encontrado (ID CSV: ${idCsv}, Nome: ${nomeRaw})`);
+            } else {
+                importaveis++;
+            }
 
             this.dadosProcessados.push(item);
         }
@@ -185,7 +212,7 @@ window.Produtividade.Importacao.Validacao = {
                 data_referencia: d.data_referencia,
                 quantidade: d.quantidade,
                 status: d.status, 
-                // auditora removida daqui para evitar erro de schema
+                // sem auditora
                 fifo: d.fifo,
                 gradual_total: d.gradual_total,
                 gradual_parcial: d.gradual_parcial,
