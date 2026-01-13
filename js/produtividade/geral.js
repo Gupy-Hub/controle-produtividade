@@ -6,7 +6,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Modo RANGE FORÇADO - Board Fix)...");
+        console.log("🔧 Produtividade: Iniciando (Modo Turbo - RPC SQL)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -21,12 +21,6 @@ Produtividade.Geral = {
         return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
     },
 
-    parsePorcentagem: function(valorStr) {
-        if (!valorStr) return 0;
-        let limpo = valorStr.toString().replace('%', '').replace(',', '.').trim();
-        return parseFloat(limpo) || 0;
-    },
-
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
@@ -35,17 +29,17 @@ Produtividade.Geral = {
         const dataInicio = datas.inicio;
         const dataFim = datas.fim;
 
-        console.log(`📅 Buscando de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Baixando dados massivos...</td></tr>';
+        console.log(`📅 Buscando dados otimizados de ${dataInicio} até ${dataFim}`);
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando no servidor...</td></tr>';
 
         try {
-            // 1. BUSCA PRODUÇÃO (USANDO RANGE PARA FORÇAR VOLUME)
+            // 1. BUSCA PRODUÇÃO (Volume)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
                 .gte('data_referencia', dataInicio)
                 .lte('data_referencia', dataFim)
-                .range(0, 50000) // FORÇA BRUTA: Linha 0 até 50.000
+                .range(0, 50000) // Produção diária tem volume menor, range ainda ok
                 .order('data_referencia', { ascending: true });
             
             if (errProd) throw errProd;
@@ -53,8 +47,7 @@ Produtividade.Geral = {
             // 2. BUSCA USUÁRIOS
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
-                .select('id, nome, perfil, funcao, contrato')
-                .range(0, 2000);
+                .select('id, nome, perfil, funcao, contrato');
             
             if (errUser) throw errUser;
             
@@ -65,32 +58,25 @@ Produtividade.Geral = {
                 if(u.nome) mapaNomeParaId[this.normalizar(u.nome)] = u.id;
             });
 
-            // 3. BUSCA ASSERTIVIDADE (AQUI ESTAVA O PROBLEMA DE 1000 LINHAS)
-            // Trocamos .limit() por .range(0, 50000)
-            const { data: qualidade, error: errQuali } = await Sistema.supabase
-                .from('assertividade')
-                .select('assistente, data_auditoria, ok, nok, porcentagem, status')
-                .gte('data_auditoria', dataInicio)
-                .lte('data_auditoria', dataFim)
-                .range(0, 50000); // <--- SOLUÇÃO DO BOARD
+            // 3. BUSCA ASSERTIVIDADE VIA RPC (AQUI É A MÁGICA DE PERFORMANCE)
+            // Em vez de baixar 500k linhas, chamamos a função que devolve o resumo pronto.
+            const { data: qualidadeResumo, error: errQuali } = await Sistema.supabase
+                .rpc('calcular_assertividade_periodo', { 
+                    p_inicio: dataInicio, 
+                    p_fim: dataFim 
+                });
 
             if (errQuali) throw errQuali;
 
-            console.log(`🔎 Auditoria: ${qualidade.length} registros (RANGE 0-50k aplicado).`);
-            
-            // Validação visual no console se quebrou a barreira de 1000
-            if (qualidade.length === 1000) {
-                console.warn("⚠️ ALERTA DO BOARD: O retorno cravou em 1000 exatamente. Verifique se há mais dados ou se o banco limitou.");
-            }
+            console.log(`⚡ RPC Retornou: ${qualidadeResumo.length} resumos consolidados (Ultra leve).`);
 
-            const statusValidos = ['OK', 'NOK', 'REV', 'JUST', 'DUPL', 'IA', 'EMPR', 'REC'];
+            // Organiza o resumo retornado pelo banco
             const mapaQualidadeDiaria = {}; 
             const mapaQualidadeTotal = {};
-            
             let nomesSemMatch = new Set();
 
-            if (qualidade) {
-                qualidade.forEach(q => {
+            if (qualidadeResumo) {
+                qualidadeResumo.forEach(q => {
                     const nomeNorm = this.normalizar(q.assistente);
                     const uid = mapaNomeParaId[nomeNorm];
                     
@@ -99,31 +85,27 @@ Produtividade.Geral = {
                         return;
                     }
 
-                    if (q.data_auditoria) {
-                        const statusItem = (q.status || '').toUpperCase().trim();
-                        
-                        if (statusValidos.includes(statusItem)) {
-                            const notaDoc = this.parsePorcentagem(q.porcentagem);
+                    // Função auxiliar para somar os resumos
+                    const somar = (obj) => {
+                        if (!obj) obj = { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
+                        obj.somaNotas += (Number(q.soma_notas) || 0);
+                        obj.qtdDocs += (Number(q.qtd_docs) || 0);
+                        obj.ok += (Number(q.total_ok) || 0);
+                        obj.nok += (Number(q.total_nok) || 0);
+                        return obj;
+                    };
 
-                            const somar = (obj) => {
-                                if (!obj) obj = { somaNotas: 0, qtdDocs: 0, ok: 0, nok: 0 };
-                                obj.somaNotas += notaDoc;
-                                obj.qtdDocs += 1;
-                                obj.ok += (parseInt(q.ok) || 0);
-                                obj.nok += (parseInt(q.nok) || 0);
-                                return obj;
-                            };
+                    // Agrega no Dia
+                    const chaveDia = `${uid}_${q.data_ref}`; // RPC retorna data_ref YYYY-MM-DD
+                    mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
 
-                            const chaveDia = `${uid}_${q.data_auditoria}`;
-                            mapaQualidadeDiaria[chaveDia] = somar(mapaQualidadeDiaria[chaveDia]);
-                            mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
-                        }
-                    }
+                    // Agrega no Total do Período
+                    mapaQualidadeTotal[uid] = somar(mapaQualidadeTotal[uid]);
                 });
             }
 
             if (nomesSemMatch.size > 0) {
-                console.warn("⚠️ Nomes da auditoria sem usuário correspondente:", [...nomesSemMatch]);
+                console.warn("⚠️ Nomes do CSV sem usuário no sistema:", [...nomesSemMatch]);
             }
 
             // 4. METAS
@@ -132,8 +114,7 @@ Produtividade.Geral = {
                 .from('metas')
                 .select('usuario_id, meta_producao')
                 .eq('mes', parseInt(mesRef))
-                .eq('ano', parseInt(anoRef))
-                .range(0, 2000);
+                .eq('ano', parseInt(anoRef));
             
             const mapaMetas = {};
             if(metasBanco) metasBanco.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
