@@ -7,14 +7,14 @@ Importacao.Assertividade = {
         if (!arquivo) return;
 
         const statusEl = document.getElementById('status-importacao');
-        statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Analisando arquivo...</span>`;
+        statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo arquivo...</span>`;
 
         Papa.parse(arquivo, {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
             transformHeader: function(header) {
-                // Transforma tudo em minúsculo e remove aspas para evitar erro de 'Status' vs 'STATUS'
+                // Normaliza cabeçalhos para evitar erros de Case Sensitive
                 return header.trim().replace(/"/g, '').toLowerCase();
             },
             complete: async (results) => {
@@ -40,16 +40,14 @@ Importacao.Assertividade = {
         let erros = 0;
         const TAMANHO_LOTE = 200;
 
-        // Mapeamento dos dados
+        // 1. MAPEAMENTO E LIMPEZA DOS DADOS
         const dadosFormatados = linhas.map(linha => {
             
-            // 1. DATA (Procura por varias colunas possíveis)
+            // Data
             let valData = linha['data da auditoria'] || linha['data'] || linha['data_auditoria'] || linha['end_time'];
-            let origemData = 'AUDITORIA';
+            if (!valData) return null;
 
-            if (!valData) return null; // Sem data = Lixo
-
-            // Tratamento de Data
+            // Formatação de Data
             let dataFormatada = null;
             if (valData.includes('T')) dataFormatada = valData.split('T')[0];
             else if (valData.includes('/')) {
@@ -60,46 +58,66 @@ Importacao.Assertividade = {
 
             if (!dataFormatada) return null;
 
-            // 2. EMPRESA (Agora opcional, para não perder dados)
+            // Empresa (Aceita falta de ID salvando como '0')
             const idEmpresa = linha['company_id'] || linha['company id'] || '0';
             let nomeEmpresa = linha['empresa'] || linha['nome da ppc'] || 'Empresa não informada';
 
-            // 3. ASSISTENTE & AUDITORA
-            const assistente = linha['assistente'] || linha['id_assistente'] || 'Desconhecido';
-            const auditora = linha['auditora'] || 'Sistema';
+            // Status (Captura status para cálculo de média)
+            const statusFinal = linha['status'] || 'PROCESSADO';
 
-            // 4. STATUS & RESULTADOS
-            // Importante: Pega 'status' (minusculo) pois o header foi transformado
-            const statusFinal = linha['status'] || 'PROCESSADO'; 
-            
             return {
                 data_auditoria: dataFormatada,
                 company_id: idEmpresa.toString().trim(),
                 empresa: nomeEmpresa.trim(),
-                assistente: assistente,
+                assistente: linha['assistente'] || linha['id_assistente'] || 'Desconhecido',
                 doc_name: linha['doc_name'] || linha['documento'] || linha['nome_documento'] || '-',
                 status: statusFinal, 
                 obs: (linha['apontamentos/obs'] || linha['obs'] || ''),
                 campos: parseInt(linha['nº campos']) || 0,
                 ok: parseInt(linha['ok']) || 0,
                 nok: parseInt(linha['nok']) || 0,
+                // Captura a % Assert do arquivo para usar na média ponderada
                 porcentagem: linha['% assert'] || linha['assertividade'] || '0%',
-                auditora: auditora
+                auditora: linha['auditora'] || 'Sistema'
             };
         }).filter(item => item !== null);
 
         const total = dadosFormatados.length;
         if (total === 0) {
-            alert("Nenhum registro válido identificado.");
+            alert("Nenhum registro válido encontrado no arquivo.");
+            statusEl.innerHTML = "";
             return;
         }
 
+        // 2. PREVENÇÃO DE DUPLICIDADE (CLEAN INSERT)
+        statusEl.innerHTML = `<span class="text-amber-500"><i class="fas fa-eraser"></i> Limpando dados antigos das datas importadas...</span>`;
+        
+        // Identifica quais dias estão no arquivo
+        const datasParaLimpar = [...new Set(dadosFormatados.map(d => d.data_auditoria))];
+        
+        try {
+            // Apaga TUDO dessas datas antes de inserir o novo
+            const { error: errDel } = await Sistema.supabase
+                .from('assertividade')
+                .delete()
+                .in('data_auditoria', datasParaLimpar);
+
+            if (errDel) throw errDel;
+
+        } catch (e) {
+            console.error("Erro ao limpar duplicidade:", e);
+            alert("Erro ao limpar dados antigos: " + e.message);
+            statusEl.innerHTML = "Erro na limpeza.";
+            return; // Aborta para não duplicar se a limpeza falhar
+        }
+
+        // 3. INSERÇÃO (LOTE)
         statusEl.innerHTML = `<span class="text-orange-500 font-bold">Importando ${total} registros...</span>`;
 
-        // Lote
         for (let i = 0; i < total; i += TAMANHO_LOTE) {
             const lote = dadosFormatados.slice(i, i + TAMANHO_LOTE);
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
+
             if (error) {
                 console.error("Erro lote:", error);
                 erros += lote.length;
@@ -108,12 +126,14 @@ Importacao.Assertividade = {
             }
         }
 
-        // Final
+        // 4. FINALIZAÇÃO
         let msg = `Sucesso: ${sucesso}`;
         if(erros > 0) msg += ` | Erros: ${erros}`;
-        statusEl.innerHTML = `<span class="text-emerald-600 font-bold">${msg}</span>`;
+        
+        statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> ${msg}</span>`;
         
         if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
-        alert("Importação Concluída!\nRecomendado: Atualize a tela de Produtividade.");
+        
+        alert(`Importação Concluída!\n\nRegistros atualizados para as datas: ${datasParaLimpar.join(', ')}.\nNão há duplicidade.`);
     }
 };
