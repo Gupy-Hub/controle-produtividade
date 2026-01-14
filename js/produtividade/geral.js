@@ -8,14 +8,17 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Feriados Nacionais 2025
-    feriados: ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
+    // Feriados Mapeados por Ano (Incluindo Estaduais SP - 09/07 e Nacionais Móveis)
+    feriados: {
+        "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
+        "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
+    },
     
-    // STATUS NEUTROS (Contam Volume se tiver auditora, mas NÃO contam nota no cálculo antigo - mantido para referência)
+    // STATUS NEUTROS (Contam Volume se tiver auditora preenchida)
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v2)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -37,11 +40,17 @@ Produtividade.Geral = {
 
     isDiaUtil: function(dateObj) {
         const day = dateObj.getDay();
-        if (day === 0 || day === 6) return false;
+        if (day === 0 || day === 6) return false; // Sábado/Domingo
+        
+        const ano = dateObj.getFullYear();
         const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
         const dia = String(dateObj.getDate()).padStart(2, '0');
         const chave = `${mes}-${dia}`;
-        if (this.feriados.includes(chave)) return false;
+        
+        // Verifica feriados do ano específico (fallback para lista vazia se ano não mapeado)
+        const listaFeriados = this.feriados[ano.toString()] || [];
+        if (listaFeriados.includes(chave)) return false;
+        
         return true;
     },
 
@@ -71,7 +80,7 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando dados cruzados...</td></tr>';
 
         try {
-            // 1. Busca Produção Bruta (Para Volume)
+            // 1. Busca Produção Bruta
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -82,7 +91,7 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Auditorias Reais (Para Qualidade) - Tabela Assertividade
+            // 2. Busca Auditorias Reais
             const { data: auditorias, error: errAudit } = await Sistema.supabase
                 .from('assertividade')
                 .select('usuario_id, porcentagem, auditora, data_auditoria')
@@ -91,32 +100,27 @@ Produtividade.Geral = {
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias (Calcula Média Real Humana)
-            const mapaAuditoria = {}; // { usuario_id: { soma: 0, qtd: 0 } }
+            // 3. Processa Auditorias
+            const mapaAuditoria = {}; 
             let kpiAuditSoma = 0;
             let kpiAuditQtd = 0;
 
             if (auditorias) {
                 auditorias.forEach(a => {
-                    // FILTRO DE OURO: Ignora Sistema e Vazios
                     const audNome = (a.auditora || '').trim().toUpperCase();
                     if (!audNome || audNome === 'SISTEMA' || audNome === 'ROBO') return;
 
-                    // Trata porcentagem
                     let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
                     if (valStr === '') return;
-                    
                     let val = parseFloat(valStr);
                     if (isNaN(val)) return;
 
-                    // Acumula por usuário
                     const uid = a.usuario_id;
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     
                     mapaAuditoria[uid].soma += val;
                     mapaAuditoria[uid].qtd++;
 
-                    // Acumula Global
                     kpiAuditSoma += val;
                     kpiAuditQtd++;
                 });
@@ -147,7 +151,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. Agrupamento (Merge de Volume + Qualidade Real)
+            // 6. Agrupamento (FIX: Lógica de Dias Únicos)
             let dadosAgrupados = {};
             
             producao.forEach(item => {
@@ -158,14 +162,12 @@ Produtividade.Geral = {
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
+                        // Set para evitar contagem duplicada de dias (Correção Nexus)
+                        diasProcessados: new Set(),
                         totais: { 
-                            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, dias: 0, diasUteis: 0, 
-                            // Nota: somaNotas e qtdDocs aqui serão usados apenas para registros individuais da tabela de produção (histórico),
-                            // a média geral virá do mapaAuditoria.
-                            somaNotas: 0, qtdDocs: 0 
+                            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 
                         },
                         meta_real: mapaMetas[uid] || 0,
-                        // Injeta dados da auditoria cruzada
                         auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 }
                     };
                 }
@@ -175,7 +177,7 @@ Produtividade.Geral = {
                 const isNok = status.includes('NOK') || status.includes('ERRO') || status.includes('FALHA');
                 const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
-                // --- VOLUME ---
+                // Lógica de Volume
                 let contaVolume = false;
                 if (isOk || isNok) {
                     contaVolume = true;
@@ -191,11 +193,16 @@ Produtividade.Geral = {
                     d.gp += (Number(item.gradual_parcial) || 0);
                     d.fc += (Number(item.perfil_fc) || 0);
                     
-                    const f = this.getFator(item.fator);
-                    d.diasUteis += f;
+                    // --- CORREÇÃO DE DIAS ÚTEIS ---
+                    // Só contabiliza o fator de dia trabalhado UMA VEZ por dia/usuário
+                    const diaKey = `${item.data_referencia}`; 
+                    if (!dadosAgrupados[uid].diasProcessados.has(diaKey)) {
+                        dadosAgrupados[uid].diasProcessados.add(diaKey);
+                        const f = this.getFator(item.fator);
+                        d.diasUteis += f;
+                    }
                 }
 
-                // Adiciona registro (apenas para visualização detalhada)
                 if (contaVolume || isOk || isNok || isNeutro) {
                     dadosAgrupados[uid].registros.push({ 
                         ...item, 
@@ -208,7 +215,6 @@ Produtividade.Geral = {
 
             this.dadosOriginais = Object.values(dadosAgrupados);
             
-            // Passamos os totais de auditoria para o KPI global
             const kpiGlobalAudit = { soma: kpiAuditSoma, qtd: kpiAuditQtd };
 
             if (this.usuarioSelecionado) {
@@ -250,7 +256,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // VISÃO DETALHADA (Dropdown)
+                // VISÃO DETALHADA
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
                     const metaCalc = metaBase * fatorReal;
@@ -260,12 +266,7 @@ Produtividade.Geral = {
 
                     const [ano, mes, dia] = r.data_referencia.split('-');
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
-                    
-                    // Nota: No detalhe de Produção, não temos a assertividade linha a linha cruzada com ID.
-                    // Exibimos traço ou status para não confundir, já que a média correta está no topo.
-                    let assertVal = "-";
-                    let corAssert = 'text-slate-300';
-
+                    let assertVal = "-"; let corAssert = 'text-slate-300';
                     let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
 
                     const tr = document.createElement('tr');
@@ -278,24 +279,17 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO GERAL (Linha de Resumo)
+                // VISÃO GERAL
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
                 
-                // === CÁLCULO ASSERTIVIDADE CRUZADA ===
-                let assertGeralTxt = "-"; 
-                let corAssert = "text-slate-400 italic";
-                let mediaNumerica = 0; // Para ranking
-
-                // Usa os dados da auditoriaReal (calculados na busca cruzada)
+                let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic"; let mediaNumerica = 0;
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
                     const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
                     mediaNumerica = media;
                     assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
                     corAssert = media >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
                 }
-                
-                // Armazena para o ranking usar depois
                 d.kpiMediaAssert = mediaNumerica;
 
                 let colunaAbonoHtml = `<td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>`;
@@ -367,8 +361,6 @@ Produtividade.Geral = {
 
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
-        // --- KPI QUALIDADE (Baseado no Cross-Check) ---
-        // Usa o acumulado real das auditorias humanas
         let pctAssert = 0;
         if (kpiAuditGlobal && kpiAuditGlobal.qtd > 0) {
             pctAssert = kpiAuditGlobal.soma / kpiAuditGlobal.qtd;
@@ -388,6 +380,8 @@ Produtividade.Geral = {
         let curr = new Date(datas.inicio + "T00:00:00");
         const end = new Date(datas.fim + "T00:00:00");
         const mapaDiasAbonados = {};
+        
+        // Verifica se dia foi totalmente abonado para o KPI de calendário
         if (dadosBrutosProducao) {
             dadosBrutosProducao.forEach(r => {
                 if(!mapaDiasAbonados[r.data_referencia]) mapaDiasAbonados[r.data_referencia] = { total: 0, abonados: 0 };
@@ -413,7 +407,6 @@ Produtividade.Geral = {
         this.setTxt('kpi-media-esperada', Math.round(mediaMetaDia));
         this.setTxt('kpi-media-real', Math.round(mediaRealDia));
 
-        // RANKING (Atualizado para usar a Média Real)
         const topProd = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase())).sort((a, b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const topAssert = [...dadosAgrupados].filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao||'').toUpperCase()) && d.kpiMediaAssert > 0).sort((a, b) => b.kpiMediaAssert - a.kpiMediaAssert).slice(0, 3);
         

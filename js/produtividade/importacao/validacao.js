@@ -16,7 +16,7 @@ Produtividade.Importacao.Validacao = {
         const statusEl = document.getElementById('status-importacao-prod');
         if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo ${file.name}...</span>`;
 
-        // 1. Extração da Data do Nome do Arquivo (A Lógica Solicitada)
+        // 1. Extração da Data do Nome do Arquivo
         const dataArquivo = this.extrairDataDoNome(file.name);
 
         if (!dataArquivo) {
@@ -33,7 +33,6 @@ Produtividade.Importacao.Validacao = {
             skipEmptyLines: true,
             encoding: "UTF-8",
             transformHeader: function(h) {
-                // Remove aspas e caracteres invisíveis
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
             },
             complete: (results) => {
@@ -48,19 +47,13 @@ Produtividade.Importacao.Validacao = {
         input.value = '';
     },
 
-    // Função que converte "01122025" -> "2025-12-01"
     extrairDataDoNome: function(nome) {
-        // Procura por 8 dígitos seguidos (DDMMAAAA)
         const match = nome.match(/(\d{2})(\d{2})(\d{4})/);
-        
         if (match) {
             const dia = match[1];
             const mes = match[2];
             const ano = match[3];
-            
-            // Validação simples
             if (parseInt(mes) > 12 || parseInt(dia) > 31) return null;
-            
             return `${ano}-${mes}-${dia}`;
         }
         return null;
@@ -83,41 +76,33 @@ Produtividade.Importacao.Validacao = {
 
         for (let i = 0; i < linhas.length; i++) {
             const row = linhas[i];
-            
-            // 2. Validação do ID (Obrigatório)
             let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
             
-            // Pula linha de Total ou vazia
             if (!idRaw || (row['assistente'] && row['assistente'].toLowerCase() === 'total')) {
                 ignorados++;
                 continue;
             }
 
-            // Remove caracteres não numéricos do ID
             const usuarioId = parseInt(idRaw.toString().replace(/\D/g, ''));
             if (!usuarioId) {
                 ignorados++;
                 continue;
             }
 
-            // 3. Captura de Volume (Quantidade)
             let quantidade = 0;
             if (row['documentos_validados']) {
                 quantidade = parseInt(row['documentos_validados']) || 0;
             } else if (row['quantidade'] || row['qtd']) {
                 quantidade = parseInt(row['quantidade'] || row['qtd']) || 0;
             } else {
-                // Se for arquivo detalhado sem coluna de qtd explícita, conta 1
                 quantidade = 1;
             }
 
-            // 4. Métricas Específicas
             const fifo = parseInt(row['fifo'] || row['documentos_validados_fifo']) || 0;
             const gTotal = parseInt(row['gradual_total'] || row['gradual total'] || row['documentos_validados_gradual_total']) || 0;
             const gParcial = parseInt(row['gradual_parcial'] || row['gradual parcial'] || row['documentos_validados_gradual_parcial']) || 0;
             const perfilFc = parseInt(row['perfil_fc'] || row['perfil fc'] || row['documentos_validados_perfil_fc']) || 0;
 
-            // 5. Status
             let statusFinal = 'OK';
             if (row['status']) {
                 const s = row['status'].toUpperCase();
@@ -126,7 +111,7 @@ Produtividade.Importacao.Validacao = {
 
             this.dadosProcessados.push({
                 usuario_id: usuarioId,
-                data_referencia: dataFixa, // DATA VINDA DO NOME DO ARQUIVO
+                data_referencia: dataFixa,
                 quantidade: quantidade,
                 status: statusFinal,
                 fifo: fifo,
@@ -145,23 +130,53 @@ Produtividade.Importacao.Validacao = {
             return alert("Nenhum dado válido encontrado. Verifique se o arquivo possui a coluna 'id_assistente'.");
         }
 
-        // Formata data para exibir bonitinho no confirm (AAAA-MM-DD -> DD/MM/AAAA)
         const [ano, mes, dia] = dataFixa.split('-');
         const dataExibicao = `${dia}/${mes}/${ano}`;
+        
+        // --- VERIFICAÇÃO DE INTEGRIDADE (Nexus Operacional) ---
+        const { count, error } = await Sistema.supabase
+            .from('producao')
+            .select('*', { count: 'exact', head: true })
+            .eq('data_referencia', dataFixa);
+            
+        let msgExtra = "";
+        let deveSubstituir = false;
+        
+        if (count > 0) {
+            msgExtra = `\n⚠️ ATENÇÃO: JÁ EXISTEM ${count} REGISTROS NESTA DATA (${dataExibicao})!\n\nSe continuar, os dados ANTIGOS SERÃO APAGADOS e substituídos pelos novos.`;
+            deveSubstituir = true;
+        }
 
         const msg = `Resumo da Importação:\n\n` +
-                    `📅 Data Detectada: ${dataExibicao} (Via Nome do Arquivo)\n` +
+                    `📅 Data Detectada: ${dataExibicao}\n` +
                     `📊 Registros Válidos: ${contador}\n` +
-                    `🗑️ Linhas Ignoradas: ${ignorados}\n\n` +
+                    `🗑️ Linhas Ignoradas: ${ignorados}` +
+                    msgExtra + `\n\n` +
                     `Confirmar gravação no banco de dados?`;
 
         if (confirm(msg)) {
-            this.salvarNoBanco();
+            this.salvarNoBanco(deveSubstituir, dataFixa);
         }
     },
 
-    salvarNoBanco: async function() {
+    salvarNoBanco: async function(deveSubstituir, dataFixa) {
         const statusEl = document.getElementById('status-importacao-prod');
+        
+        // Limpeza prévia para garantir integridade
+        if (deveSubstituir) {
+            if(statusEl) statusEl.innerHTML = `<span class="text-rose-500 font-bold">🗑️ Limpando dados antigos...</span>`;
+            const { error: errDel } = await Sistema.supabase
+                .from('producao')
+                .delete()
+                .eq('data_referencia', dataFixa);
+                
+            if (errDel) {
+                alert("Erro ao limpar dados antigos: " + errDel.message);
+                if(statusEl) statusEl.innerHTML = "";
+                return;
+            }
+        }
+
         const payload = this.dadosProcessados;
         const total = payload.length;
         const BATCH_SIZE = 1000;
@@ -197,20 +212,16 @@ Produtividade.Importacao.Validacao = {
         
         alert("Produção importada com sucesso!");
         
-        // Recarrega a tela para mostrar os dados novos na data correta
         if (Produtividade.Geral && Produtividade.Geral.carregarTela) {
-            // Atualiza o filtro da tela para a data importada, para o usuário ver o resultado imediatamente
             const [ano, mes, dia] = this.dadosProcessados[0].data_referencia.split('-');
             const elDia = document.getElementById('sel-data-dia');
             const elMes = document.getElementById('sel-mes');
             const elAno = document.getElementById('sel-ano');
 
-            // Ajusta o filtro visual
             if (elDia) elDia.value = this.dadosProcessados[0].data_referencia;
-            if (elMes) elMes.value = parseInt(mes) - 1; // Mês 0-11
+            if (elMes) elMes.value = parseInt(mes) - 1; 
             if (elAno) elAno.value = ano;
             
-            // Força recarregamento
             Produtividade.Geral.carregarTela();
         }
     }
