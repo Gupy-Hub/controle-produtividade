@@ -1,7 +1,7 @@
 window.Produtividade = window.Produtividade || {};
 window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 
-// === IMPORTADOR DE PRODUÇÃO (DATA VIA NOME DO ARQUIVO) ===
+// === IMPORTADOR DE PRODUÇÃO: DATA VIA NOME DO ARQUIVO ===
 Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
     
@@ -16,11 +16,11 @@ Produtividade.Importacao.Validacao = {
         const statusEl = document.getElementById('status-importacao-prod');
         if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo ${file.name}...</span>`;
 
-        // 1. Extração da Data do Nome do Arquivo
+        // 1. Extração da Data do Nome do Arquivo (A Lógica Solicitada)
         const dataArquivo = this.extrairDataDoNome(file.name);
 
         if (!dataArquivo) {
-            alert(`⚠️ ERRO CRÍTICO:\n\nO nome do arquivo ("${file.name}") não contém uma data válida no formato DDMMAAAA (ex: 01122025.csv).\n\nRenomeie o arquivo e tente novamente.`);
+            alert(`⚠️ ERRO DE NOME DE ARQUIVO:\n\nO arquivo "${file.name}" não contém uma data no formato DDMMAAAA (ex: 01122025.csv).\n\nRenomeie o arquivo para incluir a data e tente novamente.`);
             input.value = '';
             if(statusEl) statusEl.innerHTML = "";
             return;
@@ -33,6 +33,7 @@ Produtividade.Importacao.Validacao = {
             skipEmptyLines: true,
             encoding: "UTF-8",
             transformHeader: function(h) {
+                // Remove aspas e caracteres invisíveis
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
             },
             complete: (results) => {
@@ -47,9 +48,9 @@ Produtividade.Importacao.Validacao = {
         input.value = '';
     },
 
-    // Função auxiliar para converter "01122025" em "2025-12-01"
+    // Função que converte "01122025" -> "2025-12-01"
     extrairDataDoNome: function(nome) {
-        // Procura por 8 digitos seguidos (DDMMAAAA)
+        // Procura por 8 dígitos seguidos (DDMMAAAA)
         const match = nome.match(/(\d{2})(\d{2})(\d{4})/);
         
         if (match) {
@@ -57,7 +58,7 @@ Produtividade.Importacao.Validacao = {
             const mes = match[2];
             const ano = match[3];
             
-            // Validação básica
+            // Validação simples
             if (parseInt(mes) > 12 || parseInt(dia) > 31) return null;
             
             return `${ano}-${mes}-${dia}`;
@@ -83,22 +84,23 @@ Produtividade.Importacao.Validacao = {
         for (let i = 0; i < linhas.length; i++) {
             const row = linhas[i];
             
-            // 2. Validação do ID
+            // 2. Validação do ID (Obrigatório)
             let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
             
             // Pula linha de Total ou vazia
-            if (!idRaw || row['assistente'] === 'Total') {
+            if (!idRaw || (row['assistente'] && row['assistente'].toLowerCase() === 'total')) {
                 ignorados++;
                 continue;
             }
 
+            // Remove caracteres não numéricos do ID
             const usuarioId = parseInt(idRaw.toString().replace(/\D/g, ''));
             if (!usuarioId) {
                 ignorados++;
                 continue;
             }
 
-            // 3. Volume
+            // 3. Captura de Volume (Quantidade)
             let quantidade = 0;
             if (row['documentos_validados']) {
                 quantidade = parseInt(row['documentos_validados']) || 0;
@@ -124,7 +126,7 @@ Produtividade.Importacao.Validacao = {
 
             this.dadosProcessados.push({
                 usuario_id: usuarioId,
-                data_referencia: dataFixa, // Usa a data extraída do nome do arquivo
+                data_referencia: dataFixa, // DATA VINDA DO NOME DO ARQUIVO
                 quantidade: quantidade,
                 status: statusFinal,
                 fifo: fifo,
@@ -143,9 +145,12 @@ Produtividade.Importacao.Validacao = {
             return alert("Nenhum dado válido encontrado. Verifique se o arquivo possui a coluna 'id_assistente'.");
         }
 
-        // Confirmação para o usuário
+        // Formata data para exibir bonitinho no confirm (AAAA-MM-DD -> DD/MM/AAAA)
+        const [ano, mes, dia] = dataFixa.split('-');
+        const dataExibicao = `${dia}/${mes}/${ano}`;
+
         const msg = `Resumo da Importação:\n\n` +
-                    `📅 Data de Destino: ${dataFixa} (Extraída do arquivo)\n` +
+                    `📅 Data Detectada: ${dataExibicao} (Via Nome do Arquivo)\n` +
                     `📊 Registros Válidos: ${contador}\n` +
                     `🗑️ Linhas Ignoradas: ${ignorados}\n\n` +
                     `Confirmar gravação no banco de dados?`;
@@ -163,9 +168,6 @@ Produtividade.Importacao.Validacao = {
         let enviados = 0;
 
         if(statusEl) statusEl.innerHTML = `<span class="text-orange-500 font-bold">Enviando dados...</span>`;
-
-        // Opcional: Limpar dados anteriores dessa data para evitar duplicidade de totais
-        // Se quiser ativar a limpeza automática antes de inserir, me avise.
         
         for (let i = 0; i < total; i += BATCH_SIZE) {
             const chunk = payload.slice(i, i + BATCH_SIZE);
@@ -176,7 +178,7 @@ Produtividade.Importacao.Validacao = {
             if (error) {
                 console.error(error);
                 if(statusEl) statusEl.innerHTML = "";
-                alert("Erro ao salvar: " + error.message);
+                alert("Erro ao salvar lote: " + error.message);
                 return;
             }
             
@@ -195,18 +197,20 @@ Produtividade.Importacao.Validacao = {
         
         alert("Produção importada com sucesso!");
         
+        // Recarrega a tela para mostrar os dados novos na data correta
         if (Produtividade.Geral && Produtividade.Geral.carregarTela) {
-            // Recarrega a tela com a data do arquivo importado para o usuário ver o resultado
-            // Atualiza os inputs de data
+            // Atualiza o filtro da tela para a data importada, para o usuário ver o resultado imediatamente
             const [ano, mes, dia] = this.dadosProcessados[0].data_referencia.split('-');
             const elDia = document.getElementById('sel-data-dia');
             const elMes = document.getElementById('sel-mes');
             const elAno = document.getElementById('sel-ano');
 
+            // Ajusta o filtro visual
             if (elDia) elDia.value = this.dadosProcessados[0].data_referencia;
-            if (elMes) elMes.value = parseInt(mes) - 1; // JS Month é 0-index
+            if (elMes) elMes.value = parseInt(mes) - 1; // Mês 0-11
             if (elAno) elAno.value = ano;
-
+            
+            // Força recarregamento
             Produtividade.Geral.carregarTela();
         }
     }
