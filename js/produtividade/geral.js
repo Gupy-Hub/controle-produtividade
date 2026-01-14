@@ -18,7 +18,7 @@ Produtividade.Geral = {
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v2.1)...");
+        console.log("🔧 Produtividade: Iniciando (Média Assertividade 0-100%)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -91,39 +91,42 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Auditorias Reais
+            // 2. Busca Auditorias Reais (Para Qualidade)
+            // Trazemos todos os registros do período para calcular a média
             const { data: auditorias, error: errAudit } = await Sistema.supabase
                 .from('assertividade')
-                .select('usuario_id, porcentagem, auditora, data_auditoria')
+                .select('usuario_id, porcentagem')
                 .gte('data_auditoria', dataInicio)
                 .lte('data_auditoria', dataFim);
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias
-            const mapaAuditoria = {}; 
+            // 3. Processa Auditorias (Calcula Média: Filtro 0 a 100%)
+            const mapaAuditoria = {}; // { usuario_id: { soma: 0, qtd: 0 } }
             let kpiAuditSoma = 0;
             let kpiAuditQtd = 0;
 
             if (auditorias) {
                 auditorias.forEach(a => {
-                    // Tratamento de porcentagem (remove %, troca vírgula por ponto)
+                    // Normaliza valor (ex: "100%", "98,5", 100)
                     let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
                     if (valStr === '') return;
                     
                     let val = parseFloat(valStr);
                     if (isNaN(val)) return;
 
-                    // FILTRO SOLICITADO: Valor deve ser estritamente entre 0 e 100.
-                    // (Removemos o filtro de 'SISTEMA'/'ROBO' para considerar TODOS os campos válidos)
+                    // REGRA DE OURO: Considerar apenas valores de 0 a 100
+                    // Ignora negativos ou valores acima de 100 (erros)
                     if (val < 0 || val > 100) return;
 
+                    // Acumula por usuário
                     const uid = a.usuario_id;
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     
                     mapaAuditoria[uid].soma += val;
                     mapaAuditoria[uid].qtd++;
 
+                    // Acumula Global
                     kpiAuditSoma += val;
                     kpiAuditQtd++;
                 });
@@ -154,7 +157,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. Agrupamento (FIX: Lógica de Dias Únicos)
+            // 6. Agrupamento (Merge de Volume + Qualidade Real)
             let dadosAgrupados = {};
             
             producao.forEach(item => {
@@ -165,7 +168,7 @@ Produtividade.Geral = {
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
-                        // Set para evitar contagem duplicada de dias (Correção Nexus)
+                        // Set para evitar contagem duplicada de dias
                         diasProcessados: new Set(),
                         totais: { 
                             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 
@@ -196,8 +199,7 @@ Produtividade.Geral = {
                     d.gp += (Number(item.gradual_parcial) || 0);
                     d.fc += (Number(item.perfil_fc) || 0);
                     
-                    // --- CORREÇÃO DE DIAS ÚTEIS ---
-                    // Só contabiliza o fator de dia trabalhado UMA VEZ por dia/usuário
+                    // Contabiliza dia trabalhado (fator) apenas uma vez por dia
                     const diaKey = `${item.data_referencia}`; 
                     if (!dadosAgrupados[uid].diasProcessados.has(diaKey)) {
                         dadosAgrupados[uid].diasProcessados.add(diaKey);
@@ -286,8 +288,13 @@ Produtividade.Geral = {
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
                 
-                let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic"; let mediaNumerica = 0;
+                // === CÁLCULO DE ASSERTIVIDADE (MÉDIA) ===
+                let assertGeralTxt = "-"; 
+                let corAssert = "text-slate-400 italic"; 
+                let mediaNumerica = 0;
+
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
+                    // Cálculo da média simples
                     const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
                     mediaNumerica = media;
                     assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
