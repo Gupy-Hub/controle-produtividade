@@ -18,7 +18,7 @@ Produtividade.Geral = {
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v2)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v2.1)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -107,13 +107,16 @@ Produtividade.Geral = {
 
             if (auditorias) {
                 auditorias.forEach(a => {
-                    const audNome = (a.auditora || '').trim().toUpperCase();
-                    if (!audNome || audNome === 'SISTEMA' || audNome === 'ROBO') return;
-
+                    // Tratamento de porcentagem (remove %, troca vírgula por ponto)
                     let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
                     if (valStr === '') return;
+                    
                     let val = parseFloat(valStr);
                     if (isNaN(val)) return;
+
+                    // FILTRO SOLICITADO: Valor deve ser estritamente entre 0 e 100.
+                    // (Removemos o filtro de 'SISTEMA'/'ROBO' para considerar TODOS os campos válidos)
+                    if (val < 0 || val > 100) return;
 
                     const uid = a.usuario_id;
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
