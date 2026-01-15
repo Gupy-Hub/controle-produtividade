@@ -2,10 +2,11 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.2 - NO BLANKS)
- * -----------------------------------------------------------------
- * Correção Crítica: Impede importação de linhas sem data (end_time).
- * Regra: Sem 'end_time' = Lixo (Descarte imediato).
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.3 - UTC LITERAL)
+ * --------------------------------------------------------------------
+ * Ajuste Crítico: Utiliza a data literal do ISO String (UTC) para
+ * evitar que horários da madrugada (ex: 01:38) sejam movidos para o dia anterior.
+ * * Exemplo: '2025-12-06T01:38:30Z' será importado como '2025-12-06'.
  */
 Gestao.Importacao.Assertividade = {
     init: function() {
@@ -28,12 +29,12 @@ Gestao.Importacao.Assertividade = {
         const btn = document.getElementById('btn-importar-assert');
         const statusEl = document.getElementById('status-importacao-assert');
         
-        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Filtrando...';
-        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold"><i class="fas fa-filter"></i> Analisando end_time...</span>';
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold"><i class="fas fa-calendar-alt"></i> Lendo datas (UTC)...</span>';
 
         Papa.parse(file, {
             header: true,
-            skipEmptyLines: true, // Ignora linhas totalmente vazias (,,,,)
+            skipEmptyLines: true, // Garante que linhas vazias no fim do arquivo sejam ignoradas
             encoding: "UTF-8",
             transformHeader: function(h) {
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
@@ -62,30 +63,32 @@ Gestao.Importacao.Assertividade = {
         const validos = [];
         const diasEncontrados = new Set();
         let ignorados = 0;
-        const OFF_SET_HORAS = 3; // Ajuste Fuso Brasil (GMT-3)
 
         for (const row of linhas) {
-            // --- REGRA DE OURO: SEM DATA, SEM IMPORTAÇÃO ---
-            
-            // 1. Captura bruta
+            // 1. Validação de DATA (end_time) - CRITÉRIO PRINCIPAL
             let endTimeRaw = row['end_time'];
 
-            // 2. Validação de nulidade e string vazia
+            // Se estiver vazio, nulo ou apenas espaços, ignora
             if (!endTimeRaw || typeof endTimeRaw !== 'string' || endTimeRaw.trim() === '') {
                 ignorados++;
-                continue; // Pula imediatamente
+                continue; 
             }
 
-            // 3. Validação de Data Válida (JS Date)
+            // Tenta criar objeto data para validar integridade
             const dataObj = new Date(endTimeRaw);
             if (isNaN(dataObj.getTime())) {
-                ignorados++; // Data existe mas é inválida (ex: "N/A")
+                ignorados++; 
                 continue;
             }
 
-            // --- FIM DA VALIDAÇÃO DE DATA ---
+            // 2. Extração da Data Literal (UTC)
+            // Se o arquivo diz "2025-12-06T01:38...", queremos "2025-12-06"
+            // Usamos .toISOString() que retorna sempre em UTC, e pegamos a parte da data
+            const dataFinal = dataObj.toISOString().split('T')[0];
+            
+            diasEncontrados.add(dataFinal);
 
-            // Agora validamos o ID (Assistente)
+            // 3. Validação do ID (Assistente)
             let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
             if (!idRaw) {
                 ignorados++;
@@ -98,14 +101,7 @@ Gestao.Importacao.Assertividade = {
                 continue;
             }
 
-            // Processamento da Data (Remover Hora e Ajustar Fuso)
-            const timestampBrt = dataObj.getTime() - (OFF_SET_HORAS * 60 * 60 * 1000);
-            const dataBrt = new Date(timestampBrt);
-            const dataFinal = dataBrt.toISOString().split('T')[0]; // YYYY-MM-DD
-            
-            diasEncontrados.add(dataFinal);
-
-            // Tratamento de Métricas
+            // 4. Tratamento de Métricas
             let pctRaw = row['% assert'] || row['assert'] || row['assertividade'] || '0';
             let pctClean = pctRaw.toString().replace('%','').replace(',','.').trim();
             let pctFinal = (pctClean === '' || isNaN(parseFloat(pctClean))) ? 0 : parseFloat(pctClean).toFixed(2);
@@ -127,30 +123,30 @@ Gestao.Importacao.Assertividade = {
                 qtd_nok: parseInt(row['nok'] || 0),
                 num_campos: parseInt(row['nº campos'] || 0),
                 porcentagem: pctFinal,
-                data_referencia: dataFinal,
+                data_referencia: dataFinal, // Agora gravando a data LITERAL do arquivo
                 data_auditoria: dataAudit,
                 empresa_nome: (row['empresa'] || '').trim(),
                 empresa_id: parseInt(row['company_id'] || 0)
             });
         }
 
-        // Feedback caso TUDO tenha sido filtrado (arquivo vazio ou colunas erradas)
         if (validos.length === 0) {
             if(statusEl) statusEl.innerHTML = "";
-            return alert(`Nenhum dado válido encontrado.\n\nVerificado ${linhas.length} linhas.\nIgnoradas (sem data/id): ${ignorados}.\n\nCertifique-se que a coluna 'end_time' existe e contém datas.`);
+            return alert(`Nenhum dado válido.\n\nIgnorados: ${ignorados}\nVerifique se a coluna 'end_time' está preenchida corretamente.`);
         }
 
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
     },
 
     salvarNoBanco: async function(dados, dias, statusEl) {
+        // Ordena para visualização
         dias.sort();
         const diasFormatados = dias.map(d => d.split('-').reverse().join('/')).join(', ');
         
         const msg = `Resumo da Importação:\n\n` +
-                    `📅 Datas Válidas: \n[ ${diasFormatados} ]\n\n` +
-                    `✅ Registros Prontos: ${dados.length}\n` +
-                    `⚠️ Substituição: Dados antigos destas datas serão APAGADOS.`;
+                    `📅 Datas Detectadas: \n[ ${diasFormatados} ]\n\n` +
+                    `✅ Registros Válidos: ${dados.length}\n` +
+                    `⚠️ Substituição: Dados anteriores destas datas serão APAGADOS.`;
 
         if (!confirm(msg)) {
             if(statusEl) statusEl.innerHTML = "Cancelado.";
@@ -159,11 +155,11 @@ Gestao.Importacao.Assertividade = {
 
         if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando registros antigos...</span>`;
 
-        // 1. Limpeza Segura
+        // 1. Limpeza Segura (Por data literal YYYY-MM-DD)
         const { error: errDel } = await Sistema.supabase
             .from('assertividade')
             .delete()
-            .in('data_referencia', dias); // Delete Partition (YYYY-MM-DD)
+            .in('data_referencia', dias);
 
         if (errDel) {
             console.error(errDel);
@@ -205,7 +201,7 @@ Gestao.Importacao.Assertividade = {
     }
 };
 
-// Auto-inicialização
+// Inicialização
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
 } else {
