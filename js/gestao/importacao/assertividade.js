@@ -2,11 +2,11 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v8.0 - CSV ULTIMATE)
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v8.1 - CSV FIXED)
  * ---------------------------------------------------------------------
- * Foco: Performance e Correção de Parsing de CSV "Sujo".
+ * Foco: Performance e Correção de Mapeamento de Colunas.
  * 1. escapeChar: '\\' -> Corrige a leitura de campos com aspas internas.
- * 2. Data Literal: Garante que a data do arquivo seja respeitada (sem fuso).
+ * 2. Mapeamento Inteligente: Prioriza colunas exatas (id_assistente vs ID PPC).
  * 3. Validação: Ignora linhas sem ID ou sem Data.
  */
 Gestao.Importacao.Assertividade = {
@@ -35,9 +35,9 @@ Gestao.Importacao.Assertividade = {
 
         // Configuração ESPECÍFICA para o seu tipo de CSV
         Papa.parse(file, {
-            header: false, // Vamos mapear manualmente para evitar erros de duplicidade de nome
+            header: false, // Mapeamento manual para maior controle
             skipEmptyLines: 'greedy',
-            escapeChar: '\\', // CRÍTICO: Permite ler campos como "Texto com \"aspas\" internas"
+            escapeChar: '\\', 
             encoding: "UTF-8",
             complete: async (results) => {
                 try {
@@ -64,16 +64,25 @@ Gestao.Importacao.Assertividade = {
             return alert("O arquivo CSV parece estar vazio ou sem cabeçalho.");
         }
 
-        // 1. Identificar a linha de cabeçalho (Linha 0)
+        // 1. Identificar a linha de cabeçalho (Linha 0) e normalizar
         const headers = rows[0].map(h => String(h).trim().toLowerCase().replace(/"/g, ''));
         
-        // 2. Criar Mapa de Índices (Onde está cada coluna?)
+        // 2. Criar Mapa de Índices (CORRIGIDO PARA O SEU CSV)
         const idx = {
+            // Data de referência
             endTime: headers.findIndex(h => h.includes('end_time') || h === 'data'),
-            idAssistente: headers.findIndex(h => h.includes('id_assistente') || h === 'id' || h.includes('id ppc')),
-            // Pega a última coluna chamada 'assistente' (geralmente a mais completa)
+            
+            // ID DO USUÁRIO: Procura especificamente 'id_assistente' primeiro
+            idAssistente: headers.indexOf('id_assistente') !== -1 
+                ? headers.indexOf('id_assistente') 
+                : headers.findIndex(h => h.includes('id_assistente') || h === 'id' || h.includes('id ppc')),
+
+            // Nome do Assistente: Pega a última coluna 'assistente' (índice 19 no seu CSV)
             assistente: headers.lastIndexOf('assistente'), 
-            auditora: headers.findIndex(h => h.includes('auditor')),
+            
+            // Auditora: Procura 'auditor' mas ignora 'data' para não pegar "Data da Auditoria"
+            auditora: headers.findIndex(h => h.includes('auditor') && !h.includes('data')),
+            
             docName: headers.findIndex(h => h.includes('doc_name') || h.includes('documento')),
             status: headers.findIndex(h => h === 'status'),
             obs: headers.findIndex(h => h.includes('obs') || h.includes('apontamentos')),
@@ -87,7 +96,7 @@ Gestao.Importacao.Assertividade = {
 
         // Validação Mínima
         if (idx.endTime === -1) return alert("Erro: Coluna 'end_time' não encontrada no CSV.");
-        if (idx.idAssistente === -1) return alert("Erro: Coluna de ID (id_assistente ou id ppc) não encontrada.");
+        if (idx.idAssistente === -1) return alert("Erro: Coluna 'id_assistente' não encontrada.");
 
         // 3. Extração de Dados
         const validos = [];
@@ -135,6 +144,7 @@ Gestao.Importacao.Assertividade = {
             let dtAudit = null;
             if (idx.dataAudit > -1 && row[idx.dataAudit]) {
                 let da = String(row[idx.dataAudit]).trim();
+                // Tenta converter formatos comuns
                 if (da.includes('/')) {
                     const parts = da.split('/'); // DD/MM/AAAA
                     if(parts.length === 3) dtAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
@@ -152,7 +162,7 @@ Gestao.Importacao.Assertividade = {
                 observacao: (idx.obs > -1 ? String(row[idx.obs]||'') : '').trim(),
                 qtd_ok: (idx.ok > -1) ? (parseInt(row[idx.ok]) || 0) : 0,
                 qtd_nok: (idx.nok > -1) ? (parseInt(row[idx.nok]) || 0) : 0,
-                num_campos: 0, // Campo não crítico
+                num_campos: 0, 
                 porcentagem: pctFinal,
                 data_referencia: dataLiteral,
                 data_auditoria: dtAudit,
@@ -165,7 +175,7 @@ Gestao.Importacao.Assertividade = {
 
         if (validos.length === 0) {
             if(statusEl) statusEl.innerHTML = "";
-            return alert(`Nenhuma linha válida importada.\n\nVerifique:\n1. Se a coluna 'end_time' existe.\n2. Se as datas estão no formato AAAA-MM-DD.\n3. Se os IDs estão preenchidos.`);
+            return alert(`Nenhuma linha válida importada.\n\nVerifique se o CSV possui as colunas 'end_time' e 'id_assistente'.`);
         }
 
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
@@ -200,7 +210,7 @@ Gestao.Importacao.Assertividade = {
         }
 
         // 2. Inserção em Lote
-        const BATCH_SIZE = 1000; // CSV é leve, podemos aumentar o lote
+        const BATCH_SIZE = 1000;
         let inseridos = 0;
 
         for (let i = 0; i < dados.length; i += BATCH_SIZE) {
@@ -224,12 +234,14 @@ Gestao.Importacao.Assertividade = {
         alert(`Sucesso! ${inseridos} registros importados.`);
         if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold">Concluído!</span>';
         
+        // Atualiza a tabela se o módulo de visualização estiver carregado
         if(Gestao.Assertividade && typeof Gestao.Assertividade.buscarDados === 'function') {
             Gestao.Assertividade.buscarDados();
         }
     }
 };
 
+// Inicialização automática
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
 } else {
