@@ -8,13 +8,13 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Feriados Mapeados por Ano (Incluindo Estaduais SP - 09/07 e Nacionais Móveis)
+    // Feriados Mapeados
     feriados: {
         "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
-    // STATUS NEUTROS (Contam Volume se tiver auditora preenchida)
+    // STATUS NEUTROS
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
@@ -47,7 +47,6 @@ Produtividade.Geral = {
         const dia = String(dateObj.getDate()).padStart(2, '0');
         const chave = `${mes}-${dia}`;
         
-        // Verifica feriados do ano específico (fallback para lista vazia se ano não mapeado)
         const listaFeriados = this.feriados[ano.toString()] || [];
         if (listaFeriados.includes(chave)) return false;
         
@@ -91,7 +90,7 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Auditorias Reais
+            // 2. Busca Auditorias Reais (Tabela Assertividade)
             const { data: auditorias, error: errAudit } = await Sistema.supabase
                 .from('assertividade')
                 .select('usuario_id, porcentagem, auditora, data_auditoria')
@@ -100,7 +99,7 @@ Produtividade.Geral = {
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias
+            // 3. Processa Auditorias (LÓGICA BLINDADA DE MÉDIA)
             const mapaAuditoria = {}; 
             let kpiAuditSoma = 0;
             let kpiAuditQtd = 0;
@@ -110,10 +109,19 @@ Produtividade.Geral = {
                     const audNome = (a.auditora || '').trim().toUpperCase();
                     if (!audNome || audNome === 'SISTEMA' || audNome === 'ROBO') return;
 
-                    let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
-                    if (valStr === '') return;
+                    // --- INICIO CORREÇÃO DE LÓGICA ---
+                    let raw = a.porcentagem;
+                    if (raw === null || raw === undefined || raw === '') return; // Ignora nulos
+
+                    // Limpa string: remove %, troca virgula por ponto
+                    let valStr = String(raw).replace('%', '').replace(',', '.').trim();
+                    if (valStr === '' || valStr === '-') return; // Ignora vazios/traços
+
                     let val = parseFloat(valStr);
-                    if (isNaN(val)) return;
+                    
+                    // Valida se é número e se está entre 0 e 100
+                    if (isNaN(val) || val < 0 || val > 100) return; 
+                    // --- FIM CORREÇÃO ---
 
                     const uid = a.usuario_id;
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
@@ -151,7 +159,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. Agrupamento (FIX: Lógica de Dias Únicos)
+            // 6. Agrupamento
             let dadosAgrupados = {};
             
             producao.forEach(item => {
@@ -162,7 +170,6 @@ Produtividade.Geral = {
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
-                        // Set para evitar contagem duplicada de dias (Correção Nexus)
                         diasProcessados: new Set(),
                         totais: { 
                             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 
@@ -177,7 +184,6 @@ Produtividade.Geral = {
                 const isNok = status.includes('NOK') || status.includes('ERRO') || status.includes('FALHA');
                 const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
-                // Lógica de Volume
                 let contaVolume = false;
                 if (isOk || isNok) {
                     contaVolume = true;
@@ -193,8 +199,6 @@ Produtividade.Geral = {
                     d.gp += (Number(item.gradual_parcial) || 0);
                     d.fc += (Number(item.perfil_fc) || 0);
                     
-                    // --- CORREÇÃO DE DIAS ÚTEIS ---
-                    // Só contabiliza o fator de dia trabalhado UMA VEZ por dia/usuário
                     const diaKey = `${item.data_referencia}`; 
                     if (!dadosAgrupados[uid].diasProcessados.has(diaKey)) {
                         dadosAgrupados[uid].diasProcessados.add(diaKey);
@@ -283,6 +287,7 @@ Produtividade.Geral = {
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
                 
+                // Média calculada nos passos anteriores (blindada)
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic"; let mediaNumerica = 0;
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
                     const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
@@ -362,6 +367,7 @@ Produtividade.Geral = {
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
         let pctAssert = 0;
+        // Usa o KPI Global calculado com a nova regra
         if (kpiAuditGlobal && kpiAuditGlobal.qtd > 0) {
             pctAssert = kpiAuditGlobal.soma / kpiAuditGlobal.qtd;
         }
@@ -381,7 +387,6 @@ Produtividade.Geral = {
         const end = new Date(datas.fim + "T00:00:00");
         const mapaDiasAbonados = {};
         
-        // Verifica se dia foi totalmente abonado para o KPI de calendário
         if (dadosBrutosProducao) {
             dadosBrutosProducao.forEach(r => {
                 if(!mapaDiasAbonados[r.data_referencia]) mapaDiasAbonados[r.data_referencia] = { total: 0, abonados: 0 };

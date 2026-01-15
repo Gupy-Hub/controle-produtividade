@@ -37,7 +37,8 @@ Produtividade.Performance = {
         else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
 
         try {
-            const { data, error } = await Sistema.supabase.from('producao').select(`id, quantidade, fator, data_referencia, usuario:usuarios ( id, nome, perfil, funcao )`).gte('data_referencia', s).lte('data_referencia', e).order('data_referencia', { ascending: true });
+            // ADICIONADO: 'assertividade' na seleção
+            const { data, error } = await Sistema.supabase.from('producao').select(`id, quantidade, fator, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`).gte('data_referencia', s).lte('data_referencia', e).order('data_referencia', { ascending: true });
             if (error) throw error;
             this.dadosCache = data;
             this.renderizarVisaoGeral();
@@ -65,9 +66,31 @@ Produtividade.Performance = {
             const date = r.data_referencia; const qtd = Number(r.quantidade) || 0; const uid = r.usuario.id;
             const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
+            
             diasSet.add(date);
             if (!producaoPorDia[date]) producaoPorDia[date] = 0; producaoPorDia[date] += qtd;
-            if (!producaoPorUser[uid]) producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid }; producaoPorUser[uid].total += qtd;
+            
+            if (!producaoPorUser[uid]) producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid, somaAssert: 0, qtdAssert: 0 }; 
+            producaoPorUser[uid].total += qtd;
+
+            // --- LÓGICA DE ASSERTIVIDADE (Preparação) ---
+            let pRaw = r.assertividade;
+            if (pRaw) {
+                let pClean = String(pRaw).replace('%', '').replace(',', '.').trim();
+                if(pClean && pClean !== '-' && pClean !== '') {
+                    let pVal = parseFloat(pClean);
+                    // Valida range 0-100 para evitar dados sujos
+                    if (!isNaN(pVal) && pVal >= 0 && pVal <= 100) {
+                        producaoPorUser[uid].somaAssert += pVal;
+                        producaoPorUser[uid].qtdAssert++;
+                    }
+                }
+            }
+        });
+
+        // Calcula média final
+        Object.values(producaoPorUser).forEach(u => {
+            u.mediaAssert = u.qtdAssert > 0 ? (u.somaAssert / u.qtdAssert).toFixed(2) : '-';
         });
 
         const labels = Array.from(diasSet).sort();
@@ -113,6 +136,7 @@ Produtividade.Performance = {
             if (index === 1) medal = `<i class="fas fa-medal text-slate-400 w-6 text-center"></i>`;
             if (index === 2) medal = `<i class="fas fa-medal text-amber-700 w-6 text-center"></i>`;
             const safeName = u.nome.replace(/'/g, "\\'");
+            // Nota: Se quiser exibir a assertividade aqui, basta usar ${u.mediaAssert}% no HTML abaixo
             html += `<div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${safeName}')" class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 group transition"><div class="flex items-center gap-2">${medal}<div class="flex flex-col"><span class="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition truncate w-32">${u.nome}</span></div></div><span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span></div>`;
         });
         container.innerHTML = html || '<div class="text-center text-slate-400 py-10 text-xs">Nenhum dado.</div>';
