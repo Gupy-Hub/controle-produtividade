@@ -1,136 +1,117 @@
 window.Produtividade = window.Produtividade || {};
 window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 
-// === IMPORTADOR DE PRODUÇÃO: MULTI-ARQUIVO (DATA VIA NOME) ===
+// === IMPORTADOR DE PRODUÇÃO: DATA VIA NOME DO ARQUIVO ===
 Produtividade.Importacao.Validacao = {
-    dadosParaSalvar: [], // Array acumulado de todos os arquivos
-    datasEncontradas: new Set(), // Set para controlar quais datas estamos manipulando
+    dadosProcessados: [],
     
     init: function() {
-        console.log("📥 Importação de Produção: Iniciada (Modo Lote/Data no Nome)");
+        console.log("📥 Importação de Produção: Iniciada (Modo Nome do Arquivo)");
     },
 
-    processar: async function(input) {
-        const files = Array.from(input.files);
-        if (files.length === 0) return;
+    processar: function(input) {
+        const file = input.files[0];
+        if (!file) return;
 
         const statusEl = document.getElementById('status-importacao-prod');
-        this.dadosParaSalvar = [];
-        this.datasEncontradas = new Set();
-        let arquivosLidos = 0;
-        let erros = [];
+        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo ${file.name}...</span>`;
 
-        // Limpa input para permitir re-seleção futura
-        const resetInput = () => { input.value = ''; };
+        // 1. Extração da Data do Nome do Arquivo
+        const dataArquivo = this.extrairDataDoNome(file.name);
 
-        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo ${files.length} arquivos...</span>`;
-
-        // Processamento em Série (para não travar o browser se forem muitos)
-        for (const file of files) {
-            // 1. Extração da Data
-            const dataArquivo = this.extrairDataDoNome(file.name);
-            
-            if (!dataArquivo) {
-                erros.push(`Arquivo "${file.name}": Nome inválido (use DDMMAAAA.csv)`);
-                continue;
-            }
-
-            try {
-                // 2. Leitura e Parse (Promisified)
-                const resultados = await this.lerCSV(file);
-                
-                // 3. Normalização dos Dados
-                const linhasValidas = this.normalizarDados(resultados.data, dataArquivo);
-                
-                if (linhasValidas.length > 0) {
-                    this.dadosParaSalvar.push(...linhasValidas);
-                    this.datasEncontradas.add(dataArquivo);
-                    arquivosLidos++;
-                }
-            } catch (e) {
-                erros.push(`Arquivo "${file.name}": ${e.message}`);
-            }
-        }
-
-        // Feedback de Erros
-        if (erros.length > 0) {
-            alert("Alguns arquivos não puderam ser lidos:\n\n" + erros.join("\n"));
-        }
-
-        if (this.dadosParaSalvar.length === 0) {
+        if (!dataArquivo) {
+            alert(`⚠️ ERRO DE NOME DE ARQUIVO:\n\nO arquivo "${file.name}" não contém uma data no formato DDMMAAAA (ex: 01122025.csv).\n\nRenomeie o arquivo para incluir a data e tente novamente.`);
+            input.value = '';
             if(statusEl) statusEl.innerHTML = "";
-            resetInput();
-            return alert("Nenhum dado válido encontrado nos arquivos selecionados.");
+            return;
         }
 
-        // 4. Verificação de Duplicidade no Banco (Lote)
-        await this.verificarESalvar(statusEl);
-        resetInput();
-    },
+        console.log(`📅 Data extraída do arquivo: ${dataArquivo}`);
 
-    // Wrapper Promessa para o PapaParse
-    lerCSV: function(file) {
-        return new Promise((resolve, reject) => {
-            Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                encoding: "UTF-8",
-                transformHeader: (h) => h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase(),
-                complete: (results) => resolve(results),
-                error: (err) => reject(err)
-            });
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            encoding: "UTF-8",
+            transformHeader: function(h) {
+                return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
+            },
+            complete: (results) => {
+                this.analisarDados(results.data, dataArquivo);
+            },
+            error: (err) => {
+                alert("Erro ao ler CSV: " + err.message);
+                if(statusEl) statusEl.innerHTML = "";
+            }
         });
+        
+        input.value = '';
     },
 
     extrairDataDoNome: function(nome) {
-        // Procura por 8 dígitos seguidos (DDMMAAAA)
         const match = nome.match(/(\d{2})(\d{2})(\d{4})/);
         if (match) {
             const dia = match[1];
             const mes = match[2];
             const ano = match[3];
-            // Validação simples
             if (parseInt(mes) > 12 || parseInt(dia) > 31) return null;
             return `${ano}-${mes}-${dia}`;
         }
         return null;
     },
 
-    normalizarDados: function(linhas, dataFixa) {
-        const processados = [];
-        
+    analisarDados: async function(linhas, dataFixa) {
+        this.dadosProcessados = [];
+        const statusEl = document.getElementById('status-importacao-prod');
+
+        if (linhas.length === 0) {
+            if(statusEl) statusEl.innerHTML = "";
+            return alert("O arquivo está vazio.");
+        }
+
+        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600"><i class="fas fa-calculator"></i> Processando linhas...</span>`;
+        await new Promise(r => setTimeout(r, 50));
+
+        let contador = 0;
+        let ignorados = 0;
+
         for (let i = 0; i < linhas.length; i++) {
             const row = linhas[i];
-            
-            // Validação do ID
             let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
-            if (!idRaw || (row['assistente'] && row['assistente'].toLowerCase() === 'total')) continue;
+            
+            if (!idRaw || (row['assistente'] && row['assistente'].toLowerCase() === 'total')) {
+                ignorados++;
+                continue;
+            }
 
             const usuarioId = parseInt(idRaw.toString().replace(/\D/g, ''));
-            if (!usuarioId) continue;
+            if (!usuarioId) {
+                ignorados++;
+                continue;
+            }
 
-            // Captura de Volume
             let quantidade = 0;
-            if (row['documentos_validados']) quantidade = parseInt(row['documentos_validados']) || 0;
-            else if (row['quantidade'] || row['qtd']) quantidade = parseInt(row['quantidade'] || row['qtd']) || 0;
-            else quantidade = 1;
+            if (row['documentos_validados']) {
+                quantidade = parseInt(row['documentos_validados']) || 0;
+            } else if (row['quantidade'] || row['qtd']) {
+                quantidade = parseInt(row['quantidade'] || row['qtd']) || 0;
+            } else {
+                quantidade = 1;
+            }
 
-            // Métricas
             const fifo = parseInt(row['fifo'] || row['documentos_validados_fifo']) || 0;
             const gTotal = parseInt(row['gradual_total'] || row['gradual total'] || row['documentos_validados_gradual_total']) || 0;
             const gParcial = parseInt(row['gradual_parcial'] || row['gradual parcial'] || row['documentos_validados_gradual_parcial']) || 0;
             const perfilFc = parseInt(row['perfil_fc'] || row['perfil fc'] || row['documentos_validados_perfil_fc']) || 0;
 
-            // Status
             let statusFinal = 'OK';
             if (row['status']) {
                 const s = row['status'].toUpperCase();
                 if (s.includes('NOK') || s.includes('ERRO')) statusFinal = 'NOK';
             }
 
-            processados.push({
+            this.dadosProcessados.push({
                 usuario_id: usuarioId,
-                data_referencia: dataFixa, // Data específica deste arquivo
+                data_referencia: dataFixa,
                 quantidade: quantidade,
                 status: statusFinal,
                 fifo: fifo,
@@ -139,65 +120,55 @@ Produtividade.Importacao.Validacao = {
                 perfil_fc: perfilFc,
                 fator: 1
             });
+            
+            contador++;
         }
-        return processados;
-    },
 
-    verificarESalvar: async function(statusEl) {
-        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600"><i class="fas fa-search"></i> Verificando duplicidade...</span>`;
+        if(statusEl) statusEl.innerHTML = "";
 
-        // Transforma o Set de datas em Array para consulta
-        const datasArray = Array.from(this.datasEncontradas);
+        if (contador === 0) {
+            return alert("Nenhum dado válido encontrado. Verifique se o arquivo possui a coluna 'id_assistente'.");
+        }
+
+        const [ano, mes, dia] = dataFixa.split('-');
+        const dataExibicao = `${dia}/${mes}/${ano}`;
         
-        // Verifica se JÁ existem dados para ESSAS datas
-        const { data: existentes, error } = await Sistema.supabase
+        // --- VERIFICAÇÃO DE INTEGRIDADE (Nexus Operacional) ---
+        const { count, error } = await Sistema.supabase
             .from('producao')
-            .select('data_referencia')
-            .in('data_referencia', datasArray);
-
-        if (error) {
-            console.error(error);
-            if(statusEl) statusEl.innerHTML = "";
-            return alert("Erro ao verificar banco de dados: " + error.message);
-        }
-
-        // Filtra datas únicas que retornaram do banco
-        const datasComDados = new Set(existentes.map(d => d.data_referencia));
+            .select('*', { count: 'exact', head: true })
+            .eq('data_referencia', dataFixa);
+            
+        let msgExtra = "";
+        let deveSubstituir = false;
         
-        let msgAviso = "";
-        let deveLimpar = false;
-
-        if (datasComDados.size > 0) {
-            // Formata datas para exibir (AAAA-MM-DD -> DD/MM/AAAA)
-            const datasFormatadas = Array.from(datasComDados).map(d => d.split('-').reverse().join('/')).join(', ');
-            msgAviso = `\n⚠️ ATENÇÃO: Já existem registros para as datas: \n[ ${datasFormatadas} ]\n\nOs dados destas datas serão APAGADOS e substituídos.`;
-            deveLimpar = true;
+        if (count > 0) {
+            msgExtra = `\n⚠️ ATENÇÃO: JÁ EXISTEM ${count} REGISTROS NESTA DATA (${dataExibicao})!\n\nSe continuar, os dados ANTIGOS SERÃO APAGADOS e substituídos pelos novos.`;
+            deveSubstituir = true;
         }
 
-        const datasNovasFormatadas = datasArray.map(d => d.split('-').reverse().join('/')).join(', ');
-        const msg = `Resumo da Importação em Massa:\n\n` +
-                    `📅 Datas Detectadas: ${datasNovasFormatadas}\n` +
-                    `📊 Total de Registros: ${this.dadosParaSalvar.length}\n` +
-                    msgAviso + `\n\n` +
+        const msg = `Resumo da Importação:\n\n` +
+                    `📅 Data Detectada: ${dataExibicao}\n` +
+                    `📊 Registros Válidos: ${contador}\n` +
+                    `🗑️ Linhas Ignoradas: ${ignorados}` +
+                    msgExtra + `\n\n` +
                     `Confirmar gravação no banco de dados?`;
 
-        if (!confirm(msg)) {
-            if(statusEl) statusEl.innerHTML = "";
-            return;
+        if (confirm(msg)) {
+            this.salvarNoBanco(deveSubstituir, dataFixa);
         }
-
-        await this.salvarNoBanco(deveLimpar, datasArray, statusEl);
     },
 
-    salvarNoBanco: async function(deveLimpar, datasArray, statusEl) {
-        // 1. Limpeza (Delete) dos dias afetados
-        if (deveLimpar) {
+    salvarNoBanco: async function(deveSubstituir, dataFixa) {
+        const statusEl = document.getElementById('status-importacao-prod');
+        
+        // Limpeza prévia para garantir integridade
+        if (deveSubstituir) {
             if(statusEl) statusEl.innerHTML = `<span class="text-rose-500 font-bold">🗑️ Limpando dados antigos...</span>`;
-            
             const { error: errDel } = await Sistema.supabase
                 .from('producao')
                 .delete()
-                .in('data_referencia', datasArray);
+                .eq('data_referencia', dataFixa);
                 
             if (errDel) {
                 alert("Erro ao limpar dados antigos: " + errDel.message);
@@ -206,8 +177,7 @@ Produtividade.Importacao.Validacao = {
             }
         }
 
-        // 2. Inserção (Insert)
-        const payload = this.dadosParaSalvar;
+        const payload = this.dadosProcessados;
         const total = payload.length;
         const BATCH_SIZE = 1000;
         let enviados = 0;
@@ -240,21 +210,15 @@ Produtividade.Importacao.Validacao = {
             if(statusEl) statusEl.innerHTML = ""; 
         }, 3000);
         
-        alert(`Sucesso! ${total} registros importados em ${datasArray.length} datas.`);
+        alert("Produção importada com sucesso!");
         
-        // Atualiza a tela com a primeira data encontrada, só para dar feedback visual
-        if (Produtividade.Geral && Produtividade.Geral.carregarTela && datasArray.length > 0) {
-            // Ordena para pegar a data mais recente ou a primeira
-            datasArray.sort();
-            const dataAlvo = datasArray[0]; 
-            const [ano, mes, dia] = dataAlvo.split('-');
-
+        if (Produtividade.Geral && Produtividade.Geral.carregarTela) {
+            const [ano, mes, dia] = this.dadosProcessados[0].data_referencia.split('-');
             const elDia = document.getElementById('sel-data-dia');
             const elMes = document.getElementById('sel-mes');
             const elAno = document.getElementById('sel-ano');
 
-            // Ajusta o filtro visual para o usuário ver ALGO que acabou de importar
-            if (elDia) elDia.value = dataAlvo;
+            if (elDia) elDia.value = this.dadosProcessados[0].data_referencia;
             if (elMes) elMes.value = parseInt(mes) - 1; 
             if (elAno) elAno.value = ano;
             
