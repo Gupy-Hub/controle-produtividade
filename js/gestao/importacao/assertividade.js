@@ -3,6 +3,7 @@ window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 Gestao.Importacao.Assertividade = {
     init: function() {
+        // Garante que o input existe e remove listeners antigos
         const input = document.getElementById('input-csv-assertividade');
         if (input) {
             const newInput = input.cloneNode(true);
@@ -27,11 +28,14 @@ Gestao.Importacao.Assertividade = {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
+            // Limpa cabeçalhos (remove BOM \ufeff e aspas, converte para minúsculo)
             transformHeader: function(h) {
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
             },
             complete: async (results) => {
                 console.log("✅ CSV Lido. Linhas:", results.data.length);
+                if(results.data.length > 0) console.log("Exemplo de cabeçalhos processados:", Object.keys(results.data[0]));
+                
                 await this.salvarDados(results.data);
                 
                 if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
@@ -53,8 +57,8 @@ Gestao.Importacao.Assertividade = {
         let ignorados = 0;
         
         for (const row of linhas) {
-            // 1. ID Assistente
-            let idAssistente = row['id_assistente'] || row['id assistente'] || row['usuario_id'];
+            // 1. ID Assistente (coluna 'id_assistente')
+            let idAssistente = row['id_assistente'] || row['id assistente'];
             if (idAssistente) idAssistente = parseInt(idAssistente.toString().replace(/\D/g, ''));
 
             if (!idAssistente) {
@@ -62,75 +66,72 @@ Gestao.Importacao.Assertividade = {
                 continue; 
             }
 
-            // 2. Data Referência (end_time)
+            // 2. Data Referência (VITAL: coluna 'end_time')
             let dataRef = row['end_time']; 
-            if (!dataRef) dataRef = row['data'] || row['date'] || row['created_at'];
+            if (!dataRef) {
+                // Tenta fallback se end_time falhar
+                dataRef = row['data'] || row['date'];
+            }
 
             if (!dataRef) {
                 ignorados++;
                 continue;
             }
 
-            // 3. Porcentagem (% Assert)
-            let pctRaw = row['% assert'] || row['assert'] || row['% assertividade'] || row['assertividade'] || '0';
-            // Tratamento Híbrido: Converte para número para validar, mas envia string se necessário
+            // 3. Porcentagem (coluna '% assert' ou '% assertividade')
+            let pctRaw = row['% assert'] || row['% assertividade'] || row['assertividade'] || '0';
             let pct = parseFloat(pctRaw.toString().replace('%','').replace(',','.').trim());
-            
-            // Se o banco espera TEXT na coluna 'porcentagem', enviamos string formatada.
-            // Se espera NUMERIC, enviamos o float.
-            // Para garantir compatibilidade com seu banco atual (que é text), enviamos string.
+            // Envia como string formatada para compatibilidade com coluna text do banco
             let pctFinal = isNaN(pct) ? null : pct.toFixed(2); 
 
-            // 4. Data Auditoria
+            // 4. Data Auditoria (coluna 'data da auditoria')
             let dataAudit = row['data da auditoria'] || row['data auditoria'];
             if (dataAudit && dataAudit.includes('/')) {
                 const parts = dataAudit.split('/');
                 if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
 
+            // 5. Mapeamento Completo
             validos.push({
                 usuario_id: idAssistente,
-                nome_assistente: row['assistente'] || '',
-                nome_auditora_raw: row['auditora'] || '',
-                nome_documento: row['doc_name'] || row['documento'] || row['nome da ppc'] || '',
-                status: row['status'] || '',
-                observacao: row['apontamentos/obs'] || row['observação'] || row['obs'] || '',
-                qtd_ok: parseInt(row['ok'] || 0),
-                qtd_nok: parseInt(row['nok'] || 0),
-                num_campos: parseInt(row['nº campos'] || row['num campos'] || 0),
-                porcentagem: pctFinal, // Enviando como String formatada '98.50'
-                data_referencia: dataRef,
-                data_auditoria: dataAudit,
-                empresa_nome: row['empresa'] || '',
-                empresa_id: parseInt(row['company_id'] || 0)
+                nome_assistente: row['assistente'] || '', // Coluna 'assistente'
+                nome_auditora_raw: row['auditora'] || '', // Coluna 'auditora'
+                nome_documento: row['doc_name'] || row['documento'] || '', // Coluna 'doc_name'
+                status: row['status'] || '', // Coluna 'status'
+                observacao: row['apontamentos/obs'] || row['observação'] || '', // Coluna 'apontamentos/obs'
+                qtd_ok: parseInt(row['ok'] || 0), // Coluna 'ok'
+                qtd_nok: parseInt(row['nok'] || 0), // Coluna 'nok'
+                num_campos: parseInt(row['nº campos'] || row['num campos'] || 0), // Coluna 'nº campos'
+                porcentagem: pctFinal, // Coluna '% assert'
+                data_referencia: dataRef, // Coluna 'end_time' -> Banco 'data_referencia'
+                data_auditoria: dataAudit, // Coluna 'data da auditoria' -> Banco 'data_auditoria'
+                empresa_nome: row['empresa'] || '', // Coluna 'empresa'
+                empresa_id: parseInt(row['company_id'] || 0) // Coluna 'company_id'
             });
         }
 
         if (validos.length === 0) {
-            alert(`Nenhum dado válido encontrado. Verifique as colunas do CSV.`);
+            alert(`Nenhum dado válido. Verifique se o CSV tem 'id_assistente' e 'end_time'.`);
             if(statusEl) statusEl.innerHTML = "";
             return;
         }
 
+        // Loteamento
         const BATCH_SIZE = 500;
         let erros = 0;
-        let primeiroErro = null;
+        let msgErro = "";
 
         for (let i = 0; i < validos.length; i += BATCH_SIZE) {
             const lote = validos.slice(i, i + BATCH_SIZE);
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
             
             if (error) {
-                console.error("❌ Erro insert:", error);
-                if (!primeiroErro) primeiroErro = error;
-                erros++;
-                
-                // Se for erro de schema, para tudo e avisa
+                console.error("❌ Erro insert Supabase:", error);
                 if (error.code === 'PGRST204') {
-                    alert(`ERRO DE SCHEMA (CACHE):\n${error.message}\n\nDica: Execute 'NOTIFY pgrst, "reload config"' no SQL Editor.`);
-                    if(statusEl) statusEl.innerHTML = "Erro de Schema";
-                    return;
+                    msgErro = `ERRO DE SCHEMA: O banco não tem a coluna '${error.message}'. Execute o SQL enviado.`;
+                    break;
                 }
+                erros++;
             }
             
             if(statusEl) {
@@ -139,14 +140,17 @@ Gestao.Importacao.Assertividade = {
             }
         }
 
-        if (erros > 0) {
-            alert(`Importação finalizada com falhas em ${erros} lotes.\nPrimeiro erro: ${primeiroErro?.message}`);
+        if (msgErro) {
+            alert(msgErro);
+            if(statusEl) statusEl.innerHTML = "Erro Crítico";
+        } else if (erros > 0) {
+            alert(`Importação com ${erros} falhas. Verifique o console.`);
         } else {
             alert(`✅ Sucesso! ${validos.length} registros importados.`);
             if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) Gestao.Assertividade.buscarDados();
         }
         
-        setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 3000);
+        setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 4000);
     }
 };
 
