@@ -14,11 +14,10 @@ Produtividade.Geral = {
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
-    // STATUS NEUTROS
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v3)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v4 - Full Team)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -99,18 +98,15 @@ Produtividade.Geral = {
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias (Lógica de Média Correta)
-            const mapaAuditoria = {};     // Para Média Geral (Agrupado)
-            const mapaAuditoriaDia = {};  // Para Detalhe (Dia a Dia)
-            let kpiAuditSoma = 0;
-            let kpiAuditQtd = 0;
+            // 3. Processa Auditorias
+            const mapaAuditoria = {};     
+            const mapaAuditoriaDia = {}; 
 
             if (auditorias) {
                 auditorias.forEach(a => {
                     const audNome = (a.auditora || '').trim().toUpperCase();
                     if (!audNome || audNome === 'SISTEMA' || audNome === 'ROBO') return;
 
-                    // --- LÓGICA DE LIMPEZA ---
                     let raw = a.porcentagem;
                     if (raw === null || raw === undefined || raw === '') return;
 
@@ -118,30 +114,17 @@ Produtividade.Geral = {
                     if (valStr === '' || valStr === '-') return;
 
                     let val = parseFloat(valStr);
-                    
-                    // Validação: Aceita apenas entre 0 e 100
                     if (isNaN(val) || val < 0 || val > 100) return; 
 
                     const uid = a.usuario_id;
                     
-                    // Mapa Geral (Média)
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     mapaAuditoria[uid].soma += val;
                     mapaAuditoria[uid].qtd++;
 
-                    // Mapa Detalhado (Por Dia)
                     const keyDia = `${uid}_${a.data_auditoria}`; 
-                    // Se houver mais de uma auditoria no dia, fazemos a média do dia ou pegamos a última.
-                    // Aqui vamos simplificar e guardar a última válida ou média simples se já existir.
-                    if (!mapaAuditoriaDia[keyDia]) {
-                         mapaAuditoriaDia[keyDia] = { soma: val, qtd: 1 };
-                    } else {
-                         mapaAuditoriaDia[keyDia].soma += val;
-                         mapaAuditoriaDia[keyDia].qtd++;
-                    }
-
-                    kpiAuditSoma += val;
-                    kpiAuditQtd++;
+                    if (!mapaAuditoriaDia[keyDia]) mapaAuditoriaDia[keyDia] = { soma: val, qtd: 1 };
+                    else { mapaAuditoriaDia[keyDia].soma += val; mapaAuditoriaDia[keyDia].qtd++; }
                 });
             }
 
@@ -170,26 +153,16 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. Agrupamento
+            // 6. Agrupamento Unificado
             let dadosAgrupados = {};
             
+            // A) Adiciona dados de quem tem PRODUÇÃO
             producao.forEach(item => {
                 const uid = item.usuario_id;
-                const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
+                // Garante que o usuário existe no grupo
+                if(!dadosAgrupados[uid]) this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
                 
-                if(!dadosAgrupados[uid]) {
-                    dadosAgrupados[uid] = {
-                        usuario: userObj,
-                        registros: [],
-                        diasProcessados: new Set(),
-                        totais: { 
-                            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 
-                        },
-                        meta_real: mapaMetas[uid] || 0,
-                        auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 },
-                        auditoriaDiaMap: mapaAuditoriaDia // Passa o mapa de dias para uso no render
-                    };
-                }
+                const d = dadosAgrupados[uid];
                 
                 const status = (item.status || '').toUpperCase();
                 const isOk = ['OK', 'VALIDO', 'PROCESSADO', 'CONCLUIDO', 'DONE', 'FINALIZADO', 'SUCESSO'].some(s => status.includes(s));
@@ -197,53 +170,69 @@ Produtividade.Geral = {
                 const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
                 let contaVolume = false;
-                if (isOk || isNok) {
-                    contaVolume = true;
-                } else if (isNeutro && item.auditora && item.auditora.trim() !== '') {
-                    contaVolume = true;
-                }
+                if (isOk || isNok) contaVolume = true;
+                else if (isNeutro && item.auditora && item.auditora.trim() !== '') contaVolume = true;
 
                 if (contaVolume) {
-                    const d = dadosAgrupados[uid].totais;
-                    d.qty += (Number(item.quantidade) || 0);
-                    d.fifo += (Number(item.fifo) || 0);
-                    d.gt += (Number(item.gradual_total) || 0);
-                    d.gp += (Number(item.gradual_parcial) || 0);
-                    d.fc += (Number(item.perfil_fc) || 0);
+                    d.totais.qty += (Number(item.quantidade) || 0);
+                    d.totais.fifo += (Number(item.fifo) || 0);
+                    d.totais.gt += (Number(item.gradual_total) || 0);
+                    d.totais.gp += (Number(item.gradual_parcial) || 0);
+                    d.totais.fc += (Number(item.perfil_fc) || 0);
                     
                     const diaKey = `${item.data_referencia}`; 
-                    if (!dadosAgrupados[uid].diasProcessados.has(diaKey)) {
-                        dadosAgrupados[uid].diasProcessados.add(diaKey);
-                        const f = this.getFator(item.fator);
-                        d.diasUteis += f;
+                    if (!d.diasProcessados.has(diaKey)) {
+                        d.diasProcessados.add(diaKey);
+                        d.totais.diasUteis += this.getFator(item.fator);
                     }
                 }
 
                 if (contaVolume || isOk || isNok || isNeutro) {
-                    dadosAgrupados[uid].registros.push({ 
+                    d.registros.push({ 
                         ...item, 
-                        usuario: userObj, 
+                        usuario: d.usuario, 
                         motivo_abono: item.motivo_abono,
                         is_neutro: isNeutro
                     });
                 }
             });
 
+            // B) Adiciona dados de quem SÓ TEM AUDITORIA (sem produção no período)
+            Object.keys(mapaAuditoria).forEach(uid => {
+                if (!dadosAgrupados[uid]) {
+                    this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
+                }
+            });
+
             this.dadosOriginais = Object.values(dadosAgrupados);
             
-            const kpiGlobalAudit = { soma: kpiAuditSoma, qtd: kpiAuditQtd };
-
             if (this.usuarioSelecionado) {
                 const elName = document.getElementById('selected-name');
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                this.atualizarKPIs(this.dadosOriginais, kpiGlobalAudit, producao); 
+                // Passa null no KPI Global antigo para forçar o recálculo baseado na lista real
+                this.atualizarKPIs(this.dadosOriginais, null, producao); 
             }
         } catch (error) {
             console.error("Erro render:", error);
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500">Erro: ${error.message}</td></tr>`;
         }
+    },
+
+    // Helper para criar estrutura padronizada
+    criarEntradaUsuario: function(grupo, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia) {
+        const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
+        grupo[uid] = {
+            usuario: userObj,
+            registros: [],
+            diasProcessados: new Set(),
+            totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 },
+            meta_real: mapaMetas[uid] || 0,
+            auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 },
+            auditoriaDiaMap: mapaAuditoriaDia,
+            kpiMediaAssert: 0 // Será calculado no render
+        };
     },
 
     renderizarTabela: function() {
@@ -253,6 +242,8 @@ Produtividade.Geral = {
         const mostrarGestao = checkGestao ? checkGestao.checked : false;
         const mostrarDetalhes = (this.usuarioSelecionado !== null);
         let lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) : this.dadosOriginais;
+        
+        // Filtro visual de Gestoras
         if (!mostrarGestao && !this.usuarioSelecionado) lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
 
         tbody.innerHTML = '';
@@ -271,8 +262,24 @@ Produtividade.Geral = {
             const metaBase = d.meta_real; 
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
+            // CALCULA A MÉDIA INDIVIDUAL AQUI (ESSENCIAL PARA O GRID)
+            let assertGeralTxt = "-"; 
+            let corAssert = "text-slate-400 italic"; 
+            let mediaNumerica = 0;
+            
+            if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
+                const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
+                mediaNumerica = media;
+                assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
+                
+                if (media >= 98) corAssert = 'text-emerald-700 font-bold';
+                else if (media < 90) corAssert = 'text-rose-600 font-bold';
+                else corAssert = 'text-slate-600 font-bold';
+            }
+            d.kpiMediaAssert = mediaNumerica;
+
             if (mostrarDetalhes) {
-                // === VISÃO DETALHADA (Linhas de Produção Diária) ===
+                // ... (Código de detalhes mantido igual) ...
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
                     const metaCalc = metaBase * fatorReal;
@@ -284,20 +291,18 @@ Produtividade.Geral = {
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
                     let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
 
-                    // Lógica de Assertividade por Dia
+                    // Lógica Detalhada por Dia
                     let assertVal = "-"; 
-                    let corAssert = 'text-slate-300 font-light';
-                    
+                    let corAssertDia = 'text-slate-300 font-light';
                     if (d.auditoriaDiaMap) {
                         const keyDia = `${d.usuario.id}_${r.data_referencia}`;
                         const dadosDia = d.auditoriaDiaMap[keyDia];
                         if (dadosDia && dadosDia.qtd > 0) {
                             const mediaDia = dadosDia.soma / dadosDia.qtd;
                             assertVal = mediaDia.toFixed(2).replace('.', ',') + '%';
-                            
-                            if (mediaDia >= 98) corAssert = 'text-emerald-600 font-bold';
-                            else if (mediaDia < 90) corAssert = 'text-rose-600 font-bold';
-                            else corAssert = 'text-slate-600 font-bold';
+                            if (mediaDia >= 98) corAssertDia = 'text-emerald-600 font-bold';
+                            else if (mediaDia < 90) corAssertDia = 'text-rose-600 font-bold';
+                            else corAssertDia = 'text-slate-600 font-bold';
                         }
                     }
 
@@ -307,29 +312,13 @@ Produtividade.Geral = {
                         <td class="px-2 py-2 text-center border-r border-slate-200"><input type="checkbox" class="row-checkbox cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500" value="${r.id}" onchange="Produtividade.Geral.toggleSelection('${r.id}')"></td>
                         <td class="px-2 py-2 text-center border-r border-slate-200 flex items-center justify-center"><select onchange="Produtividade.Geral.mudarFator('${r.id}', this.value)" class="${corFator} text-[10px] font-bold border border-slate-200 rounded px-1 py-0.5 outline-none w-20 text-center"><option value="1" ${String(fatorReal)=='1'?'selected':''}>Não</option><option value="0.5" ${String(fatorReal)=='0.5'?'selected':''}>Parcial</option><option value="0" ${String(fatorReal)=='0'?'selected':''}>Sim</option></select>${motivoIcon}</td>
                         <td class="px-3 py-2 border-r border-slate-200"><div class="flex flex-col cursor-pointer group" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')"><div class="flex justify-between items-center"><span class="font-bold text-slate-700 text-xs group-hover:text-blue-600 transition truncate">${d.usuario.nome}</span><span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 rounded border border-blue-100 ml-2">${dia}/${mes}</span></div><span class="text-[9px] text-slate-400 uppercase tracking-tight">${cargo} • ${contrato}</span></div></td>
-                        <td class="${commonCell}">${fatorReal}</td><td class="${commonCell}">${r.fifo}</td><td class="${commonCell}">${r.gradual_total}</td><td class="${commonCell}">${r.gradual_parcial}</td><td class="${commonCell} bg-slate-50 text-[10px]">${metaBase}</td><td class="${commonCell} bg-slate-50 text-[10px] font-bold text-slate-700">${Math.round(metaCalc)}</td><td class="px-2 py-2 text-center border-r border-slate-200 font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td><td class="px-2 py-2 text-center border-r border-slate-200"><span class="${pctClass} text-xs">${Math.round(pct)}%</span></td><td class="px-2 py-2 text-center text-xs ${corAssert}">${assertVal}</td>`;
+                        <td class="${commonCell}">${fatorReal}</td><td class="${commonCell}">${r.fifo}</td><td class="${commonCell}">${r.gradual_total}</td><td class="${commonCell}">${r.gradual_parcial}</td><td class="${commonCell} bg-slate-50 text-[10px]">${metaBase}</td><td class="${commonCell} bg-slate-50 text-[10px] font-bold text-slate-700">${Math.round(metaCalc)}</td><td class="px-2 py-2 text-center border-r border-slate-200 font-bold text-blue-700 bg-blue-50/30">${r.quantidade}</td><td class="px-2 py-2 text-center border-r border-slate-200"><span class="${pctClass} text-xs">${Math.round(pct)}%</span></td><td class="px-2 py-2 text-center text-xs ${corAssertDia}">${assertVal}</td>`;
                     tbody.appendChild(tr);
                 });
             } else {
-                // === VISÃO GERAL (Linha Agrupada por Analista) ===
+                // VISÃO GERAL
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
-                
-                // Média calculada nos passos anteriores (blindada)
-                let assertGeralTxt = "-"; 
-                let corAssert = "text-slate-400 italic"; 
-                let mediaNumerica = 0;
-                
-                if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
-                    const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
-                    mediaNumerica = media;
-                    assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
-                    
-                    if (media >= 98) corAssert = 'text-emerald-700 font-bold';
-                    else if (media < 90) corAssert = 'text-rose-600 font-bold';
-                    else corAssert = 'text-slate-600 font-bold';
-                }
-                d.kpiMediaAssert = mediaNumerica;
 
                 let colunaAbonoHtml = `<td class="px-2 py-2 text-center border-r border-slate-200 text-[10px] text-slate-400 italic bg-slate-50">--</td>`;
                 if (isDiaUnico && d.registros.length > 0) {
@@ -375,9 +364,13 @@ Produtividade.Geral = {
         if(!error) this.carregarTela(); 
     },
 
-    atualizarKPIs: function(dadosAgrupados, kpiAuditGlobal, dadosBrutosProducao) { 
+    atualizarKPIs: function(dadosAgrupados, kpiAuditGlobal_Ignorado, dadosBrutosProducao) { 
         let metaTotalGeral = 0; let producaoTotalGeral = 0; 
         let countAssistentesAtivos = 0; let somaMetasOperacao = 0; let countPessoasMeta = 0; let somaProdOperacao = 0; let countPessoasProd = 0;
+        
+        // VARIÁVEIS PARA RECALCULAR A MÉDIA GLOBAL COM BASE NA EQUIPE OPERACIONAL
+        let somaGlobalAudit = 0;
+        let qtdGlobalAudit = 0;
 
         dadosAgrupados.forEach(d => {
             const cargo = (d.usuario.funcao || '').toUpperCase();
@@ -390,6 +383,12 @@ Produtividade.Geral = {
                 if (d.totais.diasUteis > 0 || d.totais.qty > 0) countAssistentesAtivos++;
                 if (d.meta_real > 0) { somaMetasOperacao += d.meta_real; countPessoasMeta++; }
                 if (d.totais.diasUteis > 0) { somaProdOperacao += (d.totais.qty / d.totais.diasUteis); countPessoasProd++; }
+                
+                // SOMA ASSERTIVIDADE APENAS DA EQUIPE (EXCLUI GESTORAS)
+                if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
+                     somaGlobalAudit += d.auditoriaReal.soma;
+                     qtdGlobalAudit += d.auditoriaReal.qtd;
+                }
             }
         });
 
@@ -400,9 +399,10 @@ Produtividade.Geral = {
 
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
+        // CALCULO DE ASSERTIVIDADE BLINDADO
         let pctAssert = 0;
-        if (kpiAuditGlobal && kpiAuditGlobal.qtd > 0) {
-            pctAssert = kpiAuditGlobal.soma / kpiAuditGlobal.qtd;
+        if (qtdGlobalAudit > 0) {
+            pctAssert = somaGlobalAudit / qtdGlobalAudit;
         }
 
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
