@@ -19,10 +19,20 @@ Gestao.Importacao.Assertividade = {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
+            // CRÍTICO: Limpa o BOM (\ufeff) e espaços/aspas dos cabeçalhos
+            transformHeader: function(h) {
+                return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
+            },
             complete: async (results) => {
+                console.log("Linhas lidas do CSV:", results.data.length);
+                if (results.data.length > 0) {
+                    console.log("Exemplo de linha bruta:", results.data[0]);
+                }
                 await this.salvarDados(results.data);
+                
                 if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
-                document.getElementById('input-csv-assertividade').value = '';
+                const input = document.getElementById('input-csv-assertividade');
+                if(input) input.value = '';
             }
         });
     },
@@ -32,61 +42,84 @@ Gestao.Importacao.Assertividade = {
         if(statusEl) statusEl.innerHTML = `<span class="text-blue-500">Processando ${linhas.length} linhas...</span>`;
 
         let validos = [];
+        let ignorados = 0;
         
         for (const row of linhas) {
-            // 1. Mapeamento de IDs
-            let idAssistente = row['id_assistente'] || row['ID Assistente'];
-            if (!idAssistente) continue; // Pula se não tiver ID
+            // 1. Busca ID do Assistente (Tenta variações comuns)
+            // O transformHeader converte tudo para minúsculo, então buscamos keys minúsculas
+            let idAssistente = row['id_assistente'] || row['id assistente'] || row['usuario_id'];
             
-            idAssistente = parseInt(idAssistente.toString().replace(/\D/g, ''));
+            // Tenta limpar caracteres não numéricos se achou algo
+            if (idAssistente) {
+                idAssistente = parseInt(idAssistente.toString().replace(/\D/g, ''));
+            }
 
-            // 2. Extração da Data de Referência (END_TIME)
-            // A coluna end_time vem como "2025-12-02T12:17:04.332Z"
+            if (!idAssistente) {
+                ignorados++;
+                continue; 
+            }
+
+            // 2. Extração da Data de Referência (end_time)
+            // Agora em minúsculo devido ao transformHeader
             let dataRef = row['end_time']; 
-            if (!dataRef) continue; // Sem data, sem registro
+            
+            if (!dataRef) {
+                // Fallback: Tenta outras colunas de data se end_time falhar
+                dataRef = row['data'] || row['date'] || row['created_at'];
+            }
+
+            if (!dataRef) {
+                console.warn("Linha sem data (end_time) ignorada:", row);
+                ignorados++;
+                continue;
+            }
 
             // 3. Extração da Porcentagem (% Assert)
-            let pctRaw = row['% Assert'] || row['% Assertividade'] || '0';
+            // O transformHeader transformou "% Assert" em "% assert" ou "assert" dependendo da limpeza
+            // Vamos tentar variações
+            let pctRaw = row['% assert'] || row['assert'] || row['% assertividade'] || row['assertividade'] || '0';
+            
+            // Limpeza do valor (Ex: "98,5%" -> 98.5)
             let pct = parseFloat(pctRaw.toString().replace('%','').replace(',','.').trim());
             
             if (isNaN(pct)) pct = null;
 
             // 4. Outros Campos
-            let dataAudit = row['Data da Auditoria '] || row['Data da Auditoria'];
-            // Converte DD/MM/AAAA para AAAA-MM-DD se necessário
+            let dataAudit = row['data da auditoria'] || row['data auditoria'];
+            // Tratamento data auditoria (PT-BR para ISO)
             if (dataAudit && dataAudit.includes('/')) {
                 const parts = dataAudit.split('/');
-                if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`; // AAAA-MM-DD
             }
 
             validos.push({
                 usuario_id: idAssistente,
-                nome_assistente: row['Assistente'],
-                nome_auditora_raw: row['Auditora'],
-                nome_documento: row['doc_name'] || row['Documento'],
-                status: row['STATUS'] || row['Status'],
-                observacao: row['Apontamentos/obs'] || row['Observação'],
-                qtd_ok: parseInt(row['Ok'] || 0),
-                qtd_nok: parseInt(row['Nok'] || 0),
-                num_campos: parseInt(row['nº Campos'] || 0),
+                nome_assistente: row['assistente'] || '',
+                nome_auditora_raw: row['auditora'] || '',
+                nome_documento: row['doc_name'] || row['documento'] || row['nome da ppc'] || '',
+                status: row['status'] || '',
+                observacao: row['apontamentos/obs'] || row['observação'] || row['obs'] || '',
+                qtd_ok: parseInt(row['ok'] || 0),
+                qtd_nok: parseInt(row['nok'] || 0),
+                num_campos: parseInt(row['nº campos'] || row['num campos'] || 0),
                 porcentagem: pct, // Coluna N do Excel
                 data_referencia: dataRef, // VITAL: Usa end_time como referência
                 data_auditoria: dataAudit,
-                empresa_nome: row['Empresa'],
-                empresa_id: parseInt(row['Company_id'] || 0)
+                empresa_nome: row['empresa'] || '',
+                empresa_id: parseInt(row['company_id'] || 0)
             });
         }
 
         if (validos.length === 0) {
-            alert("Nenhum dado válido encontrado. Verifique se o CSV tem as colunas 'id_assistente', 'end_time' e '% Assert'.");
+            alert(`Nenhum dado válido encontrado em ${linhas.length} linhas.\nVerifique se as colunas 'id_assistente', 'end_time' e '% Assert' existem.`);
             if(statusEl) statusEl.innerHTML = "";
             return;
         }
 
-        // Limpa dados antigos dessas datas (Opcional, mas recomendado para evitar duplicação)
-        // Aqui faremos apenas o Insert para simplificar, o Supabase deve ter IDs únicos ou tratamos isso.
-        // Melhor abordagem: Inserir em lotes.
+        console.log(`Dados prontos para envio: ${validos.length} registros. Ignorados: ${ignorados}`);
+        console.log("Exemplo registro processado:", validos[0]);
 
+        // Envio em Lotes
         const BATCH_SIZE = 500;
         let erros = 0;
 
@@ -94,25 +127,28 @@ Gestao.Importacao.Assertividade = {
             const lote = validos.slice(i, i + BATCH_SIZE);
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
             if (error) {
-                console.error("Erro insert:", error);
+                console.error("Erro insert Supabase:", error);
                 erros++;
             }
             if(statusEl) statusEl.innerHTML = `Enviando... ${Math.round((i/validos.length)*100)}%`;
         }
 
         if (erros > 0) {
-            alert(`Importação concluída com ${erros} lotes com erro. Verifique o console.`);
+            alert(`Importação concluída com erros em ${erros} lotes. Verifique o console (F12).`);
         } else {
-            alert(`Sucesso! ${validos.length} registros de assertividade importados.`);
-            // Atualiza a tela se estiver na gestão
-            if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) Gestao.Assertividade.buscarDados();
+            alert(`Sucesso! ${validos.length} registros importados corretamente.\n(Datas baseadas na coluna 'end_time')`);
+            
+            // Recarrega lista se estiver na tela de gestão
+            if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) {
+                Gestao.Assertividade.buscarDados();
+            }
         }
         
         if(statusEl) statusEl.innerHTML = "";
     }
 };
 
-// Inicializa
+// Auto-inicialização
 document.addEventListener('DOMContentLoaded', () => {
     Gestao.Importacao.Assertividade.init();
 });
