@@ -2,12 +2,12 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v7.0 - DEEP DIAGNOSTIC)
- * ------------------------------------------------------------------------
- * Correções:
- * 1. Busca dinâmica de cabeçalho (não assume que está na linha 1).
- * 2. Suporte a Data Serial do Excel (números) E Texto.
- * 3. Relatório detalhado de falha se nenhuma linha for importada.
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v8.0 - CSV ULTIMATE)
+ * ---------------------------------------------------------------------
+ * Foco: Performance e Correção de Parsing de CSV "Sujo".
+ * 1. escapeChar: '\\' -> Corrige a leitura de campos com aspas internas.
+ * 2. Data Literal: Garante que a data do arquivo seja respeitada (sem fuso).
+ * 3. Validação: Ignora linhas sem ID ou sem Data.
  */
 Gestao.Importacao.Assertividade = {
     init: function() {
@@ -19,96 +19,64 @@ Gestao.Importacao.Assertividade = {
             input.parentNode.replaceChild(newInput, input);
             
             newInput.addEventListener('change', (e) => {
-                if(e.target.files.length > 0) this.processarExcel(e.target.files[0]);
+                if(e.target.files.length > 0) this.processarCSV(e.target.files[0]);
             });
         }
     },
 
-    processarExcel: function(file) {
+    processarCSV: function(file) {
         if (!file) return;
 
         const btn = document.getElementById('btn-importar-assert');
         const statusEl = document.getElementById('status-importacao-assert');
         
-        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
-        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold">Analisando estrutura...</span>';
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo CSV...';
+        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold">Processando arquivo...</span>';
 
-        const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-            try {
-                const data = new Uint8Array(e.target.result);
-                // raw: true garante que datas venham como números ou strings originais, sem formatação "###" do Excel
-                const workbook = XLSX.read(data, { type: 'array', cellDates: true }); 
-                
-                let targetSheetName = null;
-                let targetRows = null;
-
-                // 1. Procura a aba correta
-                for (const sheetName of workbook.SheetNames) {
-                    const sheet = workbook.Sheets[sheetName];
-                    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-                    
-                    if (rows.length > 0) {
-                        // Varre as primeiras 20 linhas procurando cabeçalhos conhecidos
-                        for(let i=0; i < Math.min(rows.length, 20); i++) {
-                            const rowStr = rows[i].map(c => String(c).toLowerCase()).join(' ');
-                            if (rowStr.includes('end_time') || rowStr.includes('end time')) {
-                                targetSheetName = sheetName;
-                                targetRows = rows;
-                                console.log(`[NEXUS] Cabeçalho encontrado na aba '${sheetName}', linha ${i}`);
-                                break;
-                            }
-                        }
-                    }
-                    if (targetSheetName) break;
+        // Configuração ESPECÍFICA para o seu tipo de CSV
+        Papa.parse(file, {
+            header: false, // Vamos mapear manualmente para evitar erros de duplicidade de nome
+            skipEmptyLines: 'greedy',
+            escapeChar: '\\', // CRÍTICO: Permite ler campos como "Texto com \"aspas\" internas"
+            encoding: "UTF-8",
+            complete: async (results) => {
+                try {
+                    await this.mapearESalvar(results.data, statusEl);
+                } catch (error) {
+                    console.error("Erro Fatal:", error);
+                    alert("Erro crítico na importação: " + error.message);
+                } finally {
+                    if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
+                    const input = document.getElementById('input-csv-assertividade');
+                    if(input) input.value = '';
+                    if(statusEl) setTimeout(() => statusEl.innerHTML = "", 5000);
                 }
-
-                if (!targetSheetName) {
-                    throw new Error("Não encontrei a coluna 'end_time' em nenhuma aba do Excel. Verifique se o cabeçalho está correto.");
-                }
-
-                await this.mapearESalvar(targetRows, statusEl);
-
-            } catch (error) {
-                console.error("Erro Excel:", error);
-                alert("ERRO CRÍTICO: " + error.message);
-            } finally {
-                if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar Excel';
-                const input = document.getElementById('input-csv-assertividade');
-                if(input) input.value = '';
-                if(statusEl) setTimeout(() => statusEl.innerHTML = "", 8000);
+            },
+            error: (err) => {
+                alert("Erro ao ler o arquivo CSV: " + err.message);
+                if(btn) btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro';
             }
-        };
-
-        reader.readAsArrayBuffer(file);
+        });
     },
 
     mapearESalvar: async function(rows, statusEl) {
-        // 1. Localizar a linha exata do cabeçalho
-        let headerRowIndex = -1;
-        let headers = [];
-
-        for (let i = 0; i < Math.min(rows.length, 20); i++) {
-            const row = rows[i].map(c => String(c).trim().toLowerCase());
-            if (row.includes('end_time') || row.includes('end time') || row.includes('data')) {
-                headerRowIndex = i;
-                headers = row;
-                break;
-            }
+        if (!rows || rows.length < 2) {
+            return alert("O arquivo CSV parece estar vazio ou sem cabeçalho.");
         }
 
-        if (headerRowIndex === -1) return alert("Erro: Cabeçalho não encontrado (end_time).");
-
-        // 2. Mapear Colunas
+        // 1. Identificar a linha de cabeçalho (Linha 0)
+        const headers = rows[0].map(h => String(h).trim().toLowerCase().replace(/"/g, ''));
+        
+        // 2. Criar Mapa de Índices (Onde está cada coluna?)
         const idx = {
             endTime: headers.findIndex(h => h.includes('end_time') || h === 'data'),
             idAssistente: headers.findIndex(h => h.includes('id_assistente') || h === 'id' || h.includes('id ppc')),
-            assistente: headers.lastIndexOf('assistente'), // Pega o último 'assistente' (geralmente o nome correto)
+            // Pega a última coluna chamada 'assistente' (geralmente a mais completa)
+            assistente: headers.lastIndexOf('assistente'), 
             auditora: headers.findIndex(h => h.includes('auditor')),
             docName: headers.findIndex(h => h.includes('doc_name') || h.includes('documento')),
             status: headers.findIndex(h => h === 'status'),
-            obs: headers.findIndex(h => h.includes('obs')),
+            obs: headers.findIndex(h => h.includes('obs') || h.includes('apontamentos')),
             ok: headers.findIndex(h => h === 'ok'),
             nok: headers.findIndex(h => h === 'nok'),
             pct: headers.findIndex(h => h.includes('assert') || h === '%'),
@@ -117,76 +85,62 @@ Gestao.Importacao.Assertividade = {
             companyId: headers.findIndex(h => h.includes('company'))
         };
 
-        console.log("Índices mapeados:", idx); // Debug no Console (F12)
+        // Validação Mínima
+        if (idx.endTime === -1) return alert("Erro: Coluna 'end_time' não encontrada no CSV.");
+        if (idx.idAssistente === -1) return alert("Erro: Coluna de ID (id_assistente ou id ppc) não encontrada.");
 
-        // 3. Processar Linhas
+        // 3. Extração de Dados
         const validos = [];
         const diasEncontrados = new Set();
-        let stats = { total: 0, erroData: 0, erroId: 0, exemploErro: '' };
+        let stats = { lidos: 0, ignorados: 0, semData: 0 };
 
-        for (let i = headerRowIndex + 1; i < rows.length; i++) {
+        // Começa da linha 1 (pula cabeçalho)
+        for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            if (!row || row.length === 0) continue;
-            stats.total++;
+            
+            // Segurança básica
+            if (!row || row.length < 2) continue;
 
-            // --- TRATAMENTO DE DATA ROBUSTO ---
-            let rawDate = row[idx.endTime];
-            let dataFinal = null;
-
-            try {
-                if (rawDate instanceof Date) {
-                    // Se o XLSX já converteu para objeto Date
-                    dataFinal = rawDate.toISOString().split('T')[0];
-                } else if (typeof rawDate === 'number') {
-                    // Data Serial do Excel (ex: 45632)
-                    // (valor - 25569) * 86400 * 1000 ajusta para JS Epoch
-                    const dateObj = new Date((rawDate - (25569)) * 86400 * 1000);
-                    // Ajuste de fuso simples para garantir dia correto (adiciona 12h para evitar virada de dia na conversão)
-                    dateObj.setHours(dateObj.getHours() + 12);
-                    dataFinal = dateObj.toISOString().split('T')[0];
-                } else if (typeof rawDate === 'string' && rawDate.trim().length > 0) {
-                    // String: "2025-12-06T..." ou "06/12/2025"
-                    let s = rawDate.trim();
-                    if (s.includes('T')) {
-                        dataFinal = s.split('T')[0];
-                    } else if (s.includes('/')) {
-                        const p = s.split('/'); // DD/MM/AAAA
-                        if(p.length === 3) dataFinal = `${p[2]}-${p[1]}-${p[0]}`;
-                    } else if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
-                        dataFinal = s.substring(0, 10);
-                    }
-                }
-            } catch (e) {
-                console.warn("Erro ao converter data:", rawDate);
-            }
-
-            if (!dataFinal || !/^\d{4}-\d{2}-\d{2}$/.test(dataFinal)) {
-                stats.erroData++;
-                if(!stats.exemploErro) stats.exemploErro = `Linha ${i}: Data inválida ('${rawDate}')`;
+            // A. DATA (Literal do CSV)
+            const rawDate = row[idx.endTime];
+            if (!rawDate || typeof rawDate !== 'string' || rawDate.length < 10) {
+                stats.semData++;
                 continue;
             }
+            
+            // Corta os 10 primeiros caracteres: "2025-12-02T..." -> "2025-12-02"
+            const dataLiteral = rawDate.substring(0, 10);
+            
+            // Valida formato YYYY-MM-DD
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dataLiteral)) {
+                stats.semData++;
+                continue;
+            }
+            
+            diasEncontrados.add(dataLiteral);
 
-            diasEncontrados.add(dataFinal);
-
-            // --- TRATAMENTO DE ID ---
+            // B. ID
             let idRaw = row[idx.idAssistente];
             let idAssistente = idRaw ? parseInt(String(idRaw).replace(/\D/g, '')) : 0;
-
+            
             if (!idAssistente) {
-                stats.erroId++;
+                stats.ignorados++;
                 continue;
             }
 
-            // --- OUTROS CAMPOS ---
+            // C. Outros Campos
             let pctVal = (idx.pct > -1 && row[idx.pct]) ? String(row[idx.pct]).replace('%','').replace(',','.').trim() : '0';
             let pctFinal = isNaN(parseFloat(pctVal)) ? 0 : parseFloat(pctVal).toFixed(2);
 
             let dtAudit = null;
             if (idx.dataAudit > -1 && row[idx.dataAudit]) {
-               // Lógica simplificada para data de auditoria
-               let da = String(row[idx.dataAudit]).trim();
-               if(da.length >= 10) dtAudit = da.substring(0, 10).replace(/\//g, '-'); 
-               // (Aprimorar se necessário, mas foco é end_time)
+                let da = String(row[idx.dataAudit]).trim();
+                if (da.includes('/')) {
+                    const parts = da.split('/'); // DD/MM/AAAA
+                    if(parts.length === 3) dtAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
+                } else if (/^\d{4}-\d{2}-\d{2}/.test(da)) {
+                    dtAudit = da.substring(0, 10);
+                }
             }
 
             validos.push({
@@ -198,26 +152,20 @@ Gestao.Importacao.Assertividade = {
                 observacao: (idx.obs > -1 ? String(row[idx.obs]||'') : '').trim(),
                 qtd_ok: (idx.ok > -1) ? (parseInt(row[idx.ok]) || 0) : 0,
                 qtd_nok: (idx.nok > -1) ? (parseInt(row[idx.nok]) || 0) : 0,
-                num_campos: 0, 
+                num_campos: 0, // Campo não crítico
                 porcentagem: pctFinal,
-                data_referencia: dataFinal,
+                data_referencia: dataLiteral,
                 data_auditoria: dtAudit,
                 empresa_nome: (idx.empresa > -1 ? String(row[idx.empresa]||'') : '').trim(),
                 empresa_id: (idx.companyId > -1) ? (parseInt(row[idx.companyId]) || 0) : 0
             });
+            
+            stats.lidos++;
         }
 
-        // --- RELATÓRIO DE ERRO ---
         if (validos.length === 0) {
             if(statusEl) statusEl.innerHTML = "";
-            let msg = `⚠️ Nenhuma linha importada!\n\n`;
-            msg += `Total linhas analisadas: ${stats.total}\n`;
-            msg += `Falha na Data (end_time): ${stats.erroData} linhas\n`;
-            msg += `Falha no ID: ${stats.erroId} linhas\n\n`;
-            if (stats.exemploErro) msg += `Exemplo do problema: ${stats.exemploErro}`;
-            
-            alert(msg);
-            return;
+            return alert(`Nenhuma linha válida importada.\n\nVerifique:\n1. Se a coluna 'end_time' existe.\n2. Se as datas estão no formato AAAA-MM-DD.\n3. Se os IDs estão preenchidos.`);
         }
 
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
@@ -227,10 +175,10 @@ Gestao.Importacao.Assertividade = {
         dias.sort();
         const diasFormatados = dias.map(d => d.split('-').reverse().join('/')).join(', ');
         
-        const msg = `Confirmação de Importação:\n\n` +
-                    `📅 Dias: \n[ ${diasFormatados} ]\n\n` +
-                    `✅ Registros: ${dados.length}\n` +
-                    `⚠️ Substituição: Dados antigos destas datas serão apagados.`;
+        const msg = `Resumo da Importação (CSV):\n\n` +
+                    `📅 Dias Detectados: \n[ ${diasFormatados} ]\n\n` +
+                    `✅ Registros Prontos: ${dados.length}\n` +
+                    `⚠️ Substituição: Dados antigos destas datas serão APAGADOS.`;
 
         if (!confirm(msg)) {
             if(statusEl) statusEl.innerHTML = "Cancelado.";
@@ -239,6 +187,7 @@ Gestao.Importacao.Assertividade = {
 
         if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando dados antigos...</span>`;
 
+        // 1. Limpeza
         const { error: errDel } = await Sistema.supabase
             .from('assertividade')
             .delete()
@@ -250,24 +199,29 @@ Gestao.Importacao.Assertividade = {
             return;
         }
 
-        const BATCH_SIZE = 500;
+        // 2. Inserção em Lote
+        const BATCH_SIZE = 1000; // CSV é leve, podemos aumentar o lote
         let inseridos = 0;
 
         for (let i = 0; i < dados.length; i += BATCH_SIZE) {
             const lote = dados.slice(i, i + BATCH_SIZE);
+            
             if(statusEl) {
                 const pct = Math.round(((i + lote.length) / dados.length) * 100);
-                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Salvando... ${pct}%</span>`;
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Enviando... ${pct}%</span>`;
             }
+
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
+
             if (error) {
-                alert(`Erro lote: ${error.message}`);
+                console.error("Erro insert:", error);
+                alert(`Erro no lote ${i}: ${error.message}`);
                 return;
             }
             inseridos += lote.length;
         }
 
-        alert(`Sucesso! ${inseridos} registros salvos.`);
+        alert(`Sucesso! ${inseridos} registros importados.`);
         if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold">Concluído!</span>';
         
         if(Gestao.Assertividade && typeof Gestao.Assertividade.buscarDados === 'function') {
