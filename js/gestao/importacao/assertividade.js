@@ -2,11 +2,12 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.3 - UTC LITERAL)
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.4 - LITERAL DATE)
  * --------------------------------------------------------------------
- * Ajuste Crítico: Utiliza a data literal do ISO String (UTC) para
- * evitar que horários da madrugada (ex: 01:38) sejam movidos para o dia anterior.
- * * Exemplo: '2025-12-06T01:38:30Z' será importado como '2025-12-06'.
+ * Lógica Blindada: 
+ * 1. Extração LITERAL de string: Pega os 10 primeiros caracteres do 'end_time'.
+ * 2. Ignora qualquer cálculo de tempo ou fuso horário.
+ * 3. O que está escrito no CSV é o que vai para o banco.
  */
 Gestao.Importacao.Assertividade = {
     init: function() {
@@ -14,6 +15,7 @@ Gestao.Importacao.Assertividade = {
         const input = document.getElementById(inputId);
         
         if (input) {
+            // Reinicia o input para garantir estado limpo
             const newInput = input.cloneNode(true);
             input.parentNode.replaceChild(newInput, input);
             
@@ -30,11 +32,11 @@ Gestao.Importacao.Assertividade = {
         const statusEl = document.getElementById('status-importacao-assert');
         
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
-        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold"><i class="fas fa-calendar-alt"></i> Lendo datas (UTC)...</span>';
+        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold"><i class="fas fa-search"></i> Extraindo datas literais...</span>';
 
         Papa.parse(file, {
             header: true,
-            skipEmptyLines: true, // Garante que linhas vazias no fim do arquivo sejam ignoradas
+            skipEmptyLines: true, // Ignora linhas totalmente vazias
             encoding: "UTF-8",
             transformHeader: function(h) {
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
@@ -44,7 +46,7 @@ Gestao.Importacao.Assertividade = {
                     await this.filtrarESalvar(results.data, statusEl);
                 } catch (error) {
                     console.error("Erro Fatal:", error);
-                    alert("Erro na importação: " + error.message);
+                    alert("Erro crítico: " + error.message);
                 } finally {
                     if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
                     const input = document.getElementById('input-csv-assertividade');
@@ -53,7 +55,7 @@ Gestao.Importacao.Assertividade = {
                 }
             },
             error: (err) => {
-                alert("Erro leitura CSV: " + err.message);
+                alert("Erro CSV: " + err.message);
                 if(btn) btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro';
             }
         });
@@ -65,30 +67,7 @@ Gestao.Importacao.Assertividade = {
         let ignorados = 0;
 
         for (const row of linhas) {
-            // 1. Validação de DATA (end_time) - CRITÉRIO PRINCIPAL
-            let endTimeRaw = row['end_time'];
-
-            // Se estiver vazio, nulo ou apenas espaços, ignora
-            if (!endTimeRaw || typeof endTimeRaw !== 'string' || endTimeRaw.trim() === '') {
-                ignorados++;
-                continue; 
-            }
-
-            // Tenta criar objeto data para validar integridade
-            const dataObj = new Date(endTimeRaw);
-            if (isNaN(dataObj.getTime())) {
-                ignorados++; 
-                continue;
-            }
-
-            // 2. Extração da Data Literal (UTC)
-            // Se o arquivo diz "2025-12-06T01:38...", queremos "2025-12-06"
-            // Usamos .toISOString() que retorna sempre em UTC, e pegamos a parte da data
-            const dataFinal = dataObj.toISOString().split('T')[0];
-            
-            diasEncontrados.add(dataFinal);
-
-            // 3. Validação do ID (Assistente)
+            // 1. Extração de ID (Obrigatório)
             let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
             if (!idRaw) {
                 ignorados++;
@@ -101,7 +80,32 @@ Gestao.Importacao.Assertividade = {
                 continue;
             }
 
-            // 4. Tratamento de Métricas
+            // 2. Extração LITERAL da Data (end_time)
+            let endTimeRaw = row['end_time'];
+
+            // Validação básica: tem que ser string e ter conteúdo
+            if (!endTimeRaw || typeof endTimeRaw !== 'string' || endTimeRaw.trim() === '') {
+                ignorados++;
+                continue; 
+            }
+
+            // CORREÇÃO DEFINITIVA: 
+            // Corta a string nos 10 primeiros caracteres (YYYY-MM-DD).
+            // Ignora o resto (THH:mm:ss...).
+            // Exemplo: "2025-12-06T01:38:30..." vira "2025-12-06"
+            const dataLiteral = endTimeRaw.substring(0, 10);
+
+            // Valida se o recorte parece uma data (AAAA-MM-DD)
+            // Expressão Regular simples para garantir formato
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dataLiteral)) {
+                console.warn(`Data ignorada (formato inválido): ${endTimeRaw}`);
+                ignorados++; 
+                continue;
+            }
+            
+            diasEncontrados.add(dataLiteral);
+
+            // 3. Tratamento de Métricas
             let pctRaw = row['% assert'] || row['assert'] || row['assertividade'] || '0';
             let pctClean = pctRaw.toString().replace('%','').replace(',','.').trim();
             let pctFinal = (pctClean === '' || isNaN(parseFloat(pctClean))) ? 0 : parseFloat(pctClean).toFixed(2);
@@ -123,7 +127,7 @@ Gestao.Importacao.Assertividade = {
                 qtd_nok: parseInt(row['nok'] || 0),
                 num_campos: parseInt(row['nº campos'] || 0),
                 porcentagem: pctFinal,
-                data_referencia: dataFinal, // Agora gravando a data LITERAL do arquivo
+                data_referencia: dataLiteral, // A data exata que estava escrita
                 data_auditoria: dataAudit,
                 empresa_nome: (row['empresa'] || '').trim(),
                 empresa_id: parseInt(row['company_id'] || 0)
@@ -132,30 +136,30 @@ Gestao.Importacao.Assertividade = {
 
         if (validos.length === 0) {
             if(statusEl) statusEl.innerHTML = "";
-            return alert(`Nenhum dado válido.\n\nIgnorados: ${ignorados}\nVerifique se a coluna 'end_time' está preenchida corretamente.`);
+            return alert(`Nenhum dado válido.\n\nIgnorados: ${ignorados}\nVerifique se 'end_time' está no formato AAAA-MM-DD...`);
         }
 
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
     },
 
     salvarNoBanco: async function(dados, dias, statusEl) {
-        // Ordena para visualização
         dias.sort();
+        // Formatação visual para o alerta
         const diasFormatados = dias.map(d => d.split('-').reverse().join('/')).join(', ');
         
-        const msg = `Resumo da Importação:\n\n` +
-                    `📅 Datas Detectadas: \n[ ${diasFormatados} ]\n\n` +
+        const msg = `Resumo da Importação (Modo Literal):\n\n` +
+                    `📅 Datas Identificadas: \n[ ${diasFormatados} ]\n\n` +
                     `✅ Registros Válidos: ${dados.length}\n` +
-                    `⚠️ Substituição: Dados anteriores destas datas serão APAGADOS.`;
+                    `⚠️ Atenção: Os dados dessas datas serão SUBSTITUÍDOS no banco.`;
 
         if (!confirm(msg)) {
-            if(statusEl) statusEl.innerHTML = "Cancelado.";
+            if(statusEl) statusEl.innerHTML = "Operação cancelada.";
             return;
         }
 
-        if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando registros antigos...</span>`;
+        if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando dados antigos...</span>`;
 
-        // 1. Limpeza Segura (Por data literal YYYY-MM-DD)
+        // 1. Limpeza por Data Literal
         const { error: errDel } = await Sistema.supabase
             .from('assertividade')
             .delete()
@@ -177,7 +181,7 @@ Gestao.Importacao.Assertividade = {
             
             if(statusEl) {
                 const pct = Math.round(((i + lote.length) / dados.length) * 100);
-                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Salvando... ${pct}%</span>`;
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Enviando... ${pct}%</span>`;
             }
 
             const { error } = await Sistema.supabase
@@ -186,7 +190,7 @@ Gestao.Importacao.Assertividade = {
 
             if (error) {
                 console.error(error);
-                alert(`Erro ao salvar lote: ${error.message}`);
+                alert(`Erro no lote ${i}: ${error.message}`);
                 return;
             }
             inseridos += lote.length;
@@ -201,7 +205,7 @@ Gestao.Importacao.Assertividade = {
     }
 };
 
-// Inicialização
+// Auto-inicialização
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
 } else {
