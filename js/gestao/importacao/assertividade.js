@@ -1,74 +1,82 @@
+window.Gestao = window.Gestao || {};
 Gestao.ImportacaoAssertividade = {
-    init: function() {
-        // ... código de inicialização do modal ...
-    },
-
     processarCSV: async function(file) {
+        if (!file) return;
+        
+        console.log("📂 [NEXUS] Iniciando processamento do CSV...");
         const reader = new FileReader();
+        
         reader.onload = async (e) => {
             const text = e.target.result;
-            const rows = text.split('\n').slice(1); // Pula cabeçalho
-            
-            const listaParaSalvar = [];
+            // PapaParse é mais robusto para lidar com quebras de linha e vírgulas dentro de aspas
+            Papa.parse(text, {
+                header: true,
+                skipEmptyLines: true,
+                complete: async (results) => {
+                    const rows = results.data;
+                    const listaParaSalvar = [];
 
-            console.log("📂 Iniciando leitura do CSV...");
+                    rows.forEach(row => {
+                        // Mapeamento baseado no cabeçalho do seu CSV
+                        const auditora = row['Auditora'] || '';
+                        const pctRaw = row['% Assert'] || '';
+                        
+                        // DIRETIVA: Ignorar registros onde a auditora é "Sistema"
+                        if (auditora.toLowerCase().includes('sistema')) return;
 
-            rows.forEach(row => {
-                const cols = row.split(','); // ou ';' dependendo do CSV
-                if (cols.length < 5) return;
+                        // Validação de nota (0 a 100)
+                        let val = parseFloat(pctRaw.replace('%', '').replace(',', '.'));
 
-                // Mapeie as colunas conforme seu CSV (Ajuste os índices se necessário)
-                // Exemplo baseado no seu snippet: 
-                // Col 5: Assistente, Col 13: % Assert, Col 14: Data, Col 15: Auditora
-                
-                const assistenteNome = cols[5] ? cols[5].replace(/"/g, '').trim() : '';
-                const pctRaw = cols[13] ? cols[13].replace(/"/g, '').trim() : ''; 
-                const dataRaw = cols[14] ? cols[14].replace(/"/g, '').trim() : '';
-                const auditoraNome = cols[15] ? cols[15].replace(/"/g, '').trim() : '';
-
-                // --- LÓGICA CORRETA: IGNORA STATUS, OLHA APENAS A NOTA ---
-                
-                // 1. Limpa a porcentagem
-                let valStr = pctRaw.replace('%', '').replace(',', '.').trim();
-                let val = parseFloat(valStr);
-
-                // 2. Só importa se for um número válido entre 0 e 100
-                if (!isNaN(val) && val >= 0 && val <= 100) {
-                    
-                    // Formata data (DD/MM/YYYY -> YYYY-MM-DD)
-                    let dataFmt = null;
-                    if (dataRaw.includes('/')) {
-                        const [d, m, y] = dataRaw.split('/');
-                        dataFmt = `${y}-${m}-${d}`;
-                    } else {
-                        dataFmt = new Date().toISOString().split('T')[0]; // Fallback
-                    }
-
-                    listaParaSalvar.push({
-                        assistente: assistenteNome,
-                        porcentagem: pctRaw, // Salva original ou formatado
-                        data_auditoria: dataFmt,
-                        auditora: auditoraNome,
-                        // Outros campos opcionais...
-                        status: 'IMPORTADO' // Status interno apenas para controle
+                        if (!isNaN(val) && val >= 0 && val <= 100) {
+                            listaParaSalvar.push({
+                                data_referencia: this.formatarData(row['Data da Auditoria ']),
+                                empresa_nome: row['Empresa'],
+                                nome_assistente: row['Assistente'],
+                                nome_documento: row['doc_name'],
+                                status: row['STATUS'],
+                                num_campos: parseInt(row['nº Campos']) || 0,
+                                qtd_ok: parseInt(row['Ok']) || 0,
+                                qtd_nok: parseInt(row['Nok']) || 0,
+                                indice_assertividade: val,
+                                nome_auditora_raw: auditora,
+                                id_assistente: row['id_assistente']
+                            });
+                        }
                     });
+
+                    if (listaParaSalvar.length > 0) {
+                        await this.enviarParaSupabase(listaParaSalvar);
+                    } else {
+                        alert("Nenhum dado válido (ou não-sistema) encontrado no arquivo.");
+                    }
                 }
             });
-
-            console.log(`✅ ${listaParaSalvar.length} linhas válidas (0-100%) encontradas.`);
-            
-            if (listaParaSalvar.length > 0) {
-                await this.enviarParaSupabase(listaParaSalvar);
-            } else {
-                alert("Nenhuma linha com porcentagem válida encontrada.");
-            }
         };
         reader.readAsText(file);
     },
 
+    formatarData: function(dataStr) {
+        if (!dataStr) return new Date().toISOString().split('T')[0];
+        const [d, m, y] = dataStr.split('/');
+        return `${y}-${m}-${d}`;
+    },
+
     enviarParaSupabase: async function(dados) {
-        // Lógica de batch insert no Supabase
-        // ... (Seu código de insert existente) ...
-        // Certifique-se de NÃO filtrar nada aqui também.
+        try {
+            console.log(`🚀 Enviando ${dados.length} registros...`);
+            const { error } = await Sistema.supabase
+                .from('auditorias') // Certifique-se que o nome da tabela destino é este
+                .insert(dados);
+
+            if (error) throw error;
+
+            alert("Importação concluída com sucesso!");
+            if (window.Gestao && Gestao.Assertividade) {
+                Gestao.Assertividade.carregarDados();
+            }
+        } catch (err) {
+            console.error("❌ Erro no Insert:", err);
+            alert("Erro ao salvar no banco: " + err.message);
+        }
     }
 };
