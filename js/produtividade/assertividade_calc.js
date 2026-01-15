@@ -3,14 +3,14 @@ window.Produtividade = window.Produtividade || {};
 Produtividade.AssertividadeCalc = {
     /**
      * Busca e processa as métricas de assertividade.
-     * BLINDAGEM NEXUS: Ajusta datas para cobrir o dia inteiro (00:00:00 até 23:59:59).
+     * BLINDAGEM NEXUS v2: Formatação ISO 8601 (T separador) para evitar Erro 400.
      * Fallback Inteligente: Tenta 'data_referencia', se falhar busca 'data_auditoria'.
      */
     buscarMetricas: async function(dataInicio, dataFim) {
-        // AJUSTE CRÍTICO DE TEMPO: Garante que pegamos até o último segundo do dia final.
-        // Se dataFim for '2025-12-01', vira '2025-12-01 23:59:59'
-        const dataFimFull = dataFim.includes(':') ? dataFim : `${dataFim} 23:59:59`;
-        const dataInicioFull = dataInicio.includes(':') ? dataInicio : `${dataInicio} 00:00:00`;
+        // CORREÇÃO CRÍTICA DE FORMATO: Uso de 'T' em vez de espaço para compatibilidade ISO
+        // Ex: '2025-12-01' vira '2025-12-01T00:00:00'
+        const dataFimFull = dataFim.includes('T') ? dataFim : `${dataFim}T23:59:59`;
+        const dataInicioFull = dataInicio.includes('T') ? dataInicio : `${dataInicio}T00:00:00`;
 
         console.log(`🔍 Assertividade: Buscando de [${dataInicioFull}] até [${dataFimFull}]`);
 
@@ -29,7 +29,8 @@ Produtividade.AssertividadeCalc = {
             origemDados = "REFERENCIA";
         } else {
             // 2. TENTATIVA FALLBACK: DATA DE AUDITORIA (Legado)
-            console.warn("⚠️ Assertividade: Sem dados por Referência. Ativando Protocolo Fallback (Data Auditoria)...");
+            if (errRef) console.warn("Aviso busca primária:", errRef.message);
+            console.warn("⚠️ Assertividade: Sem dados por Referência ou Erro na busca. Ativando Protocolo Fallback (Data Auditoria)...");
             
             const { data: dadosAudit, error: errAudit } = await Sistema.supabase
                 .from('assertividade')
@@ -40,6 +41,8 @@ Produtividade.AssertividadeCalc = {
             if (!errAudit && dadosAudit && dadosAudit.length > 0) {
                 auditorias = dadosAudit;
                 origemDados = "AUDITORIA";
+            } else if (errAudit) {
+                console.error("Erro busca secundária:", errAudit);
             }
         }
 
