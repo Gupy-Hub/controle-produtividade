@@ -2,12 +2,12 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.4 - LITERAL DATE)
- * --------------------------------------------------------------------
- * Lógica Blindada: 
- * 1. Extração LITERAL de string: Pega os 10 primeiros caracteres do 'end_time'.
- * 2. Ignora qualquer cálculo de tempo ou fuso horário.
- * 3. O que está escrito no CSV é o que vai para o banco.
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.5 - DIAGNOSTIC MODE)
+ * -----------------------------------------------------------------------
+ * Alterações:
+ * 1. Verificação de Cabeçalhos: Avisa se o CSV foi lido errado (ex: ponto e vírgula vs vírgula).
+ * 2. Diagnóstico de Falha: Conta exatamente por que as linhas foram ignoradas.
+ * 3. Extração Literal: Pega a data (YYYY-MM-DD) direto do texto, ignorando fuso horário.
  */
 Gestao.Importacao.Assertividade = {
     init: function() {
@@ -15,7 +15,6 @@ Gestao.Importacao.Assertividade = {
         const input = document.getElementById(inputId);
         
         if (input) {
-            // Reinicia o input para garantir estado limpo
             const newInput = input.cloneNode(true);
             input.parentNode.replaceChild(newInput, input);
             
@@ -31,88 +30,109 @@ Gestao.Importacao.Assertividade = {
         const btn = document.getElementById('btn-importar-assert');
         const statusEl = document.getElementById('status-importacao-assert');
         
-        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
-        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold"><i class="fas fa-search"></i> Extraindo datas literais...</span>';
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analisando...';
+        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold">Lendo estrutura do arquivo...</span>';
 
         Papa.parse(file, {
             header: true,
-            skipEmptyLines: true, // Ignora linhas totalmente vazias
-            encoding: "UTF-8",
+            skipEmptyLines: true,
+            encoding: "UTF-8", // Garante leitura correta de acentos
             transformHeader: function(h) {
+                // Remove BOM, aspas e normaliza para minúsculo
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
             },
             complete: async (results) => {
                 try {
-                    await this.filtrarESalvar(results.data, statusEl);
+                    console.log("Headers encontrados:", results.meta.fields); // Debug Console
+                    await this.filtrarESalvar(results.data, results.meta.fields, statusEl);
                 } catch (error) {
                     console.error("Erro Fatal:", error);
-                    alert("Erro crítico: " + error.message);
+                    alert("Erro crítico no processamento: " + error.message);
                 } finally {
                     if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
                     const input = document.getElementById('input-csv-assertividade');
                     if(input) input.value = '';
-                    if(statusEl) setTimeout(() => statusEl.innerHTML = "", 5000);
+                    if(statusEl) setTimeout(() => statusEl.innerHTML = "", 8000);
                 }
             },
             error: (err) => {
-                alert("Erro CSV: " + err.message);
+                alert("Erro ao ler CSV: " + err.message);
                 if(btn) btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro';
             }
         });
     },
 
-    filtrarESalvar: async function(linhas, statusEl) {
+    filtrarESalvar: async function(linhas, headers, statusEl) {
+        // --- 1. VERIFICAÇÃO DE COLUNAS (CRÍTICO) ---
+        // Verifica se as colunas essenciais existem. Se não, avisa o usuário.
+        const temEndTime = headers.some(h => h.includes('end_time') || h === 'data' || h === 'end time');
+        const temId = headers.some(h => h.includes('id_assistente') || h.includes('usuario_id') || h === 'id');
+
+        if (!temEndTime) {
+            alert(`⛔ ERRO ESTRUTURAL: Coluna 'end_time' não encontrada.\n\nColunas detectadas: \n${headers.join(', ')}\n\nDica: Verifique se o arquivo está separado por vírgulas.`);
+            if(statusEl) statusEl.innerHTML = "Erro: Coluna end_time faltando.";
+            return;
+        }
+
+        // --- 2. FILTRAGEM ---
         const validos = [];
         const diasEncontrados = new Set();
-        let ignorados = 0;
+        
+        // Contadores de Diagnóstico (Por que as linhas estão sendo ignoradas?)
+        let stats = {
+            total: linhas.length,
+            semData: 0,
+            semId: 0,
+            sucesso: 0
+        };
 
         for (const row of linhas) {
-            // 1. Extração de ID (Obrigatório)
+            // A. Validação de DATA (end_time)
+            // Tenta pegar 'end_time'. Se não achar, tenta fallback para 'data' só por segurança.
+            let endTimeRaw = row['end_time'] || row['data'];
+
+            if (!endTimeRaw || typeof endTimeRaw !== 'string' || endTimeRaw.trim() === '') {
+                stats.semData++;
+                continue;
+            }
+
+            // EXTRAÇÃO LITERAL (CORREÇÃO SOLICITADA):
+            // Pega os primeiros 10 caracteres (YYYY-MM-DD) direto da string.
+            // Ex: "2025-12-06T01:38..." -> "2025-12-06"
+            const dataLiteral = endTimeRaw.trim().substring(0, 10);
+
+            // Verifica se parece uma data (Ano-Mes-Dia)
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(dataLiteral)) {
+                stats.semData++; // Formato inválido
+                continue;
+            }
+
+            // B. Validação de ID
             let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'];
             if (!idRaw) {
-                ignorados++;
+                stats.semId++;
                 continue;
             }
             
+            // Remove tudo que não é número
             const idAssistente = parseInt(idRaw.toString().replace(/\D/g, ''));
             if (!idAssistente) {
-                ignorados++;
+                stats.semId++;
                 continue;
             }
 
-            // 2. Extração LITERAL da Data (end_time)
-            let endTimeRaw = row['end_time'];
-
-            // Validação básica: tem que ser string e ter conteúdo
-            if (!endTimeRaw || typeof endTimeRaw !== 'string' || endTimeRaw.trim() === '') {
-                ignorados++;
-                continue; 
-            }
-
-            // CORREÇÃO DEFINITIVA: 
-            // Corta a string nos 10 primeiros caracteres (YYYY-MM-DD).
-            // Ignora o resto (THH:mm:ss...).
-            // Exemplo: "2025-12-06T01:38:30..." vira "2025-12-06"
-            const dataLiteral = endTimeRaw.substring(0, 10);
-
-            // Valida se o recorte parece uma data (AAAA-MM-DD)
-            // Expressão Regular simples para garantir formato
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(dataLiteral)) {
-                console.warn(`Data ignorada (formato inválido): ${endTimeRaw}`);
-                ignorados++; 
-                continue;
-            }
-            
+            // C. Sucesso - Adiciona aos dias encontrados
             diasEncontrados.add(dataLiteral);
+            stats.sucesso++;
 
-            // 3. Tratamento de Métricas
+            // D. Métricas (Parse seguro)
             let pctRaw = row['% assert'] || row['assert'] || row['assertividade'] || '0';
             let pctClean = pctRaw.toString().replace('%','').replace(',','.').trim();
             let pctFinal = (pctClean === '' || isNaN(parseFloat(pctClean))) ? 0 : parseFloat(pctClean).toFixed(2);
 
             let dataAudit = row['data da auditoria'] || null;
             if (dataAudit && dataAudit.includes('/')) {
-                const parts = dataAudit.split('/');
+                const parts = dataAudit.split('/'); // DD/MM/AAAA -> AAAA-MM-DD
                 if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
 
@@ -127,87 +147,27 @@ Gestao.Importacao.Assertividade = {
                 qtd_nok: parseInt(row['nok'] || 0),
                 num_campos: parseInt(row['nº campos'] || 0),
                 porcentagem: pctFinal,
-                data_referencia: dataLiteral, // A data exata que estava escrita
+                data_referencia: dataLiteral, // A data exata extraída do texto
                 data_auditoria: dataAudit,
                 empresa_nome: (row['empresa'] || '').trim(),
                 empresa_id: parseInt(row['company_id'] || 0)
             });
         }
 
+        // --- 3. FEEDBACK DE ERRO (Se não trouxe nada) ---
         if (validos.length === 0) {
             if(statusEl) statusEl.innerHTML = "";
-            return alert(`Nenhum dado válido.\n\nIgnorados: ${ignorados}\nVerifique se 'end_time' está no formato AAAA-MM-DD...`);
+            const msgErro = `⚠️ Nenhuma linha válida encontrada!\n\n` +
+                            `🔍 Diagnóstico:\n` +
+                            `- Total linhas lidas: ${stats.total}\n` +
+                            `- Ignoradas (Sem Data/Formato Errado): ${stats.semData}\n` +
+                            `- Ignoradas (Sem ID Assistente): ${stats.semId}\n\n` +
+                            `Verifique se a coluna 'end_time' contém datas no formato 'AAAA-MM-DD...'`;
+            return alert(msgErro);
         }
 
+        // --- 4. CONTINUA PARA O BANCO ---
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
     },
 
-    salvarNoBanco: async function(dados, dias, statusEl) {
-        dias.sort();
-        // Formatação visual para o alerta
-        const diasFormatados = dias.map(d => d.split('-').reverse().join('/')).join(', ');
-        
-        const msg = `Resumo da Importação (Modo Literal):\n\n` +
-                    `📅 Datas Identificadas: \n[ ${diasFormatados} ]\n\n` +
-                    `✅ Registros Válidos: ${dados.length}\n` +
-                    `⚠️ Atenção: Os dados dessas datas serão SUBSTITUÍDOS no banco.`;
-
-        if (!confirm(msg)) {
-            if(statusEl) statusEl.innerHTML = "Operação cancelada.";
-            return;
-        }
-
-        if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando dados antigos...</span>`;
-
-        // 1. Limpeza por Data Literal
-        const { error: errDel } = await Sistema.supabase
-            .from('assertividade')
-            .delete()
-            .in('data_referencia', dias);
-
-        if (errDel) {
-            console.error(errDel);
-            alert("Erro ao limpar dados antigos: " + errDel.message);
-            if(statusEl) statusEl.innerHTML = "";
-            return;
-        }
-
-        // 2. Inserção em Lote
-        const BATCH_SIZE = 500;
-        let inseridos = 0;
-
-        for (let i = 0; i < dados.length; i += BATCH_SIZE) {
-            const lote = dados.slice(i, i + BATCH_SIZE);
-            
-            if(statusEl) {
-                const pct = Math.round(((i + lote.length) / dados.length) * 100);
-                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Enviando... ${pct}%</span>`;
-            }
-
-            const { error } = await Sistema.supabase
-                .from('assertividade')
-                .insert(lote);
-
-            if (error) {
-                console.error(error);
-                alert(`Erro no lote ${i}: ${error.message}`);
-                return;
-            }
-            inseridos += lote.length;
-        }
-
-        alert(`Sucesso! ${inseridos} registros importados.`);
-        if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold">Concluído!</span>';
-        
-        if(Gestao.Assertividade && typeof Gestao.Assertividade.buscarDados === 'function') {
-            Gestao.Assertividade.buscarDados();
-        }
-    }
-};
-
-// Auto-inicialização
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
-} else {
-    Gestao.Importacao.Assertividade.init();
-}
+    salvarNoBanco: async function(
