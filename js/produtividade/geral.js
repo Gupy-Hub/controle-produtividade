@@ -14,10 +14,11 @@ Produtividade.Geral = {
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
+    // STATUS NEUTROS
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v4 - Full Team)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v5 - Final)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -114,14 +115,18 @@ Produtividade.Geral = {
                     if (valStr === '' || valStr === '-') return;
 
                     let val = parseFloat(valStr);
+                    
+                    // VALIDACAO RIGOROSA (0 a 100)
                     if (isNaN(val) || val < 0 || val > 100) return; 
 
                     const uid = a.usuario_id;
                     
+                    // Mapa Geral
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     mapaAuditoria[uid].soma += val;
                     mapaAuditoria[uid].qtd++;
 
+                    // Mapa Detalhado (Por Dia e Usuario)
                     const keyDia = `${uid}_${a.data_auditoria}`; 
                     if (!mapaAuditoriaDia[keyDia]) mapaAuditoriaDia[keyDia] = { soma: val, qtd: 1 };
                     else { mapaAuditoriaDia[keyDia].soma += val; mapaAuditoriaDia[keyDia].qtd++; }
@@ -159,7 +164,7 @@ Produtividade.Geral = {
             // A) Adiciona dados de quem tem PRODUÇÃO
             producao.forEach(item => {
                 const uid = item.usuario_id;
-                // Garante que o usuário existe no grupo
+                // Garante que o usuário existe no grupo (IMPORTANTE: Passando mapaAuditoriaDia)
                 if(!dadosAgrupados[uid]) this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
                 
                 const d = dadosAgrupados[uid];
@@ -211,7 +216,6 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
                 this.renderizarTabela();
-                // Passa null no KPI Global antigo para forçar o recálculo baseado na lista real
                 this.atualizarKPIs(this.dadosOriginais, null, producao); 
             }
         } catch (error) {
@@ -220,7 +224,7 @@ Produtividade.Geral = {
         }
     },
 
-    // Helper para criar estrutura padronizada
+    // 7. HELPER CRÍTICO: Criação Padronizada do Usuário
     criarEntradaUsuario: function(grupo, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia) {
         const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
         grupo[uid] = {
@@ -230,8 +234,8 @@ Produtividade.Geral = {
             totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 },
             meta_real: mapaMetas[uid] || 0,
             auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 },
-            auditoriaDiaMap: mapaAuditoriaDia,
-            kpiMediaAssert: 0 // Será calculado no render
+            auditoriaDiaMap: mapaAuditoriaDia, // AQUI ESTÁ O MAPA QUE FALTAVA
+            kpiMediaAssert: 0 
         };
     },
 
@@ -243,7 +247,6 @@ Produtividade.Geral = {
         const mostrarDetalhes = (this.usuarioSelecionado !== null);
         let lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) : this.dadosOriginais;
         
-        // Filtro visual de Gestoras
         if (!mostrarGestao && !this.usuarioSelecionado) lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
 
         tbody.innerHTML = '';
@@ -262,7 +265,6 @@ Produtividade.Geral = {
             const metaBase = d.meta_real; 
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
-            // CALCULA A MÉDIA INDIVIDUAL AQUI (ESSENCIAL PARA O GRID)
             let assertGeralTxt = "-"; 
             let corAssert = "text-slate-400 italic"; 
             let mediaNumerica = 0;
@@ -279,7 +281,6 @@ Produtividade.Geral = {
             d.kpiMediaAssert = mediaNumerica;
 
             if (mostrarDetalhes) {
-                // ... (Código de detalhes mantido igual) ...
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
                     const metaCalc = metaBase * fatorReal;
@@ -291,9 +292,10 @@ Produtividade.Geral = {
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
                     let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
 
-                    // Lógica Detalhada por Dia
+                    // LÓGICA DE EXIBIÇÃO POR DIA
                     let assertVal = "-"; 
                     let corAssertDia = 'text-slate-300 font-light';
+                    
                     if (d.auditoriaDiaMap) {
                         const keyDia = `${d.usuario.id}_${r.data_referencia}`;
                         const dadosDia = d.auditoriaDiaMap[keyDia];
@@ -316,7 +318,6 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO GERAL
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
 
@@ -368,7 +369,6 @@ Produtividade.Geral = {
         let metaTotalGeral = 0; let producaoTotalGeral = 0; 
         let countAssistentesAtivos = 0; let somaMetasOperacao = 0; let countPessoasMeta = 0; let somaProdOperacao = 0; let countPessoasProd = 0;
         
-        // VARIÁVEIS PARA RECALCULAR A MÉDIA GLOBAL COM BASE NA EQUIPE OPERACIONAL
         let somaGlobalAudit = 0;
         let qtdGlobalAudit = 0;
 
@@ -384,7 +384,6 @@ Produtividade.Geral = {
                 if (d.meta_real > 0) { somaMetasOperacao += d.meta_real; countPessoasMeta++; }
                 if (d.totais.diasUteis > 0) { somaProdOperacao += (d.totais.qty / d.totais.diasUteis); countPessoasProd++; }
                 
-                // SOMA ASSERTIVIDADE APENAS DA EQUIPE (EXCLUI GESTORAS)
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
                      somaGlobalAudit += d.auditoriaReal.soma;
                      qtdGlobalAudit += d.auditoriaReal.qtd;
@@ -399,7 +398,6 @@ Produtividade.Geral = {
 
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
-        // CALCULO DE ASSERTIVIDADE BLINDADO
         let pctAssert = 0;
         if (qtdGlobalAudit > 0) {
             pctAssert = somaGlobalAudit / qtdGlobalAudit;
