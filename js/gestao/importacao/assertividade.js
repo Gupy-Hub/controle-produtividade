@@ -5,7 +5,6 @@ Gestao.Importacao.Assertividade = {
     init: function() {
         const input = document.getElementById('input-csv-assertividade');
         if (input) {
-            // Remove listeners antigos clonando o elemento
             const newInput = input.cloneNode(true);
             input.parentNode.replaceChild(newInput, input);
             
@@ -72,10 +71,15 @@ Gestao.Importacao.Assertividade = {
                 continue;
             }
 
-            // 3. Porcentagem
+            // 3. Porcentagem (% Assert)
             let pctRaw = row['% assert'] || row['assert'] || row['% assertividade'] || row['assertividade'] || '0';
+            // Tratamento Híbrido: Converte para número para validar, mas envia string se necessário
             let pct = parseFloat(pctRaw.toString().replace('%','').replace(',','.').trim());
-            if (isNaN(pct)) pct = null;
+            
+            // Se o banco espera TEXT na coluna 'porcentagem', enviamos string formatada.
+            // Se espera NUMERIC, enviamos o float.
+            // Para garantir compatibilidade com seu banco atual (que é text), enviamos string.
+            let pctFinal = isNaN(pct) ? null : pct.toFixed(2); 
 
             // 4. Data Auditoria
             let dataAudit = row['data da auditoria'] || row['data auditoria'];
@@ -94,7 +98,7 @@ Gestao.Importacao.Assertividade = {
                 qtd_ok: parseInt(row['ok'] || 0),
                 qtd_nok: parseInt(row['nok'] || 0),
                 num_campos: parseInt(row['nº campos'] || row['num campos'] || 0),
-                porcentagem: pct, 
+                porcentagem: pctFinal, // Enviando como String formatada '98.50'
                 data_referencia: dataRef,
                 data_auditoria: dataAudit,
                 empresa_nome: row['empresa'] || '',
@@ -103,28 +107,30 @@ Gestao.Importacao.Assertividade = {
         }
 
         if (validos.length === 0) {
-            alert(`Nenhum dado válido. Verifique se o CSV tem 'id_assistente' e 'end_time'.`);
+            alert(`Nenhum dado válido encontrado. Verifique as colunas do CSV.`);
             if(statusEl) statusEl.innerHTML = "";
             return;
         }
 
-        // Loteamento
-        const BATCH_SIZE = 1000;
+        const BATCH_SIZE = 500;
         let erros = 0;
+        let primeiroErro = null;
 
         for (let i = 0; i < validos.length; i += BATCH_SIZE) {
             const lote = validos.slice(i, i + BATCH_SIZE);
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
             
             if (error) {
-                console.error("❌ Erro insert Supabase:", error);
-                // ALERTA INTELIGENTE: Mostra exatamente o erro que o banco retornou
-                if (error.code === 'PGRST204') {
-                    alert(`ERRO DE BANCO DE DADOS:\n\n${error.message}\n\nProvavelmente falta criar uma coluna no Supabase. Chame o suporte.`);
-                    if(statusEl) statusEl.innerHTML = "";
-                    return; // Para a importação imediatamente
-                }
+                console.error("❌ Erro insert:", error);
+                if (!primeiroErro) primeiroErro = error;
                 erros++;
+                
+                // Se for erro de schema, para tudo e avisa
+                if (error.code === 'PGRST204') {
+                    alert(`ERRO DE SCHEMA (CACHE):\n${error.message}\n\nDica: Execute 'NOTIFY pgrst, "reload config"' no SQL Editor.`);
+                    if(statusEl) statusEl.innerHTML = "Erro de Schema";
+                    return;
+                }
             }
             
             if(statusEl) {
@@ -134,7 +140,7 @@ Gestao.Importacao.Assertividade = {
         }
 
         if (erros > 0) {
-            alert(`Importação finalizada com ${erros} erros de lote. Verifique o console.`);
+            alert(`Importação finalizada com falhas em ${erros} lotes.\nPrimeiro erro: ${primeiroErro?.message}`);
         } else {
             alert(`✅ Sucesso! ${validos.length} registros importados.`);
             if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) Gestao.Assertividade.buscarDados();
