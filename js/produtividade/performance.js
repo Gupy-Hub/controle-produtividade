@@ -5,40 +5,31 @@ Produtividade.Performance = {
     
     init: function() {
         if (typeof Chart === 'undefined') { console.error("Chart.js não carregou."); return; }
-        if (!this.initialized) this.initialized = true;
-        this.togglePeriodo();
-    },
-
-    togglePeriodo: function() {
-        const t = document.getElementById('perf-period-type').value;
-        const selQ = document.getElementById('perf-select-quarter');
-        const selS = document.getElementById('perf-select-semester');
-        const dateInput = document.getElementById('global-date');
-        if(selQ) selQ.classList.add('hidden');
-        if(selS) selS.classList.add('hidden');
-        if (t === 'trimestre' && selQ) { selQ.classList.remove('hidden'); if(dateInput && dateInput.value) selQ.value = Math.ceil(parseInt(dateInput.value.split('-')[1]) / 3); } 
-        else if (t === 'semestre' && selS) { selS.classList.remove('hidden'); if(dateInput && dateInput.value) selS.value = parseInt(dateInput.value.split('-')[1]) <= 6 ? 1 : 2; }
-        this.carregar(); 
+        // Se já inicializou, apenas recarrega os dados com as novas datas
+        this.initialized = true;
+        this.carregar();
     },
 
     carregar: async function() {
         const listContainer = document.getElementById('ranking-list-container');
         if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
         
-        const t = document.getElementById('perf-period-type').value; 
-        const dateInput = document.getElementById('global-date');
-        let val = dateInput.value || new Date().toISOString().split('T')[0];
-        let [ano, mes, dia] = val.split('-').map(Number);
-        const sAno = String(ano); const sMes = String(mes).padStart(2, '0');
-        let s, e;
-        if (t === 'mes') { s = `${sAno}-${sMes}-01`; e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; }
-        else if (t === 'trimestre') { const selQ = document.getElementById('perf-select-quarter'); const trim = selQ ? parseInt(selQ.value) : Math.ceil(mes / 3); const mStart = ((trim-1)*3)+1; s = `${sAno}-${String(mStart).padStart(2,'0')}-01`; e = `${sAno}-${String(mStart+2).padStart(2,'0')}-${new Date(ano, mStart+2, 0).getDate()}`; } 
-        else if (t === 'semestre') { const selS = document.getElementById('perf-select-semester'); const sem = selS ? parseInt(selS.value) : (mes <= 6 ? 1 : 2); s = sem === 1 ? `${sAno}-01-01` : `${sAno}-07-01`; e = sem === 1 ? `${sAno}-06-30` : `${sAno}-12-31`; } 
-        else { s = `${sAno}-01-01`; e = `${sAno}-12-31`; }
+        // --- INTEGRAÇÃO COM MAIN.JS ---
+        const datas = Produtividade.getDatasFiltro();
+        const s = datas.inicio;
+        const e = datas.fim;
+
+        console.log(`🚀 Performance: Buscando de ${s} a ${e}`);
 
         try {
-            // ADICIONADO: 'assertividade' na seleção
-            const { data, error } = await Sistema.supabase.from('producao').select(`id, quantidade, fator, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`).gte('data_referencia', s).lte('data_referencia', e).order('data_referencia', { ascending: true });
+            // ADICIONADO: 'assertividade' na seleção para a lógica de qualidade
+            const { data, error } = await Sistema.supabase
+                .from('producao')
+                .select(`id, quantidade, fator, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`)
+                .gte('data_referencia', s)
+                .lte('data_referencia', e)
+                .order('data_referencia', { ascending: true });
+                
             if (error) throw error;
             this.dadosCache = data;
             this.renderizarVisaoGeral();
@@ -49,22 +40,32 @@ Produtividade.Performance = {
     },
 
     renderizarVisaoGeral: function() {
-        document.getElementById('btn-reset-chart').classList.add('hidden');
-        document.getElementById('chart-title').innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
-        document.getElementById('chart-subtitle').innerText = 'Soma da produção diária de toda a equipe';
+        // Limpa estado anterior
+        const btnReset = document.getElementById('btn-reset-chart');
+        if(btnReset) btnReset.classList.add('hidden');
+        
+        const elTitle = document.getElementById('chart-title');
+        if(elTitle) elTitle.innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
+        
+        const elSub = document.getElementById('chart-subtitle');
+        if(elSub) elSub.innerText = 'Soma da produção diária de toda a equipe';
 
         const data = this.dadosCache;
         if (!data || data.length === 0) {
             this.destroyChart();
-            document.getElementById('ranking-list-container').innerHTML = '<div class="text-center text-slate-400 py-10 text-xs">Sem dados no período.</div>';
+            const listContainer = document.getElementById('ranking-list-container');
+            if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs">Sem dados no período.</div>';
             return;
         }
 
         const producaoPorDia = {}; const diasSet = new Set(); const producaoPorUser = {};
+        
         data.forEach(r => {
             if(!r.usuario) return;
             const date = r.data_referencia; const qtd = Number(r.quantidade) || 0; const uid = r.usuario.id;
             const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            
+            // Ignora Gestores na Performance Operacional
             if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
             
             diasSet.add(date);
@@ -73,13 +74,13 @@ Produtividade.Performance = {
             if (!producaoPorUser[uid]) producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid, somaAssert: 0, qtdAssert: 0 }; 
             producaoPorUser[uid].total += qtd;
 
-            // --- LÓGICA DE ASSERTIVIDADE (Preparação) ---
+            // --- LÓGICA DE ASSERTIVIDADE (BLINDADA) ---
             let pRaw = r.assertividade;
             if (pRaw) {
                 let pClean = String(pRaw).replace('%', '').replace(',', '.').trim();
                 if(pClean && pClean !== '-' && pClean !== '') {
                     let pVal = parseFloat(pClean);
-                    // Valida range 0-100 para evitar dados sujos
+                    // Valida range 0-100
                     if (!isNaN(pVal) && pVal >= 0 && pVal <= 100) {
                         producaoPorUser[uid].somaAssert += pVal;
                         producaoPorUser[uid].qtdAssert++;
@@ -88,36 +89,63 @@ Produtividade.Performance = {
             }
         });
 
-        // Calcula média final
+        // Calcula média final (opcional para exibir na lista)
         Object.values(producaoPorUser).forEach(u => {
             u.mediaAssert = u.qtdAssert > 0 ? (u.somaAssert / u.qtdAssert).toFixed(2) : '-';
         });
 
         const labels = Array.from(diasSet).sort();
         const values = labels.map(d => producaoPorDia[d] || 0);
-        this.renderChart(labels, [{ label: 'Produção Total do Time', data: values, borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, tension: 0.3, fill: true, pointRadius: 3, pointHoverRadius: 6 }]);
+        
+        this.renderChart(labels, [{ 
+            label: 'Produção Total do Time', 
+            data: values, 
+            borderColor: '#3b82f6', 
+            backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+            borderWidth: 2, 
+            tension: 0.3, 
+            fill: true, 
+            pointRadius: 3, 
+            pointHoverRadius: 6 
+        }]);
+        
         this.renderRankingList(Object.values(producaoPorUser));
     },
 
     renderizarVisaoIndividual: function(userId, userNameRaw) {
         const userName = userNameRaw ? userNameRaw.replace(/'/g, "") : "Usuário";
-        document.getElementById('btn-reset-chart').classList.remove('hidden');
+        
+        const btnReset = document.getElementById('btn-reset-chart');
+        if(btnReset) btnReset.classList.remove('hidden');
+        
         document.getElementById('chart-title').innerHTML = `<i class="fas fa-user text-emerald-500 mr-2"></i> ${userName}`;
         document.getElementById('chart-subtitle').innerText = 'Comparativo: Individual vs Média do Time';
 
         const data = this.dadosCache; const diasSet = new Set(); const userProd = {}; const teamProd = {}; const teamCount = {}; 
+        
         data.forEach(r => {
             if(!r.usuario) return;
             const date = r.data_referencia; const qtd = Number(r.quantidade) || 0; const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
+            
             diasSet.add(date);
-            if (!teamProd[date]) { teamProd[date] = 0; teamCount[date] = new Set(); } teamProd[date] += qtd; teamCount[date].add(r.usuario.id);
-            if (String(r.usuario.id) === String(userId)) { if (!userProd[date]) userProd[date] = 0; userProd[date] += qtd; }
+            if (!teamProd[date]) { teamProd[date] = 0; teamCount[date] = new Set(); } 
+            teamProd[date] += qtd; 
+            teamCount[date].add(r.usuario.id);
+            
+            if (String(r.usuario.id) === String(userId)) { 
+                if (!userProd[date]) userProd[date] = 0; 
+                userProd[date] += qtd; 
+            }
         });
 
         const labels = Array.from(diasSet).sort();
         const userValues = labels.map(d => userProd[d] || 0);
-        const avgValues = labels.map(d => { const total = teamProd[d] || 0; const count = teamCount[d] ? teamCount[d].size : 1; return count > 0 ? Math.round(total / count) : 0; });
+        const avgValues = labels.map(d => { 
+            const total = teamProd[d] || 0; 
+            const count = teamCount[d] ? teamCount[d].size : 1; 
+            return count > 0 ? Math.round(total / count) : 0; 
+        });
 
         this.renderChart(labels, [
             { label: 'Produção: ' + userName.split(' ')[0], data: userValues, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 3, tension: 0.3, fill: true },
@@ -136,8 +164,15 @@ Produtividade.Performance = {
             if (index === 1) medal = `<i class="fas fa-medal text-slate-400 w-6 text-center"></i>`;
             if (index === 2) medal = `<i class="fas fa-medal text-amber-700 w-6 text-center"></i>`;
             const safeName = u.nome.replace(/'/g, "\\'");
-            // Nota: Se quiser exibir a assertividade aqui, basta usar ${u.mediaAssert}% no HTML abaixo
-            html += `<div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${safeName}')" class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 group transition"><div class="flex items-center gap-2">${medal}<div class="flex flex-col"><span class="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition truncate w-32">${u.nome}</span></div></div><span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span></div>`;
+            
+            // Exibindo Assertividade Média se disponível
+            let assertTag = "";
+            if (u.mediaAssert !== '-') {
+                let cor = parseFloat(u.mediaAssert) >= 98 ? 'text-emerald-600' : 'text-rose-500';
+                assertTag = `<span class="text-[9px] font-bold ${cor} ml-2 bg-slate-50 px-1 rounded border">Avg: ${u.mediaAssert}%</span>`;
+            }
+
+            html += `<div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${safeName}')" class="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0 group transition"><div class="flex items-center gap-2">${medal}<div class="flex flex-col"><span class="text-xs font-bold text-slate-700 group-hover:text-blue-600 transition truncate w-32">${u.nome}</span>${assertTag}</div></div><span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span></div>`;
         });
         container.innerHTML = html || '<div class="text-center text-slate-400 py-10 text-xs">Nenhum dado.</div>';
     },

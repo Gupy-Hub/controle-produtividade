@@ -37,13 +37,6 @@ Produtividade.Consolidado = {
         return weeks;
     },
 
-    detectarPeriodoAtivo: function() {
-        if (document.getElementById('btn-periodo-dia') && document.getElementById('btn-periodo-dia').classList.contains('bg-blue-600')) return 'dia'; 
-        if (document.getElementById('btn-periodo-mes') && document.getElementById('btn-periodo-mes').classList.contains('text-blue-600')) return 'mes'; 
-        if (document.getElementById('btn-periodo-ano') && document.getElementById('btn-periodo-ano').classList.contains('text-blue-600')) return 'ano'; 
-        return 'dia'; 
-    },
-
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
         if (isNaN(val) || val <= 0) { delete this.overridesHC[colIndex]; this.renderizar(this.dadosCalculados); return; }
@@ -78,35 +71,21 @@ Produtividade.Consolidado = {
     
     carregar: async function(forcar = false) {
         const tbody = document.getElementById('cons-table-body'); 
-        const t = this.detectarPeriodoAtivo();
-        const selAno = document.getElementById('sel-ano');
-        const selMes = document.getElementById('sel-mes');
         
-        const ano = selAno ? parseInt(selAno.value) : new Date().getFullYear();
-        const mes = selMes ? parseInt(selMes.value) + 1 : new Date().getMonth() + 1; 
-        
-        const sAno = String(ano); 
-        const sMes = String(mes).padStart(2, '0');
-        
-        let s, e;
-        
-        if (t === 'dia' || t === 'mes') { 
-            s = `${sAno}-${sMes}-01`; 
-            e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        } 
-        else if (t === 'ano') { 
-            s = `${sAno}-01-01`; 
-            e = `${sAno}-12-31`; 
-        } else {
-            s = `${sAno}-${sMes}-01`; 
-            e = `${sAno}-${sMes}-${new Date(ano, mes, 0).getDate()}`; 
-        }
+        // --- INTEGRAÇÃO COM MAIN.JS (FONTE DA VERDADE) ---
+        const datas = Produtividade.getDatasFiltro();
+        const s = datas.inicio;
+        const e = datas.fim;
+        let t = Produtividade.filtroPeriodo || 'mes'; // dia, semana, mes, ano
+
+        // Ajuste: Tratar 'semana' como 'dia' para visualização detalhada
+        if (t === 'semana') t = 'dia';
 
         console.log(`📊 Consolidado: ${t} | ${s} até ${e}`);
 
         const cacheKey = `${t}_${s}_${e}`;
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) { 
-            this.processarEExibir(this.ultimoCache.data, t, mes, ano); 
+            this.processarEExibir(this.ultimoCache.data, t, s, e); 
             return; 
         }
         
@@ -125,8 +104,8 @@ Produtividade.Consolidado = {
             const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
             if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 17;
             
-            this.ultimoCache = { key: cacheKey, data: rawData, tipo: t, mes: mes, ano: ano };
-            this.processarEExibir(rawData, t, mes, ano);
+            this.ultimoCache = { key: cacheKey, data: rawData, tipo: t };
+            this.processarEExibir(rawData, t, s, e);
 
         } catch (e) { 
             console.error(e); 
@@ -134,18 +113,31 @@ Produtividade.Consolidado = {
         }
     },
 
-    processarDados: function(rawData, t, currentMonth, currentYear) {
+    processarDados: function(rawData, t, dataInicio, dataFim) {
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
         let datesMap = {}; 
+        
+        // Extrai componentes da data inicial para lógica de mês/ano
+        const dIni = new Date(dataInicio + 'T12:00:00');
+        const currentYear = dIni.getFullYear();
+        const currentMonth = dIni.getMonth() + 1;
 
         if (t === 'dia' || t === 'dia-detalhe') { 
-            const lastDay = new Date(currentYear, currentMonth, 0).getDate(); 
-            for(let d=1; d<=lastDay; d++) { 
-                cols.push(String(d).padStart(2,'0')); 
-                const dataFull = `${currentYear}-${String(currentMonth).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-                datesMap[d] = { ini: dataFull, fim: dataFull }; 
-            } 
+            // Se for dia ou semana, lista cada dia do intervalo
+            let curr = new Date(dataInicio + 'T12:00:00');
+            const end = new Date(dataFim + 'T12:00:00');
+            let idx = 1;
+            
+            while(curr <= end) {
+                const diaStr = String(curr.getDate()).padStart(2,'0');
+                cols.push(diaStr);
+                const dataFull = curr.toISOString().split('T')[0];
+                datesMap[idx] = { ini: dataFull, fim: dataFull, refDia: parseInt(diaStr) }; 
+                
+                curr.setDate(curr.getDate() + 1);
+                idx++;
+            }
         } 
         else if (t === 'mes') { 
             const semanas = this.getSemanasDoMes(currentYear, currentMonth); 
@@ -176,7 +168,10 @@ Produtividade.Consolidado = {
                 let b = -1; 
 
                 if (t === 'dia' || t === 'dia-detalhe') { 
-                    b = parseInt(r.data_referencia.split('-')[2]); 
+                    // Busca qual coluna corresponde à data
+                    for(let k=1; k<=numCols; k++) {
+                        if (datesMap[k].ini === r.data_referencia) { b = k; break; }
+                    }
                 } 
                 else if (t === 'mes') { 
                     for(let k=1; k<=numCols; k++) { 
@@ -214,8 +209,8 @@ Produtividade.Consolidado = {
         return { cols, st, numCols, datesMap };
     },
 
-    processarEExibir: function(rawData, t, mes, ano) {
-        this.dadosCalculados = this.processarDados(rawData, t, mes, ano);
+    processarEExibir: function(rawData, t, s, e) {
+        this.dadosCalculados = this.processarDados(rawData, t, s, e);
         this.renderizar(this.dadosCalculados);
     },
 
@@ -281,7 +276,6 @@ Produtividade.Consolidado = {
                 if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`; 
                 else cellClass += `text-slate-500 font-medium`; 
                 
-                // AJUSTE DO DESTAQUE DA LINHA EDITÁVEL
                 if (overrideObj && label === 'Total Assistentes') cellClass += " bg-amber-50/50 font-bold text-amber-700";
 
                 tr += `<td class="${cellClass}">${txt}</td>`;
@@ -289,7 +283,6 @@ Produtividade.Consolidado = {
             return tr + '</tr>';
         };
 
-        // ALTERADO DE "HC Utilizado" PARA "Total Assistentes"
         h += mkRow('Total Assistentes', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
         
         h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
@@ -327,9 +320,7 @@ Produtividade.Consolidado = {
             wsData.push(row);
         };
 
-        // ALTERADO NO EXCEL TAMBÉM
         addRow('Total Assistentes', (s, d, HF) => HF, true); 
-        
         addRow('Dias Úteis', (s) => s.diasUteis); 
         addRow('Total FIFO', s => s.fifo); 
         addRow('Total G. Parcial', s => s.gp); 
