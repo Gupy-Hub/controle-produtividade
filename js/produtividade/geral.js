@@ -8,17 +8,16 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Feriados Mapeados por Ano (Incluindo Estaduais SP - 09/07 e Nacionais Móveis)
+    // Feriados Mapeados por Ano
     feriados: {
         "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
-    // STATUS NEUTROS (Contam Volume se tiver auditora preenchida)
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Correção Drill-down + Média 0-100%)...");
+        console.log("🔧 Produtividade: Iniciando (Com Service de Assertividade)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -40,7 +39,7 @@ Produtividade.Geral = {
 
     isDiaUtil: function(dateObj) {
         const day = dateObj.getDay();
-        if (day === 0 || day === 6) return false; // Sábado/Domingo
+        if (day === 0 || day === 6) return false;
         
         const ano = dateObj.getFullYear();
         const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -76,10 +75,10 @@ Produtividade.Geral = {
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando dados de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando dados cruzados...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando dados...</td></tr>';
 
         try {
-            // 1. Busca Produção
+            // 1. Busca Produção (Volume)
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -90,52 +89,22 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Auditorias (Para Média Assertividade 0-100%)
-            const { data: auditorias, error: errAudit } = await Sistema.supabase
-                .from('assertividade')
-                .select('usuario_id, porcentagem')
-                .gte('data_auditoria', dataInicio)
-                .lte('data_auditoria', dataFim);
+            // 2. Busca Assertividade (VIA SERVICE NOVO)
+            // Abstraímos toda a lógica de filtro 0-100 para o AssertividadeCalc
+            const metricasAudit = await Produtividade.AssertividadeCalc.buscarMetricas(dataInicio, dataFim);
+            const mapaAuditoria = metricasAudit.mapa;
+            const kpiGlobalAudit = metricasAudit.global;
 
-            if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
-
-            // 3. Processa Auditorias
-            const mapaAuditoria = {}; 
-            let kpiAuditSoma = 0;
-            let kpiAuditQtd = 0;
-
-            if (auditorias) {
-                auditorias.forEach(a => {
-                    let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
-                    if (valStr === '') return;
-                    let val = parseFloat(valStr);
-                    if (isNaN(val)) return;
-
-                    // FILTRO: Apenas valores entre 0 e 100
-                    if (val < 0 || val > 100) return;
-
-                    const uid = a.usuario_id;
-                    if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
-                    
-                    mapaAuditoria[uid].soma += val;
-                    mapaAuditoria[uid].qtd++;
-
-                    kpiAuditSoma += val;
-                    kpiAuditQtd++;
-                });
-            }
-
-            // 4. Usuários
+            // 3. Usuários
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato')
                 .range(0, 5000);
             if (errUser) throw errUser;
-            
             const mapaUsuarios = {};
             usuarios.forEach(u => mapaUsuarios[u.id] = u);
 
-            // 5. Metas
+            // 4. Metas
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
@@ -150,7 +119,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. Agrupamento
+            // 5. Agrupamento
             let dadosAgrupados = {};
             
             producao.forEach(item => {
@@ -164,6 +133,7 @@ Produtividade.Geral = {
                         diasProcessados: new Set(),
                         totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 },
                         meta_real: mapaMetas[uid] || 0,
+                        // Injeta os dados já processados pelo Service
                         auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 }
                     };
                 }
@@ -204,15 +174,13 @@ Produtividade.Geral = {
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
-            const kpiGlobalAudit = { soma: kpiAuditSoma, qtd: kpiAuditQtd };
 
-            // === FIX DRILL-DOWN: Atualiza UI se necessário, mas não entra em loop recursivo ===
+            // Atualização UI de seleção
             if (this.usuarioSelecionado) {
                 const elHeader = document.getElementById('selection-header');
                 const elName = document.getElementById('selected-name');
                 if(elHeader) elHeader.classList.remove('hidden');
                 
-                // Tenta achar o nome do usuário selecionado nos dados carregados
                 const userSel = this.dadosOriginais.find(d => d.usuario.id == this.usuarioSelecionado);
                 if (userSel && elName) elName.textContent = userSel.usuario.nome;
             } else {
@@ -235,7 +203,6 @@ Produtividade.Geral = {
         const checkGestao = document.getElementById('check-gestao');
         const mostrarGestao = checkGestao ? checkGestao.checked : false;
         
-        // FILTRAGEM DE USUÁRIO (Lógica Local)
         let lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
@@ -261,7 +228,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // VISÃO DETALHADA (DRILL-DOWN)
+                // VISÃO DETALHADA
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
                     const metaCalc = metaBase * fatorReal;
@@ -284,13 +251,14 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO GERAL (RESUMO)
+                // VISÃO GERAL
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
                 
                 let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic"; let mediaNumerica = 0;
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
-                    const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
+                    // Cálculo de média usando o Service (ou direto se preferir)
+                    const media = Produtividade.AssertividadeCalc.calcularMedia(d.auditoriaReal);
                     mediaNumerica = media;
                     assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
                     corAssert = media >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
@@ -313,18 +281,17 @@ Produtividade.Geral = {
         });
     },
 
-    // --- FIX NAVEGAÇÃO: Apenas re-renderiza, NÃO faz fetch novo ---
     filtrarUsuario: function(id, nome) { 
         this.usuarioSelecionado = id; 
         document.getElementById('selection-header').classList.remove('hidden'); 
         document.getElementById('selected-name').textContent = nome; 
-        this.renderizarTabela(); // Apenas redesenha a tabela com o filtro
+        this.renderizarTabela(); 
     },
     
     limparSelecao: function() { 
         this.usuarioSelecionado = null; 
         document.getElementById('selection-header').classList.add('hidden'); 
-        this.renderizarTabela(); // Redesenha a tabela completa
+        this.renderizarTabela(); 
     },
 
     toggleSelection: function(id) { if(this.selecionados.has(id)) this.selecionados.delete(id); else this.selecionados.add(id); },
@@ -380,10 +347,8 @@ Produtividade.Geral = {
 
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
-        let pctAssert = 0;
-        if (kpiAuditGlobal && kpiAuditGlobal.qtd > 0) {
-            pctAssert = kpiAuditGlobal.soma / kpiAuditGlobal.qtd;
-        }
+        // Uso do Service para calcular média global
+        const pctAssert = Produtividade.AssertividadeCalc.calcularMedia(kpiAuditGlobal);
 
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
         this.setTxt('kpi-meta-assertividade-val', (pctAssert || 0).toFixed(2).replace('.', ',') + '%');
