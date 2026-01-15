@@ -8,17 +8,15 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Feriados Mapeados
     feriados: {
         "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
-    // STATUS NEUTROS
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v5 - Final)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v6 - Unlocked)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -79,7 +77,7 @@ Produtividade.Geral = {
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando dados cruzados...</td></tr>';
 
         try {
-            // 1. Busca Produção Bruta
+            // 1. Busca Produção
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -90,7 +88,7 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Auditorias Reais
+            // 2. Busca Auditorias
             const { data: auditorias, error: errAudit } = await Sistema.supabase
                 .from('assertividade')
                 .select('usuario_id, porcentagem, auditora, data_auditoria')
@@ -99,14 +97,15 @@ Produtividade.Geral = {
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias
+            // 3. Processa Auditorias (CORREÇÃO APLICADA: REMOVIDO FILTRO DE AUDITOR)
             const mapaAuditoria = {};     
             const mapaAuditoriaDia = {}; 
 
             if (auditorias) {
                 auditorias.forEach(a => {
-                    const audNome = (a.auditora || '').trim().toUpperCase();
-                    if (!audNome || audNome === 'SISTEMA' || audNome === 'ROBO') return;
+                    // --- REMOVIDO: Filtro que ignorava SISTEMA/ROBO ---
+                    // Antes: if (!audNome || audNome === 'SISTEMA'...) return;
+                    // Agora: Aceita qualquer auditoria com nota válida.
 
                     let raw = a.porcentagem;
                     if (raw === null || raw === undefined || raw === '') return;
@@ -116,7 +115,7 @@ Produtividade.Geral = {
 
                     let val = parseFloat(valStr);
                     
-                    // VALIDACAO RIGOROSA (0 a 100)
+                    // Validação Numérica Rigorosa (0 a 100)
                     if (isNaN(val) || val < 0 || val > 100) return; 
 
                     const uid = a.usuario_id;
@@ -158,13 +157,12 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 6. Agrupamento Unificado
+            // 6. Agrupamento
             let dadosAgrupados = {};
             
-            // A) Adiciona dados de quem tem PRODUÇÃO
+            // A) Produção
             producao.forEach(item => {
                 const uid = item.usuario_id;
-                // Garante que o usuário existe no grupo (IMPORTANTE: Passando mapaAuditoriaDia)
                 if(!dadosAgrupados[uid]) this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
                 
                 const d = dadosAgrupados[uid];
@@ -202,7 +200,7 @@ Produtividade.Geral = {
                 }
             });
 
-            // B) Adiciona dados de quem SÓ TEM AUDITORIA (sem produção no período)
+            // B) Apenas Auditoria
             Object.keys(mapaAuditoria).forEach(uid => {
                 if (!dadosAgrupados[uid]) {
                     this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
@@ -224,7 +222,6 @@ Produtividade.Geral = {
         }
     },
 
-    // 7. HELPER CRÍTICO: Criação Padronizada do Usuário
     criarEntradaUsuario: function(grupo, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia) {
         const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
         grupo[uid] = {
@@ -234,7 +231,7 @@ Produtividade.Geral = {
             totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 },
             meta_real: mapaMetas[uid] || 0,
             auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 },
-            auditoriaDiaMap: mapaAuditoriaDia, // AQUI ESTÁ O MAPA QUE FALTAVA
+            auditoriaDiaMap: mapaAuditoriaDia,
             kpiMediaAssert: 0 
         };
     },
@@ -292,7 +289,6 @@ Produtividade.Geral = {
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
                     let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
 
-                    // LÓGICA DE EXIBIÇÃO POR DIA
                     let assertVal = "-"; 
                     let corAssertDia = 'text-slate-300 font-light';
                     
