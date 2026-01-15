@@ -1,17 +1,31 @@
 window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
+/**
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v4.0)
+ * -----------------------------------------------------
+ * Responsável pelo parsing, validação e persistência de dados de assertividade (CSV).
+ * Garante idempotência via estratégia "Delete-Partition-Insert" baseada em dias.
+ */
 Gestao.Importacao.Assertividade = {
+    // Configuração de Fuso Horário (BRT)
+    TIMEZONE_OFFSET: -3, 
+
     init: function() {
-        // Garante que o input existe e remove listeners antigos para evitar disparos múltiplos
-        const input = document.getElementById('input-csv-assertividade');
+        const inputId = 'input-csv-assertividade';
+        const input = document.getElementById(inputId);
+        
         if (input) {
+            // Remove listeners antigos clonando o elemento (Pattern: Event Listener Cleanup)
             const newInput = input.cloneNode(true);
             input.parentNode.replaceChild(newInput, input);
             
             newInput.addEventListener('change', (e) => {
                 if(e.target.files.length > 0) this.processarArquivo(e.target.files[0]);
             });
+            console.log(`[NEXUS] Listener anexado ao input: ${inputId}`);
+        } else {
+            console.warn(`[NEXUS] Input ${inputId} não encontrado no DOM.`);
         }
     },
 
@@ -21,78 +35,83 @@ Gestao.Importacao.Assertividade = {
         const btn = document.getElementById('btn-importar-assert');
         const statusEl = document.getElementById('status-importacao-assert');
         
-        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analisando...';
-        if(statusEl) statusEl.innerHTML = '<span class="text-blue-500">Lendo arquivo...</span>';
+        // Estado de Carregamento
+        if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+        if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold"><i class="fas fa-microchip"></i> Analisando estrutura...</span>';
 
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
-            // Remove BOM e limpa cabeçalhos para evitar erros de caractere invisível
+            // Sanitização de Cabeçalhos: Remove BOM, aspas e normaliza para minúsculo
             transformHeader: function(h) {
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
             },
             complete: async (results) => {
-                console.log("✅ CSV Lido. Linhas:", results.data.length);
-                await this.salvarDados(results.data);
-                
-                if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
-                const input = document.getElementById('input-csv-assertividade');
-                if(input) input.value = '';
+                try {
+                    console.log(`[NEXUS] CSV Lido. Total Linhas: ${results.data.length}`);
+                    await this.analisarESalvar(results.data, statusEl);
+                } catch (error) {
+                    console.error("[NEXUS] Erro crítico no fluxo:", error);
+                    alert("Erro fatal na importação: " + error.message);
+                } finally {
+                    // Reset de UI
+                    if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
+                    const input = document.getElementById('input-csv-assertividade');
+                    if(input) input.value = '';
+                    if(statusEl) setTimeout(() => statusEl.innerHTML = "", 8000);
+                }
             },
             error: (err) => {
-                alert("Erro ao ler CSV: " + err.message);
-                if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
-                if(statusEl) statusEl.innerHTML = "Erro na leitura";
+                console.error("[NEXUS] Erro PapaParse:", err);
+                alert("Falha na leitura do arquivo CSV. Verifique a codificação.");
+                if(btn) btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Erro';
+                if(statusEl) statusEl.innerHTML = '<span class="text-red-500">Erro na leitura</span>';
             }
         });
     },
 
-    salvarDados: async function(linhas) {
-        const statusEl = document.getElementById('status-importacao-assert');
-        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600">Validando dados...</span>`;
+    /**
+     * Normaliza dados e agrupa por Dia de Referência para validação de duplicidade.
+     */
+    analisarESalvar: async function(linhas, statusEl) {
+        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600 font-semibold"><i class="fas fa-filter"></i> Normalizando dados...</span>`;
 
-        let validos = [];
+        const validos = [];
+        const diasEncontrados = new Set();
         let ignorados = 0;
-        
-        // Variáveis para detectar o período do arquivo (Min/Max Data)
-        let minDate = null;
-        let maxDate = null;
-        
+
         for (const row of linhas) {
-            // 1. ID Assistente: Limpeza agressiva para garantir Inteiro
-            let idRaw = row['id_assistente'] || row['id assistente'] || row['usuario_id'];
+            // 1. Extração de ID (Resiliência contra sujeira no CSV)
+            let idRaw = row['id_assistente'] || row['id assistente'] || row['usuario_id'] || row['id'];
             let idAssistente = idRaw ? parseInt(idRaw.toString().replace(/\D/g, '')) : null;
 
             if (!idAssistente) {
-                ignorados++;
+                ignorados++; // Linha sem ID vinculável
                 continue; 
             }
 
-            // 2. Data Referência (end_time): Ponto Crítico para a Meta
-            let dataRef = row['end_time']; 
-            if (!dataRef) dataRef = row['data'] || row['date'] || row['created_at'];
-
-            // Validação de Data
-            if (!dataRef || isNaN(new Date(dataRef).getTime())) {
+            // 2. Data Referência (Prioridade: end_time > data > created_at)
+            let dataRefRaw = row['end_time'] || row['data'] || row['date'] || row['created_at'];
+            if (!dataRefRaw || !this.isDateValid(dataRefRaw)) {
                 ignorados++;
                 continue;
             }
 
-            // Atualiza intervalo de datas detectado
-            const currentDt = new Date(dataRef);
-            if (!minDate || currentDt < minDate) minDate = currentDt;
-            if (!maxDate || currentDt > maxDate) maxDate = currentDt;
+            // 3. Cálculo do Dia de Referência (Fuso BRT)
+            // Extrai o dia "lógico" (YYYY-MM-DD) baseado no timestamp ajustado para GMT-3
+            const dataRefObj = new Date(dataRefRaw);
+            const diaLogico = this.getDiaLogicoBRT(dataRefObj);
+            diasEncontrados.add(diaLogico);
 
-            // 3. Porcentagem (% Assert)
+            // 4. Normalização de Métricas
+            // Porcentagem: Trata "95,5%", "95.5", ou vazio
             let pctRaw = row['% assert'] || row['assert'] || row['% assertividade'] || row['assertividade'] || '0';
-            let pct = parseFloat(pctRaw.toString().replace('%','').replace(',','.').trim());
-            
-            // Tratamento para coluna TEXT no banco (envia string formatada)
-            let pctFinal = isNaN(pct) ? null : pct.toFixed(2); 
+            let pctClean = pctRaw.toString().replace('%','').replace(',','.').trim();
+            let pctFinal = (pctClean === '' || isNaN(parseFloat(pctClean))) ? 0 : parseFloat(pctClean).toFixed(2);
 
-            // 4. Data Auditoria (Opcional)
-            let dataAudit = row['data da auditoria'] || row['data auditoria'];
+            // Data Auditoria: Converte DD/MM/AAAA para YYYY-MM-DD
+            let dataAudit = row['data da auditoria'] || row['data auditoria'] || null;
             if (dataAudit && dataAudit.includes('/')) {
                 const parts = dataAudit.split('/');
                 if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
@@ -100,95 +119,149 @@ Gestao.Importacao.Assertividade = {
 
             validos.push({
                 usuario_id: idAssistente,
-                nome_assistente: row['assistente'] || '',
-                nome_auditora_raw: row['auditora'] || '',
-                nome_documento: row['doc_name'] || row['documento'] || row['nome da ppc'] || '',
-                status: row['status'] || '',
-                observacao: row['apontamentos/obs'] || row['observação'] || row['obs'] || '',
+                nome_assistente: (row['assistente'] || '').trim(),
+                nome_auditora_raw: (row['auditora'] || '').trim(),
+                nome_documento: (row['doc_name'] || row['documento'] || row['nome da ppc'] || '').trim(),
+                status: (row['status'] || '').toUpperCase().trim(),
+                observacao: (row['apontamentos/obs'] || row['observação'] || row['obs'] || '').trim(),
                 qtd_ok: parseInt(row['ok'] || 0),
                 qtd_nok: parseInt(row['nok'] || 0),
                 num_campos: parseInt(row['nº campos'] || row['num campos'] || 0),
                 porcentagem: pctFinal,
-                data_referencia: dataRef,
+                data_referencia: dataRefRaw, // Mantém timestamp original para precisão
+                data_referencia_dia: diaLogico, // Campo auxiliar (se existir no banco) ou usado apenas para logica
                 data_auditoria: dataAudit,
-                empresa_nome: row['empresa'] || '',
+                empresa_nome: (row['empresa'] || '').trim(),
                 empresa_id: parseInt(row['company_id'] || 0)
             });
         }
 
         if (validos.length === 0) {
-            alert(`Nenhum dado válido. Verifique se o CSV tem 'id_assistente' e 'end_time'.`);
             if(statusEl) statusEl.innerHTML = "";
+            return alert(`Nenhum dado válido encontrado.\n\nVerifique se o CSV contém as colunas: 'id_assistente' e 'end_time'.\nLinhas ignoradas: ${ignorados}`);
+        }
+
+        // --- PROTOCOLO DE IDEMPOTÊNCIA ---
+        await this.executarTransacaoSegura(validos, Array.from(diasEncontrados), statusEl);
+    },
+
+    executarTransacaoSegura: async function(dados, dias, statusEl) {
+        // Ordena dias para exibição
+        dias.sort();
+        const diasFormatados = dias.map(d => d.split('-').reverse().join('/')).join(', ');
+
+        const confirmMsg = `Confirmar Importação de Assertividade?\n\n` +
+                           `📅 Dias Detectados: \n[ ${diasFormatados} ]\n\n` +
+                           `⚠️ ATENÇÃO: Todos os registros ANTERIORES destas datas serão APAGADOS e substituídos pelos novos dados.\n` +
+                           `📊 Registros Novos: ${dados.length}`;
+
+        if (!confirm(confirmMsg)) {
+            if(statusEl) statusEl.innerHTML = "Importação cancelada pelo usuário.";
             return;
         }
 
-        // --- PROTOCOLO NEXUS: Limpeza de Dados Antigos ---
-        // Garante que não duplique dados se o usuário reimportar o mesmo mês
-        if (minDate && maxDate) {
-            const startStr = minDate.toISOString();
-            const endStr = maxDate.toISOString();
+        if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold"><i class="fas fa-eraser"></i> Limpando versões anteriores...</span>`;
+
+        // 1. Limpeza (DELETE) por Range de Data (Dia Completo)
+        // Isso garante que não sobrem "fantasmas" se o horário da reimportação for diferente
+        for (const dia of dias) {
+            // Define o intervalo do dia em UTC (ou local, dependendo de como o banco está configurado)
+            // Considerando que 'data_referencia' no banco é TIMESTAMPTZ ou TIMESTAMP
+            // A query abaixo assume que data_referencia é comparável com string ISO.
             
-            if(confirm(`📅 Período Detectado: \n${minDate.toLocaleDateString()} a ${maxDate.toLocaleDateString()}\n\nDeseja SUBSTITUIR os dados deste período? (Recomendado para evitar duplicidade)`)) {
-                if(statusEl) statusEl.innerHTML = `<span class="text-rose-500">Limpando período...</span>`;
-                
-                const { error: deleteError } = await Sistema.supabase
-                    .from('assertividade')
-                    .delete()
-                    .gte('data_referencia', startStr)
-                    .lte('data_referencia', endStr);
-                
-                if (deleteError) {
-                    console.error("Erro ao limpar dados antigos:", deleteError);
-                    alert("Aviso: Não foi possível limpar dados antigos. A importação continuará, mas pode haver duplicatas.");
-                }
+            // Início: Dia 00:00:00 | Fim: Dia 23:59:59.999
+            // A comparação textual funciona bem se o formato no banco for ISO 8601
+            const inicioDia = `${dia}T00:00:00`; 
+            const fimDia = `${dia}T23:59:59.999`;
+
+            // Nota: Se o banco estiver salvando com offset, o ideal é usar filtro de data,
+            // mas range de string ISO costuma ser seguro para colunas TIMESTAMP.
+            // Para maior precisão, usamos gte/lte nas strings ISO parciais se o banco aceitar,
+            // ou filtro customizado. Assumindo comportamento padrão PostgREST:
+            
+            const { error: errDel } = await Sistema.supabase
+                .from('assertividade')
+                .delete()
+                .gte('data_referencia', inicioDia) // >= YYYY-MM-DDT00:00:00
+                .lte('data_referencia', fimDia);   // <= YYYY-MM-DDT23:59:59
+            
+            if (errDel) {
+                console.error(`Erro ao limpar dia ${dia}:`, errDel);
+                alert(`Erro ao limpar dados do dia ${dia}. A operação foi abortada para evitar duplicidade.`);
+                if(statusEl) statusEl.innerHTML = "";
+                return;
             }
         }
 
-        // --- Inserção em Lote (Batch Insert) ---
-        const BATCH_SIZE = 1000; // Aumentado para performance
-        let erros = 0;
-        let msgErroCritico = "";
-
-        for (let i = 0; i < validos.length; i += BATCH_SIZE) {
-            const lote = validos.slice(i, i + BATCH_SIZE);
-            
-            if(statusEl) {
-                const progresso = Math.min(100, Math.round(((i + lote.length) / validos.length) * 100));
-                statusEl.innerHTML = `<span class="text-orange-600 font-bold"><i class="fas fa-circle-notch fa-spin"></i> Enviando... ${progresso}%</span>`;
-            }
-
-            const { error } = await Sistema.supabase.from('assertividade').insert(lote);
-            
-            if (error) {
-                console.error("❌ Erro insert Supabase:", error);
-                if (error.code === 'PGRST204') {
-                    // Erro de coluna faltante (Schema Cache)
-                    msgErroCritico = `ERRO DE SCHEMA: O banco recusou a coluna '${error.message}'.\nSolução: Execute 'NOTIFY pgrst, "reload config"' no SQL Editor.`;
-                    break; 
-                }
-                erros++;
-            }
-        }
-
-        if (msgErroCritico) {
-            alert(msgErroCritico);
-            if(statusEl) statusEl.innerHTML = "Erro Crítico de Banco";
-        } else if (erros > 0) {
-            alert(`Importação concluída com ${erros} erros de lote. Verifique o console.`);
-            if(statusEl) statusEl.innerHTML = "Concluído com alertas";
-        } else {
-            alert(`✅ Sucesso! ${validos.length} registros processados e atualizados.`);
-            if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold">Sucesso!</span>';
-            
-            // Atualiza a tabela se estiver visível
-            if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) Gestao.Assertividade.buscarDados();
-        }
+        // 2. Inserção em Lote (Batch Insert)
+        const BATCH_SIZE = 500;
+        let inseridos = 0;
         
-        setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 5000);
+        for (let i = 0; i < dados.length; i += BATCH_SIZE) {
+            const lote = dados.slice(i, i + BATCH_SIZE);
+            
+            // Removemos campos auxiliares que não existem no banco antes de enviar
+            const loteLimpo = lote.map(item => {
+                const { data_referencia_dia, ...resto } = item; 
+                return resto;
+            });
+
+            if(statusEl) {
+                const pct = Math.round(((i + lote.length) / dados.length) * 100);
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold"><i class="fas fa-upload"></i> Enviando... ${pct}%</span>`;
+            }
+
+            const { error } = await Sistema.supabase
+                .from('assertividade')
+                .insert(loteLimpo);
+
+            if (error) {
+                console.error("Erro Insert Batch:", error);
+                if (error.code === 'PGRST204') {
+                    alert(`Erro de Schema: Coluna inexistente detectada (${error.message}). Notifique o suporte.`);
+                } else {
+                    alert(`Erro na gravação do lote ${i}: ${error.message}`);
+                }
+                if(statusEl) statusEl.innerHTML = `<span class="text-red-600">Falha na gravação.</span>`;
+                return;
+            }
+            inseridos += lote.length;
+        }
+
+        // Sucesso
+        const msgSucesso = `✅ Sucesso! ${inseridos} registros atualizados em ${dias.length} datas.`;
+        alert(msgSucesso);
+        if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold"><i class="fas fa-check-circle"></i> Concluído!</span>';
+
+        // Atualização da View (se disponível)
+        if(Gestao.Assertividade && typeof Gestao.Assertividade.buscarDados === 'function') {
+            Gestao.Assertividade.buscarDados();
+        }
+    },
+
+    // --- Helpers Utilitários ---
+
+    isDateValid: function(dateStr) {
+        const d = new Date(dateStr);
+        return d instanceof Date && !isNaN(d);
+    },
+
+    /**
+     * Retorna o dia (YYYY-MM-DD) correspondente ao fuso horário brasileiro,
+     * dado um objeto Date (que pode estar em UTC).
+     */
+    getDiaLogicoBRT: function(dateObj) {
+        // Ajuste manual simples para garantir o dia correto independente do browser
+        // Subtrai 3 horas do tempo UTC para obter o horário BRT aproximado
+        // (Nota: Isso assume que a entrada UTC está correta. 
+        // Se a entrada já for local, o JS trata sozinho, mas 'end_time' costuma vir com 'Z')
+        const ms = dateObj.getTime();
+        const brtDate = new Date(ms - (3 * 60 * 60 * 1000)); 
+        return brtDate.toISOString().split('T')[0];
     }
 };
 
-// Inicialização segura para garantir carregamento do DOM
+// Inicialização segura
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
 } else {
