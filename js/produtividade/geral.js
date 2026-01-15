@@ -18,7 +18,7 @@ Produtividade.Geral = {
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v2)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v3)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -40,7 +40,7 @@ Produtividade.Geral = {
 
     isDiaUtil: function(dateObj) {
         const day = dateObj.getDay();
-        if (day === 0 || day === 6) return false; // Sábado/Domingo
+        if (day === 0 || day === 6) return false; 
         
         const ano = dateObj.getFullYear();
         const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -90,7 +90,7 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Auditorias Reais (Tabela Assertividade)
+            // 2. Busca Auditorias Reais
             const { data: auditorias, error: errAudit } = await Sistema.supabase
                 .from('assertividade')
                 .select('usuario_id, porcentagem, auditora, data_auditoria')
@@ -99,8 +99,9 @@ Produtividade.Geral = {
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias (LÓGICA BLINDADA DE MÉDIA)
-            const mapaAuditoria = {}; 
+            // 3. Processa Auditorias (Lógica de Média Correta)
+            const mapaAuditoria = {};     // Para Média Geral (Agrupado)
+            const mapaAuditoriaDia = {};  // Para Detalhe (Dia a Dia)
             let kpiAuditSoma = 0;
             let kpiAuditQtd = 0;
 
@@ -109,25 +110,35 @@ Produtividade.Geral = {
                     const audNome = (a.auditora || '').trim().toUpperCase();
                     if (!audNome || audNome === 'SISTEMA' || audNome === 'ROBO') return;
 
-                    // --- INICIO CORREÇÃO DE LÓGICA ---
+                    // --- LÓGICA DE LIMPEZA ---
                     let raw = a.porcentagem;
-                    if (raw === null || raw === undefined || raw === '') return; // Ignora nulos
+                    if (raw === null || raw === undefined || raw === '') return;
 
-                    // Limpa string: remove %, troca virgula por ponto
                     let valStr = String(raw).replace('%', '').replace(',', '.').trim();
-                    if (valStr === '' || valStr === '-') return; // Ignora vazios/traços
+                    if (valStr === '' || valStr === '-') return;
 
                     let val = parseFloat(valStr);
                     
-                    // Valida se é número e se está entre 0 e 100
+                    // Validação: Aceita apenas entre 0 e 100
                     if (isNaN(val) || val < 0 || val > 100) return; 
-                    // --- FIM CORREÇÃO ---
 
                     const uid = a.usuario_id;
-                    if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     
+                    // Mapa Geral (Média)
+                    if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     mapaAuditoria[uid].soma += val;
                     mapaAuditoria[uid].qtd++;
+
+                    // Mapa Detalhado (Por Dia)
+                    const keyDia = `${uid}_${a.data_auditoria}`; 
+                    // Se houver mais de uma auditoria no dia, fazemos a média do dia ou pegamos a última.
+                    // Aqui vamos simplificar e guardar a última válida ou média simples se já existir.
+                    if (!mapaAuditoriaDia[keyDia]) {
+                         mapaAuditoriaDia[keyDia] = { soma: val, qtd: 1 };
+                    } else {
+                         mapaAuditoriaDia[keyDia].soma += val;
+                         mapaAuditoriaDia[keyDia].qtd++;
+                    }
 
                     kpiAuditSoma += val;
                     kpiAuditQtd++;
@@ -175,7 +186,8 @@ Produtividade.Geral = {
                             qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 
                         },
                         meta_real: mapaMetas[uid] || 0,
-                        auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 }
+                        auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 },
+                        auditoriaDiaMap: mapaAuditoriaDia // Passa o mapa de dias para uso no render
                     };
                 }
                 
@@ -260,7 +272,7 @@ Produtividade.Geral = {
             const commonCell = "px-2 py-2 text-center border-r border-slate-200 text-slate-600 font-medium text-xs";
 
             if (mostrarDetalhes) {
-                // VISÃO DETALHADA
+                // === VISÃO DETALHADA (Linhas de Produção Diária) ===
                 d.registros.sort((a,b) => a.data_referencia.localeCompare(b.data_referencia)).forEach(r => {
                     const fatorReal = this.getFator(r.fator);
                     const metaCalc = metaBase * fatorReal;
@@ -270,8 +282,24 @@ Produtividade.Geral = {
 
                     const [ano, mes, dia] = r.data_referencia.split('-');
                     let corFator = fatorReal === 0.5 ? 'bg-amber-50 text-amber-700' : fatorReal === 0 ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700';
-                    let assertVal = "-"; let corAssert = 'text-slate-300';
                     let motivoIcon = r.motivo_abono ? `<i class="fas fa-info-circle text-blue-400 ml-1 cursor-help" title="${r.motivo_abono}"></i>` : "";
+
+                    // Lógica de Assertividade por Dia
+                    let assertVal = "-"; 
+                    let corAssert = 'text-slate-300 font-light';
+                    
+                    if (d.auditoriaDiaMap) {
+                        const keyDia = `${d.usuario.id}_${r.data_referencia}`;
+                        const dadosDia = d.auditoriaDiaMap[keyDia];
+                        if (dadosDia && dadosDia.qtd > 0) {
+                            const mediaDia = dadosDia.soma / dadosDia.qtd;
+                            assertVal = mediaDia.toFixed(2).replace('.', ',') + '%';
+                            
+                            if (mediaDia >= 98) corAssert = 'text-emerald-600 font-bold';
+                            else if (mediaDia < 90) corAssert = 'text-rose-600 font-bold';
+                            else corAssert = 'text-slate-600 font-bold';
+                        }
+                    }
 
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-50 transition odd:bg-white even:bg-slate-50/30 border-b border-slate-200";
@@ -283,17 +311,23 @@ Produtividade.Geral = {
                     tbody.appendChild(tr);
                 });
             } else {
-                // VISÃO GERAL
+                // === VISÃO GERAL (Linha Agrupada por Analista) ===
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
                 
                 // Média calculada nos passos anteriores (blindada)
-                let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic"; let mediaNumerica = 0;
+                let assertGeralTxt = "-"; 
+                let corAssert = "text-slate-400 italic"; 
+                let mediaNumerica = 0;
+                
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
                     const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
                     mediaNumerica = media;
                     assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
-                    corAssert = media >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
+                    
+                    if (media >= 98) corAssert = 'text-emerald-700 font-bold';
+                    else if (media < 90) corAssert = 'text-rose-600 font-bold';
+                    else corAssert = 'text-slate-600 font-bold';
                 }
                 d.kpiMediaAssert = mediaNumerica;
 
@@ -367,7 +401,6 @@ Produtividade.Geral = {
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
         let pctAssert = 0;
-        // Usa o KPI Global calculado com a nova regra
         if (kpiAuditGlobal && kpiAuditGlobal.qtd > 0) {
             pctAssert = kpiAuditGlobal.soma / kpiAuditGlobal.qtd;
         }
