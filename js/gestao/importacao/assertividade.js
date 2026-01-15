@@ -2,12 +2,12 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (NEXUS-CORE v8.1 - CSV FIXED)
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (SECURE EDITION v9.0)
  * ---------------------------------------------------------------------
- * Foco: Performance e Correção de Mapeamento de Colunas.
- * 1. escapeChar: '\\' -> Corrige a leitura de campos com aspas internas.
- * 2. Mapeamento Inteligente: Prioriza colunas exatas (id_assistente vs ID PPC).
- * 3. Validação: Ignora linhas sem ID ou sem Data.
+ * Segurança: Implementa padrão "RPC-Only" para escrita.
+ * 1. Limpeza: Usa rpc('limpar_assertividade_dias') em vez de delete().
+ * 2. Inserção: Usa rpc('importar_assertividade_lote') em vez de insert().
+ * 3. Fallback: Mantém lógica de parsing robusta do CSV.
  */
 Gestao.Importacao.Assertividade = {
     init: function() {
@@ -33,9 +33,9 @@ Gestao.Importacao.Assertividade = {
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo CSV...';
         if(statusEl) statusEl.innerHTML = '<span class="text-blue-600 font-semibold">Processando arquivo...</span>';
 
-        // Configuração ESPECÍFICA para o seu tipo de CSV
+        // Configuração do PapaParse
         Papa.parse(file, {
-            header: false, // Mapeamento manual para maior controle
+            header: false, 
             skipEmptyLines: 'greedy',
             escapeChar: '\\', 
             encoding: "UTF-8",
@@ -64,25 +64,17 @@ Gestao.Importacao.Assertividade = {
             return alert("O arquivo CSV parece estar vazio ou sem cabeçalho.");
         }
 
-        // 1. Identificar a linha de cabeçalho (Linha 0) e normalizar
+        // 1. Identificar a linha de cabeçalho
         const headers = rows[0].map(h => String(h).trim().toLowerCase().replace(/"/g, ''));
         
-        // 2. Criar Mapa de Índices (CORRIGIDO PARA O SEU CSV)
+        // 2. Criar Mapa de Índices (Lógica corrigida anteriormente)
         const idx = {
-            // Data de referência
             endTime: headers.findIndex(h => h.includes('end_time') || h === 'data'),
-            
-            // ID DO USUÁRIO: Procura especificamente 'id_assistente' primeiro
             idAssistente: headers.indexOf('id_assistente') !== -1 
                 ? headers.indexOf('id_assistente') 
                 : headers.findIndex(h => h.includes('id_assistente') || h === 'id' || h.includes('id ppc')),
-
-            // Nome do Assistente: Pega a última coluna 'assistente' (índice 19 no seu CSV)
             assistente: headers.lastIndexOf('assistente'), 
-            
-            // Auditora: Procura 'auditor' mas ignora 'data' para não pegar "Data da Auditoria"
             auditora: headers.findIndex(h => h.includes('auditor') && !h.includes('data')),
-            
             docName: headers.findIndex(h => h.includes('doc_name') || h.includes('documento')),
             status: headers.findIndex(h => h === 'status'),
             obs: headers.findIndex(h => h.includes('obs') || h.includes('apontamentos')),
@@ -94,7 +86,6 @@ Gestao.Importacao.Assertividade = {
             companyId: headers.findIndex(h => h.includes('company'))
         };
 
-        // Validação Mínima
         if (idx.endTime === -1) return alert("Erro: Coluna 'end_time' não encontrada no CSV.");
         if (idx.idAssistente === -1) return alert("Erro: Coluna 'id_assistente' não encontrada.");
 
@@ -103,24 +94,17 @@ Gestao.Importacao.Assertividade = {
         const diasEncontrados = new Set();
         let stats = { lidos: 0, ignorados: 0, semData: 0 };
 
-        // Começa da linha 1 (pula cabeçalho)
         for (let i = 1; i < rows.length; i++) {
             const row = rows[i];
-            
-            // Segurança básica
             if (!row || row.length < 2) continue;
 
-            // A. DATA (Literal do CSV)
             const rawDate = row[idx.endTime];
             if (!rawDate || typeof rawDate !== 'string' || rawDate.length < 10) {
                 stats.semData++;
                 continue;
             }
             
-            // Corta os 10 primeiros caracteres: "2025-12-02T..." -> "2025-12-02"
             const dataLiteral = rawDate.substring(0, 10);
-            
-            // Valida formato YYYY-MM-DD
             if (!/^\d{4}-\d{2}-\d{2}$/.test(dataLiteral)) {
                 stats.semData++;
                 continue;
@@ -128,7 +112,6 @@ Gestao.Importacao.Assertividade = {
             
             diasEncontrados.add(dataLiteral);
 
-            // B. ID
             let idRaw = row[idx.idAssistente];
             let idAssistente = idRaw ? parseInt(String(idRaw).replace(/\D/g, '')) : 0;
             
@@ -137,16 +120,14 @@ Gestao.Importacao.Assertividade = {
                 continue;
             }
 
-            // C. Outros Campos
             let pctVal = (idx.pct > -1 && row[idx.pct]) ? String(row[idx.pct]).replace('%','').replace(',','.').trim() : '0';
             let pctFinal = isNaN(parseFloat(pctVal)) ? 0 : parseFloat(pctVal).toFixed(2);
 
             let dtAudit = null;
             if (idx.dataAudit > -1 && row[idx.dataAudit]) {
                 let da = String(row[idx.dataAudit]).trim();
-                // Tenta converter formatos comuns
                 if (da.includes('/')) {
-                    const parts = da.split('/'); // DD/MM/AAAA
+                    const parts = da.split('/'); 
                     if(parts.length === 3) dtAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
                 } else if (/^\d{4}-\d{2}-\d{2}/.test(da)) {
                     dtAudit = da.substring(0, 10);
@@ -169,13 +150,11 @@ Gestao.Importacao.Assertividade = {
                 empresa_nome: (idx.empresa > -1 ? String(row[idx.empresa]||'') : '').trim(),
                 empresa_id: (idx.companyId > -1) ? (parseInt(row[idx.companyId]) || 0) : 0
             });
-            
-            stats.lidos++;
         }
 
         if (validos.length === 0) {
             if(statusEl) statusEl.innerHTML = "";
-            return alert(`Nenhuma linha válida importada.\n\nVerifique se o CSV possui as colunas 'end_time' e 'id_assistente'.`);
+            return alert(`Nenhuma linha válida importada.`);
         }
 
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
@@ -188,29 +167,29 @@ Gestao.Importacao.Assertividade = {
         const msg = `Resumo da Importação (CSV):\n\n` +
                     `📅 Dias Detectados: \n[ ${diasFormatados} ]\n\n` +
                     `✅ Registros Prontos: ${dados.length}\n` +
-                    `⚠️ Substituição: Dados antigos destas datas serão APAGADOS.`;
+                    `⚠️ Substituição Segura: Dados antigos destas datas serão reescritos.`;
 
         if (!confirm(msg)) {
             if(statusEl) statusEl.innerHTML = "Cancelado.";
             return;
         }
 
-        if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando dados antigos...</span>`;
+        if(statusEl) statusEl.innerHTML = `<span class="text-rose-600 font-bold">Limpando dados antigos (Via RPC)...</span>`;
 
-        // 1. Limpeza
+        // 1. Limpeza via RPC (Blindado)
+        // Substitui o antigo .delete().in()
         const { error: errDel } = await Sistema.supabase
-            .from('assertividade')
-            .delete()
-            .in('data_referencia', dias);
+            .rpc('limpar_assertividade_dias', { dias: dias });
 
         if (errDel) {
-            alert("Erro ao limpar dados: " + errDel.message);
+            console.error("Erro RPC Delete:", errDel);
+            alert("Erro de permissão ao limpar dados: " + errDel.message);
             if(statusEl) statusEl.innerHTML = "";
             return;
         }
 
-        // 2. Inserção em Lote
-        const BATCH_SIZE = 1000;
+        // 2. Inserção via RPC (Blindado)
+        const BATCH_SIZE = 500; // Reduzi levemente o lote para garantir estabilidade no RPC
         let inseridos = 0;
 
         for (let i = 0; i < dados.length; i += BATCH_SIZE) {
@@ -218,30 +197,30 @@ Gestao.Importacao.Assertividade = {
             
             if(statusEl) {
                 const pct = Math.round(((i + lote.length) / dados.length) * 100);
-                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Enviando... ${pct}%</span>`;
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold">Enviando Seguro... ${pct}%</span>`;
             }
 
-            const { error } = await Sistema.supabase.from('assertividade').insert(lote);
+            // Substitui o antigo .insert()
+            const { error } = await Sistema.supabase
+                .rpc('importar_assertividade_lote', { dados: lote });
 
             if (error) {
-                console.error("Erro insert:", error);
+                console.error("Erro RPC Insert:", error);
                 alert(`Erro no lote ${i}: ${error.message}`);
                 return;
             }
             inseridos += lote.length;
         }
 
-        alert(`Sucesso! ${inseridos} registros importados.`);
+        alert(`Sucesso! ${inseridos} registros importados e seguros.`);
         if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold">Concluído!</span>';
         
-        // Atualiza a tabela se o módulo de visualização estiver carregado
         if(Gestao.Assertividade && typeof Gestao.Assertividade.buscarDados === 'function') {
             Gestao.Assertividade.buscarDados();
         }
     }
 };
 
-// Inicialização automática
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
 } else {
