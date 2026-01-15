@@ -5,17 +5,16 @@ Produtividade.Geral = {
     dadosOriginais: [], 
     usuarioSelecionado: null,
     
-    // Feriados Fixos
+    // Feriados
     feriados: {
         "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
-    // Status que contam como esforço (Volume) mas não tem nota de qualidade
     statusNeutros: ['DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA', 'CANCELADO', 'JUSTIFICADO'],
 
     init: function() { 
-        console.log("🔧 [NEXUS] Produtividade: Engine V11 (Schema Fix)...");
+        console.log("🔧 [NEXUS] Produtividade: Engine V12 (Smart Pagination)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -30,37 +29,37 @@ Produtividade.Geral = {
         return num;
     },
 
-    // --- ENGINE DE BUSCA RECURSIVA (Busca em lotes até acabar) ---
+    // --- ENGINE DE BUSCA RECURSIVA (CALIBRADA PARA 1000/REQ) ---
     buscarTodosRegistros: async function(tabela, colunas, dataInicio, dataFim, campoData) {
         let todosDados = [];
+        const TAMANHO_LOTE = 1000; // Calibrado com o limite do servidor
         let de = 0;
-        let ate = 9999; // Lotes de 10k (Máximo seguro do Supabase)
         let continuar = true;
         
         const feedbackEl = document.getElementById('loading-feedback');
         
         while (continuar) {
-            if(feedbackEl) feedbackEl.innerText = `Lendo ${tabela}: ${todosDados.length} registros carregados...`;
+            // Feedback visual de progresso
+            if(feedbackEl) feedbackEl.innerText = `Lendo ${tabela}: ${todosDados.length} carregados...`;
             
-            // Busca o lote atual
             const { data, error } = await Sistema.supabase
                 .from(tabela)
                 .select(colunas)
                 .gte(campoData, dataInicio)
                 .lte(campoData, dataFim)
-                .range(de, ate);
+                .range(de, de + TAMANHO_LOTE - 1); // Range exato de 1000
 
-            if (error) throw error; // Se der erro aqui, o catch lá embaixo pega
+            if (error) throw error;
 
             todosDados = todosDados.concat(data);
 
-            // Se o retorno for menor que o tamanho do lote, acabaram os dados no servidor
-            if (data.length < 10000) {
+            // A LÓGICA CORRIGIDA:
+            // Se vier menos que 1000, significa que acabou.
+            // Se vier 1000, significa que pode ter mais na próxima página.
+            if (data.length < TAMANHO_LOTE) {
                 continuar = false;
             } else {
-                // Prepara o próximo lote
-                de += 10000;
-                ate += 10000;
+                de += TAMANHO_LOTE;
             }
         }
         return todosDados;
@@ -76,7 +75,6 @@ Produtividade.Geral = {
 
         console.log(`📅 [NEXUS] Batch Query: ${dataInicio} -> ${dataFim}`);
         
-        // Feedback Visual de Carregamento
         tbody.innerHTML = `
             <tr>
                 <td colspan="12" class="text-center py-12 text-slate-400">
@@ -89,22 +87,22 @@ Produtividade.Geral = {
             </tr>`;
 
         try {
-            // 1. Definição das Colunas (CORRIGIDO: Removido 'auditora' de producao)
-            // Trazemos apenas o necessário para economizar memória do navegador
+            // 1. Definição das Colunas (Otimizadas)
             const colsProducao = 'usuario_id, status, quantidade, fifo, gradual_total, gradual_parcial, fator'; 
-            const colsAssert = 'usuario_id, porcentagem, auditora'; // Aqui 'auditora' existe e é útil
+            const colsAssert = 'usuario_id, porcentagem, auditora'; // Auditora existe aqui
 
-            // 2. Execução Paralela dos Downloaders Recursivos
+            // 2. Execução Paralela
             const [dadosProd, dadosAudit, resUsers, resMetas] = await Promise.all([
                 this.buscarTodosRegistros('producao', colsProducao, dataInicio, dataFim, 'data_referencia'),
                 this.buscarTodosRegistros('assertividade', colsAssert, dataInicio, dataFim, 'data_auditoria'),
-                Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao, contrato').range(0, 9999),
+                // Usuários e Metas geralmente são menores, range fixo alto resolve
+                Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao, contrato').range(0, 4999),
                 Sistema.supabase.from('metas').select('usuario_id, meta_producao').eq('mes', parseInt(dataInicio.split('-')[1])).eq('ano', parseInt(dataInicio.split('-')[0]))
             ]);
 
             console.log(`✅ Download Completo: ${dadosProd.length} linhas de produção | ${dadosAudit.length} auditorias.`);
 
-            // 3. Indexação (HashMaps para performance O(1))
+            // 3. Indexação
             const mapaUsuarios = {}; if(resUsers.data) resUsers.data.forEach(u => mapaUsuarios[u.id] = u);
             const mapaMetas = {}; if(resMetas.data) resMetas.data.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
 
@@ -121,19 +119,15 @@ Produtividade.Geral = {
                 mapaAuditoria[uid].qtd++;
             });
 
-            // 5. Agregação de Produção (Loop Otimizado)
+            // 5. Agregação de Produção
             let dadosAgrupados = {};
 
-            // Loop clássico for é mais rápido que forEach em arrays gigantes
             for (let i = 0; i < dadosProd.length; i++) {
                 const item = dadosProd[i];
                 const uid = item.usuario_id;
                 
-                // Inicialização Lazy (Cria o objeto do usuário apenas na primeira vez que aparece)
                 if(!dadosAgrupados[uid]) {
                     const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
-                    
-                    // Já calcula a média se houver auditoria
                     let mediaFinal = 0;
                     const aud = mapaAuditoria[uid];
                     if (aud && aud.qtd > 0) mediaFinal = aud.soma / aud.qtd;
@@ -149,13 +143,9 @@ Produtividade.Geral = {
                 const d = dadosAgrupados[uid];
                 const status = (item.status || '').toUpperCase();
                 
-                // Lógica de Negócio (CORRIGIDA: Sem depender da coluna auditora na produção)
                 const isOk = ['OK', 'VALIDO', 'REV', 'PROCESSADO', 'CONCLUIDO', 'SUCESSO'].some(s => status.includes(s));
                 const isNok = status.includes('NOK') || status.includes('ERRO');
                 
-                // Regra de Volume: Conta se for OK ou NOK.
-                // Itens neutros (como DUPL) geralmente não contam volume de meta, a menos que especificado.
-                // Como removemos a coluna 'auditora' da query (pois não existia), removemos a dependência dela aqui.
                 let contaVolume = isOk || isNok;
 
                 if (contaVolume) {
@@ -169,7 +159,7 @@ Produtividade.Geral = {
                 }
             }
 
-            // Adiciona usuários que só têm Auditoria mas não produziram nada no período (Fantasmas)
+            // Adiciona fantasmas (só auditoria)
             Object.keys(mapaAuditoria).forEach(uid => {
                 if (!dadosAgrupados[uid]) {
                     const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
@@ -195,17 +185,12 @@ Produtividade.Geral = {
             }
 
         } catch (error) { 
-            console.error("[NEXUS] Stack Trace:", error); 
-            // Mostra o erro amigável na tela
+            console.error("[NEXUS] Erro:", error); 
             let msg = error.message || "Erro desconhecido";
-            if (msg.includes('column') && msg.includes('does not exist')) {
-                msg = "Erro de Estrutura: Uma coluna solicitada não existe no Banco de Dados. Verifique o console.";
-            }
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold"><i class="fas fa-bomb"></i> Falha Crítica: ${msg}</td></tr>`; 
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold"><i class="fas fa-bomb"></i> Falha: ${msg}</td></tr>`; 
         }
     },
 
-    // --- RENDERIZAÇÃO E INTERFACE (Mantida intacta e funcionando) ---
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
@@ -229,7 +214,6 @@ Produtividade.Geral = {
 
         lista.sort((a,b) => (a.usuario.nome||'').localeCompare(b.usuario.nome||''));
 
-        // Buffer de HTML para renderização rápida
         let htmlBuffer = '';
         
         lista.forEach(d => {
