@@ -72,11 +72,12 @@ Gestao.Assertividade = {
 
         try {
             // 1. QUERY PRINCIPAL (VIEW): Traz nomes e estrutura
+            // Utiliza a View para performance e filtragem
             let query = Sistema.supabase
                 .from('vw_assertividade_completa')
                 .select('*', { count: 'exact' });
 
-            // Filtros
+            // Aplicação dos Filtros
             if (this.estado.termo) query = query.ilike('search_vector', `%${this.estado.termo}%`);
             if (this.estado.filtros.data) query = query.eq('data_referencia', this.estado.filtros.data);
             if (this.estado.filtros.empresa) query = query.ilike('empresa_nome', `%${this.estado.filtros.empresa}%`);
@@ -96,38 +97,43 @@ Gestao.Assertividade = {
 
             const { data: dadosView, error, count } = await query;
 
-            if (error) throw error;
+            if (error) throw new Error(`Erro na View: ${error.message}`);
 
             this.estado.total = count || 0;
 
             // 2. QUERY SECUNDÁRIA (TABELA REAL): Traz a porcentagem bruta (Search & Merge)
-            // Isso garante que leremos exatamente o que foi importado, ignorando cálculos da View.
-            let listaFinal = [];
+            // IMPORTANTE: Tenta buscar o dado fiel da planilha (string "100%", etc)
+            let listaFinal = dadosView || [];
             
             if (dadosView && dadosView.length > 0) {
                 const ids = dadosView.map(d => d.id);
                 
-                // Busca na tabela original usando os IDs recuperados
-                const { data: dadosRaw, error: errorRaw } = await Sistema.supabase
-                    .from('assertividade')
-                    .select('id, porcentagem')
-                    .in('id', ids);
+                try {
+                    // Busca na tabela original usando os IDs recuperados
+                    const { data: dadosRaw, error: errorRaw } = await Sistema.supabase
+                        .from('assertividade')
+                        .select('id, porcentagem')
+                        .in('id', ids);
 
-                if (!errorRaw && dadosRaw) {
-                    // Cria mapa para acesso rápido: { 101: "100%", 102: null }
-                    const mapaPorcentagem = {};
-                    dadosRaw.forEach(r => mapaPorcentagem[r.id] = r.porcentagem);
+                    if (!errorRaw && dadosRaw) {
+                        // Cria mapa para acesso rápido: { 101: "100%", 102: null }
+                        const mapaPorcentagem = {};
+                        dadosRaw.forEach(r => mapaPorcentagem[r.id] = r.porcentagem);
 
-                    // Funde os dados
-                    listaFinal = dadosView.map(item => {
-                        return { 
-                            ...item, 
-                            porcentagem_real: mapaPorcentagem[item.id] // Aqui vem o dado fiel à planilha
-                        };
-                    });
-                } else {
-                    console.error("Erro ao buscar dados brutos:", errorRaw);
-                    listaFinal = dadosView; // Fallback
+                        // Funde os dados
+                        listaFinal = dadosView.map(item => {
+                            return { 
+                                ...item, 
+                                porcentagem_real: mapaPorcentagem[item.id] // Aqui vem o dado fiel à planilha
+                            };
+                        });
+                    } else {
+                        // Log silencioso para não assustar o usuário, mas avisar o dev
+                        console.warn("Aviso: Falha ao buscar porcentagem bruta (Tabela). Usando dados da View.", errorRaw);
+                    }
+                } catch (errSecundario) {
+                    console.warn("Aviso: Exceção ao buscar dados secundários (401 possível). Usando fallback.", errSecundario);
+                    // Não lança erro, apenas segue com os dados da View
                 }
             }
 
@@ -135,7 +141,7 @@ Gestao.Assertividade = {
             this.atualizarControlesPaginacao();
 
         } catch (e) {
-            console.error("Erro busca:", e);
+            console.error("Erro crítico na busca:", e);
             if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold"><i class="fas fa-exclamation-circle mr-2"></i> Erro ao filtrar: ${e.message}</td></tr>`;
         }
     },
@@ -194,26 +200,28 @@ Gestao.Assertividade = {
 
             const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
 
-            // === LÓGICA FINAL: Usa 'porcentagem_real' que veio da tabela ===
-            // Se veio null da tabela, é null aqui. Não há cálculo automático.
-            // Se falhar o merge (undefined), usa indice_assertividade como fallback.
+            // === LÓGICA DE EXIBIÇÃO DA PORCENTAGEM ===
+            // Prioriza o dado real da tabela. Se falhou ou não existe, usa o da View.
             
             let valorParaExibir = item.porcentagem_real;
 
-            if (valorParaExibir === undefined) {
-                // Se por algum motivo o merge falhou, fallback para o calculado
-                valorParaExibir = item.indice_assertividade;
+            if (valorParaExibir === undefined || valorParaExibir === null) {
+                // Fallback para o valor calculado/vindo da view se o merge falhou
+                valorParaExibir = item.indice_assertividade || item.porcentagem; // Tenta também 'porcentagem' se vier da View
             }
 
             let assertDisplay = '-';
             let assertColor = 'text-slate-400 font-light'; 
 
             if (valorParaExibir !== null && valorParaExibir !== '' && valorParaExibir !== undefined) {
-                const assertVal = parseFloat(valorParaExibir);
+                // Remove símbolo % se vier duplicado e converte para float para checar cor
+                const valorLimpo = String(valorParaExibir).replace('%', '').replace(',', '.');
+                const assertVal = parseFloat(valorLimpo);
+                
+                // Exibição mantém o formato original (com % se for string ou adiciona)
+                assertDisplay = String(valorParaExibir).includes('%') ? valorParaExibir : valorParaExibir + '%';
                 
                 if (!isNaN(assertVal)) {
-                    assertDisplay = assertVal + '%';
-                    
                     assertColor = 'text-slate-600';
                     if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
                     else if (assertVal < 90 && assertVal >= 0) assertColor = 'text-rose-600 font-bold';
@@ -229,9 +237,9 @@ Gestao.Assertividade = {
                 <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${docSafe}">${docSafe}</td>
                 <td class="px-3 py-2 text-center">${statusBadge}</td>
                 <td class="px-3 py-2 text-slate-400 max-w-[180px] truncate cursor-help border-l border-slate-100 pl-4 italic" title="${obsSafe}">${obsSafe}</td>
-                <td class="px-3 py-2 text-center font-mono bg-slate-50/50 text-slate-500">${item.num_campos}</td>
-                <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50/30">${item.qtd_ok}</td>
-                <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50/30">${item.qtd_nok}</td>
+                <td class="px-3 py-2 text-center font-mono bg-slate-50/50 text-slate-500">${item.num_campos || '-'}</td>
+                <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50/30">${item.qtd_ok || '-'}</td>
+                <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50/30">${item.qtd_nok || '-'}</td>
                 <td class="px-3 py-2 text-center ${assertColor} text-sm bg-slate-50/50">${assertDisplay}</td>
                 <td class="px-3 py-2 text-slate-500 text-[10px] uppercase">${auditoraSafe}</td>
             </tr>`;
