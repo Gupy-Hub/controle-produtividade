@@ -13,10 +13,11 @@ Produtividade.Geral = {
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
-    statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
+    // CORREÇÃO: 'REV' removido daqui pois conta como Produção Válida (Ok=1)
+    statusNeutros: ['DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA', 'CANCELADO'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v6 - Unlocked)...");
+        console.log("🔧 Produtividade: Iniciando (Cross-Check Assertividade v7 - Status Fix)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -97,16 +98,12 @@ Produtividade.Geral = {
 
             if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
 
-            // 3. Processa Auditorias (CORREÇÃO APLICADA: REMOVIDO FILTRO DE AUDITOR)
+            // 3. Processa Auditorias
             const mapaAuditoria = {};     
             const mapaAuditoriaDia = {}; 
 
             if (auditorias) {
                 auditorias.forEach(a => {
-                    // --- REMOVIDO: Filtro que ignorava SISTEMA/ROBO ---
-                    // Antes: if (!audNome || audNome === 'SISTEMA'...) return;
-                    // Agora: Aceita qualquer auditoria com nota válida.
-
                     let raw = a.porcentagem;
                     if (raw === null || raw === undefined || raw === '') return;
 
@@ -114,18 +111,14 @@ Produtividade.Geral = {
                     if (valStr === '' || valStr === '-') return;
 
                     let val = parseFloat(valStr);
-                    
-                    // Validação Numérica Rigorosa (0 a 100)
                     if (isNaN(val) || val < 0 || val > 100) return; 
 
                     const uid = a.usuario_id;
                     
-                    // Mapa Geral
                     if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
                     mapaAuditoria[uid].soma += val;
                     mapaAuditoria[uid].qtd++;
 
-                    // Mapa Detalhado (Por Dia e Usuario)
                     const keyDia = `${uid}_${a.data_auditoria}`; 
                     if (!mapaAuditoriaDia[keyDia]) mapaAuditoriaDia[keyDia] = { soma: val, qtd: 1 };
                     else { mapaAuditoriaDia[keyDia].soma += val; mapaAuditoriaDia[keyDia].qtd++; }
@@ -160,7 +153,6 @@ Produtividade.Geral = {
             // 6. Agrupamento
             let dadosAgrupados = {};
             
-            // A) Produção
             producao.forEach(item => {
                 const uid = item.usuario_id;
                 if(!dadosAgrupados[uid]) this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
@@ -168,13 +160,21 @@ Produtividade.Geral = {
                 const d = dadosAgrupados[uid];
                 
                 const status = (item.status || '').toUpperCase();
-                const isOk = ['OK', 'VALIDO', 'PROCESSADO', 'CONCLUIDO', 'DONE', 'FINALIZADO', 'SUCESSO'].some(s => status.includes(s));
+
+                // CORREÇÃO: ADICIONADO 'REV' COMO STATUS DE SUCESSO/OK
+                const isOk = ['OK', 'VALIDO', 'PROCESSADO', 'CONCLUIDO', 'DONE', 'FINALIZADO', 'SUCESSO', 'REV'].some(s => status.includes(s));
                 const isNok = status.includes('NOK') || status.includes('ERRO') || status.includes('FALHA');
                 const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
                 let contaVolume = false;
-                if (isOk || isNok) contaVolume = true;
-                else if (isNeutro && item.auditora && item.auditora.trim() !== '') contaVolume = true;
+                
+                // Regra: Se é OK (incluindo REV) ou NOK, conta volume sempre.
+                if (isOk || isNok) {
+                    contaVolume = true;
+                } else if (isNeutro && item.auditora && item.auditora.trim() !== '') {
+                    // Se for neutro (ex: DUPL), só conta se tiver auditoria
+                    contaVolume = true;
+                }
 
                 if (contaVolume) {
                     d.totais.qty += (Number(item.quantidade) || 0);
@@ -200,7 +200,6 @@ Produtividade.Geral = {
                 }
             });
 
-            // B) Apenas Auditoria
             Object.keys(mapaAuditoria).forEach(uid => {
                 if (!dadosAgrupados[uid]) {
                     this.criarEntradaUsuario(dadosAgrupados, uid, mapaUsuarios, mapaMetas, mapaAuditoria, mapaAuditoriaDia);
