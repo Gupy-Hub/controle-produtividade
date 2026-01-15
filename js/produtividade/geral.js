@@ -4,67 +4,16 @@ Produtividade.Geral = {
     initialized: false,
     dadosOriginais: [], 
     usuarioSelecionado: null,
-    
-    // Feriados
-    feriados: {
-        "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
-        "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
-    },
-    
-    statusNeutros: ['DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA', 'CANCELADO', 'JUSTIFICADO'],
 
     init: function() { 
-        console.log("🔧 [NEXUS] Produtividade: Engine V12 (Smart Pagination)...");
+        console.log("🚀 [NEXUS] Produtividade: Engine V14 (Server-Side SQL)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
 
     setTxt: function(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; },
-    
-    parsePercentage: function(val) {
-        if (val === null || val === undefined || val === '') return null;
-        let clean = String(val).replace('%', '').replace(',', '.').trim();
-        let num = parseFloat(clean);
-        if (isNaN(num) || num < 0 || num > 100) return null;
-        return num;
-    },
 
-    // --- ENGINE DE BUSCA RECURSIVA (CALIBRADA PARA 1000/REQ) ---
-    buscarTodosRegistros: async function(tabela, colunas, dataInicio, dataFim, campoData) {
-        let todosDados = [];
-        const TAMANHO_LOTE = 1000; // Calibrado com o limite do servidor
-        let de = 0;
-        let continuar = true;
-        
-        const feedbackEl = document.getElementById('loading-feedback');
-        
-        while (continuar) {
-            // Feedback visual de progresso
-            if(feedbackEl) feedbackEl.innerText = `Lendo ${tabela}: ${todosDados.length} carregados...`;
-            
-            const { data, error } = await Sistema.supabase
-                .from(tabela)
-                .select(colunas)
-                .gte(campoData, dataInicio)
-                .lte(campoData, dataFim)
-                .range(de, de + TAMANHO_LOTE - 1); // Range exato de 1000
-
-            if (error) throw error;
-
-            todosDados = todosDados.concat(data);
-
-            // A LÓGICA CORRIGIDA:
-            // Se vier menos que 1000, significa que acabou.
-            // Se vier 1000, significa que pode ter mais na próxima página.
-            if (data.length < TAMANHO_LOTE) {
-                continuar = false;
-            } else {
-                de += TAMANHO_LOTE;
-            }
-        }
-        return todosDados;
-    },
-
+    // --- NOVA ENGINE: CHAMADA RPC (ULTRA RÁPIDA) ---
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
@@ -73,109 +22,56 @@ Produtividade.Geral = {
         const dataInicio = datas.inicio;
         const dataFim = datas.fim;
 
-        console.log(`📅 [NEXUS] Batch Query: ${dataInicio} -> ${dataFim}`);
+        console.log(`📡 [NEXUS] RPC Request: ${dataInicio} -> ${dataFim}`);
         
         tbody.innerHTML = `
             <tr>
                 <td colspan="12" class="text-center py-12 text-slate-400">
                     <div class="flex flex-col items-center justify-center gap-2">
-                        <i class="fas fa-satellite-dish fa-spin text-2xl text-blue-500"></i>
-                        <span class="font-bold text-slate-600">Sincronizando Big Data...</span>
-                        <span id="loading-feedback" class="text-xs font-mono text-slate-400">Iniciando conexões...</span>
+                        <i class="fas fa-server fa-pulse text-2xl text-emerald-500"></i>
+                        <span class="font-bold text-slate-600">Calculando no Servidor...</span>
+                        <span class="text-xs font-mono text-slate-400">Database Aggregation</span>
                     </div>
                 </td>
             </tr>`;
 
         try {
-            // 1. Definição das Colunas (Otimizadas)
-            const colsProducao = 'usuario_id, status, quantidade, fifo, gradual_total, gradual_parcial, fator'; 
-            const colsAssert = 'usuario_id, porcentagem, auditora'; // Auditora existe aqui
+            // AQUI ESTÁ A MÁGICA: Uma única chamada resolve tudo.
+            const { data, error } = await Sistema.supabase
+                .rpc('get_painel_produtividade', { 
+                    data_inicio: dataInicio, 
+                    data_fim: dataFim 
+                });
 
-            // 2. Execução Paralela
-            const [dadosProd, dadosAudit, resUsers, resMetas] = await Promise.all([
-                this.buscarTodosRegistros('producao', colsProducao, dataInicio, dataFim, 'data_referencia'),
-                this.buscarTodosRegistros('assertividade', colsAssert, dataInicio, dataFim, 'data_auditoria'),
-                // Usuários e Metas geralmente são menores, range fixo alto resolve
-                Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao, contrato').range(0, 4999),
-                Sistema.supabase.from('metas').select('usuario_id, meta_producao').eq('mes', parseInt(dataInicio.split('-')[1])).eq('ano', parseInt(dataInicio.split('-')[0]))
-            ]);
+            if (error) throw error;
 
-            console.log(`✅ Download Completo: ${dadosProd.length} linhas de produção | ${dadosAudit.length} auditorias.`);
+            console.log(`✅ [NEXUS] Dados recebidos: ${data.length} registros processados.`);
 
-            // 3. Indexação
-            const mapaUsuarios = {}; if(resUsers.data) resUsers.data.forEach(u => mapaUsuarios[u.id] = u);
-            const mapaMetas = {}; if(resMetas.data) resMetas.data.forEach(m => mapaMetas[m.usuario_id] = m.meta_producao);
-
-            // 4. Agregação de Assertividade
-            const mapaAuditoria = {};     
-            dadosAudit.forEach(a => {
-                const val = this.parsePercentage(a.porcentagem);
-                if (val === null) return; 
-
-                const uid = a.usuario_id;
-                if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
-                
-                mapaAuditoria[uid].soma += val;
-                mapaAuditoria[uid].qtd++;
-            });
-
-            // 5. Agregação de Produção
-            let dadosAgrupados = {};
-
-            for (let i = 0; i < dadosProd.length; i++) {
-                const item = dadosProd[i];
-                const uid = item.usuario_id;
-                
-                if(!dadosAgrupados[uid]) {
-                    const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
-                    let mediaFinal = 0;
-                    const aud = mapaAuditoria[uid];
-                    if (aud && aud.qtd > 0) mediaFinal = aud.soma / aud.qtd;
-
-                    dadosAgrupados[uid] = {
-                        usuario: userObj, 
-                        totais: { qty: 0, diasUteis: 0, fifo:0, gt:0, gp:0 },
-                        meta_real: mapaMetas[uid] || 650, 
-                        auditoria: { media: mediaFinal, qtd: aud ? aud.qtd : 0, soma: aud ? aud.soma : 0 }
-                    };
+            // Adaptador para manter compatibilidade com o layout existente
+            // Convertemos o formato "Flat" do SQL para o formato "Aninhado" que o renderizador usa
+            this.dadosOriginais = data.map(row => ({
+                usuario: {
+                    id: row.usuario_id,
+                    nome: row.nome,
+                    funcao: row.funcao,
+                    contrato: row.contrato
+                },
+                meta_real: row.meta_producao,
+                totais: {
+                    qty: row.total_qty,
+                    diasUteis: row.total_dias_uteis,
+                    fifo: row.total_fifo,
+                    gt: row.total_gt,
+                    gp: row.total_gp
+                },
+                auditoria: {
+                    media: row.media_assertividade,
+                    qtd: row.qtd_auditorias,
+                    soma: row.soma_auditorias
                 }
-                
-                const d = dadosAgrupados[uid];
-                const status = (item.status || '').toUpperCase();
-                
-                const isOk = ['OK', 'VALIDO', 'REV', 'PROCESSADO', 'CONCLUIDO', 'SUCESSO'].some(s => status.includes(s));
-                const isNok = status.includes('NOK') || status.includes('ERRO');
-                
-                let contaVolume = isOk || isNok;
-
-                if (contaVolume) {
-                    d.totais.qty += (Number(item.quantidade) || 0);
-                    d.totais.fifo += (Number(item.fifo) || 0);
-                    d.totais.gt += (Number(item.gradual_total) || 0);
-                    d.totais.gp += (Number(item.gradual_parcial) || 0);
-                    
-                    const fator = parseFloat(item.fator);
-                    if (!isNaN(fator)) d.totais.diasUteis += fator;
-                }
-            }
-
-            // Adiciona fantasmas (só auditoria)
-            Object.keys(mapaAuditoria).forEach(uid => {
-                if (!dadosAgrupados[uid]) {
-                    const userObj = mapaUsuarios[uid] || { id: uid, nome: `ID: ${uid}`, funcao: 'ND', contrato: 'ND' };
-                    const aud = mapaAuditoria[uid];
-                    dadosAgrupados[uid] = {
-                        usuario: userObj,
-                        totais: { qty: 0, diasUteis: 0, fifo:0, gt:0, gp:0 },
-                        meta_real: mapaMetas[uid] || 650,
-                        auditoria: { media: aud.soma / aud.qtd, qtd: aud.qtd, soma: aud.soma }
-                    };
-                }
-            });
-
-            this.dadosOriginais = Object.values(dadosAgrupados);
+            }));
             
-            // UI Final
+            // Fluxo padrão de UI
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
                 this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
@@ -185,12 +81,12 @@ Produtividade.Geral = {
             }
 
         } catch (error) { 
-            console.error("[NEXUS] Erro:", error); 
-            let msg = error.message || "Erro desconhecido";
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold"><i class="fas fa-bomb"></i> Falha: ${msg}</td></tr>`; 
+            console.error("[NEXUS] RPC Error:", error); 
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold"><i class="fas fa-database"></i> Erro no Banco de Dados: ${error.message}</td></tr>`; 
         }
     },
 
+    // --- RENDERIZAÇÃO (Mantida Igual para preservar o visual) ---
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
@@ -214,11 +110,12 @@ Produtividade.Geral = {
 
         lista.sort((a,b) => (a.usuario.nome||'').localeCompare(b.usuario.nome||''));
 
-        let htmlBuffer = '';
-        
-        lista.forEach(d => {
+        const htmlParts = lista.map(d => {
             const metaDia = d.meta_real; 
-            const atingimento = metaDia > 0 ? (d.totais.qty / (metaDia * (d.totais.diasUteis || 1))) * 100 : 0;
+            // Proteção contra divisão por zero
+            const atingimento = (metaDia > 0 && d.totais.diasUteis > 0) 
+                ? (d.totais.qty / (metaDia * d.totais.diasUteis)) * 100 
+                : 0;
             
             let assertDisplay = "-";
             let corAssert = "text-slate-300 border-slate-100 bg-slate-50"; 
@@ -235,7 +132,7 @@ Produtividade.Geral = {
                 else corAssert = "text-rose-700 font-bold bg-rose-50 border-rose-200";
             }
 
-            htmlBuffer += `
+            return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
                 <td class="px-2 py-3 text-center bg-slate-50/30">
                     <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
@@ -269,7 +166,7 @@ Produtividade.Geral = {
             </tr>`;
         });
 
-        tbody.innerHTML = htmlBuffer;
+        tbody.innerHTML = htmlParts.join('');
         this.setTxt('total-registros-footer', lista.length);
     },
 
@@ -302,12 +199,12 @@ Produtividade.Geral = {
         dados.forEach(d => {
             if (['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase())) return;
 
-            totalProd += d.totais.qty;
-            totalMeta += (d.meta_real * d.totais.diasUteis);
-            diasUteis += d.totais.diasUteis;
+            totalProd += Number(d.totais.qty);
+            totalMeta += (Number(d.meta_real) * Number(d.totais.diasUteis));
+            diasUteis += Number(d.totais.diasUteis);
 
             if (d.auditoria.qtd > 0) {
-                somaMediaAssert += d.auditoria.media;
+                somaMediaAssert += Number(d.auditoria.media);
                 countAssert++;
             }
         });
@@ -341,11 +238,11 @@ Produtividade.Geral = {
         
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
-        if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${u.totais.qty}</span></div>`).join('');
+        if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
 
         const topAssert = [...op].filter(u => u.auditoria.qtd > 0).sort((a,b) => b.auditoria.media - a.auditoria.media).slice(0, 3);
         const listAssert = document.getElementById('top-assert-list');
-        if(listAssert) listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.auditoria.media.toFixed(1)}%</span></div>`).join('');
+        if(listAssert) listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${Number(u.auditoria.media).toFixed(1)}%</span></div>`).join('');
     },
 
     toggleAll: function(checked) {
@@ -353,7 +250,8 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, valor) {
-        alert("Necessário update no banco.");
+        // Exemplo: Sistema.supabase.rpc('update_fator_usuario', { p_usuario_id: uid, p_data: ..., p_valor: valor });
+        alert("Necessário implementar RPC de Update no banco.");
     },
 
     excluirDadosDia: async function() {
