@@ -8,16 +8,17 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
     selecionados: new Set(),
     
-    // Feriados Mapeados por Ano
+    // Feriados Mapeados por Ano (Incluindo Estaduais SP - 09/07 e Nacionais Móveis)
     feriados: {
         "2025": ["01-01", "03-03", "03-04", "04-18", "04-21", "05-01", "06-19", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"],
         "2026": ["01-01", "02-17", "02-18", "04-03", "04-21", "05-01", "06-04", "07-09", "09-07", "10-12", "11-02", "11-15", "11-20", "12-24", "12-25", "12-31"]
     },
     
+    // STATUS NEUTROS (Contam Volume se tiver auditora preenchida)
     statusNeutros: ['REV', 'DUPL', 'EMPR', 'IA', 'NA', 'N/A', 'REVALIDA'],
 
     init: function() { 
-        console.log("🔧 Produtividade: Iniciando (Com Service de Assertividade)...");
+        console.log("🔧 Produtividade: Iniciando (Média Assertividade 0-100%)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -39,13 +40,14 @@ Produtividade.Geral = {
 
     isDiaUtil: function(dateObj) {
         const day = dateObj.getDay();
-        if (day === 0 || day === 6) return false;
+        if (day === 0 || day === 6) return false; // Sábado/Domingo
         
         const ano = dateObj.getFullYear();
         const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
         const dia = String(dateObj.getDate()).padStart(2, '0');
         const chave = `${mes}-${dia}`;
         
+        // Verifica feriados do ano específico (fallback para lista vazia se ano não mapeado)
         const listaFeriados = this.feriados[ano.toString()] || [];
         if (listaFeriados.includes(chave)) return false;
         
@@ -75,10 +77,10 @@ Produtividade.Geral = {
         const dataFim = datas.fim;
 
         console.log(`📅 Buscando dados de ${dataInicio} até ${dataFim}`);
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando dados...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400"><i class="fas fa-bolt fa-spin mr-2"></i> Processando dados cruzados...</td></tr>';
 
         try {
-            // 1. Busca Produção (Volume)
+            // 1. Busca Produção Bruta
             const { data: producao, error: errProd } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -89,22 +91,58 @@ Produtividade.Geral = {
             
             if (errProd) throw errProd;
 
-            // 2. Busca Assertividade (VIA SERVICE NOVO)
-            // Abstraímos toda a lógica de filtro 0-100 para o AssertividadeCalc
-            const metricasAudit = await Produtividade.AssertividadeCalc.buscarMetricas(dataInicio, dataFim);
-            const mapaAuditoria = metricasAudit.mapa;
-            const kpiGlobalAudit = metricasAudit.global;
+            // 2. Busca Auditorias Reais (Para Qualidade)
+            // Trazemos todos os registros do período para calcular a média
+            const { data: auditorias, error: errAudit } = await Sistema.supabase
+                .from('assertividade')
+                .select('usuario_id, porcentagem')
+                .gte('data_auditoria', dataInicio)
+                .lte('data_auditoria', dataFim);
 
-            // 3. Usuários
+            if (errAudit) console.warn("Erro ao buscar assertividade:", errAudit);
+
+            // 3. Processa Auditorias (Calcula Média: Filtro 0 a 100%)
+            const mapaAuditoria = {}; // { usuario_id: { soma: 0, qtd: 0 } }
+            let kpiAuditSoma = 0;
+            let kpiAuditQtd = 0;
+
+            if (auditorias) {
+                auditorias.forEach(a => {
+                    // Normaliza valor (ex: "100%", "98,5", 100)
+                    let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
+                    if (valStr === '') return;
+                    
+                    let val = parseFloat(valStr);
+                    if (isNaN(val)) return;
+
+                    // REGRA DE OURO: Considerar apenas valores de 0 a 100
+                    // Ignora negativos ou valores acima de 100 (erros)
+                    if (val < 0 || val > 100) return;
+
+                    // Acumula por usuário
+                    const uid = a.usuario_id;
+                    if (!mapaAuditoria[uid]) mapaAuditoria[uid] = { soma: 0, qtd: 0 };
+                    
+                    mapaAuditoria[uid].soma += val;
+                    mapaAuditoria[uid].qtd++;
+
+                    // Acumula Global
+                    kpiAuditSoma += val;
+                    kpiAuditQtd++;
+                });
+            }
+
+            // 4. Busca Usuários
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, perfil, funcao, contrato')
                 .range(0, 5000);
+            
             if (errUser) throw errUser;
             const mapaUsuarios = {};
             usuarios.forEach(u => mapaUsuarios[u.id] = u);
 
-            // 4. Metas
+            // 5. Busca Metas
             const [anoRef, mesRef] = dataInicio.split('-');
             const { data: metasBanco } = await Sistema.supabase
                 .from('metas')
@@ -119,7 +157,7 @@ Produtividade.Geral = {
             this.cacheData = producao;
             this.cacheDatas = { start: dataInicio, end: dataFim };
 
-            // 5. Agrupamento
+            // 6. Agrupamento (Merge de Volume + Qualidade Real)
             let dadosAgrupados = {};
             
             producao.forEach(item => {
@@ -130,10 +168,12 @@ Produtividade.Geral = {
                     dadosAgrupados[uid] = {
                         usuario: userObj,
                         registros: [],
+                        // Set para evitar contagem duplicada de dias
                         diasProcessados: new Set(),
-                        totais: { qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 },
+                        totais: { 
+                            qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0, diasUteis: 0 
+                        },
                         meta_real: mapaMetas[uid] || 0,
-                        // Injeta os dados já processados pelo Service
                         auditoriaReal: mapaAuditoria[uid] || { soma: 0, qtd: 0 }
                     };
                 }
@@ -143,9 +183,13 @@ Produtividade.Geral = {
                 const isNok = status.includes('NOK') || status.includes('ERRO') || status.includes('FALHA');
                 const isNeutro = this.statusNeutros.some(s => status.includes(s));
                 
+                // Lógica de Volume
                 let contaVolume = false;
-                if (isOk || isNok) contaVolume = true;
-                else if (isNeutro && item.auditora && item.auditora.trim() !== '') contaVolume = true;
+                if (isOk || isNok) {
+                    contaVolume = true;
+                } else if (isNeutro && item.auditora && item.auditora.trim() !== '') {
+                    contaVolume = true;
+                }
 
                 if (contaVolume) {
                     const d = dadosAgrupados[uid].totais;
@@ -155,6 +199,7 @@ Produtividade.Geral = {
                     d.gp += (Number(item.gradual_parcial) || 0);
                     d.fc += (Number(item.perfil_fc) || 0);
                     
+                    // Contabiliza dia trabalhado (fator) apenas uma vez por dia
                     const diaKey = `${item.data_referencia}`; 
                     if (!dadosAgrupados[uid].diasProcessados.has(diaKey)) {
                         dadosAgrupados[uid].diasProcessados.add(diaKey);
@@ -174,23 +219,16 @@ Produtividade.Geral = {
             });
 
             this.dadosOriginais = Object.values(dadosAgrupados);
+            
+            const kpiGlobalAudit = { soma: kpiAuditSoma, qtd: kpiAuditQtd };
 
-            // Atualização UI de seleção
             if (this.usuarioSelecionado) {
-                const elHeader = document.getElementById('selection-header');
                 const elName = document.getElementById('selected-name');
-                if(elHeader) elHeader.classList.remove('hidden');
-                
-                const userSel = this.dadosOriginais.find(d => d.usuario.id == this.usuarioSelecionado);
-                if (userSel && elName) elName.textContent = userSel.usuario.nome;
+                this.filtrarUsuario(this.usuarioSelecionado, elName ? elName.textContent : '');
             } else {
-                const elHeader = document.getElementById('selection-header');
-                if(elHeader) elHeader.classList.add('hidden');
+                this.renderizarTabela();
+                this.atualizarKPIs(this.dadosOriginais, kpiGlobalAudit, producao); 
             }
-
-            this.renderizarTabela();
-            this.atualizarKPIs(this.dadosOriginais, kpiGlobalAudit, producao); 
-
         } catch (error) {
             console.error("Erro render:", error);
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500">Erro: ${error.message}</td></tr>`;
@@ -202,13 +240,8 @@ Produtividade.Geral = {
         if(!tbody) return;
         const checkGestao = document.getElementById('check-gestao');
         const mostrarGestao = checkGestao ? checkGestao.checked : false;
-        
-        let lista = this.usuarioSelecionado 
-            ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
-            : this.dadosOriginais;
-        
-        const mostrarDetalhes = (this.usuarioSelecionado !== null && lista.length > 0);
-
+        const mostrarDetalhes = (this.usuarioSelecionado !== null);
+        let lista = this.usuarioSelecionado ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) : this.dadosOriginais;
         if (!mostrarGestao && !this.usuarioSelecionado) lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
 
         tbody.innerHTML = '';
@@ -255,10 +288,14 @@ Produtividade.Geral = {
                 const metaTotalPeriodo = metaBase * d.totais.diasUteis;
                 let pct = metaTotalPeriodo > 0 ? (d.totais.qty / metaTotalPeriodo) * 100 : (d.totais.qty > 0 ? 100 : 0);
                 
-                let assertGeralTxt = "-"; let corAssert = "text-slate-400 italic"; let mediaNumerica = 0;
+                // === CÁLCULO DE ASSERTIVIDADE (MÉDIA) ===
+                let assertGeralTxt = "-"; 
+                let corAssert = "text-slate-400 italic"; 
+                let mediaNumerica = 0;
+
                 if (d.auditoriaReal && d.auditoriaReal.qtd > 0) {
-                    // Cálculo de média usando o Service (ou direto se preferir)
-                    const media = Produtividade.AssertividadeCalc.calcularMedia(d.auditoriaReal);
+                    // Cálculo da média simples
+                    const media = d.auditoriaReal.soma / d.auditoriaReal.qtd;
                     mediaNumerica = media;
                     assertGeralTxt = media.toFixed(2).replace('.', ',') + "%";
                     corAssert = media >= 98 ? 'text-emerald-700 font-bold' : 'text-rose-600 font-bold';
@@ -279,19 +316,6 @@ Produtividade.Geral = {
                 tbody.appendChild(tr);
             }
         });
-    },
-
-    filtrarUsuario: function(id, nome) { 
-        this.usuarioSelecionado = id; 
-        document.getElementById('selection-header').classList.remove('hidden'); 
-        document.getElementById('selected-name').textContent = nome; 
-        this.renderizarTabela(); 
-    },
-    
-    limparSelecao: function() { 
-        this.usuarioSelecionado = null; 
-        document.getElementById('selection-header').classList.add('hidden'); 
-        this.renderizarTabela(); 
     },
 
     toggleSelection: function(id) { if(this.selecionados.has(id)) this.selecionados.delete(id); else this.selecionados.add(id); },
@@ -347,8 +371,10 @@ Produtividade.Geral = {
 
         const pctProd = metaTotalGeral > 0 ? (producaoTotalGeral / metaTotalGeral) * 100 : 0;
         
-        // Uso do Service para calcular média global
-        const pctAssert = Produtividade.AssertividadeCalc.calcularMedia(kpiAuditGlobal);
+        let pctAssert = 0;
+        if (kpiAuditGlobal && kpiAuditGlobal.qtd > 0) {
+            pctAssert = kpiAuditGlobal.soma / kpiAuditGlobal.qtd;
+        }
 
         this.setTxt('kpi-meta-producao-val', Math.round(pctProd) + '%');
         this.setTxt('kpi-meta-assertividade-val', (pctAssert || 0).toFixed(2).replace('.', ',') + '%');
@@ -365,6 +391,7 @@ Produtividade.Geral = {
         const end = new Date(datas.fim + "T00:00:00");
         const mapaDiasAbonados = {};
         
+        // Verifica se dia foi totalmente abonado para o KPI de calendário
         if (dadosBrutosProducao) {
             dadosBrutosProducao.forEach(r => {
                 if(!mapaDiasAbonados[r.data_referencia]) mapaDiasAbonados[r.data_referencia] = { total: 0, abonados: 0 };
@@ -406,5 +433,7 @@ Produtividade.Geral = {
         this.setHtml('top-assert-list', renderTop(topAssert, false));
     },
 
+    filtrarUsuario: function(id, nome) { this.usuarioSelecionado = id; document.getElementById('selection-header').classList.remove('hidden'); document.getElementById('selected-name').textContent = nome; this.carregarTela(); },
+    limparSelecao: function() { this.usuarioSelecionado = null; document.getElementById('selection-header').classList.add('hidden'); this.carregarTela(); },
     excluirDadosDia: async function() { const datas = Produtividade.getDatasFiltro(); const s = datas.inicio; const e = datas.fim; if(!s || !e) return alert("Período não definido."); if(!confirm(`⚠️ ATENÇÃO: Isso apagará apenas a PRODUÇÃO do período. A assertividade (Qualidade) é mantida.`)) return; try { const { error } = await Sistema.supabase.rpc('excluir_producao_periodo', { p_inicio: s, p_fim: e }); if(error) throw error; alert("Produção excluída com sucesso!"); this.carregarTela(); } catch(err) { alert("Erro: " + err.message); } }
 };
