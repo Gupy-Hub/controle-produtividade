@@ -3,16 +3,18 @@ window.Produtividade = window.Produtividade || {};
 Produtividade.AssertividadeCalc = {
     /**
      * Busca e processa as métricas de assertividade para o período.
-     * Regra: Considera apenas valores válidos entre 0 e 100.
+     * Regra 1: Filtra por DATA DE REFERÊNCIA (Data do documento), não da auditoria.
+     * Regra 2: Considera apenas valores válidos entre 0 e 100.
      * Retorna: { mapa: { usuario_id: { soma, qtd } }, global: { soma, qtd } }
      */
     buscarMetricas: async function(dataInicio, dataFim) {
-        // Busca apenas as colunas necessárias para otimizar tráfego
+        // CORREÇÃO CRÍTICA: Busca por 'data_referencia' para alinhar com a Produção.
+        // Adicionado 'indice_assertividade' como backup caso 'porcentagem' venha nulo.
         const { data: auditorias, error } = await Sistema.supabase
             .from('assertividade')
-            .select('usuario_id, porcentagem')
-            .gte('data_auditoria', dataInicio)
-            .lte('data_auditoria', dataFim);
+            .select('usuario_id, porcentagem, indice_assertividade, data_referencia') 
+            .gte('data_referencia', dataInicio)
+            .lte('data_referencia', dataFim);
 
         if (error) {
             console.warn("Erro ao buscar assertividade (Service):", error);
@@ -25,26 +27,32 @@ Produtividade.AssertividadeCalc = {
 
         if (auditorias) {
             auditorias.forEach(a => {
-                // 1. Normalização (Remove %, troca vírgula por ponto, trim)
-                let valStr = (a.porcentagem || '').toString().replace('%', '').replace(',', '.').trim();
+                // 1. Lógica de Fallback (Tenta 'porcentagem', se falhar tenta 'indice_assertividade')
+                let rawValue = a.porcentagem;
+                if (rawValue === null || rawValue === undefined || rawValue === '') {
+                    rawValue = a.indice_assertividade;
+                }
+
+                // 2. Normalização
+                let valStr = (rawValue || '').toString().replace('%', '').replace(',', '.').trim();
                 if (valStr === '') return;
                 
                 let val = parseFloat(valStr);
                 
-                // 2. Validação Numérica
+                // 3. Validação Numérica
                 if (isNaN(val)) return;
 
-                // 3. REGRA DE OURO: Considerar apenas valores de 0 a 100
+                // 4. REGRA DE OURO: Considerar apenas valores de 0 a 100
                 if (val < 0 || val > 100) return;
 
-                // 4. Agregação por Usuário
+                // 5. Agregação por Usuário (Vínculo Seguro por ID)
                 const uid = a.usuario_id;
                 if (!mapa[uid]) mapa[uid] = { soma: 0, qtd: 0 };
                 
                 mapa[uid].soma += val;
                 mapa[uid].qtd++;
 
-                // 5. Agregação Global
+                // 6. Agregação Global
                 globalSoma += val;
                 globalQtd++;
             });
