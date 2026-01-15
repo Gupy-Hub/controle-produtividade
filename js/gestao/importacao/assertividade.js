@@ -2,12 +2,12 @@ window.Gestao = window.Gestao || {};
 window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 /**
- * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (FINAL FIX v9.2)
+ * MÓDULO DE IMPORTAÇÃO: ASSERTIVIDADE (UNIVERSAL DATE FIX v10.0)
  * ---------------------------------------------------------------------
  * Correções:
- * 1. Mapeamento da coluna 'nº Campos'.
- * 2. Envio de dados para colunas legadas (Empresa, ID, Obs).
- * 3. Uso de RPC segura.
+ * 1. Parser de Data Universal: Aceita DD/MM/AAAA, YYYY-MM-DD e variantes.
+ * 2. Resolve o problema dos dias 01-08 não serem lidos.
+ * 3. Mantém a segurança RPC e leitura de todas as colunas.
  */
 Gestao.Importacao.Assertividade = {
     init: function() {
@@ -22,6 +22,30 @@ Gestao.Importacao.Assertividade = {
                 if(e.target.files.length > 0) this.processarCSV(e.target.files[0]);
             });
         }
+    },
+
+    // Função Auxiliar: Transforma qualquer bagunça de data em YYYY-MM-DD
+    normalizarData: function(dataRaw) {
+        if (!dataRaw || typeof dataRaw !== 'string') return null;
+        const data = dataRaw.trim();
+        
+        // 1. Tenta formato ISO (YYYY-MM-DD...) ou YYYY-M-D
+        // Ex: "2025-12-02T12:00..." ou "2025-12-1"
+        if (/^\d{4}-\d{1,2}-\d{1,2}/.test(data)) {
+            return data.substring(0, 10);
+        }
+        
+        // 2. Tenta formato BR (DD/MM/AAAA) ou D/M/AAAA
+        // Ex: "01/12/2025" ou "1/12/2025"
+        const match = data.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (match) {
+            const dia = match[1].padStart(2, '0');
+            const mes = match[2].padStart(2, '0');
+            const ano = match[3];
+            return `${ano}-${mes}-${dia}`;
+        }
+        
+        return null;
     },
 
     processarCSV: function(file) {
@@ -63,10 +87,9 @@ Gestao.Importacao.Assertividade = {
             return alert("O arquivo CSV parece estar vazio ou sem cabeçalho.");
         }
 
-        // 1. Identificar cabeçalho e normalizar
         const headers = rows[0].map(h => String(h).trim().toLowerCase().replace(/"/g, ''));
         
-        // 2. Criar Mapa de Índices (CORRIGIDO)
+        // Mapa de Índices
         const idx = {
             endTime: headers.findIndex(h => h.includes('end_time') || h === 'data'),
             idAssistente: headers.indexOf('id_assistente') !== -1 
@@ -83,14 +106,13 @@ Gestao.Importacao.Assertividade = {
             dataAudit: headers.findIndex(h => h.includes('data da auditoria')),
             empresa: headers.findIndex(h => h === 'empresa'),
             companyId: headers.findIndex(h => h.includes('company')),
-            // NOVA CORREÇÃO: Captura a coluna de campos
             campos: headers.findIndex(h => h.includes('campos') || h.includes('nº campos'))
         };
 
         if (idx.endTime === -1) return alert("Erro: Coluna 'end_time' não encontrada.");
         if (idx.idAssistente === -1) return alert("Erro: Coluna 'id_assistente' não encontrada.");
 
-        // 3. Extração
+        // Extração
         const validos = [];
         const diasEncontrados = new Set();
         let stats = { lidos: 0, ignorados: 0, semData: 0 };
@@ -99,11 +121,14 @@ Gestao.Importacao.Assertividade = {
             const row = rows[i];
             if (!row || row.length < 2) continue;
 
-            // Data Referência
+            // CORREÇÃO PRINCIPAL: Uso da normalização para Data de Referência
             const rawDate = row[idx.endTime];
-            if (!rawDate || typeof rawDate !== 'string' || rawDate.length < 10) continue;
-            const dataLiteral = rawDate.substring(0, 10);
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(dataLiteral)) continue;
+            const dataLiteral = this.normalizarData(rawDate);
+            
+            if (!dataLiteral) {
+                stats.semData++;
+                continue; // Pula se realmente não tiver data válida
+            }
             
             diasEncontrados.add(dataLiteral);
 
@@ -116,19 +141,12 @@ Gestao.Importacao.Assertividade = {
             let pctVal = (idx.pct > -1 && row[idx.pct]) ? String(row[idx.pct]).replace('%','').replace(',','.').trim() : '0';
             let pctFinal = isNaN(parseFloat(pctVal)) ? 0 : parseFloat(pctVal).toFixed(2);
 
-            // Data Auditoria
+            // CORREÇÃO SECUNDÁRIA: Uso da normalização para Data de Auditoria também
             let dtAudit = null;
             if (idx.dataAudit > -1 && row[idx.dataAudit]) {
-                let da = String(row[idx.dataAudit]).trim();
-                if (da.includes('/')) {
-                    const parts = da.split('/'); 
-                    if(parts.length === 3) dtAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
-                } else if (/^\d{4}-\d{2}-\d{2}/.test(da)) {
-                    dtAudit = da.substring(0, 10);
-                }
+                dtAudit = this.normalizarData(String(row[idx.dataAudit]));
             }
 
-            // Nº Campos (Novo)
             let numCampos = (idx.campos > -1 && row[idx.campos]) ? (parseInt(row[idx.campos]) || 0) : 0;
 
             validos.push({
@@ -140,7 +158,7 @@ Gestao.Importacao.Assertividade = {
                 observacao: (idx.obs > -1 ? String(row[idx.obs]||'') : '').trim(),
                 qtd_ok: (idx.ok > -1) ? (parseInt(row[idx.ok]) || 0) : 0,
                 qtd_nok: (idx.nok > -1) ? (parseInt(row[idx.nok]) || 0) : 0,
-                num_campos: numCampos, // Agora extraído corretamente
+                num_campos: numCampos, 
                 porcentagem: pctFinal,
                 data_referencia: dataLiteral,
                 data_auditoria: dtAudit,
@@ -149,7 +167,7 @@ Gestao.Importacao.Assertividade = {
             });
         }
 
-        if (validos.length === 0) return alert(`Nenhuma linha válida importada.`);
+        if (validos.length === 0) return alert(`Nenhuma linha válida importada. Verifique as datas.`);
 
         await this.salvarNoBanco(validos, Array.from(diasEncontrados), statusEl);
     },
@@ -159,9 +177,9 @@ Gestao.Importacao.Assertividade = {
         const diasFormatados = dias.map(d => d.split('-').reverse().join('/')).join(', ');
         
         const msg = `Resumo da Importação:\n\n` +
-                    `📅 Dias: \n[ ${diasFormatados} ]\n\n` +
+                    `📅 Dias Detectados (Total: ${dias.length}): \n[ ${diasFormatados} ]\n\n` +
                     `✅ Registros: ${dados.length}\n` +
-                    `⚠️ Atenção: Os dados antigos destas datas serão SUBSTITUÍDOS.`;
+                    `⚠️ Atenção: Os dados destes dias serão REESCRITOS.`;
 
         if (!confirm(msg)) {
             if(statusEl) statusEl.innerHTML = "Cancelado.";
@@ -199,7 +217,7 @@ Gestao.Importacao.Assertividade = {
             inseridos += lote.length;
         }
 
-        alert(`Sucesso! ${inseridos} registros importados com todas as colunas.`);
+        alert(`Sucesso! ${inseridos} registros importados e corrigidos.`);
         if(statusEl) statusEl.innerHTML = '<span class="text-emerald-600 font-bold">Concluído!</span>';
         
         if(Gestao.Assertividade && typeof Gestao.Assertividade.buscarDados === 'function') {
