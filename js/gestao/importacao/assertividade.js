@@ -3,9 +3,16 @@ window.Gestao.Importacao = window.Gestao.Importacao || {};
 
 Gestao.Importacao.Assertividade = {
     init: function() {
+        // Remove listeners antigos para evitar duplicação (boa prática em SPAs)
         const input = document.getElementById('input-csv-assertividade');
         if (input) {
-            input.addEventListener('change', (e) => this.processarArquivo(e.target.files[0]));
+            // Clona e substitui para limpar eventos anteriores
+            const newInput = input.cloneNode(true);
+            input.parentNode.replaceChild(newInput, input);
+            
+            newInput.addEventListener('change', (e) => {
+                if(e.target.files.length > 0) this.processarArquivo(e.target.files[0]);
+            });
         }
     },
 
@@ -13,83 +20,71 @@ Gestao.Importacao.Assertividade = {
         if (!file) return;
 
         const btn = document.getElementById('btn-importar-assert');
+        const statusEl = document.getElementById('status-importacao-assert');
+        
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
+        if(statusEl) statusEl.innerHTML = '<span class="text-blue-500">Lendo arquivo...</span>';
 
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
             encoding: "UTF-8",
-            // CRÍTICO: Limpa o BOM (\ufeff) e espaços/aspas dos cabeçalhos
             transformHeader: function(h) {
+                // Limpeza Extrema de Cabeçalhos (Remove BOM e aspas)
                 return h.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
             },
             complete: async (results) => {
-                console.log("Linhas lidas do CSV:", results.data.length);
-                if (results.data.length > 0) {
-                    console.log("Exemplo de linha bruta:", results.data[0]);
-                }
+                console.log("✅ CSV Lido. Linhas:", results.data.length);
                 await this.salvarDados(results.data);
                 
                 if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
                 const input = document.getElementById('input-csv-assertividade');
                 if(input) input.value = '';
+            },
+            error: (err) => {
+                alert("Erro ao ler CSV: " + err.message);
+                if(btn) btn.innerHTML = '<i class="fas fa-file-upload"></i> Importar CSV';
             }
         });
     },
 
     salvarDados: async function(linhas) {
         const statusEl = document.getElementById('status-importacao-assert');
-        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500">Processando ${linhas.length} linhas...</span>`;
+        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600">Analisando ${linhas.length} linhas...</span>`;
 
         let validos = [];
         let ignorados = 0;
         
         for (const row of linhas) {
-            // 1. Busca ID do Assistente (Tenta variações comuns)
-            // O transformHeader converte tudo para minúsculo, então buscamos keys minúsculas
+            // 1. ID Assistente
             let idAssistente = row['id_assistente'] || row['id assistente'] || row['usuario_id'];
-            
-            // Tenta limpar caracteres não numéricos se achou algo
-            if (idAssistente) {
-                idAssistente = parseInt(idAssistente.toString().replace(/\D/g, ''));
-            }
+            if (idAssistente) idAssistente = parseInt(idAssistente.toString().replace(/\D/g, ''));
 
             if (!idAssistente) {
                 ignorados++;
                 continue; 
             }
 
-            // 2. Extração da Data de Referência (end_time)
-            // Agora em minúsculo devido ao transformHeader
+            // 2. Data Referência (end_time) - CRÍTICO
             let dataRef = row['end_time']; 
-            
-            if (!dataRef) {
-                // Fallback: Tenta outras colunas de data se end_time falhar
-                dataRef = row['data'] || row['date'] || row['created_at'];
-            }
+            // Fallback apenas se end_time estiver vazio
+            if (!dataRef) dataRef = row['data'] || row['date'] || row['created_at'];
 
             if (!dataRef) {
-                console.warn("Linha sem data (end_time) ignorada:", row);
                 ignorados++;
                 continue;
             }
 
-            // 3. Extração da Porcentagem (% Assert)
-            // O transformHeader transformou "% Assert" em "% assert" ou "assert" dependendo da limpeza
-            // Vamos tentar variações
+            // 3. Porcentagem
             let pctRaw = row['% assert'] || row['assert'] || row['% assertividade'] || row['assertividade'] || '0';
-            
-            // Limpeza do valor (Ex: "98,5%" -> 98.5)
             let pct = parseFloat(pctRaw.toString().replace('%','').replace(',','.').trim());
-            
             if (isNaN(pct)) pct = null;
 
-            // 4. Outros Campos
+            // 4. Data Auditoria (Para histórico)
             let dataAudit = row['data da auditoria'] || row['data auditoria'];
-            // Tratamento data auditoria (PT-BR para ISO)
             if (dataAudit && dataAudit.includes('/')) {
                 const parts = dataAudit.split('/');
-                if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`; // AAAA-MM-DD
+                if(parts.length === 3) dataAudit = `${parts[2]}-${parts[1]}-${parts[0]}`;
             }
 
             validos.push({
@@ -102,8 +97,8 @@ Gestao.Importacao.Assertividade = {
                 qtd_ok: parseInt(row['ok'] || 0),
                 qtd_nok: parseInt(row['nok'] || 0),
                 num_campos: parseInt(row['nº campos'] || row['num campos'] || 0),
-                porcentagem: pct, // Coluna N do Excel
-                data_referencia: dataRef, // VITAL: Usa end_time como referência
+                porcentagem: pct, 
+                data_referencia: dataRef, // CAMPO NOVO QUE PRECISA ESTAR NO BANCO
                 data_auditoria: dataAudit,
                 empresa_nome: row['empresa'] || '',
                 empresa_id: parseInt(row['company_id'] || 0)
@@ -111,44 +106,48 @@ Gestao.Importacao.Assertividade = {
         }
 
         if (validos.length === 0) {
-            alert(`Nenhum dado válido encontrado em ${linhas.length} linhas.\nVerifique se as colunas 'id_assistente', 'end_time' e '% Assert' existem.`);
+            alert(`Nenhum dado válido. Verifique se o CSV tem 'id_assistente' e 'end_time'.`);
             if(statusEl) statusEl.innerHTML = "";
             return;
         }
 
-        console.log(`Dados prontos para envio: ${validos.length} registros. Ignorados: ${ignorados}`);
-        console.log("Exemplo registro processado:", validos[0]);
-
-        // Envio em Lotes
-        const BATCH_SIZE = 500;
+        // Loteamento
+        const BATCH_SIZE = 1000;
         let erros = 0;
 
         for (let i = 0; i < validos.length; i += BATCH_SIZE) {
             const lote = validos.slice(i, i + BATCH_SIZE);
             const { error } = await Sistema.supabase.from('assertividade').insert(lote);
+            
             if (error) {
-                console.error("Erro insert Supabase:", error);
+                console.error("❌ Erro insert Supabase:", error);
+                if (error.code === 'PGRST204') {
+                    alert("ERRO CRÍTICO: A coluna 'data_referencia' não existe no banco de dados. Execute o script SQL enviado.");
+                    return;
+                }
                 erros++;
             }
-            if(statusEl) statusEl.innerHTML = `Enviando... ${Math.round((i/validos.length)*100)}%`;
+            
+            if(statusEl) {
+                const progresso = Math.min(100, Math.round(((i + lote.length) / validos.length) * 100));
+                statusEl.innerHTML = `<span class="text-orange-600 font-bold"><i class="fas fa-circle-notch fa-spin"></i> Enviando... ${progresso}%</span>`;
+            }
         }
 
         if (erros > 0) {
-            alert(`Importação concluída com erros em ${erros} lotes. Verifique o console (F12).`);
+            alert(`Importação finalizada com ${erros} erros de lote. Verifique o console.`);
         } else {
-            alert(`Sucesso! ${validos.length} registros importados corretamente.\n(Datas baseadas na coluna 'end_time')`);
-            
-            // Recarrega lista se estiver na tela de gestão
-            if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) {
-                Gestao.Assertividade.buscarDados();
-            }
+            alert(`✅ Sucesso! ${validos.length} registros importados.`);
+            if(Gestao.Assertividade && Gestao.Assertividade.buscarDados) Gestao.Assertividade.buscarDados();
         }
         
-        if(statusEl) statusEl.innerHTML = "";
+        setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 3000);
     }
 };
 
-// Auto-inicialização
-document.addEventListener('DOMContentLoaded', () => {
+// Inicialização segura
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => Gestao.Importacao.Assertividade.init());
+} else {
     Gestao.Importacao.Assertividade.init();
-});
+}
