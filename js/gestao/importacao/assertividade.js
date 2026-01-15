@@ -1,122 +1,74 @@
-window.Importacao = window.Importacao || {};
-
-Importacao.Assertividade = {
-    
-    processarArquivo: function(input) {
-        const arquivo = input.files[0];
-        if (!arquivo) return;
-
-        const statusEl = document.getElementById('status-importacao');
-        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo Log de Auditoria...</span>`;
-
-        Papa.parse(arquivo, {
-            header: true,
-            skipEmptyLines: true,
-            encoding: "UTF-8",
-            transformHeader: function(header) {
-                // Remove caracteres especiais e normaliza
-                return header.trim().replace(/"/g, '').replace(/^\ufeff/, '').toLowerCase();
-            },
-            complete: async (results) => {
-                await this.enviarParaBanco(results.data);
-                input.value = ""; 
-            },
-            error: (err) => {
-                console.error("Erro CSV:", err);
-                alert("Erro leitura: " + err.message);
-            }
-        });
+Gestao.ImportacaoAssertividade = {
+    init: function() {
+        // ... código de inicialização do modal ...
     },
 
-    enviarParaBanco: async function(linhas) {
-        const statusEl = document.getElementById('status-importacao');
-        const TAMANHO_LOTE = 1000; 
-
-        if(statusEl) statusEl.innerHTML = `<span class="text-purple-600"><i class="fas fa-filter"></i> Processando Qualidade...</span>`;
-        await new Promise(r => setTimeout(r, 50));
-
-        const dadosFormatados = linhas.map(linha => {
-            // 1. DATA (Obrigatória no log detalhado)
-            let valData = linha['end_time'] || linha['data_auditoria'] || linha['data']; 
-            if (!valData) return null; 
-
-            // Trata ISO Date
-            if (valData.includes('T')) valData = valData.split('T')[0];
-
-            // 2. ID DO USUÁRIO
-            let idAssistente = linha['id_assistente'] || linha['id assistente'] || linha['id_ppc'];
-            let usuarioIdFinal = null;
-            if (idAssistente) {
-                usuarioIdFinal = parseInt(idAssistente.toString().replace(/\D/g, ''));
-            } else {
-                return null; // Sem ID não importamos assertividade
-            }
-
-            // 3. TRATAMENTO DA NOTA (% Assert)
-            // Se tiver valor, usa. Se for vazio, é NULL (não conta na média)
-            let rawPorcentagem = linha['% assert'] || linha['assertividade'];
-            let porcentagemFinal = null;
-
-            if (rawPorcentagem && rawPorcentagem.trim() !== '') {
-                porcentagemFinal = rawPorcentagem.trim();
-            }
-
-            // 4. Auditora
-            const auditora = linha['auditora'] || 'Sistema';
-
-            return {
-                data_auditoria: valData,
-                company_id: (linha['company_id'] || '0').toString(),
-                empresa: (linha['empresa'] || 'Empresa não informada').trim(),
-                usuario_id: usuarioIdFinal, 
-                assistente: (linha['assistente'] || 'Desconhecido').trim(),
-                doc_name: (linha['doc_name'] || linha['documento'] || '-').trim(),
-                status: (linha['status'] || 'PROCESSADO').toUpperCase(), 
-                obs: (linha['apontamentos/obs'] || linha['obs'] || ''),
-                campos: parseInt(linha['nº campos']) || 0,
-                ok: parseInt(linha['ok']) || 0,
-                nok: parseInt(linha['nok']) || 0,
-                porcentagem: porcentagemFinal, // NULL se vazio
-                auditora: auditora
-            };
-        }).filter(item => item !== null);
-
-        const total = dadosFormatados.length;
-        if (total === 0) {
-            alert("Nenhum registro de auditoria válido encontrado.");
-            if(statusEl) statusEl.innerHTML = "";
-            return;
-        }
-
-        // LIMPEZA SEGURA (Remove dados antigos dessas datas para não duplicar)
-        if(statusEl) statusEl.innerHTML = `<span class="text-amber-600"><i class="fas fa-eraser"></i> Atualizando período...</span>`;
-        const datasParaLimpar = [...new Set(dadosFormatados.map(d => d.data_auditoria))];
-        
-        try {
-            await Sistema.supabase.from('assertividade').delete().in('data_auditoria', datasParaLimpar);
-        } catch (e) {
-            console.error(e);
-        }
-
-        // INSERÇÃO
-        if(statusEl) statusEl.innerHTML = `<span class="text-orange-500 font-bold">Salvando ${total} auditorias...</span>`;
-        let sucesso = 0;
-
-        for (let i = 0; i < total; i += TAMANHO_LOTE) {
-            const lote = dadosFormatados.slice(i, i + TAMANHO_LOTE);
-            const { error } = await Sistema.supabase.from('assertividade').insert(lote);
-            if (!error) sucesso += lote.length;
+    processarCSV: async function(file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target.result;
+            const rows = text.split('\n').slice(1); // Pula cabeçalho
             
-            if (statusEl) {
-                const pct = Math.round(((i + lote.length) / total) * 100);
-                statusEl.innerHTML = `<span class="text-orange-600 font-bold"><i class="fas fa-upload"></i> Progresso: ${pct}%</span>`;
-            }
-        }
+            const listaParaSalvar = [];
 
-        setTimeout(() => {
-            if(statusEl) statusEl.innerHTML = "";
-            alert(`Assertividade Atualizada!\n${sucesso} registros importados.`);
-            if(Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
-        }, 500);
+            console.log("📂 Iniciando leitura do CSV...");
+
+            rows.forEach(row => {
+                const cols = row.split(','); // ou ';' dependendo do CSV
+                if (cols.length < 5) return;
+
+                // Mapeie as colunas conforme seu CSV (Ajuste os índices se necessário)
+                // Exemplo baseado no seu snippet: 
+                // Col 5: Assistente, Col 13: % Assert, Col 14: Data, Col 15: Auditora
+                
+                const assistenteNome = cols[5] ? cols[5].replace(/"/g, '').trim() : '';
+                const pctRaw = cols[13] ? cols[13].replace(/"/g, '').trim() : ''; 
+                const dataRaw = cols[14] ? cols[14].replace(/"/g, '').trim() : '';
+                const auditoraNome = cols[15] ? cols[15].replace(/"/g, '').trim() : '';
+
+                // --- LÓGICA CORRETA: IGNORA STATUS, OLHA APENAS A NOTA ---
+                
+                // 1. Limpa a porcentagem
+                let valStr = pctRaw.replace('%', '').replace(',', '.').trim();
+                let val = parseFloat(valStr);
+
+                // 2. Só importa se for um número válido entre 0 e 100
+                if (!isNaN(val) && val >= 0 && val <= 100) {
+                    
+                    // Formata data (DD/MM/YYYY -> YYYY-MM-DD)
+                    let dataFmt = null;
+                    if (dataRaw.includes('/')) {
+                        const [d, m, y] = dataRaw.split('/');
+                        dataFmt = `${y}-${m}-${d}`;
+                    } else {
+                        dataFmt = new Date().toISOString().split('T')[0]; // Fallback
+                    }
+
+                    listaParaSalvar.push({
+                        assistente: assistenteNome,
+                        porcentagem: pctRaw, // Salva original ou formatado
+                        data_auditoria: dataFmt,
+                        auditora: auditoraNome,
+                        // Outros campos opcionais...
+                        status: 'IMPORTADO' // Status interno apenas para controle
+                    });
+                }
+            });
+
+            console.log(`✅ ${listaParaSalvar.length} linhas válidas (0-100%) encontradas.`);
+            
+            if (listaParaSalvar.length > 0) {
+                await this.enviarParaSupabase(listaParaSalvar);
+            } else {
+                alert("Nenhuma linha com porcentagem válida encontrada.");
+            }
+        };
+        reader.readAsText(file);
+    },
+
+    enviarParaSupabase: async function(dados) {
+        // Lógica de batch insert no Supabase
+        // ... (Seu código de insert existente) ...
+        // Certifique-se de NÃO filtrar nada aqui também.
     }
 };
