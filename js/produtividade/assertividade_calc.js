@@ -2,23 +2,39 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.AssertividadeCalc = {
     /**
-     * Busca e processa as métricas de assertividade para o período.
-     * Regra 1: Filtra por DATA DE REFERÊNCIA (Data do documento), não da auditoria.
-     * Regra 2: Considera apenas valores válidos entre 0 e 100.
-     * Retorna: { mapa: { usuario_id: { soma, qtd } }, global: { soma, qtd } }
+     * Busca e processa as métricas de assertividade.
+     * Lógica Híbrida: Tenta buscar por 'data_referencia'. 
+     * Se não encontrar registros, faz fallback para 'data_auditoria' para garantir compatibilidade.
      */
     buscarMetricas: async function(dataInicio, dataFim) {
-        // CORREÇÃO CRÍTICA: Busca por 'data_referencia' para alinhar com a Produção.
-        // Adicionado 'indice_assertividade' como backup caso 'porcentagem' venha nulo.
-        const { data: auditorias, error } = await Sistema.supabase
+        let auditorias = [];
+        let usouFallback = false;
+
+        // 1. TENTATIVA PRINCIPAL: DATA DE REFERÊNCIA (Ideal para dados novos)
+        const { data: dadosRef, error: errRef } = await Sistema.supabase
             .from('assertividade')
-            .select('usuario_id, porcentagem, indice_assertividade, data_referencia') 
+            .select('usuario_id, porcentagem, indice_assertividade') 
             .gte('data_referencia', dataInicio)
             .lte('data_referencia', dataFim);
 
-        if (error) {
-            console.warn("Erro ao buscar assertividade (Service):", error);
-            return { mapa: {}, global: { soma: 0, qtd: 0 } };
+        if (!errRef && dadosRef && dadosRef.length > 0) {
+            auditorias = dadosRef;
+        } else {
+            // 2. TENTATIVA FALLBACK: DATA DE AUDITORIA (Para dados legados/sem referência)
+            console.warn("⚠️ Assertividade: Nenhum dado por Data de Referência. Tentando Data de Auditoria...");
+            
+            const { data: dadosAudit, error: errAudit } = await Sistema.supabase
+                .from('assertividade')
+                .select('usuario_id, porcentagem, indice_assertividade') 
+                .gte('data_auditoria', dataInicio)
+                .lte('data_auditoria', dataFim);
+                
+            if (!errAudit && dadosAudit) {
+                auditorias = dadosAudit;
+                usouFallback = true;
+            } else if (errAudit) {
+                console.error("Erro busca assertividade:", errAudit);
+            }
         }
 
         const mapa = {};
@@ -27,25 +43,25 @@ Produtividade.AssertividadeCalc = {
 
         if (auditorias) {
             auditorias.forEach(a => {
-                // 1. Lógica de Fallback (Tenta 'porcentagem', se falhar tenta 'indice_assertividade')
+                // 1. Lógica de Valor (Prioriza 'porcentagem', senão 'indice_assertividade')
                 let rawValue = a.porcentagem;
                 if (rawValue === null || rawValue === undefined || rawValue === '') {
                     rawValue = a.indice_assertividade;
                 }
 
-                // 2. Normalização
+                // 2. Normalização (Texto para Número)
                 let valStr = (rawValue || '').toString().replace('%', '').replace(',', '.').trim();
                 if (valStr === '') return;
                 
                 let val = parseFloat(valStr);
                 
-                // 3. Validação Numérica
+                // 3. Validação: Ignora NaN
                 if (isNaN(val)) return;
 
                 // 4. REGRA DE OURO: Considerar apenas valores de 0 a 100
                 if (val < 0 || val > 100) return;
 
-                // 5. Agregação por Usuário (Vínculo Seguro por ID)
+                // 5. Agregação por Usuário
                 const uid = a.usuario_id;
                 if (!mapa[uid]) mapa[uid] = { soma: 0, qtd: 0 };
                 
@@ -56,6 +72,10 @@ Produtividade.AssertividadeCalc = {
                 globalSoma += val;
                 globalQtd++;
             });
+        }
+        
+        if(usouFallback && globalQtd > 0) {
+            console.log(`✅ Recuperados ${globalQtd} registros via Data de Auditoria.`);
         }
         
         return { 
