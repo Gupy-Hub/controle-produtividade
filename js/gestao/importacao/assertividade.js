@@ -56,7 +56,6 @@ Importacao.Assertividade = {
     tratarEEnviar: async function(linhas) {
         console.time("TempoTratamento");
         
-        // Array simples, pois a deduplicação será feita no Banco de Dados
         const listaParaSalvar = [];
 
         for (let i = 0; i < linhas.length; i++) {
@@ -65,18 +64,18 @@ Importacao.Assertividade = {
             if (!linha['Assistente']) continue;
 
             // --- TRATAMENTO DE DATAS ---
-            const endTimeRaw = linha['end_time']; // Ex: "2025-12-02T12:17:04.332Z"
+            const endTimeRaw = linha['end_time']; 
             let dataApenas = null;
             let dataHoraCompleta = null;
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                dataApenas = endTimeRaw.split('T')[0]; // "2025-12-02" (Para Relatórios)
-                dataHoraCompleta = endTimeRaw;         // Completo (Para Unicidade)
+                dataApenas = endTimeRaw.split('T')[0]; 
+                dataHoraCompleta = endTimeRaw;         
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
                 dataApenas = endTimeRaw.substring(0, 10);
-                dataHoraCompleta = endTimeRaw; // Assume que é único
+                dataHoraCompleta = endTimeRaw; 
             } else {
-                // Fallback: Data de agora
+                // Se não tiver data, gera agora (garante unicidade pelo timestamp)
                 const agora = new Date().toISOString();
                 dataApenas = agora.split('T')[0];
                 dataHoraCompleta = agora; 
@@ -89,18 +88,10 @@ Importacao.Assertividade = {
             const nNok = parseInt(linha['Nok']) || 0;
 
             const objeto = {
-                // --- CHAVES ---
                 usuario_id: idAssistente,
-                
-                // DATA DE AUDITORIA: Só a Data (Conforme sua regra de negócio)
                 data_auditoria: dataApenas, 
-                
-                // DATA REFERENCIA: Carimbo de Tempo Exato (Segredo para não duplicar o arquivo)
-                data_referencia: dataHoraCompleta, 
-                
+                data_referencia: dataHoraCompleta, // Chave Anti-Duplicidade
                 created_at: new Date().toISOString(),
-
-                // --- DADOS ---
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
                 empresa: linha['Empresa'],
@@ -148,13 +139,11 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // --- UPSERT COM IGNORE DUPLICATES ---
-                // onConflict usa a constraint que criamos no SQL: unique_historico_fiel
-                // Se a linha já existir (mesmo assistente, hora exata, doc e status), ignora.
+                // CORREÇÃO AQUI: SEM ESPAÇOS NA STRING DE CONFLITO
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
-                        onConflict: 'assistente, data_referencia, doc_name, status',
+                        onConflict: 'assistente,data_referencia,doc_name,status', // <--- SEM ESPAÇOS
                         ignoreDuplicates: true 
                     });
 
@@ -178,7 +167,8 @@ Importacao.Assertividade = {
 
         } catch (error) {
             console.error("Erro Supabase:", error);
-            alert(`Erro durante a gravação: ${error.message}`);
+            // Mostra o erro detalhado se disponível
+            alert(`Erro durante a gravação: ${error.message || error.details || 'Erro desconhecido'}`);
         }
     }
 };
