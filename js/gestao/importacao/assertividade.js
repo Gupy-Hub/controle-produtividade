@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo Literalmente...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo Texto Puro...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Modo: TEXTO LITERAL - Sem Fuso)...");
+            console.log("📂 [Importacao] Iniciando leitura (Modo: TEXTO ESTRITO - Ignora Horas)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,28 +57,33 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
+        // Variável para debug no console (mostrará as 3 primeiras datas encontradas)
+        let debugCount = 0;
+
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
             if (!linha['Assistente']) continue;
 
-            const endTimeRaw = linha['end_time']; // Ex: "2025-12-06T02:00:00.000Z"
-            let dataLiteral = null;
-            let dataHoraCompleta = null;
+            const endTimeRaw = linha['end_time']; 
+            let dataTextoPuro = null;
 
-            // --- LÓGICA LITERAL (STRING) ---
-            if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Pega apenas os 10 primeiros caracteres. Ignora o resto.
-                // "2025-12-06T02..." vira "2025-12-06"
-                dataLiteral = endTimeRaw.substring(0, 10);
-                
-                // Mantém o original APENAS para identificar unicidade do registro
-                dataHoraCompleta = endTimeRaw; 
+            // --- LÓGICA DE CORTE DE STRING (ZERO MATEMÁTICA) ---
+            if (endTimeRaw && endTimeRaw.includes('T')) {
+                // Pega tudo que está ANTES do T.
+                // Ex: "2025-12-07T02:00:00Z" -> vira -> "2025-12-07"
+                dataTextoPuro = endTimeRaw.split('T')[0];
+            } else if (endTimeRaw && endTimeRaw.length >= 10) {
+                dataTextoPuro = endTimeRaw.substring(0, 10);
             } else {
-                // Fallback para hoje se estiver vazio
-                const now = new Date();
-                dataLiteral = now.toISOString().substring(0, 10);
-                dataHoraCompleta = now.toISOString(); 
+                // Se estiver vazio, usa hoje
+                dataTextoPuro = new Date().toISOString().split('T')[0];
+            }
+
+            // DEBUG: Mostra no console o que ele está lendo das 5 primeiras linhas
+            if (debugCount < 5) {
+                console.log(`🔍 Linha ${i+1}: Original="${endTimeRaw}" -> Gravando="${dataTextoPuro}"`);
+                debugCount++;
             }
 
             const idAssistente = parseInt(linha['id_assistente']) || null;
@@ -90,10 +95,12 @@ Importacao.Assertividade = {
             const objeto = {
                 usuario_id: idAssistente,
                 
-                // DATA PURA (Igual ao Excel/CSV)
-                data_auditoria: dataLiteral, 
+                // DATA PURA
+                data_auditoria: dataTextoPuro, 
                 
-                data_referencia: dataHoraCompleta, 
+                // Usamos o RAW completo apenas para garantir que não duplicamos a MESMA linha do Excel
+                data_referencia: endTimeRaw || new Date().toISOString(), 
+                
                 created_at: new Date().toISOString(),
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
@@ -121,7 +128,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados (Cópia Exata da Data).`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados.`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
@@ -142,7 +149,6 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // Upsert para garantir que se o registro já existe, a data seja corrigida para o valor literal
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
@@ -156,13 +162,13 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Sincronizando: ${pct}% (${totalInserido}/${total})`);
+                    console.log(`🚀 Gravando: ${pct}% (${totalInserido}/${total})`);
                     if(statusDiv) statusDiv.innerText = `${pct}% Salvo`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Processo Finalizado! Datas importadas exatamente como no arquivo.`);
+            alert(`Importação Concluída! Verifique o console (F12) para ver as datas originais.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
