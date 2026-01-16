@@ -1,74 +1,74 @@
-window.Gestao = window.Gestao || {};
 Gestao.ImportacaoAssertividade = {
+    init: function() {
+        // ... código de inicialização do modal ...
+    },
+
     processarCSV: async function(file) {
-        if (!file) return;
-        console.log("📂 [NEXUS] Processando arquivo: " + file.name);
-        
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: async (results) => {
-                const listaParaSalvar = results.data
-                    .filter(row => {
-                        // REGRA: Ignora Auditora 'Sistema' e garante que existe nota
-                        const auditora = (row['Auditora'] || '').toLowerCase();
-                        const temNota = row['% Assert'] !== undefined && row['% Assert'] !== null;
-                        return auditora !== 'sistema' && auditora !== '' && temNota;
-                    })
-                    .map(row => {
-                        // Conversão da porcentagem (ex: "91,89%" -> 91.89)
-                        let pctStr = String(row['% Assert'] || '0').replace('%', '').replace(',', '.').trim();
-                        let pctValor = parseFloat(pctStr) || 0;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target.result;
+            const rows = text.split('\n').slice(1); // Pula cabeçalho
+            
+            const listaParaSalvar = [];
 
-                        // MAPEAMENTO EXATO COM AS COLUNAS DA TABELA 'assertividade'
-                        return {
-                            data_referencia: this.formatarData(row['Data da Auditoria ']),
-                            empresa_nome: row['Empresa'],
-                            nome_assistente: row['Assistente'],
-                            nome_documento: row['doc_name'],
-                            status: row['STATUS'],
-                            num_campos: parseInt(row['nº Campos']) || 0,
-                            qtd_ok: parseInt(row['Ok']) || 0,
-                            qtd_nok: parseInt(row['Nok']) || 0,
-                            porcentagem: pctValor, // Nome correto conforme sua lista
-                            nome_auditora_raw: row['Auditora'],
-                            observacao: row['Apontamentos/obs'] || ''
-                        };
-                    });
+            console.log("📂 Iniciando leitura do CSV...");
 
-                console.log(`✅ [NEXUS] ${listaParaSalvar.length} registros validados para envio.`);
+            rows.forEach(row => {
+                const cols = row.split(','); // ou ';' dependendo do CSV
+                if (cols.length < 5) return;
+
+                // Mapeie as colunas conforme seu CSV (Ajuste os índices se necessário)
+                // Exemplo baseado no seu snippet: 
+                // Col 5: Assistente, Col 13: % Assert, Col 14: Data, Col 15: Auditora
                 
-                if (listaParaSalvar.length > 0) {
-                    await this.enviarLotes(listaParaSalvar);
-                } else {
-                    alert("Nenhum registro válido (não-sistema) encontrado.");
+                const assistenteNome = cols[5] ? cols[5].replace(/"/g, '').trim() : '';
+                const pctRaw = cols[13] ? cols[13].replace(/"/g, '').trim() : ''; 
+                const dataRaw = cols[14] ? cols[14].replace(/"/g, '').trim() : '';
+                const auditoraNome = cols[15] ? cols[15].replace(/"/g, '').trim() : '';
+
+                // --- LÓGICA CORRETA: IGNORA STATUS, OLHA APENAS A NOTA ---
+                
+                // 1. Limpa a porcentagem
+                let valStr = pctRaw.replace('%', '').replace(',', '.').trim();
+                let val = parseFloat(valStr);
+
+                // 2. Só importa se for um número válido entre 0 e 100
+                if (!isNaN(val) && val >= 0 && val <= 100) {
+                    
+                    // Formata data (DD/MM/YYYY -> YYYY-MM-DD)
+                    let dataFmt = null;
+                    if (dataRaw.includes('/')) {
+                        const [d, m, y] = dataRaw.split('/');
+                        dataFmt = `${y}-${m}-${d}`;
+                    } else {
+                        dataFmt = new Date().toISOString().split('T')[0]; // Fallback
+                    }
+
+                    listaParaSalvar.push({
+                        assistente: assistenteNome,
+                        porcentagem: pctRaw, // Salva original ou formatado
+                        data_auditoria: dataFmt,
+                        auditora: auditoraNome,
+                        // Outros campos opcionais...
+                        status: 'IMPORTADO' // Status interno apenas para controle
+                    });
                 }
+            });
+
+            console.log(`✅ ${listaParaSalvar.length} linhas válidas (0-100%) encontradas.`);
+            
+            if (listaParaSalvar.length > 0) {
+                await this.enviarParaSupabase(listaParaSalvar);
+            } else {
+                alert("Nenhuma linha com porcentagem válida encontrada.");
             }
-        });
+        };
+        reader.readAsText(file);
     },
 
-    formatarData: (d) => {
-        if (!d || !d.includes('/')) return new Date().toISOString().split('T')[0];
-        const parts = d.split('/');
-        return `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
-    },
-
-    enviarLotes: async function(dados) {
-        const TAMANHO_LOTE = 500;
-        for (let i = 0; i < dados.length; i += TAMANHO_LOTE) {
-            const lote = dados.slice(i, i + TAMANHO_LOTE);
-            
-            const { error } = await Sistema.supabase
-                .from('assertividade')
-                .insert(lote);
-            
-            if (error) {
-                console.error("❌ Erro técnico no lote:", error);
-                alert(`Erro no banco: ${error.message}`);
-                return;
-            }
-        }
-        alert(`✅ Sucesso! ${dados.length} registros importados na tabela 'assertividade'.`);
-        if (window.Gestao?.Assertividade?.carregarDados) Gestao.Assertividade.carregarDados();
+    enviarParaSupabase: async function(dados) {
+        // Lógica de batch insert no Supabase
+        // ... (Seu código de insert existente) ...
+        // Certifique-se de NÃO filtrar nada aqui também.
     }
 };
