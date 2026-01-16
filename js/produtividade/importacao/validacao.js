@@ -1,20 +1,16 @@
 // ARQUIVO: js/produtividade/importacao/validacao.js
 
-// Garante a existência dos namespaces sem erros de inicialização
-if (typeof window.Produtividade === 'undefined') window.Produtividade = {};
-if (typeof window.Produtividade.Importacao === 'undefined') window.Produtividade.Importacao = {};
+// Inicialização segura dos Namespaces
+window.Produtividade = window.Produtividade || {};
+window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 
 window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
-    arquivosPendentes: 0,
-    
+
     init: function() {
-        console.log("📥 Importação de Produção: Engine V2.1 (Fixed Syntax)");
+        console.log("📥 Importação de Produção: Engine V2.2 (Sintaxe e Sessão)");
     },
 
-    /**
-     * Extrai data do nome do arquivo DDMMAAAA.csv
-     */
     extrairDataDoNome: function(nome) {
         const match = nome.match(/(\d{2})(\d{2})(\d{4})/);
         if (match) {
@@ -24,16 +20,11 @@ window.Produtividade.Importacao.Validacao = {
         return null;
     },
 
-    /**
-     * Processa a fila de arquivos
-     */
     processar: async function(input) {
         const files = Array.from(input.files);
         if (files.length === 0) return;
 
         this.dadosProcessados = [];
-        this.arquivosPendentes = files.length;
-        
         const statusEl = document.getElementById('status-importacao-prod');
         if(statusEl) statusEl.classList.remove('hidden');
 
@@ -43,7 +34,7 @@ window.Produtividade.Importacao.Validacao = {
                 
                 const dataArquivo = this.extrairDataDoNome(file.name);
                 if (!dataArquivo) {
-                    alert(`⚠️ Nome inválido: ${file.name}. Use o padrão DDMMAAAA.csv`);
+                    alert(`⚠️ Arquivo inválido: ${file.name}. Use DDMMAAAA.csv`);
                     continue;
                 }
 
@@ -63,10 +54,9 @@ window.Produtividade.Importacao.Validacao = {
             }
             this.finalizarAnalise();
         } catch (err) {
-            console.error("Erro no processamento de arquivos:", err);
-            alert("Erro ao ler arquivos CSV.");
+            console.error("Erro na leitura:", err);
         } finally {
-            input.value = ''; 
+            input.value = '';
         }
     },
 
@@ -78,12 +68,10 @@ window.Produtividade.Importacao.Validacao = {
             const usuarioId = parseInt(idRaw.toString().replace(/\D/g, ''));
             if (isNaN(usuarioId)) return;
 
-            const quantidade = parseInt(row['documentos_validados'] || row['quantidade'] || row['qtd'] || 0);
-
             this.dadosProcessados.push({
                 usuario_id: usuarioId,
                 data_referencia: dataFixa,
-                quantidade: quantidade,
+                quantidade: parseInt(row['documentos_validados'] || row['quantidade'] || row['qtd'] || 0),
                 fifo: parseInt(row['fifo'] || 0),
                 gradual_total: parseInt(row['gradual_total'] || row['gradual total'] || 0),
                 gradual_parcial: parseInt(row['gradual_parcial'] || row['gradual parcial'] || 0),
@@ -96,64 +84,47 @@ window.Produtividade.Importacao.Validacao = {
 
     finalizarAnalise: function() {
         if (this.dadosProcessados.length === 0) {
-            alert("Nenhum dado válido encontrado.");
+            alert("Nenhum dado válido extraído.");
             return;
         }
-
-        const confirmacao = confirm(`Processados ${this.dadosProcessados.length} registros. Confirmar gravação no banco?`);
-        if (confirmacao) {
+        if (confirm(`Deseja salvar ${this.dadosProcessados.length} registros no banco?`)) {
             this.salvarNoBanco();
         }
     },
 
     salvarNoBanco: async function() {
         const statusEl = document.getElementById('status-importacao-prod');
-        
         try {
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-spinner fa-spin"></i> Verificando conexão...</span>`;
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500">Sincronizando...</span>`;
 
-            // 1. Tenta obter a sessão atualizada
-            const { data, error: sessionError } = await Sistema.supabase.auth.getSession();
+            // Tenta obter sessão de forma direta
+            const { data: { session } } = await Sistema.supabase.auth.getSession();
             
-            if (sessionError || !data.session) {
-                console.error("Erro de sessão:", sessionError);
-                throw new Error("Sessão inválida ou expirada. Por favor, atualize a página (F5) ou refaça o login.");
+            if (!session) {
+                // Tenta um fallback buscando o usuário
+                const { data: { user } } = await Sistema.supabase.auth.getUser();
+                if (!user) throw new Error("Usuário não autenticado. Faça login novamente.");
             }
 
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando ${this.dadosProcessados.length} registros...</span>`;
-
-            // 2. Executa o Upsert
-            const { error: upsertError } = await Sistema.supabase
+            const { error } = await Sistema.supabase
                 .from('producao')
                 .upsert(this.dadosProcessados, { 
                     onConflict: 'usuario_id,data_referencia' 
                 });
 
-            if (upsertError) {
-                // Se o erro for 401 mesmo com sessão, é falta de política RLS no banco
-                if (upsertError.status === 401 || upsertError.code === "42501") {
-                    throw new Error("Permissão Negada (RLS). O banco não permite gravação para seu usuário.");
-                }
-                throw upsertError;
-            }
+            if (error) throw error;
 
-            // 3. Sucesso
-            if(statusEl) statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Importado com Sucesso!</span>`;
-            alert("✅ Dados sincronizados com o Supabase!");
-            
-            if (window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
-                window.Produtividade.Geral.carregarTela();
-            }
+            alert("✅ Importação concluída!");
+            if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
 
         } catch (e) {
-            console.error("Falha na Operação:", e);
-            alert("❌ Erro: " + e.message);
-            if(statusEl) statusEl.innerHTML = `<span class="text-red-600 font-bold">Falha: ${e.message}</span>`;
+            console.error("Erro no Supabase:", e);
+            alert("Erro: " + (e.message || "Falha na conexão"));
         } finally {
-            // Limpa o status após 5 segundos
-            setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 5000);
+            if(statusEl) statusEl.innerHTML = "";
         }
     }
+};
 
-// Auto-inicialização
-Produtividade.Importacao.Validacao.init();
+// Inicialização imediata
+window.Produtividade.Importacao.Validacao.init();
