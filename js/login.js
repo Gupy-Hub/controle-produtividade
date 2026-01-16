@@ -1,6 +1,7 @@
+// js/login.js
+
 async function entrar() {
     // Referências do HTML
-    // Nota: Mantivemos o id="email" para não quebrar seu HTML, mas tratamos como ID numérico
     const idInput = document.getElementById('email'); 
     const senhaInput = document.getElementById('senha');
     const btn = document.querySelector('button');
@@ -12,7 +13,7 @@ async function entrar() {
         return;
     }
 
-    // 2. Prepara os dados (Converte ID para Número)
+    // 2. Prepara os dados
     const idUsuario = parseInt(idInput.value.trim());
     const senhaUsuario = senhaInput.value;
 
@@ -42,11 +43,16 @@ async function entrar() {
             const usuario = data[0];
             console.log("Login Sucesso:", usuario.nome);
             
-            // Salva na sessão
-            localStorage.setItem('usuario', JSON.stringify(usuario));
+            // [CORREÇÃO 1] Salva com o nome que o sistema.js espera ('usuario_logado')
+            localStorage.setItem('usuario_logado', JSON.stringify(usuario));
             
-            // Redireciona
-            window.location.href = 'sistema.html';
+            // [CORREÇÃO 2] Redirecionamento Inteligente
+            // Se for sistema.html (que não existe), manda para a dashboard correta
+            if (usuario.nivel_acesso === 'admin') {
+                window.location.href = 'gestao.html'; // Página de Gestão para Admins
+            } else {
+                window.location.href = 'minha_area.html'; // Página Padrão para Usuários
+            }
         } else {
             throw new Error("Usuário não retornado pelo banco.");
         }
@@ -54,9 +60,8 @@ async function entrar() {
     } catch (erro) {
         console.error("Erro Login:", erro);
         
-        // Tratamento de mensagens amigáveis
         let msg = erro.message || "Erro desconhecido";
-        if (msg.includes("ID de usuário")) msg = "ID não encontrado.";
+        if (msg.includes("ID incorreto")) msg = "ID não encontrado.";
         if (msg.includes("Senha incorreta")) msg = "Senha incorreta.";
         if (msg.includes("crypt")) msg = "Erro de criptografia no banco.";
 
