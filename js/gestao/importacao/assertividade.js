@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando Regra de Jornada...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ajustando Turnos...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Regra: Jornada Estendida -10h)...");
+            console.log("📂 [Importacao] Iniciando leitura (Regra: Cutoff 04:00 AM)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -55,12 +55,12 @@ Importacao.Assertividade = {
 
     tratarEEnviar: async function(linhas) {
         console.time("TempoTratamento");
-        
         const listaParaSalvar = [];
 
-        // Configuração da Jornada
-        // Subtrair 10 horas garante que qualquer trabalho até as 07:00 AM (BRT) conte como o dia anterior
-        const HORAS_SUBTRAIR = 10; 
+        // HORA DE CORTE: 4 da manhã
+        // Tudo feito antes das 04:00 conta para o dia anterior.
+        // Tudo feito das 04:00 em diante conta para o dia atual.
+        const CUTOFF_HOUR = 4; 
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
@@ -68,27 +68,33 @@ Importacao.Assertividade = {
             if (!linha['Assistente']) continue;
 
             const endTimeRaw = linha['end_time']; 
-            let dataJornada = null;
+            let dataFiscal = null;
             let dataHoraCompleta = null;
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
                 // 1. Cria Data a partir do UTC
                 const dt = new Date(endTimeRaw);
                 
-                // 2. Aplica o "Recuo de Jornada" (-10 horas)
-                // Ex: Sábado 04:00 UTC -> Sexta 18:00 (Cai na Sexta)
-                dt.setHours(dt.getHours() - HORAS_SUBTRAIR);
+                // 2. Converte para Brasília (UTC -3)
+                dt.setHours(dt.getHours() - 3);
+
+                // 3. Aplica a Regra do Cutoff
+                // Se a hora (já em BRT) for menor que 4 (ex: 00, 01, 02, 03), volta 1 dia
+                if (dt.getHours() < CUTOFF_HOUR) {
+                    dt.setDate(dt.getDate() - 1);
+                }
                 
-                dataJornada = dt.toISOString().split('T')[0];
+                // Formata YYYY-MM-DD
+                dataFiscal = dt.toISOString().split('T')[0];
                 dataHoraCompleta = endTimeRaw; // Mantém original para chave única
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Fallback para datas simples (assume que já está certo ou aplica recuo simples)
-                dataJornada = endTimeRaw.substring(0, 10);
+                // Fallback para datas simples
+                dataFiscal = endTimeRaw.substring(0, 10);
                 dataHoraCompleta = endTimeRaw; 
             } else {
                 const agora = new Date();
-                agora.setHours(agora.getHours() - HORAS_SUBTRAIR);
-                dataJornada = agora.toISOString().split('T')[0];
+                agora.setHours(agora.getHours() - 3);
+                dataFiscal = agora.toISOString().split('T')[0];
                 dataHoraCompleta = agora.toISOString(); 
             }
 
@@ -101,8 +107,8 @@ Importacao.Assertividade = {
             const objeto = {
                 usuario_id: idAssistente,
                 
-                // DATA CALCULADA PELA JORNADA
-                data_auditoria: dataJornada, 
+                // DATA DE COMPETÊNCIA (Fiscal)
+                data_auditoria: dataFiscal, 
                 
                 data_referencia: dataHoraCompleta, 
                 created_at: new Date().toISOString(),
@@ -132,7 +138,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados (Jornada Ajustada).`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados (Cutoff 04:00 AM).`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
@@ -167,13 +173,13 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Sincronizando Jornada: ${pct}% (${totalInserido}/${total})`);
+                    console.log(`🚀 Sincronizando Cutoff: ${pct}% (${totalInserido}/${total})`);
                     if(statusDiv) statusDiv.innerText = `${pct}% Ajustado`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Sucesso! Datas ajustadas considerando turno da madrugada.`);
+            alert(`Sucesso! Datas ajustadas. Madrugada conta como dia anterior, Manhã conta como dia atual.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
