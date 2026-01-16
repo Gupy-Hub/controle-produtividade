@@ -1,202 +1,233 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Performance Pro - Gestão</title>
+    <title>Gestão - Performance Pro</title>
     
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+
     <style>
-        body { font-family: 'Inter', sans-serif; }
-        
-        /* Cor personalizada para combinar com o Login (Nexus Dark) */
-        .bg-nexus-dark { background-color: #0f172a; }
-        .bg-nexus-card { background-color: #1e293b; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; }
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
+        .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
+        .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        .animate-fade { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .custom-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col">
-
-    <nav class="bg-nexus-dark text-white shadow-lg z-50">
-        <div class="container mx-auto px-6">
-            <div class="flex items-center justify-between h-16">
-                
-                <div class="flex items-center gap-3">
-                    <i class="fas fa-chart-line text-blue-400 text-xl"></i>
-                    <span class="text-lg font-bold tracking-wide">Performance Pro</span>
-                </div>
-
-                <div class="hidden md:flex space-x-8">
-                    <a href="index.html" class="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-colors">
-                        <i class="fas fa-home mr-1"></i> Início
-                    </a>
-                    <a href="minha_area.html" class="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-colors">
-                        <i class="fas fa-user mr-1"></i> Minha Área
-                    </a>
-                    <a href="produtividade.html" class="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium transition-colors">
-                        <i class="fas fa-chart-bar mr-1"></i> Produção
-                    </a>
-                    <a href="gestao.html" class="bg-blue-600 text-white px-3 py-2 rounded-md text-sm font-medium shadow-md">
-                        <i class="fas fa-cogs mr-1"></i> Gestão
-                    </a>
-                </div>
-
-                <button onclick="logout()" class="text-red-400 hover:text-red-300 text-sm font-medium flex items-center gap-2">
-                    <span>Sair</span>
-                    <i class="fas fa-sign-out-alt"></i>
-                </button>
-            </div>
-        </div>
-    </nav>
-
-    <main class="flex-grow container mx-auto px-6 py-8">
-        
-        <div class="flex flex-col md:flex-row justify-between items-center mb-8">
-            <h3 class="text-gray-700 text-3xl font-bold">Painel de Gestão</h3>
-            <span class="text-sm text-gray-500 mt-2 md:mt-0">Administração do Sistema</span>
-        </div>
-
-        <div class="mb-8">
-            <h4 class="text-gray-600 text-lg font-medium mb-4 flex items-center gap-2">
-                <i class="fas fa-file-import"></i> Importação de Dados
-            </h4>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                
-                <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-t-4 border-blue-500">
-                    <div class="flex items-center justify-between mb-4">
-                        <h5 class="text-gray-800 font-bold">Assertividade</h5>
-                        <i class="fas fa-file-csv text-blue-500 text-2xl"></i>
-                    </div>
-                    <p class="text-sm text-gray-600 mb-4">Relatório mensal de auditoria (CSV).</p>
-                    
-                    <div class="relative">
-                        <input type="file" 
-                               onchange="Importacao.Assertividade.processarArquivo(this)"
-                               accept=".csv"
-                               class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-t-4 border-green-500">
-                    <div class="flex items-center justify-between mb-4">
-                        <h5 class="text-gray-800 font-bold">Usuários</h5>
-                        <i class="fas fa-users text-green-500 text-2xl"></i>
-                    </div>
-                    <p class="text-sm text-gray-600 mb-4">Base de colaboradores.</p>
-                    <input type="file" id="input-csv-usuarios" accept=".csv" class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 cursor-pointer">
-                </div>
-
-                <div class="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border-t-4 border-purple-500">
-                    <div class="flex items-center justify-between mb-4">
-                        <h5 class="text-gray-800 font-bold">Empresas</h5>
-                        <i class="fas fa-building text-purple-500 text-2xl"></i>
-                    </div>
-                    <p class="text-sm text-gray-600 mb-4">Base de clientes/CNPJs.</p>
-                    <input type="file" id="input-csv-empresas" accept=".csv" class="block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100 cursor-pointer">
-                </div>
-
-            </div>
-        </div>
-
-        <div class="bg-white rounded-lg shadow-md overflow-hidden">
-            <div class="bg-gray-50 border-b px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-                <div class="flex items-center gap-2">
-                    <i class="fas fa-database text-gray-400"></i>
-                    <h4 class="text-lg font-semibold text-gray-700">Dados do Sistema</h4>
-                </div>
-                
-                <div class="w-full md:w-48">
-                    <label class="text-[10px] text-gray-500 font-bold block mb-1 uppercase tracking-wider">Filtrar Status:</label>
-                    <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[11px] p-2 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600 uppercase">
-                        <option value="">TODOS OS STATUS</option>
-                        <option value="PROCESSADO">PROCESSADO</option>
-                        <option value="OK">OK</option>
-                        <option value="NOK">NOK</option>
-                        <option value="REV">REV</option>
-                        <option value="JUST">JUST</option>
-                        <option value="DUPL">DUPL</option>
-                        <option value="IA">IA</option>
-                        <option value="EMPR">EMPR</option>
-                        <option value="REC">REC</option>
-                        <option value="PENDENTE">PENDENTE</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="p-6">
-                <div class="flex gap-2 mb-6 border-b overflow-x-auto pb-1">
-                    <button onclick="trocarAba('assertividade')" class="px-4 py-2 text-blue-600 border-b-2 border-blue-600 font-bold text-sm hover:bg-blue-50 transition-colors rounded-t-md whitespace-nowrap">
-                        Assertividade
-                    </button>
-                    <button class="px-4 py-2 text-gray-500 font-medium text-sm hover:text-gray-700 hover:bg-gray-50 transition-colors rounded-t-md whitespace-nowrap">
-                        Metas
-                    </button>
-                    <button class="px-4 py-2 text-gray-500 font-medium text-sm hover:text-gray-700 hover:bg-gray-50 transition-colors rounded-t-md whitespace-nowrap">
-                        Equipe
-                    </button>
-                    <button class="px-4 py-2 text-gray-500 font-medium text-sm hover:text-gray-700 hover:bg-gray-50 transition-colors rounded-t-md whitespace-nowrap">
-                        Empresas
-                    </button>
-                </div>
-                
-                <div id="conteudo-gestao" class="min-h-[300px] overflow-x-auto">
-                    <div class="text-center py-10">
-                        <i class="fas fa-spinner fa-spin text-blue-500 text-3xl mb-3"></i>
-                        <p class="text-gray-500">Carregando dados...</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-    </main>
-
-    <footer class="bg-white border-t py-4 text-center">
-        <p class="text-xs text-gray-400">&copy; 2025 Performance Pro System</p>
-    </footer>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+<body class="bg-slate-50">
     
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     
-    <script src="js/gestao/importacao/assertividade.js"></script>
-    <script src="js/gestao/assertividade.js"></script>
+    <script src="js/menu/global.js"></script>
+    <div id="global-menu"></div>
+
+    <div class="bg-white border-b border-slate-200 shadow-sm fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
+        <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
+            <div class="flex gap-2 overflow-x-auto no-scrollbar">
+                <button onclick="Gestao.mudarAba('usuarios')" id="btn-usuarios" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-users"></i> Usuários</button>
+                <button onclick="Gestao.mudarAba('empresas')" id="btn-empresas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-building"></i> Empresas</button>
+                <button onclick="Gestao.mudarAba('assertividade')" id="btn-assertividade" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-double"></i> Assertividade</button>
+                <button onclick="Gestao.mudarAba('metas')" id="btn-metas" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-bullseye"></i> Metas</button>
+            </div>
+            <div class="text-xs text-slate-400 font-bold hidden md:block">
+                Painel Administrativo
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-[1600px] mx-auto px-4 py-8 pt-32">
+        
+        <div id="view-usuarios" class="gestao-view animate-fade space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div class="relative w-full md:w-96 group">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
+                    <input type="text" id="search-usuarios" onkeyup="Gestao.Usuarios.filtrar()" placeholder="Buscar..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
+                </div>
+                <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
+                    <label class="flex items-center gap-3 cursor-pointer select-none group"><div class="relative"><input type="checkbox" id="toggle-inativos" onchange="Gestao.Usuarios.filtrar()" class="sr-only peer"><div class="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 shadow-inner"></div></div><span class="text-sm font-bold text-slate-500 group-hover:text-blue-600 transition">Exibir Inativos</span></label>
+                    <button onclick="Gestao.Usuarios.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 transform active:scale-95"><i class="fas fa-user-plus"></i> <span class="hidden sm:inline">Novo</span></button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                <div class="overflow-x-auto custom-scroll">
+                    <table class="w-full min-w-[1000px] text-sm text-left"><thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100"><tr><th class="px-4 py-4 w-[10%]">ID</th><th class="px-4 py-4 w-[35%]">Nome</th><th class="px-4 py-4 w-[20%]">Contrato</th><th class="px-4 py-4 w-[20%] text-center">Status</th><th class="px-4 py-4 w-[15%] text-right">Ações</th></tr></thead><tbody id="lista-usuarios" class="divide-y divide-slate-100 bg-white"></tbody></table>
+                </div>
+                <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide"><span id="contador-usuarios">Carregando...</span><span><i class="fas fa-info-circle mr-1"></i> ID é único</span></div>
+            </div>
+        </div>
+
+        <div id="view-empresas" class="gestao-view hidden animate-fade space-y-4">
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div class="relative w-full md:w-96 group">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
+                    <input type="text" id="search-empresas" onkeyup="Gestao.Empresas.atualizarFiltrosEBuscar()" placeholder="Buscar..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
+                </div>
+                <div class="flex justify-end w-full md:w-auto gap-4 items-center">
+                     <div class="text-xs text-slate-400 text-right hidden md:block"><span class="bg-emerald-50 text-emerald-600 px-2 py-1 rounded font-bold border border-emerald-100">Database Live</span></div>
+                    <button onclick="Gestao.Empresas.abrirModal()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 transform active:scale-95"><i class="fas fa-plus-circle"></i> <span class="hidden sm:inline">Nova Empresa</span></button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div class="overflow-x-auto custom-scroll flex-1">
+                    <table class="w-full min-w-[1000px] text-sm text-left"><thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100"><tr><th class="px-4 py-3 w-[10%]">ID</th><th class="px-4 py-3 w-[30%]">Nome</th><th class="px-4 py-3 w-[15%]">Subdomínio</th><th class="px-4 py-3 w-[15%]">Entrou em</th><th class="px-4 py-3 w-[20%]">Obs</th><th class="px-4 py-3 w-[10%] text-right">Ações</th></tr><tr class="bg-slate-100/50 border-b border-slate-200"><td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td><td class="p-1"><input type="text" id="filtro-emp-nome" onkeyup="Gestao.Empresas.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"><input type="text" id="filtro-emp-sub" onkeyup="Gestao.Empresas.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed text-center" value="-"></td><td class="p-1"><input type="text" id="filtro-emp-obs" onkeyup="Gestao.Empresas.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td><td class="p-1"></td></tr></thead><tbody id="lista-empresas" class="divide-y divide-slate-100 bg-white"></tbody></table>
+                </div>
+                <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 text-[10px] text-slate-400 flex justify-between items-center font-semibold uppercase tracking-wide"><div class="flex items-center gap-4"><span id="info-paginacao-emp" class="text-slate-500">Iniciando...</span></div><div class="flex items-center gap-2"><button onclick="Gestao.Empresas.mudarPagina(-1)" id="btn-ant-emp" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><i class="fas fa-chevron-left"></i> Anterior</button><button onclick="Gestao.Empresas.mudarPagina(1)" id="btn-prox-emp" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">Próximo <i class="fas fa-chevron-right"></i></button></div></div>
+            </div>
+        </div>
+
+        <div id="view-assertividade" class="gestao-view hidden animate-fade space-y-4">
+             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 justify-between items-center">
+                <div class="relative w-full md:w-96 group">
+                    <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition"></i>
+                    <input type="text" id="search-assert" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Buscar Geral..." class="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:border-blue-500 outline-none transition shadow-sm">
+                </div>
+
+                <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                    <div id="status-importacao" class="text-xs font-bold text-slate-400 hidden md:block"></div>
+                    
+                    <input type="file" id="input-csv-assertividade" accept=".csv" class="hidden" onchange="Importacao.Assertividade.processarArquivo(this)">
+                    
+                    <button onclick="document.getElementById('input-csv-assertividade').click()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 transform active:scale-95">
+                        <i class="fas fa-file-upload"></i> <span class="hidden sm:inline">Importar CSV</span>
+                    </button>
+                </div>
+             </div>
+
+             <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                 <div class="overflow-x-auto custom-scroll flex-1">
+                     <table class="w-full min-w-[1500px] text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] border-b border-slate-100 tracking-wider">
+                            <tr><th class="px-3 py-2 w-[8%]">Data</th><th class="px-3 py-2 w-[5%] text-center">ID Emp</th><th class="px-3 py-2 w-[12%]">Empresa</th><th class="px-3 py-2 w-[12%]">Assistente</th><th class="px-3 py-2 w-[12%]">Doc Name</th><th class="px-3 py-2 w-[6%] text-center">Status</th><th class="px-3 py-2 w-[15%]">Obs</th><th class="px-3 py-2 w-[5%] text-center">Campos</th><th class="px-3 py-2 w-[5%] text-center text-emerald-600">OK</th><th class="px-3 py-2 w-[5%] text-center text-rose-600">NOK</th><th class="px-3 py-2 w-[5%] text-center">%</th><th class="px-3 py-2 w-[10%]">Auditora</th></tr>
+                            <tr class="bg-slate-100/50 border-b border-slate-200">
+                                <td class="p-1"><input type="date" id="filtro-data" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" disabled class="w-full text-[10px] p-1 border rounded bg-slate-100 cursor-not-allowed"></td>
+                                <td class="p-1"><input type="text" id="filtro-empresa" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" id="filtro-assistente" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1"><input type="text" id="filtro-doc" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1">
+                                    <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
+                                        <option value="">TODOS</option>
+                                        <option value="PROCESSADO">PROCESSADO</option>
+                                        <option value="OK">OK</option>
+                                        <option value="NOK">NOK</option>
+                                        <option value="REV">REV</option>
+                                        <option value="JUST">JUST</option>
+                                        <option value="DUPL">DUPL</option>
+                                        <option value="IA">IA</option>
+                                        <option value="EMPR">EMPR</option>
+                                        <option value="REC">REC</option>
+                                        <option value="PENDENTE">PENDENTE</option>
+                                    </select>
+                                </td>
+                                <td class="p-1"><input type="text" id="filtro-obs" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Filtrar..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1 text-center text-xs text-slate-300">-</td>
+                                <td class="p-1"><input type="text" id="filtro-auditora" onkeyup="Gestao.Assertividade.atualizarFiltrosEBuscar()" placeholder="Nome..." class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm"></td>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-assertividade" class="divide-y divide-slate-100 bg-white"></tbody>
+                     </table>
+                 </div>
+                 <div class="px-4 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs font-semibold text-slate-600"><div class="flex items-center gap-4"><span id="info-paginacao" class="text-slate-500">Iniciando...</span></div><div class="flex items-center gap-2"><button onclick="Gestao.Assertividade.mudarPagina(-1)" id="btn-ant" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"><i class="fas fa-chevron-left"></i> Anterior</button><button onclick="Gestao.Assertividade.mudarPagina(1)" id="btn-prox" class="px-3 py-1.5 bg-white border border-slate-300 rounded hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm">Próximo <i class="fas fa-chevron-right"></i></button></div></div>
+             </div>
+        </div>
+
+        <div id="view-metas" class="gestao-view hidden animate-fade space-y-4">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col xl:flex-row gap-6 justify-between items-center z-20">
+                
+                <div class="flex items-center gap-3 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                    <button onclick="Gestao.Metas.mudarMes(-1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-white hover:shadow rounded transition"><i class="fas fa-chevron-left"></i></button>
+                    <div class="text-center px-4 min-w-[140px]">
+                        <span class="block text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">Competência</span>
+                        <span id="metas-periodo-label" class="text-base font-bold text-slate-700 capitalize">Carregando...</span>
+                    </div>
+                    <button onclick="Gestao.Metas.mudarMes(1)" class="w-8 h-8 flex items-center justify-center text-slate-500 hover:bg-white hover:shadow rounded transition"><i class="fas fa-chevron-right"></i></button>
+                </div>
+
+                <div class="flex items-center gap-2 bg-blue-50 p-2 rounded-lg border border-blue-100 w-full xl:w-auto">
+                    <span class="text-[10px] font-bold text-blue-700 uppercase hidden md:inline mr-2">Em Massa:</span>
+                    
+                    <div class="relative">
+                        <input type="number" id="input-massa-prod" placeholder="Qtd (ex: 1000)" class="w-28 px-3 py-1.5 text-xs border border-blue-200 rounded text-center font-bold text-blue-800 placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                        <span class="absolute right-2 top-1.5 text-[10px] text-blue-300 font-bold">UN</span>
+                    </div>
+
+                    <div class="relative">
+                        <input type="number" id="input-massa-assert" placeholder="% (ex: 98)" class="w-24 px-3 py-1.5 text-xs border border-blue-200 rounded text-center font-bold text-blue-800 placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                        <span class="absolute right-2 top-1.5 text-[10px] text-blue-300 font-bold">%</span>
+                    </div>
+
+                    <button onclick="Gestao.Metas.aplicarEmMassa()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-sm transition active:scale-95 whitespace-nowrap" title="Aplicar aos selecionados">
+                        <i class="fas fa-check"></i>
+                    </button>
+                </div>
+
+                <button onclick="Gestao.Metas.salvarTodas()" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-bold shadow-md hover:shadow-lg transition transform active:scale-95 w-full xl:w-auto flex justify-center items-center gap-2">
+                    <i class="fas fa-save"></i> Salvar Metas
+                </button>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div class="overflow-x-auto custom-scroll flex-1">
+                    <table class="w-full min-w-[900px] text-sm text-left">
+                        <thead class="bg-slate-50 text-slate-500 font-bold uppercase text-xs border-b border-slate-100">
+                            <tr>
+                                <th class="px-6 py-4 w-[5%] text-center">
+                                    <input type="checkbox" id="check-meta-todos" onclick="Gestao.Metas.toggleSelecionarTodos()" class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer">
+                                </th>
+                                <th class="px-6 py-4 w-[5%]">ID</th>
+                                <th class="px-6 py-4 w-[30%]">Assistente</th>
+                                <th class="px-6 py-4 w-[10%]">Contrato</th>
+                                
+                                <th class="px-4 py-4 w-[20%] text-center bg-blue-50/30 border-x border-slate-100">
+                                    <i class="fas fa-box-open text-blue-400 mr-1"></i> Meta Produção
+                                </th>
+                                
+                                <th class="px-4 py-4 w-[20%] text-center bg-emerald-50/30 border-r border-slate-100">
+                                    <i class="fas fa-check-circle text-emerald-400 mr-1"></i> Meta Assertividade
+                                </th>
+                                
+                                <th class="px-6 py-4 w-[10%] text-right">Histórico</th>
+                            </tr>
+                        </thead>
+                        <tbody id="lista-metas" class="divide-y divide-slate-100 bg-white">
+                            </tbody>
+                    </table>
+                </div>
+                <div class="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 font-medium">
+                    <span><i class="fas fa-info-circle mr-1"></i> Defina as metas e clique em Salvar.</span>
+                    <span id="resumo-metas-footer">Carregando...</span>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
     <script src="js/gestao/main.js"></script>
+    <script src="js/gestao/usuarios.js"></script>
+    <script src="js/gestao/empresas.js"></script>
+    <script src="js/gestao/assertividade.js"></script>
+    <script src="js/gestao/metas.js"></script>
+    
+    <script src="js/gestao/importacao/usuarios.js"></script>
+    <script src="js/gestao/importacao/empresas.js"></script>
+    <script src="js/gestao/importacao/assertividade.js"></script>
 
-    <script>
-        // Função simples de Logout
-        async function logout() {
-            if(confirm("Deseja realmente sair do sistema?")) {
-                localStorage.removeItem('usuario_logado');
-                if (Sistema && Sistema.supabase) {
-                    await Sistema.supabase.auth.signOut();
-                }
-                window.location.href = 'index.html';
-            }
-        }
-
-        // Função auxiliar para troca de abas (Visual)
-        function trocarAba(aba) {
-            // Lógica simples visual, a lógica real deve estar no main.js ou assertividade.js
-            console.log("Trocando para aba:", aba);
-            if(aba === 'assertividade' && Gestao && Gestao.Assertividade) {
-                Gestao.Assertividade.carregar();
-            }
-        }
-
-        // Inicializa se possível
-        document.addEventListener('DOMContentLoaded', () => {
-            if(typeof Gestao !== 'undefined' && Gestao.Assertividade) {
-                // Pequeno delay para garantir que o Supabase conectou
-                setTimeout(() => Gestao.Assertividade.carregar(), 500);
-            }
-        });
-    </script>
 </body>
 </html>
