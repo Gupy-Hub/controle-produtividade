@@ -11,12 +11,11 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando Histórico...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
-            // Timeout para garantir que a UI mostre o "spinner" antes de travar no processamento
             setTimeout(() => {
                 this.lerCSV(file).finally(() => {
                     input.value = ''; 
@@ -33,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Fonte Data: end_time)...");
+            console.log("📂 [Importacao] Iniciando leitura (Modo: Upsert Anti-Duplicidade)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,32 +56,32 @@ Importacao.Assertividade = {
     tratarEEnviar: async function(linhas) {
         console.time("TempoTratamento");
         
-        // Array simples: Aceita tudo, sem deduplicar (Histórico Completo)
+        // Array simples, pois a deduplicação será feita no Banco de Dados
         const listaParaSalvar = [];
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
-            // Validação mínima: linha deve ter assistente para ser válida
             if (!linha['Assistente']) continue;
 
-            // --- REGRA DE DATA (end_time) ---
-            // Formato esperado: "2025-12-02T12:17:04.332Z"
-            const endTimeRaw = linha['end_time']; 
-            let dataFmt = null;
+            // --- TRATAMENTO DE DATAS ---
+            const endTimeRaw = linha['end_time']; // Ex: "2025-12-02T12:17:04.332Z"
+            let dataApenas = null;
+            let dataHoraCompleta = null;
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // Pega a parte antes do T (Data YYYY-MM-DD)
-                dataFmt = endTimeRaw.split('T')[0];
+                dataApenas = endTimeRaw.split('T')[0]; // "2025-12-02" (Para Relatórios)
+                dataHoraCompleta = endTimeRaw;         // Completo (Para Unicidade)
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Fallback (apenas os 10 primeiros caracteres)
-                dataFmt = endTimeRaw.substring(0, 10);
+                dataApenas = endTimeRaw.substring(0, 10);
+                dataHoraCompleta = endTimeRaw; // Assume que é único
             } else {
-                // Fallback de segurança: Data de hoje
-                dataFmt = new Date().toISOString().split('T')[0];
+                // Fallback: Data de agora
+                const agora = new Date().toISOString();
+                dataApenas = agora.split('T')[0];
+                dataHoraCompleta = agora; 
             }
 
-            // Conversões numéricas para evitar erros no banco
             const idAssistente = parseInt(linha['id_assistente']) || null;
             const companyId = parseInt(linha['Company_id']) || null;
             const nCampos = parseInt(linha['nº Campos']) || 0;
@@ -90,41 +89,32 @@ Importacao.Assertividade = {
             const nNok = parseInt(linha['Nok']) || 0;
 
             const objeto = {
-                // --- CHAVES E DATAS ---
+                // --- CHAVES ---
                 usuario_id: idAssistente,
                 
-                // Data Oficial: Vinda do end_time
-                data_auditoria: dataFmt, 
-                data_referencia: dataFmt, 
+                // DATA DE AUDITORIA: Só a Data (Conforme sua regra de negócio)
+                data_auditoria: dataApenas, 
+                
+                // DATA REFERENCIA: Carimbo de Tempo Exato (Segredo para não duplicar o arquivo)
+                data_referencia: dataHoraCompleta, 
                 
                 created_at: new Date().toISOString(),
 
-                // --- IDENTIFICAÇÃO ---
+                // --- DADOS ---
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
-                
                 empresa: linha['Empresa'],
                 empresa_nome: linha['Empresa'],
-
                 assistente: linha['Assistente'],
                 nome_assistente: linha['Assistente'],
-
                 auditora: linha['Auditora'],
                 nome_auditora_raw: linha['Auditora'],
-
-                // --- CONTEÚDO ---
                 doc_name: linha['doc_name'],
                 nome_documento: linha['doc_name'],
-
-                // Status pode repetir (REV -> NOK -> OK)
                 status: linha['STATUS'], 
-                
                 obs: linha['Apontamentos/obs'],
                 observacao: linha['Apontamentos/obs'],
-
                 porcentagem: linha['% Assert'], 
-
-                // --- MÉTRICAS ---
                 campos: nCampos,
                 num_campos: nCampos,
                 ok: nOk,
@@ -137,18 +127,17 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros prontos para inserção.`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados.`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
         } else {
-            alert("Nenhum dado válido encontrado nas colunas.");
+            alert("Nenhum dado válido encontrado.");
         }
     },
 
     enviarParaSupabase: async function(dados) {
         try {
-            // Lote grande para velocidade
             const BATCH_SIZE = 1000; 
             let totalInserido = 0;
             const total = dados.length;
@@ -159,27 +148,30 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // INSERT PURO: Grava tudo como novo registro (Histórico)
+                // --- UPSERT COM IGNORE DUPLICATES ---
+                // onConflict usa a constraint que criamos no SQL: unique_historico_fiel
+                // Se a linha já existir (mesmo assistente, hora exata, doc e status), ignora.
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
-                    .insert(lote);
+                    .upsert(lote, { 
+                        onConflict: 'assistente, data_referencia, doc_name, status',
+                        ignoreDuplicates: true 
+                    });
 
                 if (error) throw error;
                 
                 totalInserido += lote.length;
                 
-                // Atualiza progresso visual a cada 5k registros
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Enviando: ${pct}% (${totalInserido}/${total})`);
-                    if(statusDiv) statusDiv.innerText = `${pct}% Salvo`;
+                    console.log(`🚀 Sincronizando: ${pct}% (${totalInserido}/${total})`);
+                    if(statusDiv) statusDiv.innerText = `${pct}% Processado`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Processo Finalizado! ${totalInserido} registros importados com sucesso.`);
+            alert(`Processo Finalizado! Arquivo sincronizado com segurança.`);
             
-            // Recarrega a tabela se estiver na tela de gestão
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
             }
