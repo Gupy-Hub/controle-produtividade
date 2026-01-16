@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo Texto Puro...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando Lógica Híbrida...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Modo: TEXTO ESTRITO - Ignora Horas)...");
+            console.log("📂 [Importacao] Iniciando (Regra: UTC-3 com Proteção de Domingo)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,8 +57,8 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
-        // Variável para debug no console (mostrará as 3 primeiras datas encontradas)
-        let debugCount = 0;
+        // 3 Horas em milissegundos
+        const OFFSET_BRASIL = 3 * 60 * 60 * 1000; 
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
@@ -66,24 +66,40 @@ Importacao.Assertividade = {
             if (!linha['Assistente']) continue;
 
             const endTimeRaw = linha['end_time']; 
-            let dataTextoPuro = null;
+            let dataFinal = null;
+            let dataHoraCompleta = null;
 
-            // --- LÓGICA DE CORTE DE STRING (ZERO MATEMÁTICA) ---
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // Pega tudo que está ANTES do T.
-                // Ex: "2025-12-07T02:00:00Z" -> vira -> "2025-12-07"
-                dataTextoPuro = endTimeRaw.split('T')[0];
-            } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                dataTextoPuro = endTimeRaw.substring(0, 10);
-            } else {
-                // Se estiver vazio, usa hoje
-                dataTextoPuro = new Date().toISOString().split('T')[0];
-            }
+                // 1. Data Original UTC
+                const dtUTC = new Date(endTimeRaw);
+                const msUTC = dtUTC.getTime();
 
-            // DEBUG: Mostra no console o que ele está lendo das 5 primeiras linhas
-            if (debugCount < 5) {
-                console.log(`🔍 Linha ${i+1}: Original="${endTimeRaw}" -> Gravando="${dataTextoPuro}"`);
-                debugCount++;
+                // 2. Aplica UTC-3 (Brasil)
+                // Ex: Sábado 01:00 UTC vira Sexta 22:00 (Sexta é dia 5 na semana JS? Depende da ref)
+                const dtBrasil = new Date(msUTC - OFFSET_BRASIL);
+                
+                // 3. Verificação de Dia da Semana (0 = Domingo, 6 = Sábado)
+                // getUTCDay() aqui funciona porque criamos a data subtraindo o offset manualmente
+                const diaSemanaBrasil = dtBrasil.getUTCDay();
+
+                // LÓGICA DE PROTEÇÃO DE DOMINGO
+                if (diaSemanaBrasil === 0) { 
+                    // Se caiu no Domingo (era Segunda de madrugada), volta para Segunda
+                    // Adiciona 1 dia (24h)
+                    dtBrasil.setTime(dtBrasil.getTime() + (24 * 60 * 60 * 1000));
+                }
+
+                dataFinal = dtBrasil.toISOString().split('T')[0];
+                dataHoraCompleta = endTimeRaw; 
+
+            } else if (endTimeRaw && endTimeRaw.length >= 10) {
+                // Fallback
+                dataFinal = endTimeRaw.substring(0, 10);
+                dataHoraCompleta = endTimeRaw; 
+            } else {
+                const now = new Date();
+                dataFinal = now.toISOString().split('T')[0];
+                dataHoraCompleta = now.toISOString(); 
             }
 
             const idAssistente = parseInt(linha['id_assistente']) || null;
@@ -94,13 +110,8 @@ Importacao.Assertividade = {
 
             const objeto = {
                 usuario_id: idAssistente,
-                
-                // DATA PURA
-                data_auditoria: dataTextoPuro, 
-                
-                // Usamos o RAW completo apenas para garantir que não duplicamos a MESMA linha do Excel
-                data_referencia: endTimeRaw || new Date().toISOString(), 
-                
+                data_auditoria: dataFinal, 
+                data_referencia: dataHoraCompleta, 
                 created_at: new Date().toISOString(),
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
@@ -162,13 +173,13 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Gravando: ${pct}% (${totalInserido}/${total})`);
+                    console.log(`🚀 Sincronizando: ${pct}% (${totalInserido}/${total})`);
                     if(statusDiv) statusDiv.innerText = `${pct}% Salvo`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Importação Concluída! Verifique o console (F12) para ver as datas originais.`);
+            alert(`Sucesso! Sábados viraram Sextas. Segundas continuam Segundas.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
