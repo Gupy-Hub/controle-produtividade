@@ -1,80 +1,76 @@
-const Login = {
-    entrar: async function() {
-        const idInput = document.getElementById('login-id').value.trim();
-        const senhaInput = document.getElementById('login-senha').value.trim();
-        const btn = document.getElementById('btn-login');
-        
-        if (!idInput || !senhaInput) return this.mostrarErro("Preencha ID e Senha.");
-
-        // Feedback visual
-        btn.disabled = true;
-        const textoOriginal = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
-        this.ocultarErro();
-
-        try {
-            if (!Sistema.supabase) {
-                throw new Error("Erro de conexão. Recarregue a página.");
-            }
-
-            // Chamada RPC corrigida (via p_id e p_senha)
-            const { data: usuario, error } = await Sistema.supabase
-                .rpc('api_login', { 
-                    p_id: parseInt(idInput), 
-                    p_senha: senhaInput 
-                });
-
-            if (error) {
-                console.error("Erro SQL:", error);
-                throw new Error(error.message || "Erro ao verificar credenciais.");
-            }
-
-            if (!usuario) {
-                throw new Error("Usuário não retornado.");
-            }
-
-            // Sucesso - Salva sessão
-            localStorage.setItem('usuario_logado', JSON.stringify(usuario));
-            
-            // Redirecionamento Inteligente
-            const funcao = (usuario.funcao || '').toUpperCase();
-            
-            if (funcao === 'GESTORA' || funcao.includes('AUDITORA')) {
-                window.location.href = 'gestao.html';
-            } else {
-                window.location.href = 'minha_area.html';
-            }
-
-        } catch (err) {
-            console.error(err);
-            // Tradução amigável de erros comuns
-            let msg = err.message;
-            if (msg.includes("incorretos")) msg = "ID ou Senha incorretos.";
-            if (msg.includes("inativo")) msg = "Seu acesso está inativo. Procure a gestão.";
-            
-            this.mostrarErro(msg);
-            btn.disabled = false;
-            btn.innerHTML = textoOriginal;
-        }
-    },
-
-    mostrarErro: function(texto) {
-        const msg = document.getElementById('msg-erro');
-        if (msg) {
-            msg.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${texto}`;
-            msg.classList.remove('hidden');
-        } else {
-            alert(texto);
-        }
-    },
-
-    ocultarErro: function() {
-        const msg = document.getElementById('msg-erro');
-        if (msg) msg.classList.add('hidden');
+async function entrar() {
+    // Referências do HTML
+    // Nota: Mantivemos o id="email" para não quebrar seu HTML, mas tratamos como ID numérico
+    const idInput = document.getElementById('email'); 
+    const senhaInput = document.getElementById('senha');
+    const btn = document.querySelector('button');
+    const originalBtnText = btn.innerHTML;
+    
+    // 1. Validação Básica
+    if (!idInput.value || !senhaInput.value) {
+        alert("Por favor, preencha seu ID e Senha.");
+        return;
     }
-};
 
-// Evento de tecla Enter
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') Login.entrar();
+    // 2. Prepara os dados (Converte ID para Número)
+    const idUsuario = parseInt(idInput.value.trim());
+    const senhaUsuario = senhaInput.value;
+
+    if (isNaN(idUsuario)) {
+        alert("O ID deve ser apenas números.");
+        return;
+    }
+
+    try {
+        // Estado de Carregamento
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando...';
+        btn.disabled = true;
+
+        console.log("Tentando logar com ID:", idUsuario);
+
+        // 3. Chama o Supabase (Função RPC)
+        const { data, error } = await Sistema.supabase
+            .rpc('api_login', { 
+                p_id: idUsuario, 
+                p_senha: senhaUsuario 
+            });
+
+        if (error) throw error;
+
+        // 4. Sucesso
+        if (data && data.length > 0) {
+            const usuario = data[0];
+            console.log("Login Sucesso:", usuario.nome);
+            
+            // Salva na sessão
+            localStorage.setItem('usuario', JSON.stringify(usuario));
+            
+            // Redireciona
+            window.location.href = 'sistema.html';
+        } else {
+            throw new Error("Usuário não retornado pelo banco.");
+        }
+
+    } catch (erro) {
+        console.error("Erro Login:", erro);
+        
+        // Tratamento de mensagens amigáveis
+        let msg = erro.message || "Erro desconhecido";
+        if (msg.includes("ID de usuário")) msg = "ID não encontrado.";
+        if (msg.includes("Senha incorreta")) msg = "Senha incorreta.";
+        if (msg.includes("crypt")) msg = "Erro de criptografia no banco.";
+
+        alert("Falha ao entrar: " + msg);
+        
+        // Reseta o botão
+        btn.innerHTML = originalBtnText;
+        btn.disabled = false;
+    }
+}
+
+// Garante que o enter funcione
+document.addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+        entrar();
+    }
 });
