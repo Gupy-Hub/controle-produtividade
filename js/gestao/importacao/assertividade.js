@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo Datas...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo Literalmente...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Lógica: UTC -3h Simples)...");
+            console.log("📂 [Importacao] Iniciando leitura (Modo: TEXTO LITERAL - Sem Fuso)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,42 +57,27 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
-        // CONSTANTE: 3 Horas (Fuso Brasil Padrão)
-        // Apenas ajusta o UTC para o horário de Brasília.
-        const MS_PER_HOUR = 60 * 60 * 1000;
-        const OFFSET_BRASIL = 3 * MS_PER_HOUR;
-
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
             if (!linha['Assistente']) continue;
 
-            const endTimeRaw = linha['end_time']; 
-            let dataBrasilia = null;
+            const endTimeRaw = linha['end_time']; // Ex: "2025-12-06T02:00:00.000Z"
+            let dataLiteral = null;
             let dataHoraCompleta = null;
 
-            if (endTimeRaw && endTimeRaw.includes('T')) {
-                // 1. Pega o instante exato em UTC (ex: Sábado 02:00 UTC)
-                const dt = new Date(endTimeRaw);
-                const timeUTC = dt.getTime(); 
-
-                // 2. Subtrai 3 horas puras (ex: Vira Sexta 23:00 UTC-Equivalente)
-                // Isso garante que a data extraída seja a do Brasil, sem depender do navegador
-                const dtBrasil = new Date(timeUTC - OFFSET_BRASIL);
+            // --- LÓGICA LITERAL (STRING) ---
+            if (endTimeRaw && endTimeRaw.length >= 10) {
+                // Pega apenas os 10 primeiros caracteres. Ignora o resto.
+                // "2025-12-06T02..." vira "2025-12-06"
+                dataLiteral = endTimeRaw.substring(0, 10);
                 
-                // 3. Pega a data (YYYY-MM-DD) resultante
-                dataBrasilia = dtBrasil.toISOString().split('T')[0];
-                dataHoraCompleta = endTimeRaw; 
-
-            } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Fallback para datas simples
-                dataBrasilia = endTimeRaw.substring(0, 10);
+                // Mantém o original APENAS para identificar unicidade do registro
                 dataHoraCompleta = endTimeRaw; 
             } else {
-                // Fallback para agora
+                // Fallback para hoje se estiver vazio
                 const now = new Date();
-                const dtBrasilNow = new Date(now.getTime() - OFFSET_BRASIL);
-                dataBrasilia = dtBrasilNow.toISOString().split('T')[0];
+                dataLiteral = now.toISOString().substring(0, 10);
                 dataHoraCompleta = now.toISOString(); 
             }
 
@@ -105,8 +90,8 @@ Importacao.Assertividade = {
             const objeto = {
                 usuario_id: idAssistente,
                 
-                // DATA OFICIAL (Dia Simples)
-                data_auditoria: dataBrasilia, 
+                // DATA PURA (Igual ao Excel/CSV)
+                data_auditoria: dataLiteral, 
                 
                 data_referencia: dataHoraCompleta, 
                 created_at: new Date().toISOString(),
@@ -136,7 +121,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados (Fuso Brasil -3h).`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados (Cópia Exata da Data).`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
@@ -157,7 +142,7 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // Upsert para corrigir datas
+                // Upsert para garantir que se o registro já existe, a data seja corrigida para o valor literal
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
@@ -172,12 +157,12 @@ Importacao.Assertividade = {
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
                     console.log(`🚀 Sincronizando: ${pct}% (${totalInserido}/${total})`);
-                    if(statusDiv) statusDiv.innerText = `${pct}% Processado`;
+                    if(statusDiv) statusDiv.innerText = `${pct}% Salvo`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Processo Finalizado! Datas alinhadas ao horário de Brasília.`);
+            alert(`Processo Finalizado! Datas importadas exatamente como no arquivo.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
