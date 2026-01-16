@@ -1,74 +1,93 @@
-Gestao.ImportacaoAssertividade = {
-    init: function() {
-        // ... código de inicialização do modal ...
-    },
+/**
+ * PERFORMANCE PRO - MÓDULO DE IMPORTAÇÃO DE ASSERTIVIDADE
+ * Foco: Flexibilidade de nomes de arquivos e integridade de dados.
+ */
 
-    processarCSV: async function(file) {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const text = e.target.result;
-            const rows = text.split('\n').slice(1); // Pula cabeçalho
+const ImportadorAssertividade = {
+    async processarArquivo(file) {
+        console.log(`%c iniciada importação: ${file.name}`, "color: #2563eb; font-weight: bold;");
+        
+        const leitor = new FileReader();
+        
+        leitor.onload = async (e) => {
+            const texto = e.target.result;
+            const linhas = texto.split(/\r?\n/);
             
-            const listaParaSalvar = [];
-
-            console.log("📂 Iniciando leitura do CSV...");
-
-            rows.forEach(row => {
-                const cols = row.split(','); // ou ';' dependendo do CSV
-                if (cols.length < 5) return;
-
-                // Mapeie as colunas conforme seu CSV (Ajuste os índices se necessário)
-                // Exemplo baseado no seu snippet: 
-                // Col 5: Assistente, Col 13: % Assert, Col 14: Data, Col 15: Auditora
-                
-                const assistenteNome = cols[5] ? cols[5].replace(/"/g, '').trim() : '';
-                const pctRaw = cols[13] ? cols[13].replace(/"/g, '').trim() : ''; 
-                const dataRaw = cols[14] ? cols[14].replace(/"/g, '').trim() : '';
-                const auditoraNome = cols[15] ? cols[15].replace(/"/g, '').trim() : '';
-
-                // --- LÓGICA CORRETA: IGNORA STATUS, OLHA APENAS A NOTA ---
-                
-                // 1. Limpa a porcentagem
-                let valStr = pctRaw.replace('%', '').replace(',', '.').trim();
-                let val = parseFloat(valStr);
-
-                // 2. Só importa se for um número válido entre 0 e 100
-                if (!isNaN(val) && val >= 0 && val <= 100) {
-                    
-                    // Formata data (DD/MM/YYYY -> YYYY-MM-DD)
-                    let dataFmt = null;
-                    if (dataRaw.includes('/')) {
-                        const [d, m, y] = dataRaw.split('/');
-                        dataFmt = `${y}-${m}-${d}`;
-                    } else {
-                        dataFmt = new Date().toISOString().split('T')[0]; // Fallback
-                    }
-
-                    listaParaSalvar.push({
-                        assistente: assistenteNome,
-                        porcentagem: pctRaw, // Salva original ou formatado
-                        data_auditoria: dataFmt,
-                        auditora: auditoraNome,
-                        // Outros campos opcionais...
-                        status: 'IMPORTADO' // Status interno apenas para controle
-                    });
-                }
-            });
-
-            console.log(`✅ ${listaParaSalvar.length} linhas válidas (0-100%) encontradas.`);
-            
-            if (listaParaSalvar.length > 0) {
-                await this.enviarParaSupabase(listaParaSalvar);
-            } else {
-                alert("Nenhuma linha com porcentagem válida encontrada.");
+            if (linhas.length < 2) {
+                alert("O arquivo está vazio ou sem dados.");
+                return;
             }
+
+            // Detectar cabeçalho e mapear colunas
+            const cabecalho = linhas[0].toLowerCase().split(';');
+            const dadosParaInserir = [];
+
+            for (let i = 1; i < linhas.length; i++) {
+                if (!linhas[i].trim()) continue;
+
+                const colunas = linhas[i].split(';');
+                
+                // Mapeamento dinâmico baseado na estrutura da tabela 'assertividade'
+                const registro = {
+                    usuario_id: this.extrairIdUsuario(colunas, cabecalho),
+                    data_referencia: this.formatarData(colunas[cabecalho.indexOf('data')]),
+                    id_ppc: colunas[cabecalho.indexOf('id ppc')] || colunas[cabecalho.indexOf('id')],
+                    status: colunas[cabecalho.indexOf('status')] || 'Finalizado',
+                    created_at: new Date().toISOString()
+                };
+
+                if (registro.usuario_id) {
+                    dadosParaInserir.push(registro);
+                }
+            }
+
+            await this.salvarNoBanco(dadosParaInserir, file.name);
         };
-        reader.readAsText(file);
+
+        leitor.readAsText(file, 'ISO-8859-1'); // Comum em CSVs exportados de sistemas brasileiros
     },
 
-    enviarParaSupabase: async function(dados) {
-        // Lógica de batch insert no Supabase
-        // ... (Seu código de insert existente) ...
-        // Certifique-se de NÃO filtrar nada aqui também.
+    extrairIdUsuario(colunas, cabecalho) {
+        const idx = cabecalho.indexOf('usuario_id') !== -1 ? cabecalho.indexOf('usuario_id') : cabecalho.indexOf('id_assistente');
+        return colunas[idx] ? parseInt(colunas[idx]) : null;
+    },
+
+    formatarData(dataRaw) {
+        if (!dataRaw) return null;
+        // Converte DD/MM/YYYY para YYYY-MM-DD (Formato Postgres)
+        const partes = dataRaw.split('/');
+        if (partes.length === 3) {
+            return `${partes[2]}-${partes[1]}-${partes[0]}`;
+        }
+        return dataRaw;
+    },
+
+    async salvarNoBanco(dados, nomeArquivo) {
+        try {
+            // Lógica de Upsert baseada no ID PPC para evitar duplicados
+            const { data, error } = await Sistema.supabase
+                .from('assertividade')
+                .upsert(dados, { onConflict: 'id_ppc' });
+
+            if (error) throw error;
+
+            alert(`Sucesso! Importação do arquivo "${nomeArquivo}" concluída com ${dados.length} registros.`);
+            console.log("Importação concluída com sucesso.");
+            
+            if (typeof GerenciadorAssertividade !== 'undefined') {
+                GerenciadorAssertividade.init(); // Recarrega a tabela na tela
+            }
+
+        } catch (error) {
+            console.error("Erro na importação:", error);
+            alert("Erro ao salvar no banco. Verifique o console.");
+        }
     }
 };
+
+// Listener para o input de arquivo na página de gestão
+document.getElementById('input-csv-assertividade')?.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        ImportadorAssertividade.processarArquivo(e.target.files[0]);
+    }
+});
