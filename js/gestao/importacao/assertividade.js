@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Corrigindo Datas...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando Regra de Jornada...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Modo: Correção GMT-3 Brasil)...");
+            console.log("📂 [Importacao] Iniciando leitura (Regra: Jornada Estendida -10h)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -58,37 +58,38 @@ Importacao.Assertividade = {
         
         const listaParaSalvar = [];
 
+        // Configuração da Jornada
+        // Subtrair 10 horas garante que qualquer trabalho até as 07:00 AM (BRT) conte como o dia anterior
+        const HORAS_SUBTRAIR = 10; 
+
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
             if (!linha['Assistente']) continue;
 
-            // --- CORREÇÃO DE TIMEZONE (O Segredo) ---
             const endTimeRaw = linha['end_time']; 
-            let dataCorrigidaBrasil = null;
-            let dataHoraCompleta = null; // Continua sendo a chave única (UTC)
+            let dataJornada = null;
+            let dataHoraCompleta = null;
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // Cria objeto Data a partir do UTC
+                // 1. Cria Data a partir do UTC
                 const dt = new Date(endTimeRaw);
                 
-                // Subtrai 3 horas para forçar o horário de Brasília
-                dt.setHours(dt.getHours() - 3);
+                // 2. Aplica o "Recuo de Jornada" (-10 horas)
+                // Ex: Sábado 04:00 UTC -> Sexta 18:00 (Cai na Sexta)
+                dt.setHours(dt.getHours() - HORAS_SUBTRAIR);
                 
-                // Pega a data resultante (ex: 2025-12-05 se era 00:30 do dia 06 UTC)
-                dataCorrigidaBrasil = dt.toISOString().split('T')[0];
-                
-                // Mantém o original para unicidade
-                dataHoraCompleta = endTimeRaw;         
+                dataJornada = dt.toISOString().split('T')[0];
+                dataHoraCompleta = endTimeRaw; // Mantém original para chave única
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                dataCorrigidaBrasil = endTimeRaw.substring(0, 10);
+                // Fallback para datas simples (assume que já está certo ou aplica recuo simples)
+                dataJornada = endTimeRaw.substring(0, 10);
                 dataHoraCompleta = endTimeRaw; 
             } else {
                 const agora = new Date();
-                agora.setHours(agora.getHours() - 3);
-                const iso = agora.toISOString();
-                dataCorrigidaBrasil = iso.split('T')[0];
-                dataHoraCompleta = iso; 
+                agora.setHours(agora.getHours() - HORAS_SUBTRAIR);
+                dataJornada = agora.toISOString().split('T')[0];
+                dataHoraCompleta = agora.toISOString(); 
             }
 
             const idAssistente = parseInt(linha['id_assistente']) || null;
@@ -100,10 +101,10 @@ Importacao.Assertividade = {
             const objeto = {
                 usuario_id: idAssistente,
                 
-                // AQUI VAI A DATA CORRIGIDA (Sexta-feira em vez de Sábado)
-                data_auditoria: dataCorrigidaBrasil, 
+                // DATA CALCULADA PELA JORNADA
+                data_auditoria: dataJornada, 
                 
-                data_referencia: dataHoraCompleta, // Chave Anti-Duplicidade
+                data_referencia: dataHoraCompleta, 
                 created_at: new Date().toISOString(),
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
@@ -131,7 +132,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados (Fuso Horário Ajustado).`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados (Jornada Ajustada).`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
@@ -152,11 +153,12 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
+                // Atualiza os registros existentes com a NOVA DATA CALCULADA
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
                         onConflict: 'assistente,data_referencia,doc_name,status',
-                        ignoreDuplicates: false // MUDANÇA: false para forçar ATUALIZAR a data errada
+                        ignoreDuplicates: false 
                     });
 
                 if (error) throw error;
@@ -165,13 +167,13 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Corrigindo Datas: ${pct}% (${totalInserido}/${total})`);
-                    if(statusDiv) statusDiv.innerText = `${pct}% Corrigido`;
+                    console.log(`🚀 Sincronizando Jornada: ${pct}% (${totalInserido}/${total})`);
+                    if(statusDiv) statusDiv.innerText = `${pct}% Ajustado`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Sucesso! Fuso horário corrigido. As datas de Sábado devem ter voltado para Sexta.`);
+            alert(`Sucesso! Datas ajustadas considerando turno da madrugada.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
