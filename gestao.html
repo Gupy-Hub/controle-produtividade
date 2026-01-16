@@ -7,7 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Estilos globais mantidos */
         body { font-family: 'Inter', sans-serif; }
     </style>
 </head>
@@ -65,7 +64,7 @@
                             
                             <div class="relative">
                                 <input type="file" 
-                                       id="input-csv-assertividade" 
+                                       onchange="Importacao.Assertividade.processarArquivo(this)"
                                        accept=".csv"
                                        class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
                             </div>
@@ -93,18 +92,37 @@
                 </div>
 
                 <div class="mt-8 bg-white rounded-lg shadow">
-                    <div class="border-b px-6 py-4">
+                    <div class="border-b px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
                         <h4 class="text-lg font-semibold text-gray-700">Dados do Sistema</h4>
+                        
+                        <div class="w-full md:w-48">
+                            <label class="text-xs text-gray-500 font-bold block mb-1">FILTRAR STATUS:</label>
+                            <select id="filtro-status" onchange="Gestao.Assertividade.atualizarFiltrosEBuscar()" class="w-full text-[10px] p-1 border rounded bg-white focus:border-blue-500 outline-none shadow-sm font-bold text-slate-600">
+                                <option value="">TODOS</option>
+                                <option value="PROCESSADO">PROCESSADO</option>
+                                <option value="OK">OK</option>
+                                <option value="NOK">NOK</option>
+                                <option value="REV">REV</option>
+                                <option value="JUST">JUST</option>
+                                <option value="DUPL">DUPL</option>
+                                <option value="IA">IA</option>
+                                <option value="EMPR">EMPR</option>
+                                <option value="REC">REC</option>
+                                <option value="PENDENTE">PENDENTE</option>
+                            </select>
+                        </div>
                     </div>
+
                     <div class="p-6">
-                        <div class="flex gap-4 mb-4 border-b">
-                            <button class="px-4 py-2 text-blue-600 border-b-2 border-blue-600 font-medium">Metas</button>
-                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700">Equipe</button>
-                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700">Empresas</button>
+                        <div class="flex gap-4 mb-4 border-b overflow-x-auto">
+                            <button class="px-4 py-2 text-blue-600 border-b-2 border-blue-600 font-medium whitespace-nowrap">Assertividade</button>
+                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700 whitespace-nowrap">Metas</button>
+                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700 whitespace-nowrap">Equipe</button>
+                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700 whitespace-nowrap">Empresas</button>
                         </div>
                         
-                        <div id="conteudo-gestao">
-                            <p class="text-gray-500 text-center py-8">Selecione uma categoria acima para gerenciar.</p>
+                        <div id="conteudo-gestao" class="min-h-[200px]">
+                            <p class="text-gray-500 text-center py-8">Carregando dados...</p>
                         </div>
                     </div>
                 </div>
@@ -114,10 +132,12 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/config.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script> <script src="js/config.js"></script>
     <script src="js/sistema.js"></script>
     
     <script src="js/gestao/importacao/assertividade.js"></script>
+    <script src="js/gestao/assertividade.js"></script> <script src="js/gestao/main.js"></script>
+
     <script>
         async function logout() {
             if(confirm("Deseja sair?")) {
