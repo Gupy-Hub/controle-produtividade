@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ajustando Turnos...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Recalculando Datas...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Regra: Cutoff 04:00 AM)...");
+            console.log("📂 [Importacao] Iniciando leitura (Regra: UTC -7h Fixa)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,10 +57,10 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
-        // HORA DE CORTE: 4 da manhã
-        // Tudo feito antes das 04:00 conta para o dia anterior.
-        // Tudo feito das 04:00 em diante conta para o dia atual.
-        const CUTOFF_HOUR = 4; 
+        // CONSTANTE MÁGICA: 7 Horas (3h Fuso + 4h Cutoff)
+        // Isso alinha o início do dia fiscal (04:00 BRT) com o início do dia UTC (00:00)
+        const MS_PER_HOUR = 60 * 60 * 1000;
+        const OFFSET_TOTAL = 7 * MS_PER_HOUR;
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
@@ -72,30 +72,29 @@ Importacao.Assertividade = {
             let dataHoraCompleta = null;
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // 1. Cria Data a partir do UTC
+                // 1. Pega o instante exato do registro (em UTC)
                 const dt = new Date(endTimeRaw);
-                
-                // 2. Converte para Brasília (UTC -3)
-                dt.setHours(dt.getHours() - 3);
+                const time = dt.getTime(); // milissegundos
 
-                // 3. Aplica a Regra do Cutoff
-                // Se a hora (já em BRT) for menor que 4 (ex: 00, 01, 02, 03), volta 1 dia
-                if (dt.getHours() < CUTOFF_HOUR) {
-                    dt.setDate(dt.getDate() - 1);
-                }
+                // 2. Subtrai 7 horas fixas
+                // Ex: Segunda 07:00 UTC (04:00 BRT) - 7h = Segunda 00:00 UTC -> Data: Segunda
+                // Ex: Segunda 06:59 UTC (03:59 BRT) - 7h = Domingo 23:59 UTC -> Data: Domingo
+                const dtFiscal = new Date(time - OFFSET_TOTAL);
                 
-                // Formata YYYY-MM-DD
-                dataFiscal = dt.toISOString().split('T')[0];
-                dataHoraCompleta = endTimeRaw; // Mantém original para chave única
+                // 3. Extrai a data resultante
+                dataFiscal = dtFiscal.toISOString().split('T')[0];
+                dataHoraCompleta = endTimeRaw; 
+
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Fallback para datas simples
+                // Fallback (raro)
                 dataFiscal = endTimeRaw.substring(0, 10);
                 dataHoraCompleta = endTimeRaw; 
             } else {
-                const agora = new Date();
-                agora.setHours(agora.getHours() - 3);
-                dataFiscal = agora.toISOString().split('T')[0];
-                dataHoraCompleta = agora.toISOString(); 
+                // Fallback para data de agora com o mesmo ajuste
+                const now = new Date();
+                const dtFiscalNow = new Date(now.getTime() - OFFSET_TOTAL);
+                dataFiscal = dtFiscalNow.toISOString().split('T')[0];
+                dataHoraCompleta = now.toISOString(); 
             }
 
             const idAssistente = parseInt(linha['id_assistente']) || null;
@@ -107,7 +106,7 @@ Importacao.Assertividade = {
             const objeto = {
                 usuario_id: idAssistente,
                 
-                // DATA DE COMPETÊNCIA (Fiscal)
+                // DATA CORRETA
                 data_auditoria: dataFiscal, 
                 
                 data_referencia: dataHoraCompleta, 
@@ -138,7 +137,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados (Cutoff 04:00 AM).`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados (Lógica UTC-7h).`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
@@ -159,7 +158,7 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // Atualiza os registros existentes com a NOVA DATA CALCULADA
+                // Upsert para corrigir as datas dos registros existentes
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
@@ -173,13 +172,13 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Sincronizando Cutoff: ${pct}% (${totalInserido}/${total})`);
-                    if(statusDiv) statusDiv.innerText = `${pct}% Ajustado`;
+                    console.log(`🚀 Corrigindo Datas: ${pct}% (${totalInserido}/${total})`);
+                    if(statusDiv) statusDiv.innerText = `${pct}% Corrigido`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Sucesso! Datas ajustadas. Madrugada conta como dia anterior, Manhã conta como dia atual.`);
+            alert(`Sucesso! Domingo deve ter sumido e voltado para Segunda.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
