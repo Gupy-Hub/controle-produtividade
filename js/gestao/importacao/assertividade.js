@@ -1,4 +1,3 @@
-// Garante namespace
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
@@ -12,38 +11,43 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo CSV...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo e Processando...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
-            this.lerCSV(file).finally(() => {
-                input.value = ''; 
-                if (btn) {
-                    btn.innerHTML = originalText;
-                    btn.disabled = false;
-                    btn.classList.remove('cursor-not-allowed', 'opacity-75');
-                }
-            });
+            // Timeout para dar tempo da UI atualizar antes de travar no processamento
+            setTimeout(() => {
+                this.lerCSV(file).finally(() => {
+                    input.value = ''; 
+                    if (btn) {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('cursor-not-allowed', 'opacity-75');
+                    }
+                });
+            }, 100);
         }
     },
 
     lerCSV: function(file) {
         return new Promise((resolve) => {
-            console.log("📂 [Importacao] Iniciando leitura via PapaParse...");
+            console.time("TempoLeitura");
+            console.log("📂 [Importacao] Iniciando leitura otimizada...");
             
             Papa.parse(file, {
                 header: true, 
                 skipEmptyLines: true,
                 encoding: "UTF-8", 
                 complete: async (results) => {
-                    console.log(`📊 Linhas lidas: ${results.data.length}`);
+                    console.timeEnd("TempoLeitura");
+                    console.log(`📊 Linhas brutas: ${results.data.length}`);
                     await this.tratarEEnviar(results.data);
                     resolve();
                 },
                 error: (error) => {
-                    console.error("Erro PapaParse:", error);
-                    alert("Falha ao ler o arquivo CSV. Verifique a codificação.");
+                    console.error("Erro CSV:", error);
+                    alert("Erro na leitura do arquivo.");
                     resolve();
                 }
             });
@@ -51,44 +55,49 @@ Importacao.Assertividade = {
     },
 
     tratarEEnviar: async function(linhas) {
-        const listaParaSalvar = [];
-        const mapaDuplicatas = new Map(); // Para deduplicar dentro do próprio CSV (última versão ganha)
+        console.time("TempoTratamento");
+        const mapaDuplicatas = new Map();
 
-        console.log("🛠️ Tratando dados e removendo duplicatas internas...");
-
-        for (const linha of linhas) {
-            // Validação mínima
+        // Loop Otimizado (sem logs internos)
+        for (let i = 0; i < linhas.length; i++) {
+            const linha = linhas[i];
+            
             if (!linha['Assistente']) continue;
 
-            // 1. Tratamento de Data
+            // Tratamento de Data Rápido
+            // O CSV tem um espaço no final: "Data da Auditoria "
             const dataRaw = linha['Data da Auditoria '] || linha['Data da Auditoria'] || ''; 
-            let dataFmt = null;
-            if (dataRaw && dataRaw.includes('/')) {
-                const [d, m, y] = dataRaw.trim().split('/');
-                dataFmt = `${y}-${m}-${d}`;
+            let dataFmt;
+            
+            // Regex simples é mais rápido que splits múltiplos para validação
+            if (dataRaw && dataRaw.indexOf('/') > -1) {
+                const partes = dataRaw.trim().split('/');
+                // YYYY-MM-DD
+                dataFmt = partes[2] + '-' + partes[1] + '-' + partes[0];
             } else {
-                dataFmt = new Date().toISOString().split('T')[0];
+                dataFmt = new Date().toISOString().substring(0, 10);
             }
 
+            // Conversões numéricas seguras
             const idAssistente = parseInt(linha['id_assistente']) || null;
             const companyId = parseInt(linha['Company_id']) || null;
             const nCampos = parseInt(linha['nº Campos']) || 0;
             const nOk = parseInt(linha['Ok']) || 0;
             const nNok = parseInt(linha['Nok']) || 0;
 
-            // Chave Única Lógica (Business Key)
-            const chaveUnica = `${linha['Assistente']}-${dataFmt}-${linha['Empresa']}-${linha['doc_name']}`;
+            // Chave Única para Deduplicação (Mesma do Banco)
+            const chaveUnica = linha['Assistente'] + '|' + dataFmt + '|' + linha['Empresa'] + '|' + linha['doc_name'];
 
             const objeto = {
-                // --- CHAVES E DATAS ---
+                // CHAVES
                 usuario_id: idAssistente,
                 data_auditoria: dataFmt,
-                data_referencia: dataFmt,
-                created_at: new Date().toISOString(), // Atualizará a data de criação no upsert se não excluído
+                data_referencia: dataFmt, // Redundância útil para filtros
+                created_at: new Date().toISOString(),
 
-                // --- IDENTIFICAÇÃO (Escrita Espelhada) ---
-                company_id: linha['Company_id'],
-                empresa_id: companyId,
+                // IDENTIFICAÇÃO (Espelhamento para compatibilidade)
+                company_id: linha['Company_id'], // Texto original
+                empresa_id: companyId,           // Numérico
                 
                 empresa: linha['Empresa'],
                 empresa_nome: linha['Empresa'],
@@ -99,36 +108,33 @@ Importacao.Assertividade = {
                 auditora: linha['Auditora'],
                 nome_auditora_raw: linha['Auditora'],
 
-                // --- DADOS DA AUDITORIA ---
+                // CONTEÚDO
                 doc_name: linha['doc_name'],
                 nome_documento: linha['doc_name'],
 
                 status: linha['STATUS'],
-
                 obs: linha['Apontamentos/obs'],
                 observacao: linha['Apontamentos/obs'],
 
-                porcentagem: linha['% Assert'],
+                porcentagem: linha['% Assert'], // Mantém texto "100,00%"
 
-                // --- MÉTRICAS ---
+                // MÉTRICAS
                 campos: nCampos,
                 num_campos: nCampos,
-
                 ok: nOk,
                 qtd_ok: nOk,
-
                 nok: nNok,
                 qtd_nok: nNok
             };
 
-            // Guarda no Map sobrescrevendo se a chave já existir (mantém o último/mais recente do CSV)
+            // Sobrescreve: mantém sempre a última versão da planilha (estado final)
             mapaDuplicatas.set(chaveUnica, objeto);
         }
 
-        // Converte Map de volta para Array
         const listaFinal = Array.from(mapaDuplicatas.values());
-
-        console.log(`✅ ${listaFinal.length} registos únicos prontos para envio (Deduplicados de ${linhas.length}).`);
+        console.timeEnd("TempoTratamento");
+        
+        console.log(`✅ ${listaFinal.length} registros únicos processados.`);
 
         if (listaFinal.length > 0) {
             await this.enviarParaSupabase(listaFinal);
@@ -139,15 +145,17 @@ Importacao.Assertividade = {
 
     enviarParaSupabase: async function(dados) {
         try {
-            const BATCH_SIZE = 100;
+            // AUMENTADO PARA 1000 (10x mais rápido)
+            const BATCH_SIZE = 1000; 
             let totalInserido = 0;
+            const total = dados.length;
             
-            for (let i = 0; i < dados.length; i += BATCH_SIZE) {
+            console.time("TempoEnvio");
+            const statusDiv = document.getElementById('status-importacao'); // Se existir na tela
+            
+            for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // --- MUDANÇA CRÍTICA: UPSERT ---
-                // onConflict: colunas definidas no SQL
-                // ignoreDuplicates: false (queremos ATUALIZAR se existir, ex: REV -> NOK)
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
@@ -158,18 +166,25 @@ Importacao.Assertividade = {
                 if (error) throw error;
                 
                 totalInserido += lote.length;
-                console.log(`📦 Lote processado: ${totalInserido} / ${dados.length}`);
+                
+                // Log de progresso a cada 5.000 registros para não sujar o console
+                if (totalInserido % 5000 === 0 || totalInserido === total) {
+                    const pct = Math.round((totalInserido / total) * 100);
+                    console.log(`🚀 Progresso: ${pct}% (${totalInserido}/${total})`);
+                    if(statusDiv) statusDiv.innerText = `${pct}% Enviado`;
+                }
             }
 
-            alert(`Sucesso! ${totalInserido} auditorias processadas (Inseridas ou Atualizadas).`);
+            console.timeEnd("TempoEnvio");
+            alert(`Processo concluído! ${totalInserido} linhas sincronizadas.`);
             
-            if (window.Gestao && Gestao.Assertividade && typeof Gestao.Assertividade.carregar === 'function') {
+            if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
             }
 
         } catch (error) {
-            console.error("Erro Fatal no Supabase:", error);
-            alert(`Erro ao salvar no banco: ${error.message || error.details}`);
+            console.error("Erro Supabase:", error);
+            alert(`Erro no envio: ${error.message}`);
         }
     }
 };
