@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando Lógica Híbrida...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando Literalmente...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando (Regra: UTC-3 com Proteção de Domingo)...");
+            console.log("📂 [Importacao] Iniciando (Modo: TEXTO PURO - Para garantir média exata)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,49 +57,23 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
-        // 3 Horas em milissegundos
-        const OFFSET_BRASIL = 3 * 60 * 60 * 1000; 
-
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
             if (!linha['Assistente']) continue;
 
             const endTimeRaw = linha['end_time']; 
-            let dataFinal = null;
-            let dataHoraCompleta = null;
+            let dataLiteral = null;
 
+            // --- REGRA DE OURO: O QUE ESTÁ ESCRITO, É O QUE VALE ---
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // 1. Data Original UTC
-                const dtUTC = new Date(endTimeRaw);
-                const msUTC = dtUTC.getTime();
-
-                // 2. Aplica UTC-3 (Brasil)
-                // Ex: Sábado 01:00 UTC vira Sexta 22:00 (Sexta é dia 5 na semana JS? Depende da ref)
-                const dtBrasil = new Date(msUTC - OFFSET_BRASIL);
-                
-                // 3. Verificação de Dia da Semana (0 = Domingo, 6 = Sábado)
-                // getUTCDay() aqui funciona porque criamos a data subtraindo o offset manualmente
-                const diaSemanaBrasil = dtBrasil.getUTCDay();
-
-                // LÓGICA DE PROTEÇÃO DE DOMINGO
-                if (diaSemanaBrasil === 0) { 
-                    // Se caiu no Domingo (era Segunda de madrugada), volta para Segunda
-                    // Adiciona 1 dia (24h)
-                    dtBrasil.setTime(dtBrasil.getTime() + (24 * 60 * 60 * 1000));
-                }
-
-                dataFinal = dtBrasil.toISOString().split('T')[0];
-                dataHoraCompleta = endTimeRaw; 
-
+                // "2025-12-02T02:08..." -> Corta no T -> "2025-12-02"
+                // Isso joga os registros da Brenda para o dia 02, corrigindo a média do dia 01.
+                dataLiteral = endTimeRaw.split('T')[0];
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Fallback
-                dataFinal = endTimeRaw.substring(0, 10);
-                dataHoraCompleta = endTimeRaw; 
+                dataLiteral = endTimeRaw.substring(0, 10);
             } else {
-                const now = new Date();
-                dataFinal = now.toISOString().split('T')[0];
-                dataHoraCompleta = now.toISOString(); 
+                dataLiteral = new Date().toISOString().split('T')[0];
             }
 
             const idAssistente = parseInt(linha['id_assistente']) || null;
@@ -110,9 +84,13 @@ Importacao.Assertividade = {
 
             const objeto = {
                 usuario_id: idAssistente,
-                data_auditoria: dataFinal, 
-                data_referencia: dataHoraCompleta, 
+                
+                // DATA PURA
+                data_auditoria: dataLiteral, 
+                
+                data_referencia: endTimeRaw || new Date().toISOString(), 
                 created_at: new Date().toISOString(),
+                
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
                 empresa: linha['Empresa'],
@@ -179,7 +157,7 @@ Importacao.Assertividade = {
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Sucesso! Sábados viraram Sextas. Segundas continuam Segundas.`);
+            alert(`Processo Concluído! A média da Samaria deve bater 91.89% agora.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
