@@ -110,31 +110,50 @@ window.Produtividade.Importacao.Validacao = {
         const statusEl = document.getElementById('status-importacao-prod');
         
         try {
-            // Verificação de segurança da sessão
-            const { data: { session } } = await Sistema.supabase.auth.getSession();
-            if (!session) throw new Error("Sessão expirada.");
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-spinner fa-spin"></i> Verificando conexão...</span>`;
 
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando...</span>`;
+            // 1. Tenta obter a sessão atualizada
+            const { data, error: sessionError } = await Sistema.supabase.auth.getSession();
+            
+            if (sessionError || !data.session) {
+                console.error("Erro de sessão:", sessionError);
+                throw new Error("Sessão inválida ou expirada. Por favor, atualize a página (F5) ou refaça o login.");
+            }
 
-            const { error } = await Sistema.supabase
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando ${this.dadosProcessados.length} registros...</span>`;
+
+            // 2. Executa o Upsert
+            const { error: upsertError } = await Sistema.supabase
                 .from('producao')
                 .upsert(this.dadosProcessados, { 
                     onConflict: 'usuario_id,data_referencia' 
                 });
 
-            if (error) throw error;
+            if (upsertError) {
+                // Se o erro for 401 mesmo com sessão, é falta de política RLS no banco
+                if (upsertError.status === 401 || upsertError.code === "42501") {
+                    throw new Error("Permissão Negada (RLS). O banco não permite gravação para seu usuário.");
+                }
+                throw upsertError;
+            }
 
-            alert("✅ Dados importados com sucesso!");
-            if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
+            // 3. Sucesso
+            if(statusEl) statusEl.innerHTML = `<span class="text-emerald-600 font-bold"><i class="fas fa-check"></i> Importado com Sucesso!</span>`;
+            alert("✅ Dados sincronizados com o Supabase!");
+            
+            if (window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
+                window.Produtividade.Geral.carregarTela();
+            }
 
         } catch (e) {
-            console.error("Erro no Upsert:", e);
-            alert("Erro: " + (e.message || "Falha na comunicação com Supabase"));
+            console.error("Falha na Operação:", e);
+            alert("❌ Erro: " + e.message);
+            if(statusEl) statusEl.innerHTML = `<span class="text-red-600 font-bold">Falha: ${e.message}</span>`;
         } finally {
-            if(statusEl) statusEl.innerHTML = "";
+            // Limpa o status após 5 segundos
+            setTimeout(() => { if(statusEl) statusEl.innerHTML = ""; }, 5000);
         }
     }
-};
 
 // Auto-inicialização
 Produtividade.Importacao.Validacao.init();
