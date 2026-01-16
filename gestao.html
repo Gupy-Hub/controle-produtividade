@@ -6,164 +6,105 @@
     <title>Performance Pro - Gestão</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
     <style>
+        /* Estilos globais mantidos */
         body { font-family: 'Inter', sans-serif; }
-        /* Ocultar scrollbar mas permitir scroll */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body class="bg-gray-50 text-gray-800">
+<body class="bg-gray-100">
 
     <div class="flex h-screen overflow-hidden">
         
-        <aside class="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col z-10">
-            <div class="p-6 border-b border-gray-100 flex items-center gap-3">
-                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-xl">
-                    P
-                </div>
-                <span class="font-bold text-xl text-gray-800">Performance Pro</span>
+        <aside class="w-64 bg-white shadow-md z-10 hidden md:block">
+            <div class="p-6 border-b">
+                <h1 class="text-2xl font-bold text-blue-600">Performance Pro</h1>
+                <p class="text-sm text-gray-500">Gestão de Produtividade</p>
             </div>
-
-            <nav class="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-                <a href="index.html" class="flex items-center gap-3 px-3 py-2 text-gray-600 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors">
-                    <i class="fas fa-home w-5 text-center"></i>
-                    <span class="font-medium">Início</span>
+            <nav class="mt-6">
+                <a href="index.html" class="flex items-center px-6 py-3 text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors">
+                    <i class="fas fa-home w-6"></i>
+                    <span class="mx-3">Início</span>
                 </a>
-                
-                <a href="minha_area.html" class="flex items-center gap-3 px-3 py-2 text-gray-600 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors">
-                    <i class="fas fa-user w-5 text-center"></i>
-                    <span class="font-medium">Minha Área</span>
+                <a href="minha_area.html" class="flex items-center px-6 py-3 text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors">
+                    <i class="fas fa-user w-6"></i>
+                    <span class="mx-3">Minha Área</span>
                 </a>
-
-                <a href="produtividade.html" class="flex items-center gap-3 px-3 py-2 text-gray-600 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors">
-                    <i class="fas fa-chart-line w-5 text-center"></i>
-                    <span class="font-medium">Produção</span>
+                <a href="produtividade.html" class="flex items-center px-6 py-3 text-gray-600 hover:bg-gray-50 hover:text-blue-600 transition-colors">
+                    <i class="fas fa-chart-line w-6"></i>
+                    <span class="mx-3">Produção</span>
                 </a>
-
-                <a href="gestao.html" class="flex items-center gap-3 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg transition-colors">
-                    <i class="fas fa-cogs w-5 text-center"></i>
-                    <span class="font-medium">Gestão & Dados</span>
+                <a href="gestao.html" class="flex items-center px-6 py-3 bg-blue-50 text-blue-600 border-r-4 border-blue-600">
+                    <i class="fas fa-cogs w-6"></i>
+                    <span class="mx-3">Gestão & Dados</span>
                 </a>
             </nav>
-
-            <div class="p-4 border-t border-gray-200">
-                <button onclick="logout()" class="flex items-center gap-3 px-3 py-2 text-red-600 w-full hover:bg-red-50 rounded-lg transition-colors">
-                    <i class="fas fa-sign-out-alt w-5 text-center"></i>
-                    <span class="font-medium">Sair</span>
+            <div class="absolute bottom-0 w-full p-6 border-t">
+                <button onclick="logout()" class="flex items-center text-red-600 hover:text-red-800">
+                    <i class="fas fa-sign-out-alt w-6"></i>
+                    <span class="mx-3">Sair</span>
                 </button>
             </div>
         </aside>
 
-        <main class="flex-1 overflow-y-auto bg-gray-50 relative">
-            <header class="bg-white shadow-sm sticky top-0 z-20 px-6 py-4 flex justify-between items-center md:hidden">
-                <span class="font-bold text-lg">Gestão</span>
-                <button class="text-gray-600"><i class="fas fa-bars text-xl"></i></button>
-            </header>
-
-            <div class="p-8 max-w-7xl mx-auto">
+        <main class="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
+            <div class="container mx-auto px-6 py-8">
                 
-                <div class="mb-8">
-                    <h1 class="text-2xl font-bold text-gray-900">Painel de Gestão</h1>
-                    <p class="text-gray-500 mt-1">Gerencie usuários, metas e importe dados do sistema.</p>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                <h3 class="text-gray-700 text-3xl font-medium">Painel de Gestão</h3>
+                
+                <div class="mt-8">
+                    <h4 class="text-gray-600 text-lg font-medium mb-4">Importação de Dados (CSV)</h4>
                     
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-gray-800">Assertividade (Auditoria)</h3>
-                            <div class="p-2 bg-green-100 text-green-600 rounded-lg">
-                                <i class="fas fa-file-csv"></i>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h5 class="text-gray-800 font-bold">Assertividade</h5>
+                                <i class="fas fa-file-csv text-blue-500 text-2xl"></i>
+                            </div>
+                            <p class="text-sm text-gray-600 mb-4">Importe o relatório mensal de auditoria.</p>
+                            
+                            <div class="relative">
+                                <input type="file" 
+                                       id="input-csv-assertividade" 
+                                       accept=".csv"
+                                       class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer">
                             </div>
                         </div>
-                        <p class="text-xs text-gray-500 mb-4">CSV Mensal: Documento, Data, OK, NOK</p>
-                        
-                        <label for="input-csv-assertividade" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors group">
-                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                <i class="fas fa-cloud-upload-alt text-2xl text-gray-400 group-hover:text-blue-500 mb-2 transition-colors"></i>
-                                <p class="text-sm text-gray-500 font-medium">Clique para enviar</p>
-                            </div>
-                            <input type="file" id="input-csv-assertividade" accept=".csv" class="hidden">
-                        </label>
-                    </div>
 
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-gray-800">Base de Usuários</h3>
-                            <div class="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                                <i class="fas fa-users"></i>
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h5 class="text-gray-800 font-bold">Usuários</h5>
+                                <i class="fas fa-users text-green-500 text-2xl"></i>
                             </div>
+                            <p class="text-sm text-gray-600 mb-4">Atualize a base de colaboradores.</p>
+                            <input type="file" id="input-csv-usuarios" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100">
                         </div>
-                        <p class="text-xs text-gray-500 mb-4">CSV: Nome, ID, Email, Cargo</p>
-                        
-                        <label for="input-csv-usuarios" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors group">
-                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                <i class="fas fa-user-plus text-2xl text-gray-400 group-hover:text-blue-500 mb-2 transition-colors"></i>
-                                <p class="text-sm text-gray-500 font-medium">Atualizar Equipe</p>
-                            </div>
-                            <input type="file" id="input-csv-usuarios" accept=".csv" class="hidden">
-                        </label>
-                    </div>
 
-                    <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
-                        <div class="flex items-center justify-between mb-4">
-                            <h3 class="font-semibold text-gray-800">Empresas / Clientes</h3>
-                            <div class="p-2 bg-purple-100 text-purple-600 rounded-lg">
-                                <i class="fas fa-building"></i>
+                        <div class="bg-white rounded-lg shadow p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <h5 class="text-gray-800 font-bold">Empresas</h5>
+                                <i class="fas fa-building text-purple-500 text-2xl"></i>
                             </div>
+                            <p class="text-sm text-gray-600 mb-4">Base de clientes e CNPJs.</p>
+                            <input type="file" id="input-csv-empresas" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-50 file:text-purple-700 hover:file:bg-purple-100">
                         </div>
-                        <p class="text-xs text-gray-500 mb-4">CSV: CNPJ, Nome Fantasia, ID</p>
-                        
-                        <label for="input-csv-empresas" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors group">
-                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                                <i class="fas fa-industry text-2xl text-gray-400 group-hover:text-blue-500 mb-2 transition-colors"></i>
-                                <p class="text-sm text-gray-500 font-medium">Atualizar Carteira</p>
-                            </div>
-                            <input type="file" id="input-csv-empresas" accept=".csv" class="hidden">
-                        </label>
-                    </div>
 
+                    </div>
                 </div>
 
-                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    <div class="border-b border-gray-200 px-6 py-4 flex gap-6 overflow-x-auto">
-                        <button class="font-semibold text-blue-600 border-b-2 border-blue-600 pb-1">Metas & Performance</button>
-                        <button class="font-medium text-gray-500 hover:text-gray-800 transition-colors">Lista de Usuários</button>
-                        <button class="font-medium text-gray-500 hover:text-gray-800 transition-colors">Empresas</button>
-                        <button class="font-medium text-gray-500 hover:text-gray-800 transition-colors">Logs do Sistema</button>
+                <div class="mt-8 bg-white rounded-lg shadow">
+                    <div class="border-b px-6 py-4">
+                        <h4 class="text-lg font-semibold text-gray-700">Dados do Sistema</h4>
                     </div>
-
                     <div class="p-6">
-                        <div id="tab-metas">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-lg font-bold text-gray-800">Metas Vigentes</h3>
-                                <button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 transition-colors">
-                                    <i class="fas fa-plus mr-2"></i> Nova Meta
-                                </button>
-                            </div>
-                            
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-sm text-left text-gray-600">
-                                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
-                                        <tr>
-                                            <th class="px-6 py-3">Mês/Ano</th>
-                                            <th class="px-6 py-3">Meta (Pontos)</th>
-                                            <th class="px-6 py-3">Dias Úteis</th>
-                                            <th class="px-6 py-3">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="lista-metas">
-                                        <tr>
-                                            <td class="px-6 py-4" colspan="4" class="text-center text-gray-400">
-                                                Carregando dados...
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
+                        <div class="flex gap-4 mb-4 border-b">
+                            <button class="px-4 py-2 text-blue-600 border-b-2 border-blue-600 font-medium">Metas</button>
+                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700">Equipe</button>
+                            <button class="px-4 py-2 text-gray-500 hover:text-gray-700">Empresas</button>
+                        </div>
+                        
+                        <div id="conteudo-gestao">
+                            <p class="text-gray-500 text-center py-8">Selecione uma categoria acima para gerenciar.</p>
                         </div>
                     </div>
                 </div>
@@ -172,23 +113,19 @@
         </main>
     </div>
 
-    <script src="js/config.js"></script> <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/sistema.js"></script> <script src="js/gestao/importacao/assertividade.js"></script> 
-    <script src="js/gestao/importacao/usuarios.js"></script>
-    <script src="js/gestao/importacao/empresas.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/config.js"></script>
+    <script src="js/sistema.js"></script>
     
-    <script src="js/gestao/main.js"></script>
-
+    <script src="js/gestao/importacao/assertividade.js"></script>
     <script>
-        // Script simples para Logout (pode ser movido para um arquivo separado)
         async function logout() {
-            if (confirm("Deseja realmente sair?")) {
+            if(confirm("Deseja sair?")) {
                 localStorage.removeItem('usuario_logado');
                 await Sistema.supabase.auth.signOut();
                 window.location.href = 'index.html';
             }
         }
     </script>
-
 </body>
 </html>
