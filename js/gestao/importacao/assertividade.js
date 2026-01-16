@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando Literalmente...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo DATA EXATA...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando (Modo: TEXTO PURO - Para garantir média exata)...");
+            console.log("📂 [Importacao] MODO LITERAL ATIVADO: Ignorando Fuso Horário completamente.");
             
             Papa.parse(file, {
                 header: true, 
@@ -65,10 +65,10 @@ Importacao.Assertividade = {
             const endTimeRaw = linha['end_time']; 
             let dataLiteral = null;
 
-            // --- REGRA DE OURO: O QUE ESTÁ ESCRITO, É O QUE VALE ---
+            // --- LÓGICA LITERAL ---
+            // Se o arquivo diz "2025-12-02T02:00...", nós gravamos "2025-12-02".
+            // Ignoramos se no Brasil era dia 01. O que vale é o texto do arquivo.
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // "2025-12-02T02:08..." -> Corta no T -> "2025-12-02"
-                // Isso joga os registros da Brenda para o dia 02, corrigindo a média do dia 01.
                 dataLiteral = endTimeRaw.split('T')[0];
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
                 dataLiteral = endTimeRaw.substring(0, 10);
@@ -84,13 +84,9 @@ Importacao.Assertividade = {
 
             const objeto = {
                 usuario_id: idAssistente,
-                
-                // DATA PURA
-                data_auditoria: dataLiteral, 
-                
+                data_auditoria: dataLiteral, // <--- O SEGREDO ESTÁ AQUI
                 data_referencia: endTimeRaw || new Date().toISOString(), 
                 created_at: new Date().toISOString(),
-                
                 company_id: linha['Company_id'], 
                 empresa_id: companyId,           
                 empresa: linha['Empresa'],
@@ -117,8 +113,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados.`);
-
+        
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
         } else {
@@ -132,7 +127,6 @@ Importacao.Assertividade = {
             let totalInserido = 0;
             const total = dados.length;
             
-            console.time("TempoEnvio");
             const statusDiv = document.getElementById('status-importacao');
             
             for (let i = 0; i < total; i += BATCH_SIZE) {
@@ -151,13 +145,12 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Sincronizando: ${pct}% (${totalInserido}/${total})`);
-                    if(statusDiv) statusDiv.innerText = `${pct}% Salvo`;
+                    console.log(`🚀 Importando: ${pct}%`);
+                    if(statusDiv) statusDiv.innerText = `${pct}%`;
                 }
             }
 
-            console.timeEnd("TempoEnvio");
-            alert(`Processo Concluído! A média da Samaria deve bater 91.89% agora.`);
+            alert(`Importação Concluída!`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
@@ -165,7 +158,7 @@ Importacao.Assertividade = {
 
         } catch (error) {
             console.error("Erro Supabase:", error);
-            alert(`Erro durante a gravação: ${error.message}`);
+            alert(`Erro: ${error.message}`);
         }
     }
 };
