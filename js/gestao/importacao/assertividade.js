@@ -1,14 +1,11 @@
-// Garante que o namespace global existe
+// Garante namespace
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
     
-    // Método gatilho do HTML (onchange)
     processarArquivo: function(input) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
-            
-            // Feedback visual no botão
             const parentDiv = input.closest('div');
             const btn = parentDiv ? parentDiv.querySelector('button') : null;
             let originalText = '';
@@ -20,9 +17,7 @@ Importacao.Assertividade = {
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
-            // Inicia processamento
             this.lerCSV(file).finally(() => {
-                // Restaura estado inicial
                 input.value = ''; 
                 if (btn) {
                     btn.innerHTML = originalText;
@@ -33,15 +28,14 @@ Importacao.Assertividade = {
         }
     },
 
-    // Leitura robusta com PapaParse
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.log("📂 [Importacao] Iniciando leitura via PapaParse...");
             
             Papa.parse(file, {
-                header: true, // Usa cabeçalho do CSV
+                header: true, 
                 skipEmptyLines: true,
-                encoding: "UTF-8", // Importante para acentos (PT-BR)
+                encoding: "UTF-8", 
                 complete: async (results) => {
                     console.log(`📊 Linhas lidas: ${results.data.length}`);
                     await this.tratarEEnviar(results.data);
@@ -58,111 +52,117 @@ Importacao.Assertividade = {
 
     tratarEEnviar: async function(linhas) {
         const listaParaSalvar = [];
-        
-        // Mapeamento baseado no DDL do Banco e Headers do CSV (Dezembro.csv)
+        const mapaDuplicatas = new Map(); // Para deduplicar dentro do próprio CSV (última versão ganha)
+
+        console.log("🛠️ Tratando dados e removendo duplicatas internas...");
+
         for (const linha of linhas) {
-            
-            // Validação mínima: Se não tem nome de assistente, pula (linha inválida ou totalizador)
+            // Validação mínima
             if (!linha['Assistente']) continue;
 
-            // 1. Tratamento de Data (DD/MM/YYYY -> YYYY-MM-DD)
-            // Nota: O CSV tem um espaço extra no header: "Data da Auditoria "
+            // 1. Tratamento de Data
             const dataRaw = linha['Data da Auditoria '] || linha['Data da Auditoria'] || ''; 
             let dataFmt = null;
-            
             if (dataRaw && dataRaw.includes('/')) {
                 const [d, m, y] = dataRaw.trim().split('/');
                 dataFmt = `${y}-${m}-${d}`;
             } else {
-                // Fallback: data de hoje se falhar
                 dataFmt = new Date().toISOString().split('T')[0];
             }
 
-            // 2. Tratamento Numérico
             const idAssistente = parseInt(linha['id_assistente']) || null;
             const companyId = parseInt(linha['Company_id']) || null;
-            
             const nCampos = parseInt(linha['nº Campos']) || 0;
             const nOk = parseInt(linha['Ok']) || 0;
             const nNok = parseInt(linha['Nok']) || 0;
 
-            // 3. Montagem do Objeto (Escrita Espelhada para compatibilidade total)
-            listaParaSalvar.push({
+            // Chave Única Lógica (Business Key)
+            const chaveUnica = `${linha['Assistente']}-${dataFmt}-${linha['Empresa']}-${linha['doc_name']}`;
+
+            const objeto = {
                 // --- CHAVES E DATAS ---
-                usuario_id: idAssistente,       // FK para usuarios
-                data_auditoria: dataFmt,        // Coluna date
-                data_referencia: dataFmt,       // Coluna timestamp (redundância útil)
-                created_at: new Date().toISOString(),
+                usuario_id: idAssistente,
+                data_auditoria: dataFmt,
+                data_referencia: dataFmt,
+                created_at: new Date().toISOString(), // Atualizará a data de criação no upsert se não excluído
 
-                // --- IDENTIFICAÇÃO ---
-                company_id: linha['Company_id'], // Texto/Original
-                empresa_id: companyId,           // Bigint
+                // --- IDENTIFICAÇÃO (Escrita Espelhada) ---
+                company_id: linha['Company_id'],
+                empresa_id: companyId,
                 
-                empresa: linha['Empresa'],       // Legado
-                empresa_nome: linha['Empresa'],  // Novo padrão
+                empresa: linha['Empresa'],
+                empresa_nome: linha['Empresa'],
 
-                assistente: linha['Assistente'],      // Legado
-                nome_assistente: linha['Assistente'], // Novo padrão (usado na View)
+                assistente: linha['Assistente'],
+                nome_assistente: linha['Assistente'],
 
-                auditora: linha['Auditora'],          // Legado
-                nome_auditora_raw: linha['Auditora'], // Novo padrão
+                auditora: linha['Auditora'],
+                nome_auditora_raw: linha['Auditora'],
 
                 // --- DADOS DA AUDITORIA ---
-                doc_name: linha['doc_name'],       // Legado
-                nome_documento: linha['doc_name'], // Novo padrão
+                doc_name: linha['doc_name'],
+                nome_documento: linha['doc_name'],
 
                 status: linha['STATUS'],
 
-                obs: linha['Apontamentos/obs'],        // Legado
-                observacao: linha['Apontamentos/obs'], // Novo padrão
+                obs: linha['Apontamentos/obs'],
+                observacao: linha['Apontamentos/obs'],
 
-                porcentagem: linha['% Assert'], // Mantém formato texto (ex: "100,00%") conforme DDL
+                porcentagem: linha['% Assert'],
 
                 // --- MÉTRICAS ---
-                campos: nCampos,      // Legado
-                num_campos: nCampos,  // Novo padrão
+                campos: nCampos,
+                num_campos: nCampos,
 
-                ok: nOk,              // Legado
-                qtd_ok: nOk,          // Novo padrão
+                ok: nOk,
+                qtd_ok: nOk,
 
-                nok: nNok,            // Legado
-                qtd_nok: nNok         // Novo padrão
-            });
+                nok: nNok,
+                qtd_nok: nNok
+            };
+
+            // Guarda no Map sobrescrevendo se a chave já existir (mantém o último/mais recente do CSV)
+            mapaDuplicatas.set(chaveUnica, objeto);
         }
 
-        console.log(`✅ ${listaParaSalvar.length} registos processados e prontos para envio.`);
+        // Converte Map de volta para Array
+        const listaFinal = Array.from(mapaDuplicatas.values());
 
-        if (listaParaSalvar.length > 0) {
-            await this.enviarParaSupabase(listaParaSalvar);
+        console.log(`✅ ${listaFinal.length} registos únicos prontos para envio (Deduplicados de ${linhas.length}).`);
+
+        if (listaFinal.length > 0) {
+            await this.enviarParaSupabase(listaFinal);
         } else {
-            alert("Nenhum dado válido encontrado. Verifique se as colunas do CSV (ex: 'Assistente', 'Company_id') estão corretas.");
+            alert("Nenhum dado válido encontrado.");
         }
     },
 
     enviarParaSupabase: async function(dados) {
         try {
-            // Envio em Lotes (Batch) para evitar timeout
             const BATCH_SIZE = 100;
             let totalInserido = 0;
             
             for (let i = 0; i < dados.length; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // INSERT simples (Tabela assertividade não tem Unique Key clara no DDL)
-                // Se houvesse, usaríamos .upsert()
+                // --- MUDANÇA CRÍTICA: UPSERT ---
+                // onConflict: colunas definidas no SQL
+                // ignoreDuplicates: false (queremos ATUALIZAR se existir, ex: REV -> NOK)
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
-                    .insert(lote);
+                    .upsert(lote, { 
+                        onConflict: 'assistente, data_auditoria, empresa, doc_name',
+                        ignoreDuplicates: false 
+                    });
 
                 if (error) throw error;
                 
                 totalInserido += lote.length;
-                console.log(`📦 Lote enviado: ${totalInserido} / ${dados.length}`);
+                console.log(`📦 Lote processado: ${totalInserido} / ${dados.length}`);
             }
 
-            alert(`Sucesso! ${totalInserido} auditorias importadas.`);
+            alert(`Sucesso! ${totalInserido} auditorias processadas (Inseridas ou Atualizadas).`);
             
-            // Atualiza a grid se estiver na tela
             if (window.Gestao && Gestao.Assertividade && typeof Gestao.Assertividade.carregar === 'function') {
                 Gestao.Assertividade.carregar();
             }
