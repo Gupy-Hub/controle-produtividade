@@ -11,7 +11,7 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Corrigindo Datas...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura (Modo: Upsert Anti-Duplicidade)...");
+            console.log("📂 [Importacao] Iniciando leitura (Modo: Correção GMT-3 Brasil)...");
             
             Papa.parse(file, {
                 header: true, 
@@ -63,22 +63,32 @@ Importacao.Assertividade = {
             
             if (!linha['Assistente']) continue;
 
-            // --- TRATAMENTO DE DATAS ---
+            // --- CORREÇÃO DE TIMEZONE (O Segredo) ---
             const endTimeRaw = linha['end_time']; 
-            let dataApenas = null;
-            let dataHoraCompleta = null;
+            let dataCorrigidaBrasil = null;
+            let dataHoraCompleta = null; // Continua sendo a chave única (UTC)
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                dataApenas = endTimeRaw.split('T')[0]; 
+                // Cria objeto Data a partir do UTC
+                const dt = new Date(endTimeRaw);
+                
+                // Subtrai 3 horas para forçar o horário de Brasília
+                dt.setHours(dt.getHours() - 3);
+                
+                // Pega a data resultante (ex: 2025-12-05 se era 00:30 do dia 06 UTC)
+                dataCorrigidaBrasil = dt.toISOString().split('T')[0];
+                
+                // Mantém o original para unicidade
                 dataHoraCompleta = endTimeRaw;         
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                dataApenas = endTimeRaw.substring(0, 10);
+                dataCorrigidaBrasil = endTimeRaw.substring(0, 10);
                 dataHoraCompleta = endTimeRaw; 
             } else {
-                // Se não tiver data, gera agora (garante unicidade pelo timestamp)
-                const agora = new Date().toISOString();
-                dataApenas = agora.split('T')[0];
-                dataHoraCompleta = agora; 
+                const agora = new Date();
+                agora.setHours(agora.getHours() - 3);
+                const iso = agora.toISOString();
+                dataCorrigidaBrasil = iso.split('T')[0];
+                dataHoraCompleta = iso; 
             }
 
             const idAssistente = parseInt(linha['id_assistente']) || null;
@@ -89,7 +99,10 @@ Importacao.Assertividade = {
 
             const objeto = {
                 usuario_id: idAssistente,
-                data_auditoria: dataApenas, 
+                
+                // AQUI VAI A DATA CORRIGIDA (Sexta-feira em vez de Sábado)
+                data_auditoria: dataCorrigidaBrasil, 
+                
                 data_referencia: dataHoraCompleta, // Chave Anti-Duplicidade
                 created_at: new Date().toISOString(),
                 company_id: linha['Company_id'], 
@@ -118,7 +131,7 @@ Importacao.Assertividade = {
         }
 
         console.timeEnd("TempoTratamento");
-        console.log(`✅ ${listaParaSalvar.length} registros processados.`);
+        console.log(`✅ ${listaParaSalvar.length} registros processados (Fuso Horário Ajustado).`);
 
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
@@ -139,12 +152,11 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // CORREÇÃO AQUI: SEM ESPAÇOS NA STRING DE CONFLITO
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
-                        onConflict: 'assistente,data_referencia,doc_name,status', // <--- SEM ESPAÇOS
-                        ignoreDuplicates: true 
+                        onConflict: 'assistente,data_referencia,doc_name,status',
+                        ignoreDuplicates: false // MUDANÇA: false para forçar ATUALIZAR a data errada
                     });
 
                 if (error) throw error;
@@ -153,13 +165,13 @@ Importacao.Assertividade = {
                 
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Sincronizando: ${pct}% (${totalInserido}/${total})`);
-                    if(statusDiv) statusDiv.innerText = `${pct}% Processado`;
+                    console.log(`🚀 Corrigindo Datas: ${pct}% (${totalInserido}/${total})`);
+                    if(statusDiv) statusDiv.innerText = `${pct}% Corrigido`;
                 }
             }
 
             console.timeEnd("TempoEnvio");
-            alert(`Processo Finalizado! Arquivo sincronizado com segurança.`);
+            alert(`Sucesso! Fuso horário corrigido. As datas de Sábado devem ter voltado para Sexta.`);
             
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
@@ -167,8 +179,7 @@ Importacao.Assertividade = {
 
         } catch (error) {
             console.error("Erro Supabase:", error);
-            // Mostra o erro detalhado se disponível
-            alert(`Erro durante a gravação: ${error.message || error.details || 'Erro desconhecido'}`);
+            alert(`Erro durante a gravação: ${error.message}`);
         }
     }
 };
