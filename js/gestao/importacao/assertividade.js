@@ -1,93 +1,62 @@
 /**
- * PERFORMANCE PRO - MÓDULO DE IMPORTAÇÃO DE ASSERTIVIDADE
- * Foco: Flexibilidade de nomes de arquivos e integridade de dados.
+ * PERFORMANCE PRO - PROCESSAMENTO DE CSV (VERSÃO FINAL)
+ * Mapeado para as colunas: nome_documento, qtd_ok, qtd_nok, num_campos
  */
 
 const ImportadorAssertividade = {
     async processarArquivo(file) {
-        console.log(`%c iniciada importação: ${file.name}`, "color: #2563eb; font-weight: bold;");
+        console.log(`%c 📑 Iniciando processamento: ${file.name}`, "color: #2563eb; font-weight: bold;");
         
         const leitor = new FileReader();
-        
         leitor.onload = async (e) => {
             const texto = e.target.result;
             const linhas = texto.split(/\r?\n/);
             
-            if (linhas.length < 2) {
-                alert("O arquivo está vazio ou sem dados.");
-                return;
-            }
-
-            // Detectar cabeçalho e mapear colunas
-            const cabecalho = linhas[0].toLowerCase().split(';');
-            const dadosParaInserir = [];
-
+            // 1. Identificação do Cabeçalho (Pode ser ; ou , dependendo do CSV)
+            const delimitador = linhas[0].includes(';') ? ';' : ',';
+            const cabecalho = linhas[0].toLowerCase().split(delimitador);
+            
+            const registros = [];
+            
+            // 2. Iteração sobre as linhas (Pula o cabeçalho)
             for (let i = 1; i < linhas.length; i++) {
                 if (!linhas[i].trim()) continue;
-
-                const colunas = linhas[i].split(';');
                 
-                // Mapeamento dinâmico baseado na estrutura da tabela 'assertividade'
-                const registro = {
-                    usuario_id: this.extrairIdUsuario(colunas, cabecalho),
-                    data_referencia: this.formatarData(colunas[cabecalho.indexOf('data')]),
-                    id_ppc: colunas[cabecalho.indexOf('id ppc')] || colunas[cabecalho.indexOf('id')],
-                    status: colunas[cabecalho.indexOf('status')] || 'Finalizado',
-                    created_at: new Date().toISOString()
+                const col = linhas[i].split(delimitador);
+                
+                // Mapeamento baseado nas colunas reais do seu banco
+                const item = {
+                    nome_documento: col[cabecalho.indexOf('documento')] || col[cabecalho.indexOf('nome_documento')],
+                    data_auditoria: this.formatarData(col[cabecalho.indexOf('data')]),
+                    qtd_ok: parseInt(col[cabecalho.indexOf('ok')]) || 0,
+                    qtd_nok: parseInt(col[cabecalho.indexOf('nok')]) || 0,
+                    num_campos: parseInt(col[cabecalho.indexOf('campos')]) || 0,
+                    usuario_id: parseInt(col[cabecalho.indexOf('usuario_id')]) || null,
+                    status: 'Finalizado'
                 };
 
-                if (registro.usuario_id) {
-                    dadosParaInserir.push(registro);
-                }
+                if (item.nome_documento) registros.push(item);
             }
 
-            await this.salvarNoBanco(dadosParaInserir, file.name);
-        };
-
-        leitor.readAsText(file, 'ISO-8859-1'); // Comum em CSVs exportados de sistemas brasileiros
-    },
-
-    extrairIdUsuario(colunas, cabecalho) {
-        const idx = cabecalho.indexOf('usuario_id') !== -1 ? cabecalho.indexOf('usuario_id') : cabecalho.indexOf('id_assistente');
-        return colunas[idx] ? parseInt(colunas[idx]) : null;
-    },
-
-    formatarData(dataRaw) {
-        if (!dataRaw) return null;
-        // Converte DD/MM/YYYY para YYYY-MM-DD (Formato Postgres)
-        const partes = dataRaw.split('/');
-        if (partes.length === 3) {
-            return `${partes[2]}-${partes[1]}-${partes[0]}`;
-        }
-        return dataRaw;
-    },
-
-    async salvarNoBanco(dados, nomeArquivo) {
-        try {
-            // Lógica de Upsert baseada no ID PPC para evitar duplicados
-            const { data, error } = await Sistema.supabase
+            // 3. Upsert no Supabase (Usa a constraint assertividade_documento_unique)
+            const { error } = await Sistema.supabase
                 .from('assertividade')
-                .upsert(dados, { onConflict: 'id_ppc' });
+                .upsert(registros, { onConflict: 'nome_documento,data_auditoria' });
 
-            if (error) throw error;
-
-            alert(`Sucesso! Importação do arquivo "${nomeArquivo}" concluída com ${dados.length} registros.`);
-            console.log("Importação concluída com sucesso.");
-            
-            if (typeof GerenciadorAssertividade !== 'undefined') {
-                GerenciadorAssertividade.init(); // Recarrega a tabela na tela
+            if (error) {
+                console.error("Erro no Banco:", error);
+                alert("Falha ao salvar: " + error.message);
+            } else {
+                alert(`Sucesso! ${registros.length} registros processados do arquivo ${file.name}`);
             }
+        };
+        leitor.readAsText(file, 'ISO-8859-1');
+    },
 
-        } catch (error) {
-            console.error("Erro na importação:", error);
-            alert("Erro ao salvar no banco. Verifique o console.");
-        }
+    formatarData(data) {
+        if (!data) return new Date().toISOString().split('T')[0];
+        // Converte DD/MM/YYYY para YYYY-MM-DD
+        const d = data.split('/');
+        return d.length === 3 ? `${d[2]}-${d[1]}-${d[0]}` : data;
     }
 };
-
-// Listener para o input de arquivo na página de gestão
-document.getElementById('input-csv-assertividade')?.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-        ImportadorAssertividade.processarArquivo(e.target.files[0]);
-    }
-});
