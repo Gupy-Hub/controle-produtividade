@@ -1,6 +1,4 @@
 // ARQUIVO: js/produtividade/importacao/validacao.js
-
-// Inicialização segura dos Namespaces
 window.Produtividade = window.Produtividade || {};
 window.Produtividade.Importacao = window.Produtividade.Importacao || {};
 
@@ -8,7 +6,7 @@ window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
 
     init: function() {
-        console.log("📥 Importação de Produção: Engine V2.2 (Sintaxe e Sessão)");
+        console.log("📥 Importação de Produção: Engine V2.3 (Auth-Debug Mode)");
     },
 
     extrairDataDoNome: function(nome) {
@@ -34,15 +32,13 @@ window.Produtividade.Importacao.Validacao = {
                 
                 const dataArquivo = this.extrairDataDoNome(file.name);
                 if (!dataArquivo) {
-                    alert(`⚠️ Arquivo inválido: ${file.name}. Use DDMMAAAA.csv`);
+                    alert(`⚠️ Nome inválido: ${file.name}. Use DDMMAAAA.csv`);
                     continue;
                 }
 
                 await new Promise((resolve, reject) => {
                     Papa.parse(file, {
-                        header: true,
-                        skipEmptyLines: true,
-                        encoding: "UTF-8",
+                        header: true, skipEmptyLines: true, encoding: "UTF-8",
                         transformHeader: h => h.trim().toLowerCase(),
                         complete: (results) => {
                             this.prepararDados(results.data, dataArquivo);
@@ -84,7 +80,7 @@ window.Produtividade.Importacao.Validacao = {
 
     finalizarAnalise: function() {
         if (this.dadosProcessados.length === 0) {
-            alert("Nenhum dado válido extraído.");
+            alert("Nenhum dado válido encontrado.");
             return;
         }
         if (confirm(`Deseja salvar ${this.dadosProcessados.length} registros no banco?`)) {
@@ -95,36 +91,31 @@ window.Produtividade.Importacao.Validacao = {
     salvarNoBanco: async function() {
         const statusEl = document.getElementById('status-importacao-prod');
         try {
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500">Sincronizando...</span>`;
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando...</span>`;
 
-            // Tenta obter sessão de forma direta
-            const { data: { session } } = await Sistema.supabase.auth.getSession();
-            
-            if (!session) {
-                // Tenta um fallback buscando o usuário
-                const { data: { user } } = await Sistema.supabase.auth.getUser();
-                if (!user) throw new Error("Usuário não autenticado. Faça login novamente.");
-            }
-
+            // Tenta o upsert diretamente. Se houver erro de Auth, o Supabase retornará no 'error'
             const { error } = await Sistema.supabase
                 .from('producao')
-                .upsert(this.dadosProcessados, { 
-                    onConflict: 'usuario_id,data_referencia' 
-                });
+                .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
 
-            if (error) throw error;
+            if (error) {
+                // Se der erro de permissão (42501) ou Auth (401)
+                if (error.code === '42501' || error.status === 401) {
+                    throw new Error("O banco recusou a gravação. Verifique se você está logado ou se as políticas RLS permitem o UPSERT.");
+                }
+                throw error;
+            }
 
-            alert("✅ Importação concluída!");
+            alert("✅ Importação concluída com sucesso!");
             if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
 
         } catch (e) {
-            console.error("Erro no Supabase:", e);
-            alert("Erro: " + (e.message || "Falha na conexão"));
+            console.error("Erro Crítico no Upsert:", e);
+            alert("Erro: " + e.message);
         } finally {
             if(statusEl) statusEl.innerHTML = "";
         }
     }
 };
 
-// Inicialização imediata
 window.Produtividade.Importacao.Validacao.init();
