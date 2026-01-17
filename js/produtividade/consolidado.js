@@ -4,7 +4,7 @@ Produtividade.Consolidado = {
     initialized: false,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Grid Completo (10 KPIs)...");
+        console.log("🚀 [NEXUS] Consolidado: Layout Validação Iniciado...");
         this.renderizarFiltros(); 
         this.carregarDados();
         this.initialized = true;
@@ -96,7 +96,7 @@ Produtividade.Consolidado = {
         const end = new Date(fimStr + 'T12:00:00');
         while (cur <= end) {
             const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++; // 0=Dom, 6=Sab
+            if (day !== 0 && day !== 6) count++; 
             cur.setDate(cur.getDate() + 1);
         }
         return count > 0 ? count : 1;
@@ -142,21 +142,17 @@ Produtividade.Consolidado = {
 
         const dadosMapeados = assistentes.map(u => {
             const prod = Number(u.total_qty || 0);
-            
-            // Tratamento de colunas (fallback se RPC não retornar)
             const fifo = Number(u.total_fifo || u.fifo || 0);
             const gradTotal = Number(u.total_gradual_total || u.gradual_total || 0);
             const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
             const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
             
-            // Acumuladores Globais
             totalValidados += prod;
             totalFifo += fifo;
             totalGradualTotal += gradTotal;
             totalGradualParcial += gradParcial;
             totalPerfilFc += perfilFc;
 
-            // Cálculos Individuais (Tabela)
             const mediaDiaria = diasUteisPeriodo > 0 ? (prod / diasUteisPeriodo) : 0;
             const metaPeriodo = Number(u.meta_producao || 0) * diasUteisPeriodo;
             const atingimento = metaPeriodo > 0 ? (prod / metaPeriodo * 100) : 0;
@@ -172,45 +168,44 @@ Produtividade.Consolidado = {
 
         dadosMapeados.sort((a,b) => b.total - a.total);
 
-        // --- FÓRMULAS E ATUALIZAÇÃO DOS 10 KPIs ---
+        // --- ATUALIZAÇÃO DOS 5 CARDS (10 KPIs) ---
 
-        // 1. Total Assistentes
-        this.setVal('kpi-cons-total-assistentes', totalAssistentes);
-        
-        // 2. Total de dias úteis / trabalhado
-        this.setVal('kpi-cons-dias-uteis', diasUteisPeriodo);
-
-        // 3. Total de documentos Fifo
-        this.setVal('kpi-cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
-        
-        // 4. Total de documentos Gradual Parcial
-        this.setVal('kpi-cons-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
-
-        // 5. Total de documentos Gradual Total
-        this.setVal('kpi-cons-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
-        
-        // 6. Total de documentos Perfil Fc
-        this.setVal('kpi-cons-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
-
-        // 7. Total de documentos validados
-        this.setVal('kpi-cons-total-validados', totalValidados.toLocaleString('pt-BR'));
-
-        // 8. Total validação diária (Dias uteis) = Soma Total / dias uteis
+        // CARD 1: Produção Global
+        // - Principal: Total Validados
+        // - Sub: Validação Diária (Time) = Total / Dias Úteis
         const validacaoDiariaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
-        this.setVal('kpi-cons-validacao-diaria-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
+        this.setVal('cons-total-validados', totalValidados.toLocaleString('pt-BR'));
+        this.setVal('cons-validacao-diaria-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
 
-        // 9. Média validação diária (Todas assistentes) = Soma Total / Total de Assistentes
-        // OBS: "Diária" aqui no nome do requisito refere-se à média per capita do período, conforme fórmula solicitada.
+        // CARD 2: Recursos
+        // - Principal: Total Assistentes
+        // - Sub: Dias Úteis
+        this.setVal('cons-total-assistentes', totalAssistentes);
+        this.setVal('cons-dias-uteis', diasUteisPeriodo);
+
+        // CARD 3: Performance Média
+        // - Principal: Média Diária (Por Assistente)
+        // - Sub: Média Período (Por Assistente)
         const mediaPeriodoPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
-        this.setVal('kpi-cons-media-periodo-assistente', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
-
-        // 10. Média validação diária (Por Assistentes) = Soma Total / Total de dias Uteis / Total de Assistentes
         const mediaDiariaPorAssistente = (totalAssistentes > 0 && diasUteisPeriodo > 0) 
             ? (totalValidados / diasUteisPeriodo / totalAssistentes) 
             : 0;
-        this.setVal('kpi-cons-media-diaria-assistente', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
+        this.setVal('cons-media-diaria-assistente', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
+        this.setVal('cons-media-periodo-assistente', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
 
-        // Atualizar contador footer
+        // CARD 4: Tipos Prioritários
+        // - Principal: FIFO
+        // - Sub: Perfil FC
+        this.setVal('cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
+        this.setVal('cons-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
+
+        // CARD 5: Tipos Graduais (Split View)
+        // - Esq: Gradual Total
+        // - Dir: Gradual Parcial
+        this.setVal('cons-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
+        this.setVal('cons-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
+
+        // Footer Table
         const footerCount = document.getElementById('total-consolidado-registros');
         if(footerCount) footerCount.innerText = totalAssistentes;
 
