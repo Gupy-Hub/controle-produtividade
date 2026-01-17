@@ -1,8 +1,29 @@
 MinhaArea.Comparativo = {
     chartOfensores: null,
     dadosNoksCache: [],
-    visaoAtual: 'doc', // 'doc', 'empresa', 'ndf'
+    visaoAtual: 'doc', 
     mostrarTodos: false,
+
+    // LISTA DE DOCUMENTOS CONHECIDOS COMO NDF (Extraída da análise)
+    // Se o banco não tem a coluna DOC_NDF, usamos esta lista como referência.
+    listaNdfConhecidos: [
+        'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
+        'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
+        'Registro Órgão de Classe', 'Regularização do Conselho Profissional', 
+        'Certificado de Curso Técnico', 'Foto para Crachá', 'Informações para agendamento do ASO', 
+        'Declaração de Imposto de Renda', 'Passaporte', 'Visto Brasileiro para estrangeiros', 
+        'Contato de Emergência', 'CNH do Cônjuge', 'Visto', 'Formulário Allya', 
+        'Cartão de Vacinação', 'Dados Bancários - Santander', 'Escolaridade', 
+        'Cartão de Transporte', 'Curso ou certificação', 'Vale Transporte - Roteiro',
+        'ASO - Atestado de Saúde Ocupacional', 'Laudo MTE', 'Imposto de Renda', 
+        'Multiplos vínculos', 'Registro de Identificação Civil - RIC', 
+        'Diploma, Declaração ou Histórico Escolar', 'Tamanho de Uniforme', 
+        'Reservista (Acima de 45 anos)', 'Comprovante de Ensino Médio', 
+        'Certidão de Prontuário da CNH', 'Tipo de Conta Bancária', 
+        'Certidão Negativa do Conselho Regional', 'Carteira de vacinação atualizada',
+        'Declaração de Residência', 'Informações Complementares', 'Carta Proposta',
+        'CPF Mãe', 'Registro Administrativo de Nascimento de Indígena'
+    ],
 
     carregar: async function() {
         console.log("🚀 UX Dashboard: Iniciando...");
@@ -16,25 +37,21 @@ MinhaArea.Comparativo = {
         const containerNdf = document.getElementById('total-ndf-detalhe');
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
-        // Reset da interface
         if(btnLimpar) btnLimpar.classList.add('hidden');
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
-            // 1. Buscar Dados (Paginada)
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
-            // 2. Filtrar apenas NOKs
             this.dadosNoksCache = dados.filter(d => {
                 const qtd = Number(d.qtd_nok || 0);
                 const isNokStatus = (d.status || '').toUpperCase() === 'NOK';
                 return qtd > 0 || isNokStatus;
             });
             
-            // 3. Atualizar Contadores
             if(containerTotal) containerTotal.innerText = this.dadosNoksCache.length;
             
-            // Contagem NDF
+            // Contagem NDF usando a nova lógica robusta
             const totalNdf = this.dadosNoksCache.filter(d => this.isNDF(d)).length;
             if(containerNdf) containerNdf.innerText = totalNdf;
 
@@ -44,7 +61,6 @@ MinhaArea.Comparativo = {
                 return;
             }
 
-            // 4. Renderizar Gráfico e Feed Inicial
             this.atualizarGrafico();
             this.atualizarFeedPorVisao();
 
@@ -54,7 +70,28 @@ MinhaArea.Comparativo = {
         }
     },
 
-    // --- FUNÇÕES DE BUSCA E FILTRO ---
+    // --- FUNÇÃO INTELIGENTE PARA DETECTAR NDF ---
+    isNDF: function(d) {
+        // 1. Tenta pelo código oficial (caso um dia a coluna exista)
+        const tipoOficial = (d.nome_documento || d.documento || '').toUpperCase();
+        if (tipoOficial.startsWith('DOC_NDF') || tipoOficial.includes('NDF')) return true;
+
+        // 2. Tenta pela lista de nomes conhecidos (Fallback)
+        const nomeDoc = (d.doc_name || '').trim();
+        // Verifica se o nome do documento contém algum termo da lista (match parcial para ser mais seguro)
+        return this.listaNdfConhecidos.some(ndfName => 
+            nomeDoc.toLowerCase().includes(ndfName.toLowerCase())
+        );
+    },
+
+    getDocType: function(d) {
+        // Se for NDF, retorna o nome amigável "Documento NDF" para agrupamento
+        if (this.isNDF(d)) return "Documentos NDF";
+        return d.doc_name || d.nome_documento || 'Geral';
+    },
+
+    // ... (MANTENHA AS OUTRAS FUNÇÕES IGUAIS: filtrarPorBusca, toggleMostrarTodos, mudarVisao, etc) ...
+    // ... Vou repetir as principais abaixo para garantir o arquivo completo ...
 
     filtrarPorBusca: function(texto) {
         if (!texto || texto.trim() === '') {
@@ -63,7 +100,6 @@ MinhaArea.Comparativo = {
         }
         
         const termo = texto.toLowerCase();
-        // Filtra sobre o cache atual
         const filtrados = this.dadosNoksCache.filter(d => {
             const nome = (d.doc_name || '').toLowerCase();
             const tipo = (this.getDocType(d) || '').toLowerCase();
@@ -118,15 +154,14 @@ MinhaArea.Comparativo = {
             });
         } else {
             filtrados = this.dadosNoksCache.filter(d => {
-                if (valor === 'NDF (Geral)') return this.isNDF(d);
                 const tipo = this.getDocType(d);
+                // Se o valor for "Documentos NDF", filtra todos os NDFs
+                if (valor === 'Documentos NDF') return this.isNDF(d);
                 return tipo.includes(valor.replace('...', ''));
             });
         }
         this.aplicarFiltroVisual(filtrados, valor);
     },
-
-    // --- LÓGICA DE DADOS E RENDERIZAÇÃO ---
 
     atualizarGrafico: function() {
         const agrupamento = {};
@@ -141,11 +176,7 @@ MinhaArea.Comparativo = {
             if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
             } else {
-                const cat = this.getDocType(item);
-                chave = cat;
-                if (this.visaoAtual === 'doc' && this.isNDF(item)) {
-                    chave = 'NDF (Geral)';
-                }
+                chave = this.getDocType(item); // Agora usa a função getDocType inteligente
             }
             if(chave.length > 25) chave = chave.substring(0, 22) + '...';
             if (!agrupamento[chave]) agrupamento[chave] = 0;
@@ -170,6 +201,22 @@ MinhaArea.Comparativo = {
         this.renderizarFeed(lista, container);
     },
 
+    aplicarFiltroVisual: function(lista, nomeFiltro) {
+        const container = document.getElementById('feed-erros-container');
+        this.renderizarFeed(lista, container);
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) {
+            btn.classList.remove('hidden');
+            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${nomeFiltro}`;
+        }
+    },
+
+    limparFiltro: function(renderizar = true) {
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) btn.classList.add('hidden');
+        if (renderizar) this.atualizarFeedPorVisao();
+    },
+
     renderizarFeed: function(listaNok, container) {
         if(!container) return;
         if (listaNok.length === 0) {
@@ -181,7 +228,7 @@ MinhaArea.Comparativo = {
         listaNok.forEach(doc => {
             const data = doc.data_auditoria ? new Date(doc.data_auditoria).toLocaleDateString('pt-BR') : '-';
             const nome = doc.doc_name || 'Sem Nome';
-            const tipo = this.getDocType(doc);
+            const tipo = this.getDocType(doc); // Agora mostra "Documentos NDF" se for o caso
             const empresa = doc.empresa || doc.empresa_nome || '';
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             const isNdf = this.isNDF(doc);
@@ -252,38 +299,13 @@ MinhaArea.Comparativo = {
         });
     },
 
-    aplicarFiltroVisual: function(lista, nomeFiltro) {
-        const container = document.getElementById('feed-erros-container');
-        this.renderizarFeed(lista, container);
-        const btn = document.getElementById('btn-limpar-filtro');
-        if(btn) {
-            btn.classList.remove('hidden');
-            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${nomeFiltro}`;
-        }
-    },
-
-    limparFiltro: function(renderizar = true) {
-        const btn = document.getElementById('btn-limpar-filtro');
-        if(btn) btn.classList.add('hidden');
-        if (renderizar) this.atualizarFeedPorVisao();
-    },
-
     renderizarVazio: function(container) {
-        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Tudo Certo!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado.</p></div>';
+        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Parabéns!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado.</p></div>';
     },
 
     renderizarGraficoVazio: function() {
         const ctx = document.getElementById('graficoTopOfensores');
         if (ctx && this.chartOfensores) this.chartOfensores.destroy();
-    },
-
-    getDocType: function(d) {
-        return d.nome_documento || d.documento || d.doc_name || 'Geral';
-    },
-
-    isNDF: function(d) {
-        const tipo = this.getDocType(d).toUpperCase();
-        return tipo.startsWith('DOC_NDF') || tipo.includes('NDF');
     },
 
     buscarAuditoriasPaginadas: async function(uid, inicio, fim) {
