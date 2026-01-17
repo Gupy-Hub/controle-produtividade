@@ -7,7 +7,7 @@ Produtividade.Geral = {
     usuarioSelecionado: null,
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V15 (Assertividade Modular)...");
+        console.log("🚀 [NEXUS] Produtividade: Engine V16 (Filtro Atividade + Cores Binárias)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -24,15 +24,7 @@ Produtividade.Geral = {
 
         console.log(`📡 [NEXUS] RPC Request: ${dataInicio} -> ${dataFim}`);
         
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="12" class="text-center py-12 text-slate-400">
-                    <div class="flex flex-col items-center justify-center gap-2">
-                        <i class="fas fa-server fa-pulse text-2xl text-emerald-500"></i>
-                        <span class="font-bold text-slate-600">Calculando...</span>
-                    </div>
-                </td>
-            </tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados...</td></tr>`;
 
         try {
             const { data, error } = await Sistema.supabase
@@ -53,6 +45,7 @@ Produtividade.Geral = {
                     contrato: row.contrato
                 },
                 meta_real: row.meta_producao,
+                meta_assertividade: row.meta_assertividade, // Nova meta vinda do banco
                 totais: {
                     qty: row.total_qty,
                     diasUteis: row.total_dias_uteis,
@@ -61,7 +54,6 @@ Produtividade.Geral = {
                     gp: row.total_gp
                 },
                 auditoria: {
-                    // Passamos os dados brutos para o módulo Assertividade calcular
                     qtd: row.qtd_auditorias,
                     soma: row.soma_auditorias
                 }
@@ -87,7 +79,6 @@ Produtividade.Geral = {
 
         const mostrarGestao = document.getElementById('check-gestao')?.checked;
         
-        // --- DEFINIÇÃO DA LISTA (Isso corrige o ReferenceError) ---
         let lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
@@ -95,11 +86,10 @@ Produtividade.Geral = {
         if (!mostrarGestao && !this.usuarioSelecionado) {
             lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         }
-        // ---------------------------------------------------------
 
         tbody.innerHTML = '';
         if(lista.length === 0) { 
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>'; 
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro de atividade neste período.</td></tr>'; 
             this.setTxt('total-registros-footer', 0);
             return; 
         }
@@ -112,11 +102,14 @@ Produtividade.Geral = {
                 ? (d.totais.qty / (metaDia * d.totais.diasUteis)) * 100 
                 : 0;
             
-            // --- USO DO NOVO MÓDULO ---
-            // Se o módulo não carregou (404), mostramos '-' para não quebrar a tela inteira
+            // COR DA PRODUÇÃO (VERDE OU VERMELHO)
+            const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
+            const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
+
+            // ASSERTIVIDADE (Passando a meta correta)
             const htmlAssertividade = window.Produtividade.Assertividade 
-                ? Produtividade.Assertividade.renderizarCelula(d.auditoria)
-                : '<span class="text-red-500 text-[10px]">Erro JS</span>';
+                ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
+                : '-';
 
             return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
@@ -141,7 +134,7 @@ Produtividade.Geral = {
                 <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm shadow-sm">
                     ${d.totais.qty.toLocaleString('pt-BR')}
                 </td>
-                <td class="px-2 py-3 text-center font-bold ${atingimento >= 100 ? 'text-emerald-600' : 'text-slate-500'}">
+                <td class="px-2 py-3 text-center ${corProducao} ${corProducaoBg}">
                     ${atingimento.toFixed(1)}%
                 </td>
                 <td class="px-2 py-3 text-center border-l border-slate-100">
@@ -154,6 +147,8 @@ Produtividade.Geral = {
         this.setTxt('total-registros-footer', lista.length);
     },
 
+    // ... (Manter restante das funções: filtrarUsuario, limparSelecao, atualizarKPIsGlobal, renderTopLists, toggleAll, mudarFator, excluirDadosDia) ...
+    // Se precisar, posso reenviar o arquivo completo, mas a mudança principal foi no renderizarTabela e carregarTela.
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         const header = document.getElementById('selection-header');
@@ -178,10 +173,7 @@ Produtividade.Geral = {
 
     atualizarKPIsGlobal: function(dados) {
         let totalProd = 0, totalMeta = 0, diasUteis = 0;
-        
-        // Variáveis para média ponderada global
-        let somaNotasGlobal = 0;
-        let qtdAuditoriasGlobal = 0;
+        let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
 
         dados.forEach(d => {
             if (['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase())) return;
@@ -190,7 +182,6 @@ Produtividade.Geral = {
             totalMeta += (Number(d.meta_real) * Number(d.totais.diasUteis));
             diasUteis += Number(d.totais.diasUteis);
 
-            // Acumula para o KPI global
             somaNotasGlobal += Number(d.auditoria.soma || 0);
             qtdAuditoriasGlobal += Number(d.auditoria.qtd || 0);
         });
@@ -201,7 +192,6 @@ Produtividade.Geral = {
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMeta > 0 ? Math.min((totalProd/totalMeta)*100, 100) + '%' : '0%';
 
-        // Cálculo da Média Global usando o novo módulo ou lógica direta
         const mediaGlobalAssert = qtdAuditoriasGlobal > 0 ? (somaNotasGlobal / qtdAuditoriasGlobal) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
         this.setTxt('kpi-meta-producao-val', totalMeta > 0 ? ((totalProd/totalMeta)*100).toFixed(1) + '%' : '0%');
@@ -227,7 +217,6 @@ Produtividade.Geral = {
         const listProd = document.getElementById('top-prod-list');
         if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
 
-        // Top Assertividade baseado na média calculada
         const topAssert = [...op]
             .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
             .filter(u => u.auditoria.qtd > 0)
@@ -237,7 +226,7 @@ Produtividade.Geral = {
         const listAssert = document.getElementById('top-assert-list');
         if(listAssert) listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.mediaCalc.toFixed(1)}%</span></div>`).join('');
     },
-
+    
     toggleAll: function(checked) {
         document.querySelectorAll('.check-user').forEach(c => c.checked = checked);
     },
