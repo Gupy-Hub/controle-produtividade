@@ -6,7 +6,7 @@ window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
 
     init: function() {
-        console.log("📥 Importação de Produção: Engine V2.4 (Bypass Auth Check)");
+        console.log("📥 Importação de Produção: Engine V2.5 (Public Access Mode)");
     },
 
     extrairDataDoNome: function(nome) {
@@ -29,10 +29,10 @@ window.Produtividade.Importacao.Validacao = {
         try {
             for (const file of files) {
                 if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo ${file.name}...</span>`;
-                
                 const dataArquivo = this.extrairDataDoNome(file.name);
+                
                 if (!dataArquivo) {
-                    alert(`⚠️ Nome inválido: ${file.name}. Use DDMMAAAA.csv`);
+                    alert(`⚠️ Nome inválido: ${file.name}`);
                     continue;
                 }
 
@@ -40,25 +40,19 @@ window.Produtividade.Importacao.Validacao = {
                     Papa.parse(file, {
                         header: true, skipEmptyLines: true, encoding: "UTF-8",
                         transformHeader: h => h.trim().toLowerCase(),
-                        complete: (results) => {
-                            this.prepararDados(results.data, dataArquivo);
-                            resolve();
-                        },
+                        complete: (res) => { this.prepararDados(res.data, dataArquivo); resolve(); },
                         error: (err) => reject(err)
                     });
                 });
             }
             this.finalizarAnalise();
-        } catch (err) {
-            console.error("Erro na leitura:", err);
-        } finally {
-            input.value = '';
-        }
+        } catch (err) { console.error(err); }
+        input.value = '';
     },
 
     prepararDados: function(linhas, dataFixa) {
         linhas.forEach(row => {
-            let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'] || row['id assistente'];
+            let idRaw = row['id_assistente'] || row['id'] || row['usuario_id'] || row['matrícula'];
             if (!idRaw) return;
 
             const usuarioId = parseInt(idRaw.toString().replace(/\D/g, ''));
@@ -69,9 +63,9 @@ window.Produtividade.Importacao.Validacao = {
                 data_referencia: dataFixa,
                 quantidade: parseInt(row['documentos_validados'] || row['quantidade'] || row['qtd'] || 0),
                 fifo: parseInt(row['fifo'] || 0),
-                gradual_total: parseInt(row['gradual_total'] || row['gradual total'] || 0),
-                gradual_parcial: parseInt(row['gradual_parcial'] || row['gradual parcial'] || 0),
-                perfil_fc: parseInt(row['perfil_fc'] || row['perfil fc'] || 0),
+                gradual_total: parseInt(row['gradual_total'] || 0),
+                gradual_parcial: parseInt(row['gradual_parcial'] || 0),
+                perfil_fc: parseInt(row['perfil_fc'] || 0),
                 fator: 1,
                 status: 'OK'
             });
@@ -79,11 +73,8 @@ window.Produtividade.Importacao.Validacao = {
     },
 
     finalizarAnalise: function() {
-        if (this.dadosProcessados.length === 0) {
-            alert("Nenhum dado válido extraído.");
-            return;
-        }
-        if (confirm(`Deseja salvar ${this.dadosProcessados.length} registros no banco?`)) {
+        if (this.dadosProcessados.length === 0) return alert("Sem dados.");
+        if (confirm(`Gravar ${this.dadosProcessados.length} registros (Massa/Unidade)?`)) {
             this.salvarNoBanco();
         }
     },
@@ -91,29 +82,21 @@ window.Produtividade.Importacao.Validacao = {
     salvarNoBanco: async function() {
         const statusEl = document.getElementById('status-importacao-prod');
         try {
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando...</span>`;
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500">Gravando...</span>`;
 
-            // REMOVIDO CHECK DE USUÁRIO: Tentamos o upsert direto.
-            // O Supabase enviará o token se ele existir no objeto Sistema.supabase.
+            // Envio direto sem verificação de auth no JS (depende da política TO public no banco)
             const { error } = await Sistema.supabase
                 .from('producao')
                 .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
 
-            if (error) {
-                console.error("Erro retornado pelo Supabase:", error);
-                // Tradução de erros comuns
-                if (error.code === '42501' || error.status === 403 || error.status === 401) {
-                    throw new Error("Acesso Negado. Sua sessão expirou ou o banco não reconheceu seu login. Por favor, saia e entre novamente no sistema.");
-                }
-                throw error;
-            }
+            if (error) throw error;
 
-            alert("✅ Importação concluída com sucesso!");
+            alert("✅ Sucesso! Os dados já estão no banco.");
             if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
 
         } catch (e) {
-            console.error("Falha na gravação:", e);
-            alert("❌ " + e.message);
+            console.error("Erro Final:", e);
+            alert("Erro: " + e.message);
         } finally {
             if(statusEl) statusEl.innerHTML = "";
         }
