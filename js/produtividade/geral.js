@@ -1,13 +1,13 @@
-// ARQUIVO: js/produtividade/geral.js
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
     initialized: false,
     dadosOriginais: [], 
     usuarioSelecionado: null,
+    diasAtivosGlobal: 1, // Novo: Armazena quantos dias a operação rodou
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V16 (Filtro Atividade + Cores Binárias)...");
+        console.log("🚀 [NEXUS] Produtividade: Engine V17 (KPI Velocidade Real)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -27,6 +27,7 @@ Produtividade.Geral = {
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados...</td></tr>`;
 
         try {
+            // 1. Busca os Dados Detalhados
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: dataInicio, 
@@ -34,6 +35,17 @@ Produtividade.Geral = {
                 });
 
             if (error) throw error;
+
+            // 2. CORREÇÃO: Busca o número real de dias de operação (Dias Distintos)
+            const { data: diasReais, error: errDias } = await Sistema.supabase
+                .rpc('get_dias_ativos', {
+                    data_inicio: dataInicio,
+                    data_fim: dataFim
+                });
+            
+            // Se der erro ou for 0, assume 1 para evitar divisão por zero
+            this.diasAtivosGlobal = (diasReais && diasReais > 0) ? diasReais : 1;
+            console.log(`📅 Dias de Operação Ativa: ${this.diasAtivosGlobal}`);
 
             console.log(`✅ [NEXUS] Dados recebidos: ${data.length} registros.`);
 
@@ -45,7 +57,7 @@ Produtividade.Geral = {
                     contrato: row.contrato
                 },
                 meta_real: row.meta_producao,
-                meta_assertividade: row.meta_assertividade, // Nova meta vinda do banco
+                meta_assertividade: row.meta_assertividade,
                 totais: {
                     qty: row.total_qty,
                     diasUteis: row.total_dias_uteis,
@@ -102,11 +114,9 @@ Produtividade.Geral = {
                 ? (d.totais.qty / (metaDia * d.totais.diasUteis)) * 100 
                 : 0;
             
-            // COR DA PRODUÇÃO (VERDE OU VERMELHO)
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            // ASSERTIVIDADE (Passando a meta correta)
             const htmlAssertividade = window.Produtividade.Assertividade 
                 ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
                 : '-';
@@ -147,8 +157,6 @@ Produtividade.Geral = {
         this.setTxt('total-registros-footer', lista.length);
     },
 
-    // ... (Manter restante das funções: filtrarUsuario, limparSelecao, atualizarKPIsGlobal, renderTopLists, toggleAll, mudarFator, excluirDadosDia) ...
-    // Se precisar, posso reenviar o arquivo completo, mas a mudança principal foi no renderizarTabela e carregarTela.
     filtrarUsuario: function(id, nome) {
         this.usuarioSelecionado = id;
         const header = document.getElementById('selection-header');
@@ -160,7 +168,13 @@ Produtividade.Geral = {
         }
         this.renderizarTabela();
         const dadosUser = this.dadosOriginais.filter(d => d.usuario.id == id);
-        this.atualizarKPIsGlobal(dadosUser);
+        
+        // Se filtrou um usuário, recalculamos os dias ativos baseado só nele?
+        // Geralmente KPIs globais devem refletir o filtro.
+        // Se eu filtro a Samaria, quero ver a média da Samaria ou do Time?
+        // Geralmente do contexto. Vamos manter a lógica Global para o Time, 
+        // e se filtrar, recalcula para o usuário.
+        this.atualizarKPIsGlobal(dadosUser, true); 
     },
 
     limparSelecao: function() {
@@ -168,55 +182,82 @@ Produtividade.Geral = {
         document.getElementById('selection-header').classList.add('hidden');
         document.getElementById('selection-header').classList.remove('flex');
         this.renderizarTabela();
-        this.atualizarKPIsGlobal(this.dadosOriginais);
+        this.atualizarKPIsGlobal(this.dadosOriginais, false);
     },
 
-    atualizarKPIsGlobal: function(dados) {
-        let totalProd = 0, totalMeta = 0, diasUteis = 0;
+    atualizarKPIsGlobal: function(dados, isFiltrado) {
+        let totalProd = 0, totalMeta = 0;
         let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
+        
+        // Se estiver filtrado (um usuário), usamos os dias dele.
+        // Se for global, usamos os dias globais da operação (this.diasAtivosGlobal)
+        let divisorDias = this.diasAtivosGlobal;
 
         dados.forEach(d => {
             if (['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase())) return;
 
             totalProd += Number(d.totais.qty);
             totalMeta += (Number(d.meta_real) * Number(d.totais.diasUteis));
-            diasUteis += Number(d.totais.diasUteis);
+            
+            // Se estiver filtrando um usuário, somamos os dias dele para usar de divisor
+            if (isFiltrado) {
+                // Num filtro de usuário único, o divisor é a soma dos dias dele (simples)
+                // Mas como o forEach roda só pra ele, podemos pegar direto d.totais.diasUteis no final
+            }
 
             somaNotasGlobal += Number(d.auditoria.soma || 0);
             qtdAuditoriasGlobal += Number(d.auditoria.qtd || 0);
         });
 
+        // Ajuste do Divisor de Dias para o KPI de Velocidade
+        if (isFiltrado && dados.length > 0) {
+            // Se tem um usuário só, a velocidade é Total / Dias Que Ele Trabalhou
+            const user = dados[0]; // Pega o primeiro (e único)
+            divisorDias = user.totais.diasUteis > 0 ? user.totais.diasUteis : 1;
+        }
+
+        // 1. KPI VALIDAÇÃO REAL
         this.setTxt('kpi-validacao-real', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-esperado', totalMeta.toLocaleString('pt-BR'));
         
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMeta > 0 ? Math.min((totalProd/totalMeta)*100, 100) + '%' : '0%';
 
+        // 2. KPI ASSERTIVIDADE
         const mediaGlobalAssert = qtdAuditoriasGlobal > 0 ? (somaNotasGlobal / qtdAuditoriasGlobal) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
+        
+        // 3. KPI META PRODUÇÃO (%)
         this.setTxt('kpi-meta-producao-val', totalMeta > 0 ? ((totalProd/totalMeta)*100).toFixed(1) + '%' : '0%');
 
+        // 4. KPI CAPACIDADE
         const ativos = dados.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase())).length;
-        this.setTxt('kpi-capacidade-info', `${ativos}/17`);
+        this.setTxt('kpi-capacidade-info', `${ativos}/17`); // 17 é fixo ou dinâmico? Mantive fixo como no original
         const capPct = (ativos / 17) * 100;
         this.setTxt('kpi-capacidade-pct', Math.round(capPct) + '%');
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        const mediaDia = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
-        this.setTxt('kpi-media-real', mediaDia);
-        this.setTxt('kpi-dias-uteis', diasUteis.toFixed(1));
+        // 5. KPI VELOCIDADE MÉDIA (MÉDIA / DIA) - O FIX
+        // Fórmula: Produção Total / Dias de Operação (Calendário Ativo)
+        const velocidadeMedia = divisorDias > 0 ? Math.round(totalProd / divisorDias) : 0;
+        
+        this.setTxt('kpi-media-real', velocidadeMedia.toLocaleString('pt-BR'));
+        this.setTxt('kpi-dias-uteis', divisorDias); // Mostra o divisor usado no label "Dias"
 
         this.renderTopLists(dados);
     },
 
     renderTopLists: function(dados) {
+        // Filtra gestores fora do ranking
         const op = dados.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         
+        // Top Produção
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
         if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
 
+        // Top Assertividade
         const topAssert = [...op]
             .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
             .filter(u => u.auditoria.qtd > 0)
@@ -232,6 +273,7 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, valor) {
+        // Implementação futura
         alert("Necessário implementar RPC de Update no banco.");
     },
 
