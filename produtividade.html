@@ -98,12 +98,32 @@
                     </div>
                 </div>
 
+                <div class="flex items-center gap-2 bg-slate-100/50 p-1 rounded-xl border border-slate-200">
+                    <div class="relative group">
+                        <i class="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-[10px]"></i>
+                        <input type="text" id="filtro-nome-prod" onkeyup="Produtividade.Filtros.aplicar()" 
+                            placeholder="Buscar..." 
+                            class="bg-white border border-slate-200 text-slate-700 text-[10px] font-bold rounded-lg pl-8 pr-2 py-1.5 outline-none w-24 focus:w-32 focus:border-blue-500 transition-all shadow-sm">
+                    </div>
+                    
+                    <select id="filtro-funcao-prod" onchange="Produtividade.Filtros.aplicar()" 
+                        class="bg-white border border-slate-200 text-slate-700 text-[10px] font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 shadow-sm">
+                        <option value="todos">Função: Todas</option>
+                        <option value="ASSISTENTE">Assistentes</option>
+                        <option value="AUDITORA">Auditoras</option>
+                        <option value="GESTORA">Gestoras</option>
+                    </select>
+
+                    <select id="filtro-contrato-prod" onchange="Produtividade.Filtros.aplicar()" 
+                        class="bg-white border border-slate-200 text-slate-700 text-[10px] font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 shadow-sm">
+                        <option value="todos">Contrato: Todos</option>
+                        <option value="CLT">CLT</option>
+                        <option value="PJ">PJ</option>
+                    </select>
+                </div>
+
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4">
-                    <label class="inline-flex items-center cursor-pointer mr-3" title="Exibir Auditoras e Gestoras">
-                        <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()">
-                        <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
-                        <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Gestão</span>
-                    </label>
+                    <input type="checkbox" id="check-gestao" class="hidden">
 
                     <div id="status-importacao-prod" class="text-[10px] font-bold text-slate-500 hidden md:block mr-2 animate-pulse"></div>
 
@@ -292,16 +312,21 @@
         </div>
     </div>
 
-  <script src="js/produtividade/assertividade.js"></script> <script src="js/produtividade/main.js"></script>
+    <script src="js/produtividade/assertividade.js"></script> 
+    <script src="js/produtividade/main.js"></script>
     <script src="js/produtividade/geral.js"></script>
     <script src="js/produtividade/consolidado.js"></script>
     <script src="js/produtividade/performance.js"></script>
     <script src="js/produtividade/matriz.js"></script>
     <script src="js/produtividade/importacao/validacao.js"></script>
+    <script src="js/produtividade/filtros.js"></script>
     
     <script>
         // Inicializador Central
         Produtividade.atualizarTodasAbas = function() {
+            // Reaplica filtros se necessário ao trocar de período
+            if(Produtividade.Filtros) Produtividade.Filtros.aplicar();
+            
             if(Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) Produtividade.Geral.carregarTela();
             if(Produtividade.Consolidado && !document.getElementById('tab-consolidado').classList.contains('hidden')) Produtividade.Consolidado.carregar();
             if(Produtividade.Performance && !document.getElementById('tab-performance').classList.contains('hidden')) Produtividade.Performance.carregar();
