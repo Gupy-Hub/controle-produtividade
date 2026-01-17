@@ -4,7 +4,7 @@ Produtividade.Consolidado = {
     initialized: false,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Grid View Loaded...");
+        console.log("🚀 [NEXUS] Consolidado: Grid Completo (10 KPIs)...");
         this.renderizarFiltros(); 
         this.carregarDados();
         this.initialized = true;
@@ -96,7 +96,7 @@ Produtividade.Consolidado = {
         const end = new Date(fimStr + 'T12:00:00');
         while (cur <= end) {
             const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++;
+            if (day !== 0 && day !== 6) count++; // 0=Dom, 6=Sab
             cur.setDate(cur.getDate() + 1);
         }
         return count > 0 ? count : 1;
@@ -112,11 +112,7 @@ Produtividade.Consolidado = {
         const { inicio, fim } = this.getDatasIntervalo();
         const diasUteisPeriodo = this.countDiasUteis(inicio, fim);
 
-        // Atualiza Badge de Dias Úteis
-        const badgeDias = document.getElementById('cons-dias-uteis-badge');
-        if(badgeDias) badgeDias.innerText = diasUteisPeriodo;
-
-        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando dados consolidados...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando dados...</td></tr>';
 
         try {
             const { data, error } = await Sistema.supabase
@@ -132,10 +128,12 @@ Produtividade.Consolidado = {
     },
 
     processarDados: function(data, diasUteisPeriodo) {
-        // Filtrar e preparar dados
         const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
-        
-        // Variáveis de Acumulação
+
+        // --- 1. Total Assistentes ---
+        const totalAssistentes = assistentes.length;
+
+        // --- Variáveis de Acumulação ---
         let totalValidados = 0;
         let totalFifo = 0;
         let totalGradualTotal = 0;
@@ -144,60 +142,78 @@ Produtividade.Consolidado = {
 
         const dadosMapeados = assistentes.map(u => {
             const prod = Number(u.total_qty || 0);
+            
+            // Tratamento de colunas (fallback se RPC não retornar)
             const fifo = Number(u.total_fifo || u.fifo || 0);
             const gradTotal = Number(u.total_gradual_total || u.gradual_total || 0);
             const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
             const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
-            const metaDiaria = Number(u.meta_producao || 0);
-            const metaPeriodo = metaDiaria * diasUteisPeriodo;
-
-            // Acumula Totais
+            
+            // Acumuladores Globais
             totalValidados += prod;
             totalFifo += fifo;
             totalGradualTotal += gradTotal;
             totalGradualParcial += gradParcial;
             totalPerfilFc += perfilFc;
 
-            // Cálculos Individuais
-            const mediaDiaria = prod / diasUteisPeriodo;
+            // Cálculos Individuais (Tabela)
+            const mediaDiaria = diasUteisPeriodo > 0 ? (prod / diasUteisPeriodo) : 0;
+            const metaPeriodo = Number(u.meta_producao || 0) * diasUteisPeriodo;
             const atingimento = metaPeriodo > 0 ? (prod / metaPeriodo * 100) : 0;
 
             return {
                 nome: u.nome,
-                diasUteis: diasUteisPeriodo,
-                fifo,
-                gradTotal,
-                gradParcial,
-                perfilFc,
+                fifo, gradTotal, gradParcial, perfilFc,
                 total: prod,
                 mediaDiaria,
                 atingimento
             };
         });
 
-        // Ordenar por maior produção
         dadosMapeados.sort((a,b) => b.total - a.total);
 
-        // --- Atualizar KPIs (Cards) ---
-        const totalAssistentes = assistentes.length;
-        const mediaDiaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
-        const mediaDiaInd = (totalAssistentes > 0 && diasUteisPeriodo > 0) ? (totalValidados / diasUteisPeriodo / totalAssistentes) : 0;
+        // --- FÓRMULAS E ATUALIZAÇÃO DOS 10 KPIs ---
 
-        this.setVal('cons-kpi-total', totalValidados.toLocaleString('pt-BR'));
-        this.setVal('cons-kpi-assistentes', totalAssistentes);
-        this.setVal('cons-kpi-media-time', Math.round(mediaDiaTime).toLocaleString('pt-BR'));
-        this.setVal('cons-kpi-media-ind', mediaDiaInd.toFixed(1).replace('.', ','));
+        // 1. Total Assistentes
+        this.setVal('kpi-cons-total-assistentes', totalAssistentes);
         
-        this.setVal('cons-kpi-fifo', totalFifo.toLocaleString('pt-BR'));
-        this.setVal('cons-kpi-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
-        this.setVal('cons-kpi-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
-        this.setVal('cons-kpi-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
+        // 2. Total de dias úteis / trabalhado
+        this.setVal('kpi-cons-dias-uteis', diasUteisPeriodo);
+
+        // 3. Total de documentos Fifo
+        this.setVal('kpi-cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
+        
+        // 4. Total de documentos Gradual Parcial
+        this.setVal('kpi-cons-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
+
+        // 5. Total de documentos Gradual Total
+        this.setVal('kpi-cons-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
+        
+        // 6. Total de documentos Perfil Fc
+        this.setVal('kpi-cons-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
+
+        // 7. Total de documentos validados
+        this.setVal('kpi-cons-total-validados', totalValidados.toLocaleString('pt-BR'));
+
+        // 8. Total validação diária (Dias uteis) = Soma Total / dias uteis
+        const validacaoDiariaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
+        this.setVal('kpi-cons-validacao-diaria-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
+
+        // 9. Média validação diária (Todas assistentes) = Soma Total / Total de Assistentes
+        // OBS: "Diária" aqui no nome do requisito refere-se à média per capita do período, conforme fórmula solicitada.
+        const mediaPeriodoPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
+        this.setVal('kpi-cons-media-periodo-assistente', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
+
+        // 10. Média validação diária (Por Assistentes) = Soma Total / Total de dias Uteis / Total de Assistentes
+        const mediaDiariaPorAssistente = (totalAssistentes > 0 && diasUteisPeriodo > 0) 
+            ? (totalValidados / diasUteisPeriodo / totalAssistentes) 
+            : 0;
+        this.setVal('kpi-cons-media-diaria-assistente', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
 
         // Atualizar contador footer
         const footerCount = document.getElementById('total-consolidado-registros');
         if(footerCount) footerCount.innerText = totalAssistentes;
 
-        // --- Renderizar Tabela ---
         this.renderizarTabela(dadosMapeados);
     },
 
@@ -211,9 +227,8 @@ Produtividade.Consolidado = {
         if(!tbody) return;
 
         tbody.innerHTML = '';
-
         if(dados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">Nenhum dado encontrado para o período selecionado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">Nenhum registro.</td></tr>';
             return;
         }
 
@@ -221,24 +236,20 @@ Produtividade.Consolidado = {
             const tr = document.createElement('tr');
             tr.className = "hover:bg-blue-50/50 transition-colors group";
 
-            // Cor do atingimento
             let corAting = "text-slate-500";
             if(d.atingimento >= 100) corAting = "text-emerald-600 font-bold";
             else if(d.atingimento < 95) corAting = "text-rose-600 font-bold";
 
-            // Formatação de nome curto
             const nomeCurto = d.nome.split(' ').slice(0, 2).join(' ');
 
             tr.innerHTML = `
                 <td class="px-3 py-3 border-r border-slate-100">
                     <div class="flex items-center gap-2">
-                        <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
-                            ${d.nome.charAt(0)}
-                        </div>
+                        <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">${d.nome.charAt(0)}</div>
                         <span class="font-bold text-slate-700 text-xs">${nomeCurto}</span>
                     </div>
                 </td>
-                <td class="px-2 py-3 text-center text-slate-500 border-r border-slate-100 font-mono text-xs">${d.diasUteis}</td>
+                <td class="px-2 py-3 text-center text-slate-500 border-r border-slate-100 font-mono text-xs">-</td>
                 <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.fifo.toLocaleString('pt-BR')}</td>
                 <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.gradTotal.toLocaleString('pt-BR')}</td>
                 <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.gradParcial.toLocaleString('pt-BR')}</td>
@@ -247,7 +258,6 @@ Produtividade.Consolidado = {
                 <td class="px-2 py-3 text-center text-slate-700 font-bold border-r border-slate-100 text-xs">${Math.round(d.mediaDiaria)}</td>
                 <td class="px-2 py-3 text-center ${corAting} text-xs">${d.atingimento.toFixed(1)}%</td>
             `;
-
             tbody.appendChild(tr);
         });
     }
