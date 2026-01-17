@@ -16,19 +16,15 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #1e293b; } 
-        
         .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #475569; }
         .tab-btn:hover { background-color: #f8fafc; color: #1e293b; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
-        
         .animate-enter { animation: enter 0.3s ease-out; }
         @keyframes enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
         .kpi-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); border: 1px solid #f1f5f9; padding: 12px 16px; display: flex; flex-direction: column; justify-content: space-between; height: 100px; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
         .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
@@ -87,32 +83,7 @@
                 <div class="kpi-card border-l-4 border-l-purple-500"><i class="fas fa-calendar-check kpi-icon-bg text-purple-500"></i><div><div class="kpi-title text-purple-600">Dias Produtivos</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="kpi-dias">--</span><span class="text-[9px] font-bold text-slate-400">dias</span></div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-dias" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-purple-600">--</span></div></div>
                 <div class="kpi-card border-l-4 border-l-amber-500"><i class="fas fa-bolt kpi-icon-bg text-amber-500"></i><div><div class="kpi-title text-amber-600">Velocidade</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="kpi-media">--</span><span class="text-[10px] text-slate-400 font-bold mb-1">docs/dia</span></div></div><div class="kpi-sub-row text-slate-500"><span>Meta Ideal:</span><span id="kpi-meta-dia" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--</span></div></div>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
-                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-3 py-3 w-[10%] text-left">Data</th>
-                                <th class="px-2 py-3 w-[6%] text-center">Fator</th>
-                                <th class="px-2 py-3 w-[6%] text-center">FIFO</th>
-                                <th class="px-2 py-3 w-[6%] text-center">G. Total</th>
-                                <th class="px-2 py-3 w-[6%] text-center">G. Parcial</th>
-                                <th class="px-2 py-3 w-[8%] text-center bg-blue-50/50 text-blue-700 border-x border-blue-100">Produção</th>
-                                <th class="px-2 py-3 w-[8%] text-center">Meta Prod.</th>
-                                <th class="px-2 py-3 w-[6%] text-center">% Prod.</th>
-                                <th class="px-2 py-3 w-[8%] text-center">Meta Assert.</th>
-                                <th class="px-2 py-3 w-[6%] text-center">% Assert.</th>
-                                <th class="px-3 py-3 text-left">Observação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody>
-                    </table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
-                    <span><i class="fas fa-table mr-1"></i> Visão de Grade</span>
-                    <span>Total Registros: <span id="total-registros-footer">--</span></span>
-                </div>
-            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]"><div class="overflow-auto custom-scrollbar flex-1"><table class="w-full text-sm text-left border-collapse"><thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm"><tr class="divide-x divide-slate-200 border-b border-slate-300"><th class="px-3 py-3 w-[10%]">Data</th><th class="px-2 py-3 w-[6%] text-center">Fator</th><th class="px-2 py-3 w-[6%] text-center">FIFO</th><th class="px-2 py-3 w-[6%] text-center">G. Total</th><th class="px-2 py-3 w-[6%] text-center">G. Parcial</th><th class="px-2 py-3 w-[8%] text-center bg-blue-50/50">Produção</th><th class="px-2 py-3 w-[8%] text-center">Meta Prod.</th><th class="px-2 py-3 w-[6%] text-center">% Prod.</th><th class="px-2 py-3 w-[8%] text-center">Meta Assert.</th><th class="px-2 py-3 w-[6%] text-center">% Assert.</th><th class="px-3 py-3 text-left">Observação</th></tr></thead><tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody></table></div><div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">--</span></span></div></div>
         </div>
 
         <div id="ma-tab-metas" class="ma-view hidden animate-enter space-y-6">
@@ -191,7 +162,6 @@
                                     <input type="text" placeholder="Buscar..." onkeyup="MinhaArea.Comparativo.filtrarPorBusca(this.value)" class="pl-8 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:border-blue-500 w-40 transition">
                                     <i class="fas fa-search absolute left-2.5 top-2 text-slate-400 text-xs"></i>
                                 </div>
-
                                 <button id="btn-limpar-filtro" onclick="MinhaArea.Comparativo.limparFiltro()" class="hidden px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 shadow-sm transition flex items-center gap-2">
                                     <i class="fas fa-times text-rose-500"></i> Limpar
                                 </button>
