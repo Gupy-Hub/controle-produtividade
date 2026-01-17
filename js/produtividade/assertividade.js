@@ -6,37 +6,40 @@ Produtividade.Assertividade = {
         console.log("🛡️ Módulo de Assertividade Iniciado");
     },
 
-    /**
-     * Lógica de Cálculo:
-     * Exemplo da Samaria: Soma (3400) / Qtd (37) = 91.89%
-     */
     calcularMedia: function(soma, qtd) {
-        // Blindagem contra divisão por zero
         if (!qtd || qtd <= 0) return 0;
         return (soma / qtd);
     },
 
-    renderizarCelula: function(auditoria) {
+    /**
+     * Renderiza o badge com lógica Binária (Verde/Vermelho)
+     * @param {Object} auditoria - Objeto com qtd e soma
+     * @param {Number} metaAlvo - Meta definida no cadastro (Ex: 98)
+     */
+    renderizarCelula: function(auditoria, metaAlvo) {
         const qtd = parseInt(auditoria.qtd || 0);
         const soma = parseFloat(auditoria.soma || 0);
+        const meta = parseFloat(metaAlvo || 95); // Default 95 se não tiver meta
         
         let display = "-";
+        // Padrão (Sem dados)
         let classeCor = "text-slate-300 border-slate-100 bg-slate-50"; 
         let tooltip = "Nenhuma auditoria realizada";
 
         if (qtd > 0) {
             const media = this.calcularMedia(soma, qtd);
             
-            // Formatação: 91.89 -> "91,89%"
             display = media.toFixed(2).replace('.', ',') + "%";
+            tooltip = `Média: ${display} | Meta: ${meta}% | Auditorias: ${qtd}`;
             
-            tooltip = `Auditorias: ${qtd} | Soma %: ${soma} | Média: ${display}`;
-            
-            // Regras de Cores (SLA)
-            if (media >= 98) classeCor = "text-emerald-700 font-bold bg-emerald-50 border-emerald-200";
-            else if (media >= 95) classeCor = "text-blue-700 font-bold bg-blue-50 border-blue-200";
-            else if (media >= 90) classeCor = "text-amber-700 font-bold bg-amber-50 border-amber-200";
-            else classeCor = "text-rose-700 font-bold bg-rose-50 border-rose-200";
+            // LÓGICA BINÁRIA: BATEU A META?
+            if (media >= meta) {
+                // VERDE (Sucesso)
+                classeCor = "text-emerald-700 font-bold bg-emerald-50 border-emerald-200";
+            } else {
+                // VERMELHO (Falha)
+                classeCor = "text-rose-700 font-bold bg-rose-50 border-rose-200";
+            }
         }
 
         return `
