@@ -152,7 +152,7 @@ MinhaArea.Geral = {
                 const temJust = item.justificativa && item.justificativa.length > 0;
                 const classJust = temJust ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" : "text-slate-200 text-center block";
 
-                // ÍCONE DE VALIDAÇÃO (CHECK) PARA GESTORES E ASSISTENTES
+                // ÍCONE DE VALIDAÇÃO (CHECK)
                 const iconValidado = item.validado 
                     ? `<i class="fas fa-check-circle text-emerald-500 ml-1" title="Validado (Checking Diário)"></i>` 
                     : `<i class="far fa-circle text-slate-200 ml-1 text-[8px]" title="Pendente de checking"></i>`;
@@ -210,18 +210,15 @@ MinhaArea.Geral = {
         }
     },
 
-    // --- NOVA LÓGICA DE CHECKING (COM ESTADO CONFIRMADO) ---
+    // --- NOVA LÓGICA DE CHECKING (COM ESTADO CONFIRMADO E DATA FIXA DE TESTE) ---
     processarCheckingInterface: async function(uid, checkins) {
-        // Se for gestor vendo outra pessoa, não mostra o card de topo (apenas ícones no grid)
+        // Se for gestor vendo outra pessoa, não mostra o card de topo
         if (MinhaArea.usuario.id !== parseInt(uid)) return;
 
-        // 1. Define "Ontem"
-        const hoje = new Date();
-        const ontem = new Date(hoje);
-        ontem.setDate(ontem.getDate() - 1);
-        
-        const ontemStr = ontem.toISOString().split('T')[0];
-        const ontemFormatado = ontem.toLocaleDateString('pt-BR');
+        // --- MODO TESTE ATIVADO ---
+        // Forçando a validação para o dia 16/12/2025 conforme solicitado.
+        const ontemStr = '2025-12-16';
+        const ontemFormatado = '16/12/2025';
 
         // 2. Verifica Status
         const jaValidou = checkins.some(c => c.data_referencia === ontemStr);
@@ -236,8 +233,8 @@ MinhaArea.Geral = {
                     <div class="flex items-center gap-3">
                         <div class="bg-blue-50 p-3 rounded-full text-blue-600"><i class="fas fa-clipboard-check text-xl"></i></div>
                         <div>
-                            <h4 class="font-bold text-slate-700 text-sm">Checking Diário Pendente</h4>
-                            <p class="text-xs text-slate-500">Confirme a conferência dos dados de ontem (${ontemFormatado}).</p>
+                            <h4 class="font-bold text-slate-700 text-sm">Checking Diário Pendente (TESTE)</h4>
+                            <p class="text-xs text-slate-500">Confirme a conferência dos dados do dia ${ontemFormatado}.</p>
                         </div>
                     </div>
                     <button onclick="MinhaArea.Geral.realizarCheckin('${ontemStr}')" 
@@ -252,7 +249,7 @@ MinhaArea.Geral = {
             container.innerHTML = `
                 <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-center gap-2 shadow-sm opacity-90 transition-all">
                     <i class="fas fa-check-circle text-emerald-600"></i>
-                    <span class="text-emerald-800 font-bold text-xs">Dados confirmados (Checking Realizado)</span>
+                    <span class="text-emerald-800 font-bold text-xs">Dados de ${ontemFormatado} confirmados!</span>
                 </div>`;
             container.classList.remove('hidden');
         }
@@ -269,7 +266,6 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // Recarrega para atualizar o grid (ícones) e mudar o estado do card para "Confirmado"
             this.carregar();
 
         } catch (e) {
