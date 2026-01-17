@@ -25,7 +25,6 @@ MinhaArea.Metas = {
             if (prodRes.error) throw prodRes.error;
 
             // 2. BUSCA ROBUSTA DE AUDITORIA (Paginação Automática)
-            // Trazendo qtd_ok e qtd_nok para a contagem
             const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
             
             console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
@@ -153,7 +152,7 @@ MinhaArea.Metas = {
         while(continuar) {
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
-                .select('*') // Traz tudo (incluindo qtd_ok e qtd_nok)
+                .select('*') 
                 .eq('usuario_id', uid)
                 .gte('data_auditoria', inicio)
                 .lte('data_auditoria', fim)
@@ -201,14 +200,20 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // Auditoria & Resultados (OK/NOK)
+        // Auditoria & Resultados (OK/NOK CORRIGIDOS)
         asserts.forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
             if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
             
-            // Soma OK e NOK
-            totalOk += Number(a.qtd_ok || 0);
-            totalNok += Number(a.qtd_nok || 0);
+            // CORREÇÃO: Conta DOCUMENTOS, não soma erros
+            if (Number(a.qtd_nok) > 0) {
+                totalNok++; // Documento Reprovado
+            }
+            
+            // CORREÇÃO: Conta STATUS exato para OK (ignora REV, JUST, etc)
+            if ((a.status || '').toUpperCase() === 'OK') {
+                totalOk++; // Documento Aprovado
+            }
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
@@ -216,24 +221,20 @@ MinhaArea.Metas = {
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
         // --- UPDATE UI ---
-        
-        // Card 1
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
-        // Card 2
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Card 3 (Novo Layout)
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
         
-        // Novos Campos OK/NOK
+        // Exibe os novos contadores corrigidos
         this.setTxt('auditoria-total-ok', totalOk.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-nok', totalNok.toLocaleString('pt-BR'));
     },
