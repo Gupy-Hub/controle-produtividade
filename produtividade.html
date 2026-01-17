@@ -20,6 +20,7 @@
         .tab-btn:hover { background-color: #f1f5f9; color: #0f172a; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
         .custom-scrollbar::-webkit-scrollbar { height: 8px; width: 8px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
@@ -27,73 +28,54 @@
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         .kpi-card { 
-            background: white; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            border: 1px solid #f1f5f9;
-            padding: 12px 16px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            height: 100px;
-            position: relative;
-            overflow: hidden;
+            background: white; border-radius: 12px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05); border: 1px solid #e2e8f0;
+            padding: 12px; display: flex; flex-direction: column; justify-content: space-between; height: 90px;
         }
-        .kpi-title { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
-        .kpi-main-val { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #1e293b; }
-        .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; }
-        .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
+        .kpi-title { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; color: #64748b; margin-bottom: 4px; }
+        .kpi-main-val { font-size: 1.5rem; font-weight: 900; color: #1e293b; line-height: 1; }
+        .kpi-sub-row { margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body class="bg-slate-50">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
-    
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
     <div class="bg-white/80 backdrop-blur-md border-b border-slate-200 fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
-            
             <div class="flex gap-1 overflow-x-auto no-scrollbar">
                 <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Validação</button>
                 <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-table"></i> Consolidado</button>
                 <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-trophy"></i> Performance</button>
                 <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-th"></i> Matriz</button>
             </div>
-
             <div class="flex items-center gap-4">
-                <div class="flex items-center gap-2">
-                    <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                        <button onclick="Produtividade.mudarPeriodo('dia')" id="btn-periodo-dia" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Dia</button>
-                        <button onclick="Produtividade.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
-                        <button onclick="Produtividade.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Semana</button>
-                        <button onclick="Produtividade.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition">Ano</button>
-                    </div>
-
-                    <div class="w-px h-6 bg-slate-200 mx-1"></div>
-
-                    <div class="flex gap-2 items-center">
-                        <input type="date" id="sel-data-dia" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 w-[110px]">
-                        <select id="sel-ano" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500"></select>
-                        <select id="sel-mes" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500 min-w-[100px]">
-                            <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option><option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option><option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option><option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
-                        </select>
-                        <select id="sel-semana" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-blue-500"><option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option></select>
-                        <select id="sel-subperiodo-ano" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-lg px-2 py-1.5 outline-none cursor-pointer focus:border-purple-500"><option value="full">Ano Completo</option><optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup><optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup></select>
-                    </div>
+                <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+                    <button onclick="Produtividade.mudarPeriodo('dia')" id="btn-periodo-dia" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white transition">Dia</button>
+                    <button onclick="Produtividade.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded bg-white text-blue-600 shadow-sm transition">Mês</button>
+                    <button onclick="Produtividade.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white transition">Semana</button>
+                    <button onclick="Produtividade.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white transition">Ano</button>
                 </div>
-
+                <div class="flex gap-2">
+                    <input type="date" id="sel-data-dia" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-white border border-slate-200 text-xs font-bold rounded px-2 py-1.5 w-[110px]">
+                    <select id="sel-ano" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-xs font-bold rounded px-2 py-1.5"></select>
+                    <select id="sel-mes" onchange="Produtividade.salvarEAtualizar()" class="bg-white border border-slate-200 text-xs font-bold rounded px-2 py-1.5 min-w-[100px]">
+                        <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option>
+                        <option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option>
+                        <option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option>
+                        <option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
+                    </select>
+                    <select id="sel-semana" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-blue-50 border border-blue-200 text-xs font-bold rounded px-2 py-1.5"></select>
+                    <select id="sel-subperiodo-ano" onchange="Produtividade.salvarEAtualizar()" class="hidden bg-purple-50 border border-purple-200 text-xs font-bold rounded px-2 py-1.5"></select>
+                </div>
                 <div class="flex items-center gap-2 border-l border-slate-200 pl-4">
-                    <label class="inline-flex items-center cursor-pointer mr-3" title="Exibir Auditoras e Gestoras">
-                        <input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()">
-                        <div class="relative w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-600"></div>
-                        <span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Gestão</span>
-                    </label>
-                    <div id="status-importacao-prod" class="text-[10px] font-bold text-slate-500 hidden md:block mr-2 animate-pulse"></div>
-                    <input type="file" id="input-excel" accept=".csv" multiple class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
-                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold shadow-md transition flex items-center gap-2 active:scale-95" title="Importar"><i class="fas fa-file-csv"></i> <span class="hidden sm:inline">Importar</span></button>
-                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm transition flex items-center gap-2 border border-rose-200 hover:border-rose-300 active:scale-95" title="Excluir"><i class="fas fa-trash-alt"></i></button>
+                    <label class="inline-flex items-center cursor-pointer mr-2"><input type="checkbox" id="check-gestao" class="sr-only peer" onchange="Produtividade.atualizarTodasAbas()"><div class="relative w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-slate-600"></div><span class="ms-2 text-[10px] font-bold text-slate-500 uppercase">Gestão</span></label>
+                    <div id="status-importacao-prod" class="text-[10px] font-bold text-slate-500 hidden md:block animate-pulse"></div>
+                    <input type="file" id="input-excel" accept=".csv" class="hidden" onchange="Produtividade.Importacao.Validacao.processar(this)">
+                    <button onclick="document.getElementById('input-excel').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded text-xs font-bold shadow-md transition flex items-center gap-2"><i class="fas fa-file-csv"></i> Importar</button>
+                    <button onclick="Produtividade.Geral.excluirDadosDia()" class="bg-white hover:bg-rose-50 text-rose-600 px-3 py-1.5 rounded text-xs font-bold shadow-sm border border-rose-200 transition"><i class="fas fa-trash-alt"></i></button>
                 </div>
             </div>
         </div>
@@ -105,19 +87,19 @@
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
                 <div class="kpi-card border-l-4 border-l-blue-500"><i class="fas fa-cubes kpi-icon-bg text-blue-500"></i><div><div class="kpi-title text-blue-600">Volume Total</div><div class="kpi-main-val text-slate-800" id="kpi-validacao-real">--</div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-volume" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Meta Global:</span><span id="kpi-validacao-esperado" class="font-bold text-blue-600">--</span></div></div>
                 <div class="kpi-card border-l-4 border-l-emerald-500"><i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i><div><div class="kpi-title text-emerald-600">Qualidade</div><div class="flex items-baseline gap-2"><span class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</span><span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span></div></div><div class="kpi-sub-row text-slate-500"><span>Atingimento Meta:</span><span id="kpi-meta-producao-val" class="font-bold text-emerald-600">--%</span></div></div>
-                <div class="kpi-card border-l-4 border-l-purple-500"><i class="fas fa-users-cog kpi-icon-bg text-purple-500"></i><div><div class="kpi-title text-purple-600">Capacidade Operativa</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="kpi-capacidade-pct">--%</span><span class="text-[9px] font-bold text-slate-400">do ideal</span></div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-capacidade" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Assistentes:</span><span id="kpi-capacidade-info" class="font-bold text-purple-600">--/17</span></div></div>
-                <div class="kpi-card border-l-4 border-l-amber-500"><i class="fas fa-bolt kpi-icon-bg text-amber-500"></i><div><div class="kpi-title text-amber-600">Velocidade (Média/Dia)</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span><span class="text-[10px] text-slate-400 font-bold mb-1">/ <span id="kpi-media-esperada">--</span> (Meta)</span></div></div><div class="kpi-sub-row text-slate-500"><span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--/--</span></div></div>
-                <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2"><div class="flex justify-between items-center mb-1"><div class="kpi-title text-indigo-600">Destaques</div><i class="fas fa-medal text-indigo-300 text-xs"></i></div><div class="grid grid-cols-2 gap-2 h-full"><div class="border-r border-slate-100 pr-1"><span class="text-[8px] font-bold text-blue-400 block mb-0.5 text-center">Volume</span><div id="top-prod-list" class="flex flex-col gap-0.5"></div></div><div class="pl-1"><span class="text-[8px] font-bold text-emerald-400 block mb-0.5 text-center">Qualidade</span><div id="top-assert-list" class="flex flex-col gap-0.5"></div></div></div></div>
+                <div class="kpi-card border-l-4 border-l-purple-500"><i class="fas fa-users-cog kpi-icon-bg text-purple-500"></i><div><div class="kpi-title text-purple-600">Capacidade Operativa</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="kpi-capacidade-pct">--%</span></div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-capacidade" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Assistentes:</span><span id="kpi-capacidade-info" class="font-bold text-purple-600">--/17</span></div></div>
+                <div class="kpi-card border-l-4 border-l-amber-500"><i class="fas fa-bolt kpi-icon-bg text-amber-500"></i><div><div class="kpi-title text-amber-600">Velocidade (Média/Dia)</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span></div></div><div class="kpi-sub-row text-slate-500"><span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--/--</span></div></div>
+                <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2"><div class="flex justify-between items-center mb-1"><div class="kpi-title text-indigo-600">Destaques</div></div><div class="grid grid-cols-2 gap-2 h-full"><div class="border-r border-slate-100 pr-1"><div id="top-prod-list" class="flex flex-col gap-0.5 text-[9px]"></div></div><div class="pl-1"><div id="top-assert-list" class="flex flex-col gap-0.5 text-[9px]"></div></div></div></div>
             </div>
             
-            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
+            <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm">Limpar</button></div>
 
             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
                             <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-2 py-3 text-center w-8 bg-slate-50"><input type="checkbox" id="check-all-master" onchange="Produtividade.Geral.toggleAll(this.checked)" class="cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"></th>
+                                <th class="px-2 py-3 text-center w-8 bg-slate-50"><input type="checkbox" id="check-all-master" onchange="Produtividade.Geral.toggleAll(this.checked)" class="cursor-pointer"></th>
                                 <th class="px-2 py-3 text-center w-24 bg-slate-50"></th>
                                 <th class="px-3 py-3 w-[20%]">Assistente</th>
                                 <th class="px-2 py-3 text-center w-[6%]">Dias</th>
@@ -152,93 +134,34 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-2">
-                <div class="kpi-card border-l-4 border-l-blue-500">
-                    <i class="fas fa-cubes kpi-icon-bg text-blue-500"></i>
-                    <div><div class="kpi-title text-blue-600">Total Validados</div><div class="kpi-main-val text-slate-800" id="cons-total-validados">--</div></div>
-                    <div class="kpi-sub-row text-slate-500 mt-auto"><span>Produção Global</span></div>
-                </div>
-                <div class="kpi-card border-l-4 border-l-emerald-500">
-                    <i class="fas fa-users kpi-icon-bg text-emerald-500"></i>
-                    <div><div class="kpi-title text-emerald-600">Total Assistentes</div><div class="flex items-baseline gap-2"><span class="kpi-main-val text-emerald-700" id="cons-total-assistentes">--</span></div></div>
-                    <div class="kpi-sub-row text-slate-500 mt-auto"><span>Equipe Ativa</span></div>
-                </div>
-                <div class="kpi-card border-l-4 border-l-purple-500">
-                    <i class="fas fa-tachometer-alt kpi-icon-bg text-purple-500"></i>
-                    <div><div class="kpi-title text-purple-600">Média/Dia (Assistente)</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="cons-media-diaria-assistente">--</span></div></div>
-                    <div class="kpi-sub-row text-slate-500 mt-auto"><span>Performance Individual</span></div>
-                </div>
-                <div class="kpi-card border-l-4 border-l-amber-500">
-                    <i class="fas fa-history kpi-icon-bg text-amber-500"></i>
-                    <div><div class="kpi-title text-amber-600">Total FIFO</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="cons-total-fifo">--</span></div></div>
-                    <div class="kpi-sub-row text-slate-500 mt-auto"><span>Antigos</span></div>
-                </div>
-                <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2">
-                    <div class="flex justify-between items-center mb-1"><div class="kpi-title text-indigo-600">Gradual</div><i class="fas fa-layer-group text-indigo-300 text-xs"></i></div>
-                    <div class="grid grid-cols-2 gap-2 h-full">
-                        <div class="border-r border-slate-100 pr-1 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-blue-400 block mb-0.5 text-center uppercase">Total</span><div id="cons-grad-total" class="text-xl font-bold text-indigo-700">--</div></div>
-                        <div class="pl-1 flex flex-col justify-center items-center"><span class="text-[9px] font-bold text-emerald-400 block mb-0.5 text-center uppercase">Parcial</span><div id="cons-grad-parcial" class="text-xl font-bold text-indigo-700">--</div></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-220px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
                             <tr class="divide-x divide-slate-200 border-b border-slate-300">
                                 <th class="px-3 py-3 w-[25%]">Assistente</th>
-                                <th class="px-2 py-3 text-center w-[8%] text-slate-400">Dias</th>
+                                <th class="px-2 py-3 text-center w-[8%] text-slate-400">Dias Trab.</th>
                                 <th class="px-2 py-3 text-center w-[8%]">FIFO</th>
                                 <th class="px-2 py-3 text-center w-[8%]">G. Total</th>
                                 <th class="px-2 py-3 text-center w-[8%]">G. Parcial</th>
                                 <th class="px-2 py-3 text-center w-[8%]">Perfil FC</th>
-                                <th class="px-2 py-3 text-center w-[10%] bg-blue-50 text-blue-700 border-x border-blue-100">Total Prod.</th>
+                                <th class="px-2 py-3 text-center w-[10%] bg-blue-50 text-blue-700 border-x border-blue-100">Total Validado</th>
                                 <th class="px-2 py-3 text-center w-[10%]">Média/Dia</th>
                                 <th class="px-2 py-3 text-center w-[10%] text-emerald-700 bg-emerald-50">% Ating.</th>
                             </tr>
                         </thead>
-                        <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white"></tbody>
+                        <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white">
+                            </tbody>
                         
-                        <tfoot id="cons-table-footer" class="bg-slate-100 border-t-2 border-slate-300 font-bold text-xs text-slate-700 sticky bottom-0 z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
+                        <tfoot id="cons-table-footer" class="bg-slate-100 border-t-2 border-slate-300 font-bold text-xs text-slate-700 sticky bottom-0 z-20 shadow-[0_-4px_15px_rgba(0,0,0,0.1)]">
                             </tfoot>
                     </table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
-                    <span><i class="fas fa-table mr-1"></i> Detalhamento por Assistente</span>
-                    <span><span id="total-consolidado-registros">0</span> registros</span>
                 </div>
             </div>
         </div>
 
-        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
-                <div class="col-span-8 flex flex-col gap-4">
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center"><div><h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3><p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p></div><button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button></div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]"><canvas id="evolutionChart"></canvas></div>
-                </div>
-                <div class="col-span-4 flex flex-col gap-4">
-                    <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-start gap-3"><i class="fas fa-info-circle text-blue-500 mt-0.5"></i><p class="text-xs text-blue-800">Clique em uma assistente abaixo para ver a <strong>evolução individual</strong>.</p></div>
-                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
-                        <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center"><span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Ranking de Produção</span><i class="fas fa-filter text-slate-300"></i></div>
-                        <div class="overflow-y-auto custom-scrollbar flex-1 p-2" id="ranking-list-container"><div class="text-center text-slate-400 py-10 text-xs">Carregando...</div></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-xs text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-center border-b-2 border-slate-200">
-                            <tr><th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[200px]">Assistente</th><th class="px-3 py-4 min-w-[70px]">Jan</th><th class="px-3 py-4 min-w-[70px]">Fev</th><th class="px-3 py-4 min-w-[70px]">Mar</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">1º Tri</th><th class="px-3 py-4 min-w-[70px]">Abr</th><th class="px-3 py-4 min-w-[70px]">Mai</th><th class="px-3 py-4 min-w-[70px]">Jun</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">2º Tri</th><th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">1º Sem</th><th class="px-3 py-4 min-w-[70px]">Jul</th><th class="px-3 py-4 min-w-[70px]">Ago</th><th class="px-3 py-4 min-w-[70px]">Set</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">3º Tri</th><th class="px-3 py-4 min-w-[70px]">Out</th><th class="px-3 py-4 min-w-[70px]">Nov</th><th class="px-3 py-4 min-w-[70px]">Dez</th><th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">4º Tri</th><th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">2º Sem</th><th class="px-4 py-4 bg-slate-100 text-slate-800 font-black min-w-[100px]">Total</th></tr>
-                        </thead>
-                        <tbody id="matriz-body" class="divide-y divide-slate-100 bg-white"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
+        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6"></div>
+        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6"></div>
     </div>
 
     <script src="js/produtividade/assertividade.js"></script> 
@@ -248,7 +171,6 @@
     <script src="js/produtividade/performance.js"></script>
     <script src="js/produtividade/matriz.js"></script>
     <script src="js/produtividade/importacao/validacao.js"></script>
-    
     <script>
         Produtividade.atualizarTodasAbas = function() {
             if(Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) Produtividade.Geral.carregarTela();

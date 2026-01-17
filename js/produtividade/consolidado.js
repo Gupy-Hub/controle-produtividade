@@ -4,7 +4,7 @@ Produtividade.Consolidado = {
     initialized: false,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Grid + Footer Init...");
+        console.log("🚀 [NEXUS] Consolidado: Grid Footer Stats Init...");
         this.renderizarFiltros(); 
         setTimeout(() => this.carregarDados(), 100);
         this.initialized = true;
@@ -26,10 +26,7 @@ Produtividade.Consolidado = {
         selPeriodo.innerHTML = `
             <option value="anual" class="font-bold">📅 Ano Completo</option>
             <optgroup label="Semestres"><option value="s1">1º Semestre</option><option value="s2">2º Semestre</option></optgroup>
-            <optgroup label="Trimestres">
-                <option value="t1">1º Trimestre</option><option value="t2">2º Trimestre</option>
-                <option value="t3">3º Trimestre</option><option value="t4">4º Trimestre</option>
-            </optgroup>
+            <optgroup label="Trimestres"><option value="t1">1º Trimestre</option><option value="t2">2º Trimestre</option><option value="t3">3º Trimestre</option><option value="t4">4º Trimestre</option></optgroup>
             <optgroup label="Meses">
                 <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
                 <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
@@ -91,17 +88,14 @@ Produtividade.Consolidado = {
         return count > 0 ? count : 1;
     },
 
-    carregar: function() {
-        if(!this.initialized) this.init();
-        else this.carregarDados();
-    },
-
     carregarDados: async function() {
         const tbody = document.getElementById('cons-table-body');
+        const tfoot = document.getElementById('cons-table-footer');
         const { inicio, fim } = this.getDatasIntervalo();
         const diasUteisPeriodo = this.countDiasUteis(inicio, fim);
 
         if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i><br>Carregando dados...</td></tr>';
+        if (tfoot) tfoot.innerHTML = '';
 
         try {
             if(!Sistema || !Sistema.supabase) throw new Error("Sistema não inicializado.");
@@ -121,7 +115,7 @@ Produtividade.Consolidado = {
     processarDados: function(data, diasUteisPeriodo) {
         const assistentes = (data || []).filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
 
-        // Totais Globais
+        // --- CALCULO DOS 10 INDICADORES ---
         let totalValidados = 0;
         let totalFifo = 0;
         let totalGradualTotal = 0;
@@ -135,10 +129,15 @@ Produtividade.Consolidado = {
             const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
             const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
             
+            // 7. Total documentos validados
             totalValidados += prod;
+            // 3. Total Fifo
             totalFifo += fifo;
+            // 5. Total Gradual Total
             totalGradualTotal += gradTotal;
+            // 4. Total Gradual Parcial
             totalGradualParcial += gradParcial;
+            // 6. Total Perfil FC
             totalPerfilFc += perfilFc;
 
             const mediaDiaria = diasUteisPeriodo > 0 ? (prod / diasUteisPeriodo) : 0;
@@ -156,30 +155,36 @@ Produtividade.Consolidado = {
 
         dadosMapeados.sort((a,b) => b.total - a.total);
 
-        // --- ATUALIZA CARDS ---
+        // 1. Total assistentes
         const totalAssistentes = assistentes.length;
-        const validacaoDiariaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
-        const mediaPeriodoPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
-        const mediaDiariaPorAssistente = (totalAssistentes > 0 && diasUteisPeriodo > 0) ? (totalValidados / diasUteisPeriodo / totalAssistentes) : 0;
-
-        const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
         
-        setVal('cons-total-validados', totalValidados.toLocaleString('pt-BR'));
-        setVal('cons-validacao-diaria-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
-        setVal('cons-total-assistentes', totalAssistentes);
-        setVal('cons-dias-uteis', diasUteisPeriodo);
-        setVal('cons-media-diaria-assistente', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
-        setVal('cons-media-periodo-assistente', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
-        setVal('cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
-        setVal('cons-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
-        setVal('cons-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
-        setVal('cons-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
-        setVal('total-consolidado-registros', totalAssistentes);
+        // 2. Total dias úteis
+        const totalDiasUteis = diasUteisPeriodo;
 
+        // 8. Total validação diária (Dias uteis) = Soma Total / dias uteis
+        const validacaoDiariaTime = totalDiasUteis > 0 ? (totalValidados / totalDiasUteis) : 0;
+
+        // 9. Média validação diária (Todas assistentes) = Soma Total / Total de Assistentes 
+        // (Nota: Isso é Média por Pessoa no Período)
+        const mediaValPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
+
+        // 10. Média validação diária (Por Assistentes) = Soma Total / Dias Uteis / Total de Assistentes
+        const mediaValDiariaPorAssistente = (totalAssistentes > 0 && totalDiasUteis > 0) 
+            ? (totalValidados / totalDiasUteis / totalAssistentes) 
+            : 0;
+
+        // Renderiza
         this.renderizarTabela(dadosMapeados, {
-            totalValidados, totalFifo, totalGradualTotal, totalGradualParcial, totalPerfilFc,
-            totalAssistentes, diasUteisPeriodo,
-            validacaoDiariaTime, mediaDiariaPorAssistente, mediaPeriodoPorAssistente
+            totalAssistentes,
+            totalDiasUteis,
+            totalFifo,
+            totalGradualParcial,
+            totalGradualTotal,
+            totalPerfilFc,
+            totalValidados,
+            validacaoDiariaTime,
+            mediaValPorAssistente,
+            mediaValDiariaPorAssistente
         });
     },
 
@@ -196,10 +201,10 @@ Produtividade.Consolidado = {
             return;
         }
 
-        // Renderiza Linhas
+        // --- Renderiza Linhas (Corpo) ---
         dados.forEach(d => {
             const tr = document.createElement('tr');
-            tr.className = "hover:bg-blue-50/50 transition-colors group";
+            tr.className = "hover:bg-blue-50/50 transition-colors group border-b border-slate-100 last:border-0";
             let corAting = d.atingimento >= 100 ? "text-emerald-600 font-bold" : (d.atingimento < 95 ? "text-rose-600 font-bold" : "text-slate-500");
 
             tr.innerHTML = `
@@ -219,30 +224,40 @@ Produtividade.Consolidado = {
             tbody.appendChild(tr);
         });
 
-        // Renderiza Footer com os 10 Indicadores Solicitados
-        // Dividido em 2 linhas para acomodar todas as informações de forma limpa
+        // --- Renderiza Footer (Os 10 Dados Solicitados) ---
+        // Organizados em 2 linhas para caber perfeitamente no Grid
         if(tfoot) {
             tfoot.innerHTML = `
-                <tr class="bg-slate-50 border-t border-slate-300">
-                    <td class="px-3 py-2 text-right text-slate-500 uppercase text-[10px]">SOMAS:</td>
+                <tr class="bg-slate-50 border-t-2 border-slate-300">
+                    <td class="px-3 py-2 text-right text-slate-500 uppercase text-[10px]">TOTAIS:</td>
                     <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
-                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalFifo.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalGradualTotal.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalGradualParcial.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalPerfilFc.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-blue-800 font-bold bg-blue-100/30 border-x border-blue-200 text-sm">${totais.totalValidados.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total FIFO">${totais.totalFifo.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total Gradual Total">${totais.totalGradualTotal.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total Gradual Parcial">${totais.totalGradualParcial.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total Perfil FC">${totais.totalPerfilFc.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-blue-800 font-black bg-blue-100/50 border-x border-blue-200 text-sm" title="Total Validados">${totais.totalValidados.toLocaleString('pt-BR')}</td>
                     <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
                     <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
                 </tr>
+                
                 <tr class="bg-slate-100 border-t border-slate-200">
                     <td class="px-3 py-2 text-left text-slate-600 text-[10px] uppercase font-bold pl-4">
-                        <i class="fas fa-users mr-1"></i> ${totais.totalAssistentes} Assistentes &nbsp;|&nbsp; 
-                        <i class="fas fa-calendar-day mr-1"></i> ${totais.diasUteisPeriodo} Dias Úteis
+                        <span title="Total Assistentes"><i class="fas fa-users mr-1"></i> ${totais.totalAssistentes}</span> &nbsp;|&nbsp; 
+                        <span title="Dias Úteis"><i class="fas fa-calendar-day mr-1"></i> ${totais.totalDiasUteis}</span>
                     </td>
-                    <td colspan="5" class="px-2 py-2 text-right text-slate-500 text-[10px] uppercase font-bold">MÉDIAS DO PERÍODO:</td>
-                    <td class="px-2 py-2 text-center text-blue-600 font-bold text-[10px] border-l border-slate-200" title="Validação Diária (Time)">${Math.round(totais.validacaoDiariaTime).toLocaleString('pt-BR')}/dia</td>
-                    <td class="px-2 py-2 text-center text-slate-700 font-bold text-[10px] bg-slate-200/50" title="Média Diária por Assistente">${totais.mediaDiariaPorAssistente.toFixed(1).replace('.',',')}</td>
-                    <td class="px-2 py-2 text-center text-[10px] text-purple-600 font-bold" title="Média Total por Assistente">Avg: ${Math.round(totais.mediaPeriodoPorAssistente)}</td>
+                    <td colspan="5" class="px-2 py-2 text-right text-slate-500 text-[10px] uppercase font-bold tracking-wide">MÉDIAS GLOBAIS:</td>
+                    
+                    <td class="px-2 py-2 text-center text-blue-600 font-bold text-[10px] border-l border-slate-200" title="Validação Diária (Time) = Total / Dias Úteis">
+                        ${Math.round(totais.validacaoDiariaTime).toLocaleString('pt-BR')} /dia
+                    </td>
+                    
+                    <td class="px-2 py-2 text-center text-indigo-700 font-bold text-[10px] bg-indigo-50/50" title="Média Diária (Por Assistente) = Total / Dias / Assistentes">
+                        ${totais.mediaValDiariaPorAssistente.toFixed(1).replace('.',',')} /user
+                    </td>
+                    
+                    <td class="px-2 py-2 text-center text-[10px] text-slate-600 font-bold" title="Média Total (Todas Assistentes) = Total / Assistentes">
+                        Avg: ${Math.round(totais.mediaValPorAssistente).toLocaleString('pt-BR')}
+                    </td>
                 </tr>
             `;
         }
