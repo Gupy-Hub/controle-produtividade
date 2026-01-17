@@ -15,10 +15,10 @@ Produtividade.Assertividade = {
     },
 
     /**
-     * Gera o HTML da célula (Badge Colorido)
+     * Gera o HTML da célula (Badge Colorido) para o Dashboard Geral
      */
     renderizarCelula: function(auditoria) {
-        // Garante números
+        // Garante números (Blindagem de tipos)
         const qtd = parseInt(auditoria.qtd || 0);
         const soma = parseFloat(auditoria.soma || 0);
         
@@ -26,7 +26,7 @@ Produtividade.Assertividade = {
         let classeCor = "text-slate-300 border-slate-100 bg-slate-50"; 
         let tooltip = "Nenhuma auditoria realizada";
 
-        // Só calcula se tiver auditoria
+        // Só calcula se tiver auditoria válida
         if (qtd > 0) {
             const media = this.calcularMedia(soma, qtd);
             
@@ -34,7 +34,7 @@ Produtividade.Assertividade = {
             display = media.toFixed(2).replace('.', ',') + "%";
             tooltip = `Auditorias: ${qtd} | Soma Notas: ${soma} | Média Real: ${display}`;
             
-            // Regras de Cores (SLA)
+            // Regras de Cores (SLA de Qualidade)
             if (media >= 98) classeCor = "text-emerald-700 font-bold bg-emerald-50 border-emerald-200";
             else if (media >= 95) classeCor = "text-blue-700 font-bold bg-blue-50 border-blue-200";
             else if (media >= 90) classeCor = "text-amber-700 font-bold bg-amber-50 border-amber-200";
@@ -49,5 +49,5 @@ Produtividade.Assertividade = {
     }
 };
 
-// Auto-inicialização
+// Auto-inicialização imediata
 Produtividade.Assertividade.init();
