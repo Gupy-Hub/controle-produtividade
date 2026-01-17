@@ -6,7 +6,7 @@ window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
 
     init: function() {
-        console.log("📥 Importação de Produção: Engine V2.3 (Auth-Debug Mode)");
+        console.log("📥 Importação de Produção: Engine V2.4 (Bypass Auth Check)");
     },
 
     extrairDataDoNome: function(nome) {
@@ -80,7 +80,7 @@ window.Produtividade.Importacao.Validacao = {
 
     finalizarAnalise: function() {
         if (this.dadosProcessados.length === 0) {
-            alert("Nenhum dado válido encontrado.");
+            alert("Nenhum dado válido extraído.");
             return;
         }
         if (confirm(`Deseja salvar ${this.dadosProcessados.length} registros no banco?`)) {
@@ -88,29 +88,36 @@ window.Produtividade.Importacao.Validacao = {
         }
     },
 
-    // Substitua apenas o método salvarNoBanco para um modo "Direct Bypass"
-salvarNoBanco: async function() {
-    const statusEl = document.getElementById('status-importacao-prod');
-    try {
-        if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Tentando gravação direta...</span>`;
+    salvarNoBanco: async function() {
+        const statusEl = document.getElementById('status-importacao-prod');
+        try {
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando...</span>`;
 
-        // Tenta enviar os dados sem validar a sessão antes no JS
-        // Se falhar aqui, o erro virá direto do PostgreSQL/RLS
-        const { error } = await Sistema.supabase
-            .from('producao')
-            .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
+            // REMOVIDO CHECK DE USUÁRIO: Tentamos o upsert direto.
+            // O Supabase enviará o token se ele existir no objeto Sistema.supabase.
+            const { error } = await Sistema.supabase
+                .from('producao')
+                .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
 
-        if (error) throw error;
+            if (error) {
+                console.error("Erro retornado pelo Supabase:", error);
+                // Tradução de erros comuns
+                if (error.code === '42501' || error.status === 403 || error.status === 401) {
+                    throw new Error("Acesso Negado. Sua sessão expirou ou o banco não reconheceu seu login. Por favor, saia e entre novamente no sistema.");
+                }
+                throw error;
+            }
 
-        alert("✅ Importação concluída!");
-        if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
+            alert("✅ Importação concluída com sucesso!");
+            if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
 
-    } catch (e) {
-        console.error("Erro no Banco:", e);
-        alert("Erro no Banco: " + (e.message || "Acesso negado. Verifique as políticas de RLS no Supabase."));
-    } finally {
-        if(statusEl) statusEl.innerHTML = "";
+        } catch (e) {
+            console.error("Falha na gravação:", e);
+            alert("❌ " + e.message);
+        } finally {
+            if(statusEl) statusEl.innerHTML = "";
+        }
     }
-}
+};
 
 window.Produtividade.Importacao.Validacao.init();
