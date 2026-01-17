@@ -13,7 +13,7 @@ MinhaArea.Geral = {
         if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Processando dados...</span></div></td></tr>';
 
         try {
-            // 1. Buscas em Paralelo
+            // 1. Buscas Otimizadas (Com Filtros e Limites Aumentados)
             const [prodRes, assertRes, metaRes] = await Promise.all([
                 // Produção
                 Sistema.supabase
@@ -21,16 +21,20 @@ MinhaArea.Geral = {
                     .select('*')
                     .eq('usuario_id', uid)
                     .gte('data_referencia', inicio)
-                    .lte('data_referencia', fim),
+                    .lte('data_referencia', fim)
+                    .limit(2000), // Aumentado limite de segurança
                 
-                // Assertividade (Auditorias)
+                // Assertividade (APENAS O QUE IMPORTA)
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
                     .eq('usuario_id', uid)
                     .gte('data_auditoria', inicio)
-                    .lte('data_auditoria', fim),
-
+                    .lte('data_auditoria', fim)
+                    .not('porcentagem', 'is', null) // Ignora nulos no banco
+                    .neq('porcentagem', '')         // Ignora vazios no banco
+                    .limit(5000), // Garante que trará todas as auditorias do mês
+                
                 // Metas
                 Sistema.supabase
                     .from('metas')
@@ -51,11 +55,9 @@ MinhaArea.Geral = {
             // 3. Unificação dos Dados
             const mapaDados = new Map();
 
-            // Helper para garantir chave de data consistente (YYYY-MM-DD)
             const getDia = (dataFull) => {
                 if(!dataFull) return null;
-                const dataStr = dataFull.split('T')[0]; // Garante ignorar hora
-                
+                const dataStr = dataFull.split('T')[0];
                 if (!mapaDados.has(dataStr)) {
                     mapaDados.set(dataStr, {
                         data: dataStr,
@@ -79,18 +81,15 @@ MinhaArea.Geral = {
                 }
             });
 
-            // Processa Assertividade (Lógica IDÊNTICA ao Console)
+            // Processa Assertividade
             (assertRes.data || []).forEach(a => {
                 const dia = getDia(a.data_auditoria);
                 if(dia) {
+                    // Como já filtramos no banco, a validação aqui é apenas preventiva
                     const valRaw = a.porcentagem;
-                    
-                    // FILTRO RIGOROSO: Só passa se tiver conteúdo real
-                    if (valRaw !== null && valRaw !== undefined && String(valRaw).trim() !== '') {
-                        const nota = this.parseValorPorcentagem(valRaw);
-                        dia.assert.somaNotas += nota;
-                        dia.assert.qtdAuditorias++;
-                    }
+                    const nota = this.parseValorPorcentagem(valRaw);
+                    dia.assert.somaNotas += nota;
+                    dia.assert.qtdAuditorias++;
                 }
             });
 
@@ -139,13 +138,13 @@ MinhaArea.Geral = {
                     qtdAuditoriasGlobal += item.assert.qtdAuditorias;
                 }
 
-                // Acumuladores Globais
+                // KPIs Globais
                 totalProd += item.prod.qtd;
                 totalMeta += metaDia;
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
 
-                // Data Formatação
+                // Data
                 const dateObj = new Date(item.data + 'T12:00:00');
                 const diaStr = String(dateObj.getDate()).padStart(2, '0');
                 const mesStr = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -178,7 +177,7 @@ MinhaArea.Geral = {
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // 5. Atualiza KPIs Topo
+            // Atualiza KPIs Topo
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
 
@@ -206,7 +205,6 @@ MinhaArea.Geral = {
     parseValorPorcentagem: function(val) {
         if (val === null || val === undefined) return 0;
         if (typeof val === 'number') return val;
-        // Remove espaços, % e converte vírgula
         let str = String(val).replace('%', '').replace(/\s/g, '').replace(',', '.');
         const num = parseFloat(str);
         return isNaN(num) ? 0 : num;
