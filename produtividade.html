@@ -27,7 +27,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Estilo Novo dos Cards - HUD Design */
         .kpi-card { 
             background: white; 
             border-radius: 16px; 
@@ -48,7 +47,6 @@
         .kpi-title { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
         .kpi-main-val { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #1e293b; }
         .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; }
-        .badge { padding: 2px 6px; border-radius: 6px; font-size: 0.65rem; font-weight: 700; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -119,89 +117,12 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-28">
         
         <div id="tab-geral" class="view-section animate-fade-in space-y-4">
-            
             <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
-                
-                <div class="kpi-card border-l-4 border-l-blue-500">
-                    <i class="fas fa-cubes kpi-icon-bg text-blue-500"></i>
-                    <div>
-                        <div class="kpi-title text-blue-600">Volume Total</div>
-                        <div class="kpi-main-val text-slate-800" id="kpi-validacao-real">--</div>
-                    </div>
-                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div id="bar-volume" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                    <div class="kpi-sub-row text-slate-500 mt-1">
-                        <span>Meta Global:</span>
-                        <span id="kpi-validacao-esperado" class="font-bold text-blue-600">--</span>
-                    </div>
-                </div>
-
-                <div class="kpi-card border-l-4 border-l-emerald-500">
-                    <i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i>
-                    <div>
-                        <div class="kpi-title text-emerald-600">Qualidade</div>
-                        <div class="flex items-baseline gap-2">
-                            <span class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</span>
-                            <span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span>
-                        </div>
-                    </div>
-                    <div class="kpi-sub-row text-slate-500">
-                        <span>Atingimento Meta:</span>
-                        <span id="kpi-meta-producao-val" class="font-bold text-emerald-600">--%</span>
-                    </div>
-                </div>
-
-                <div class="kpi-card border-l-4 border-l-purple-500">
-                    <i class="fas fa-users-cog kpi-icon-bg text-purple-500"></i>
-                    <div>
-                        <div class="kpi-title text-purple-600">Capacidade Operativa</div>
-                        <div class="flex items-baseline gap-2 mt-1">
-                            <span class="kpi-main-val text-purple-700" id="kpi-capacidade-pct">--%</span>
-                            <span class="text-[9px] font-bold text-slate-400">do ideal</span>
-                        </div>
-                    </div>
-                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                        <div id="bar-capacidade" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                    <div class="kpi-sub-row text-slate-500 mt-1">
-                        <span>Assistentes:</span>
-                        <span id="kpi-capacidade-info" class="font-bold text-purple-600">--/17</span>
-                    </div>
-                </div>
-
-                <div class="kpi-card border-l-4 border-l-amber-500">
-                    <i class="fas fa-bolt kpi-icon-bg text-amber-500"></i>
-                    <div>
-                        <div class="kpi-title text-amber-600">Velocidade (Média/Dia)</div>
-                        <div class="flex items-end gap-1">
-                            <span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span>
-                            <span class="text-[10px] text-slate-400 font-bold mb-1">/ <span id="kpi-media-esperada">--</span> (Meta)</span>
-                        </div>
-                    </div>
-                    <div class="kpi-sub-row text-slate-500">
-                        <span>Dias Úteis:</span>
-                        <span id="kpi-dias-uteis" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--/--</span>
-                    </div>
-                </div>
-
-                <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2">
-                    <div class="flex justify-between items-center mb-1">
-                        <div class="kpi-title text-indigo-600">Destaques</div>
-                        <i class="fas fa-medal text-indigo-300 text-xs"></i>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 h-full">
-                        <div class="border-r border-slate-100 pr-1">
-                            <span class="text-[8px] font-bold text-blue-400 block mb-0.5 text-center">Volume</span>
-                            <div id="top-prod-list" class="flex flex-col gap-0.5"></div>
-                        </div>
-                        <div class="pl-1">
-                            <span class="text-[8px] font-bold text-emerald-400 block mb-0.5 text-center">Qualidade</span>
-                            <div id="top-assert-list" class="flex flex-col gap-0.5"></div>
-                        </div>
-                    </div>
-                </div>
-
+                <div class="kpi-card border-l-4 border-l-blue-500"><i class="fas fa-cubes kpi-icon-bg text-blue-500"></i><div><div class="kpi-title text-blue-600">Volume Total</div><div class="kpi-main-val text-slate-800" id="kpi-validacao-real">--</div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-volume" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Meta Global:</span><span id="kpi-validacao-esperado" class="font-bold text-blue-600">--</span></div></div>
+                <div class="kpi-card border-l-4 border-l-emerald-500"><i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i><div><div class="kpi-title text-emerald-600">Qualidade</div><div class="flex items-baseline gap-2"><span class="kpi-main-val text-emerald-700" id="kpi-meta-assertividade-val">--%</span><span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span></div></div><div class="kpi-sub-row text-slate-500"><span>Atingimento Meta:</span><span id="kpi-meta-producao-val" class="font-bold text-emerald-600">--%</span></div></div>
+                <div class="kpi-card border-l-4 border-l-purple-500"><i class="fas fa-users-cog kpi-icon-bg text-purple-500"></i><div><div class="kpi-title text-purple-600">Capacidade Operativa</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="kpi-capacidade-pct">--%</span><span class="text-[9px] font-bold text-slate-400">do ideal</span></div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-capacidade" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Assistentes:</span><span id="kpi-capacidade-info" class="font-bold text-purple-600">--/17</span></div></div>
+                <div class="kpi-card border-l-4 border-l-amber-500"><i class="fas fa-bolt kpi-icon-bg text-amber-500"></i><div><div class="kpi-title text-amber-600">Velocidade (Média/Dia)</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="kpi-media-real">--</span><span class="text-[10px] text-slate-400 font-bold mb-1">/ <span id="kpi-media-esperada">--</span> (Meta)</span></div></div><div class="kpi-sub-row text-slate-500"><span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--/--</span></div></div>
+                <div class="kpi-card border-l-4 border-l-indigo-500 px-3 py-2"><div class="flex justify-between items-center mb-1"><div class="kpi-title text-indigo-600">Destaques</div><i class="fas fa-medal text-indigo-300 text-xs"></i></div><div class="grid grid-cols-2 gap-2 h-full"><div class="border-r border-slate-100 pr-1"><span class="text-[8px] font-bold text-blue-400 block mb-0.5 text-center">Volume</span><div id="top-prod-list" class="flex flex-col gap-0.5"></div></div><div class="pl-1"><span class="text-[8px] font-bold text-emerald-400 block mb-0.5 text-center">Qualidade</span><div id="top-assert-list" class="flex flex-col gap-0.5"></div></div></div></div>
             </div>
             
             <div id="selection-header" class="hidden bg-blue-50 border border-blue-100 p-3 rounded-lg flex justify-between items-center animate-fade-in"><span class="text-sm font-bold text-blue-800"><i class="fas fa-user-circle mr-2"></i> Filtrado: <span id="selected-name" class="underline text-blue-900"></span></span><button onclick="Produtividade.Geral.limparSelecao()" class="text-xs bg-white border border-blue-200 text-blue-600 px-3 py-1 rounded hover:bg-blue-100 font-bold shadow-sm"><i class="fas fa-times mr-1"></i> Limpar</button></div>
@@ -211,32 +132,16 @@
                     <table class="w-full text-sm text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
                             <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-2 py-3 text-center w-8 bg-slate-50">
-                                    <input type="checkbox" id="check-all-master" onchange="Produtividade.Geral.toggleAll(this.checked)" class="cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500">
-                                </th>
-                                <th class="px-2 py-3 text-center w-24 bg-slate-50">
-                                    <div class="flex flex-col items-center gap-1">
-                                        <span>Abono</span>
-                                        <select id="bulk-fator" onchange="Produtividade.Geral.mudarFatorTodos(this.value)" class="w-full text-[9px] bg-white border border-slate-300 rounded px-1 py-0.5 font-bold text-slate-700 outline-none cursor-pointer">
-                                            <option value="">Aplicar...</option>
-                                            <option value="1">Não (Normal)</option>
-                                            <option value="0.5">Parcial</option>
-                                            <option value="0">Sim (Abonar)</option>
-                                        </select>
-                                    </div>
-                                </th>
-                                <th class="px-3 py-3 w-[20%]">Assistente</th>
+                                <th class="px-2 py-3 text-center w-8 bg-slate-50"><input type="checkbox" id="check-all-master" onchange="Produtividade.Geral.toggleAll(this.checked)" class="cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500"></th>
+                                <th class="px-2 py-3 text-center w-24 bg-slate-50"></th> <th class="px-3 py-3 w-[20%]">Assistente</th>
                                 <th class="px-2 py-3 text-center w-[6%]">Dias</th>
                                 <th class="px-2 py-3 text-center w-[6%]">FIFO</th>
                                 <th class="px-2 py-3 text-center w-[6%]">G. Total</th>
                                 <th class="px-2 py-3 text-center w-[6%]">G. Parcial</th>
-                                
                                 <th class="px-2 py-3 text-center w-[8%] bg-slate-100">Meta (Dia)</th>
                                 <th class="px-2 py-3 text-center w-[8%] bg-slate-100">Meta (Real)</th>
-                                
                                 <th class="px-2 py-3 text-center w-[10%] text-blue-700 bg-blue-50/50">Produção</th>
                                 <th class="px-2 py-3 text-center w-[8%]">% Ating.</th>
-                                
                                 <th class="px-2 py-3 text-center w-[8%] text-emerald-700 bg-emerald-50/50">% Assert</th>
                             </tr>
                         </thead>
@@ -248,24 +153,52 @@
         </div>
 
         <div id="tab-consolidado" class="view-section hidden animate-fade-in space-y-4">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
+                
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-200">
+                        <span class="text-[10px] font-bold text-slate-500 uppercase px-2"><i class="fas fa-filter mr-1"></i> Filtros</span>
+                        <select id="sel-consolidado-ano" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer"></select>
+                        <select id="sel-consolidado-periodo" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer min-w-[150px]"></select>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-6">
+                    <div class="flex flex-col items-end">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Produção Total</span>
+                        <span id="kpi-consolidado-total" class="text-2xl font-black text-blue-600 leading-none">--</span>
+                    </div>
+                    <div class="w-px h-8 bg-slate-200"></div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Média Diária</span>
+                        <span id="kpi-consolidado-media" class="text-2xl font-black text-emerald-600 leading-none">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="grafico-consolidado-container" class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 h-[350px] relative">
+                <canvas id="grafico-consolidado"></canvas>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[300px]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
                         <thead id="cons-table-header" class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm"></thead>
                         <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white"></tbody>
                     </table>
                 </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-layer-group mr-1"></i> Visão Agrupada por Período</span><span>Total Assistentes: <span id="total-consolidado-footer">0</span></span></div>
+                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
+                    <span><i class="fas fa-layer-group mr-1"></i> Visão Agrupada</span>
+                    <span><span id="total-consolidado-footer">0</span> registros</span>
+                </div>
             </div>
         </div>
 
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
+             <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
                 <div class="col-span-8 flex flex-col gap-4">
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
-                        <div><h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3><p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p></div>
-                        <button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button>
-                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center"><div><h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3><p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p></div><button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2"><i class="fas fa-arrow-left"></i> Voltar para Visão Time</button></div>
                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]"><canvas id="evolutionChart"></canvas></div>
                 </div>
                 <div class="col-span-4 flex flex-col gap-4">
@@ -279,7 +212,7 @@
         </div>
         
         <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
+             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-xs text-left border-collapse">
                         <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-center border-b-2 border-slate-200">
@@ -292,7 +225,8 @@
         </div>
     </div>
 
-  <script src="js/produtividade/assertividade.js"></script> <script src="js/produtividade/main.js"></script>
+    <script src="js/produtividade/assertividade.js"></script> 
+    <script src="js/produtividade/main.js"></script>
     <script src="js/produtividade/geral.js"></script>
     <script src="js/produtividade/consolidado.js"></script>
     <script src="js/produtividade/performance.js"></script>
@@ -300,7 +234,6 @@
     <script src="js/produtividade/importacao/validacao.js"></script>
     
     <script>
-        // Inicializador Central
         Produtividade.atualizarTodasAbas = function() {
             if(Produtividade.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) Produtividade.Geral.carregarTela();
             if(Produtividade.Consolidado && !document.getElementById('tab-consolidado').classList.contains('hidden')) Produtividade.Consolidado.carregar();

@@ -6,26 +6,23 @@ Produtividade.Consolidado = {
 
     init: function() {
         console.log("🚀 [NEXUS] Consolidado: Engine V1 (Filtros Inteligentes)...");
-        this.renderizarFiltros(); // Cria as opções do Select
+        this.renderizarFiltros(); 
         this.carregarDados();
         this.initialized = true;
     },
 
-    // 1. INJEÇÃO DOS FILTROS (Garante que os valores batam com a lógica)
     renderizarFiltros: function() {
         const selAno = document.getElementById('sel-consolidado-ano');
         const selPeriodo = document.getElementById('sel-consolidado-periodo');
         
         if (!selAno || !selPeriodo) return;
 
-        // Popula Anos (Ano Atual e Anterior)
         const anoAtual = new Date().getFullYear();
         selAno.innerHTML = `
             <option value="${anoAtual}" selected>${anoAtual}</option>
             <option value="${anoAtual - 1}">${anoAtual - 1}</option>
         `;
 
-        // Popula Períodos (Lógica Hierárquica)
         selPeriodo.innerHTML = `
             <option value="anual" class="font-bold">📅 Ano Completo</option>
             <optgroup label="Semestres">
@@ -54,39 +51,41 @@ Produtividade.Consolidado = {
             </optgroup>
         `;
 
-        // Adiciona Listeners para recarregar ao mudar
         selAno.onchange = () => this.carregarDados();
         selPeriodo.onchange = () => this.carregarDados();
     },
 
-    // 2. CÉREBRO DAS DATAS: Converte "s1" em Datas Reais
     getDatasIntervalo: function() {
-        const ano = document.getElementById('sel-consolidado-ano').value;
-        const periodo = document.getElementById('sel-consolidado-periodo').value;
+        // [FIX] Verificação de segurança
+        const elAno = document.getElementById('sel-consolidado-ano');
+        const elPeriodo = document.getElementById('sel-consolidado-periodo');
+        
+        // Se os elementos não existem, retorna intervalo padrão seguro (Ano Atual)
+        if (!elAno || !elPeriodo) {
+            const y = new Date().getFullYear();
+            return { inicio: `${y}-01-01`, fim: `${y}-12-31` };
+        }
+
+        const ano = elAno.value;
+        const periodo = elPeriodo.value;
 
         let inicio = `${ano}-01-01`;
         let fim = `${ano}-12-31`;
 
         switch (periodo) {
-            case 'anual':
-                // Já definido no default
-                break;
+            case 'anual': break;
             
-            // SEMESTRES
             case 's1': inicio = `${ano}-01-01`; fim = `${ano}-06-30`; break;
             case 's2': inicio = `${ano}-07-01`; fim = `${ano}-12-31`; break;
 
-            // TRIMESTRES
             case 't1': inicio = `${ano}-01-01`; fim = `${ano}-03-31`; break;
             case 't2': inicio = `${ano}-04-01`; fim = `${ano}-06-30`; break;
             case 't3': inicio = `${ano}-07-01`; fim = `${ano}-09-30`; break;
             case 't4': inicio = `${ano}-10-01`; fim = `${ano}-12-31`; break;
 
-            // MESES (Default numérico)
             default:
                 const mes = parseInt(periodo);
                 if (mes >= 1 && mes <= 12) {
-                    // Pega o último dia do mês automaticamente
                     const lastDay = new Date(ano, mes, 0).getDate();
                     inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
                     fim = `${ano}-${String(mes).padStart(2, '0')}-${lastDay}`;
@@ -98,18 +97,14 @@ Produtividade.Consolidado = {
     },
 
     carregarDados: async function() {
-        const container = document.getElementById('grafico-consolidado-container'); // Container do gráfico
-        const kpiTotal = document.getElementById('kpi-consolidado-total');
-        const kpiMedia = document.getElementById('kpi-consolidado-media');
+        const container = document.getElementById('grafico-consolidado-container'); 
         
-        // 1. Obtém as datas calculadas
         const { inicio, fim } = this.getDatasIntervalo();
         console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}`);
 
         if (container) container.innerHTML = '<div class="flex h-64 items-center justify-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
 
         try {
-            // Reutiliza a RPC poderosa que já criamos (Engine V15)
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: inicio, 
@@ -117,8 +112,6 @@ Produtividade.Consolidado = {
                 });
 
             if (error) throw error;
-
-            console.log(`✅ Dados recebidos: ${data.length} linhas`);
             this.processarDados(data);
 
         } catch (error) {
@@ -128,56 +121,54 @@ Produtividade.Consolidado = {
     },
 
     processarDados: function(data) {
-        // Filtra gestores fora da análise
         const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
 
-        // KPIS GERAIS
         let totalProducao = 0;
         let totalDias = 0;
         
-        // Agrupamento para o Gráfico (Por Usuário)
         const ranking = assistentes.map(u => {
             totalProducao += Number(u.total_qty);
-            totalDias += Number(u.total_dias_uteis); // Usando dias fatorados da V15
+            totalDias += Number(u.total_dias_uteis);
             
             return {
-                nome: u.nome.split(' ')[0], // Primeiro nome
+                nome: u.nome.split(' ')[0], 
                 total: Number(u.total_qty),
-                meta: Number(u.meta_producao) * Number(u.total_dias_uteis), // Meta proporcional aos dias trabalhados
+                meta: Number(u.meta_producao) * Number(u.total_dias_uteis), 
                 atingimento: (Number(u.meta_producao) * Number(u.total_dias_uteis)) > 0 
                     ? (Number(u.total_qty) / (Number(u.meta_producao) * Number(u.total_dias_uteis)) * 100) 
                     : 0
             };
         });
 
-        // Ordena por maior produção
         ranking.sort((a,b) => b.total - a.total);
 
-        // Atualiza KPIs da Tela
         const elTotal = document.getElementById('kpi-consolidado-total');
         const elMedia = document.getElementById('kpi-consolidado-media');
         
         if(elTotal) elTotal.innerText = totalProducao.toLocaleString('pt-BR');
-        // Média Global Diária = Produção Total / Soma de Dias Trabalhados
         if(elMedia) elMedia.innerText = totalDias > 0 ? Math.round(totalProducao / totalDias).toLocaleString('pt-BR') : 0;
 
         this.renderizarGrafico(ranking);
     },
 
     renderizarGrafico: function(dados) {
+        const container = document.getElementById('grafico-consolidado-container');
+        // Recria o Canvas para evitar bugs de redimensionamento do Chart.js
+        if(container) {
+             container.innerHTML = '<canvas id="grafico-consolidado"></canvas>';
+        }
+
         const ctx = document.getElementById('grafico-consolidado');
         if (!ctx) return;
 
-        // Destroi gráfico anterior se existir para não sobrepor
         if (this.chartInstance) {
             this.chartInstance.destroy();
         }
 
-        // Prepara Arrays do ChartJS
         const labels = dados.map(d => d.nome);
         const valores = dados.map(d => d.total);
         const metas = dados.map(d => d.meta);
-        const cores = dados.map(d => d.atingimento >= 100 ? '#10b981' : '#f43f5e'); // Verde ou Vermelho
+        const cores = dados.map(d => d.atingimento >= 100 ? '#10b981' : '#f43f5e'); 
 
         this.chartInstance = new Chart(ctx, {
             type: 'bar',
@@ -195,7 +186,7 @@ Produtividade.Consolidado = {
                         label: 'Meta Esperada',
                         data: metas,
                         type: 'line',
-                        borderColor: '#94a3b8', // Cinza
+                        borderColor: '#94a3b8',
                         borderWidth: 2,
                         borderDash: [5, 5],
                         pointRadius: 0,
@@ -223,13 +214,8 @@ Produtividade.Consolidado = {
                     }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { display: false }
-                    },
-                    x: {
-                        grid: { display: false }
-                    }
+                    y: { beginAtZero: true, grid: { display: false } },
+                    x: { grid: { display: false } }
                 }
             }
         });
