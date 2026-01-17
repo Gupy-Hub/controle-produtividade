@@ -1,12 +1,11 @@
-// ARQUIVO: js/minha_area/metas.js
 MinhaArea.Metas = {
-    chart: null,
+    chartProd: null,
+    chartAssert: null,
 
     carregar: async function() {
         const uid = MinhaArea.getUsuarioAlvo();
         if (!uid) return;
 
-        // 1. Prepara Datas e Reset
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const dtInicio = new Date(inicio + 'T12:00:00');
         const dtFim = new Date(fim + 'T12:00:00');
@@ -16,7 +15,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 2. Buscas (Produção, Metas, Assertividade)
+            // 1. Buscas
             const [prodRes, assertRes, metasRes] = await Promise.all([
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
                 Sistema.supabase.from('assertividade').select('data_auditoria, porcentagem').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim).not('porcentagem', 'is', null).neq('porcentagem', ''),
@@ -24,9 +23,8 @@ MinhaArea.Metas = {
             ]);
 
             if (prodRes.error) throw prodRes.error;
-            if (assertRes.error) throw assertRes.error;
 
-            // 3. Organização dos Dados
+            // 2. Mapas
             const mapMetas = {};
             (metasRes.data || []).forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
@@ -34,156 +32,194 @@ MinhaArea.Metas = {
             });
 
             const mapProd = new Map();
-            prodRes.data.forEach(p => mapProd.set(p.data_referencia, p));
+            (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
 
-            // 4. Cálculo dos Acumulados
-            let totalReal = 0, totalMetaEsperada = 0, totalFator = 0;
-            let somaAssert = 0, qtdAssert = 0;
-            let somaMetaAssert = 0, diasMetaAssert = 0;
+            const mapAssert = new Map();
+            (assertRes.data || []).forEach(a => {
+                if(!mapAssert.has(a.data_auditoria)) mapAssert.set(a.data_auditoria, []);
+                let val = String(a.porcentagem).replace('%','').replace(',','.');
+                mapAssert.get(a.data_auditoria).push(parseFloat(val));
+            });
 
-            // Para o gráfico
-            const labelsGrafico = [];
-            const dataRealGrafico = [];
-            const dataMetaGrafico = [];
-            
-            // Define granularidade do gráfico (Se diff > 35 dias -> Mensal, senão Diário)
+            // 3. Processamento para Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
-            const modoMensal = diffDays > 35;
+            const modoMensal = diffDays > 35; // Se mais de 35 dias, agrupa por mês
             
-            const acumuladorGrafico = new Map(); // Chave: "YYYY-MM" ou "YYYY-MM-DD"
+            const labels = [];
+            const dataProdReal = [];
+            const dataProdMeta = [];
+            const dataAssertReal = [];
+            const dataAssertMeta = [];
 
-            // Loop Calendário
+            // Acumuladores Mensais
+            const aggMensal = new Map(); 
+            const mesesNomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+            // 4. Loop Principal (Calendário)
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
-                // Pula FDS apenas no cálculo de metas esperadas vazias, mas se tiver produção no FDS, conta.
-                const isFDS = (d.getDay() === 0 || d.getDay() === 6);
-                
+                const diaSemana = d.getDay();
+                const isFDS = (diaSemana === 0 || diaSemana === 6);
+
+                // FILTRO DE FINAL DE SEMANA (Apenas visualização diária)
+                if (!modoMensal && isFDS) continue; 
+
                 const dataStr = d.toISOString().split('T')[0];
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
-                
-                // Meta Configurada (ou padrão)
+                const dia = d.getDate();
+
                 const metaConfig = mapMetas[ano]?.[mes] || { prod: 650, assert: 98.0 };
-                
-                // Dados Reais
                 const prodDia = mapProd.get(dataStr);
-                let qtd = 0, fator = 0;
-
-                if (prodDia) {
-                    qtd = Number(prodDia.quantidade || 0);
-                    fator = Number(prodDia.fator);
-                    if (isNaN(fator)) fator = 1.0;
-                } else if (!isFDS) {
-                    // Sem dados e dia útil: Meta cheia, Real 0
-                    fator = 1.0; 
-                }
-
-                // Acumula Gerais
-                const metaDia = Math.round(metaConfig.prod * fator);
-                totalReal += qtd;
-                totalMetaEsperada += metaDia;
-                if (prodDia) totalFator += fator; // Soma fator apenas se trabalhado
-
-                // Acumula Meta Assertividade (para média ponderada da meta)
-                if (!isFDS || prodDia) {
-                    somaMetaAssert += metaConfig.assert;
-                    diasMetaAssert++;
-                }
-
-                // Agrega para Gráfico
-                const chaveGrafico = modoMensal ? `${ano}-${String(mes).padStart(2,'0')}` : `${String(d.getDate()).padStart(2,'0')}/${String(mes).padStart(2,'0')}`;
                 
-                if (!acumuladorGrafico.has(chaveGrafico)) acumuladorGrafico.set(chaveGrafico, { real: 0, meta: 0 });
-                const slot = acumuladorGrafico.get(chaveGrafico);
-                slot.real += qtd;
-                slot.meta += metaDia;
-            }
+                // Produção
+                const qtd = prodDia ? Number(prodDia.quantidade || 0) : 0;
+                const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1); 
+                const metaDia = Math.round(metaConfig.prod * (isNaN(fator) ? 1 : fator));
 
-            // Cálculo Assertividade Realizada
-            assertRes.data.forEach(a => {
-                let val = String(a.porcentagem).replace('%','').replace(',','.');
-                val = parseFloat(val);
-                if (!isNaN(val)) {
-                    somaAssert += val;
-                    qtdAssert++;
+                // Assertividade
+                const assertsDia = mapAssert.get(dataStr) || [];
+                
+                if (modoMensal) {
+                    const chaveMes = `${ano}-${mes}`;
+                    if (!aggMensal.has(chaveMes)) {
+                        aggMensal.set(chaveMes, { 
+                            label: mesesNomes[mes-1], // Nome do Mês
+                            prodReal: 0, prodMeta: 0,
+                            assertSoma: 0, assertQtd: 0, assertMetaSoma: 0 
+                        });
+                    }
+                    const slot = aggMensal.get(chaveMes);
+                    slot.prodReal += qtd;
+                    slot.prodMeta += metaDia;
+                    
+                    if (assertsDia.length > 0) {
+                        assertsDia.forEach(v => { slot.assertSoma += v; slot.assertQtd++; });
+                    }
+                    slot.assertMetaSoma = metaConfig.assert; 
+                } else {
+                    // DIÁRIO
+                    labels.push(`${String(dia).padStart(2,'0')}/${String(mes).padStart(2,'0')}`);
+                    dataProdReal.push(qtd);
+                    dataProdMeta.push(metaDia);
+
+                    if (assertsDia.length > 0) {
+                        const mediaDia = assertsDia.reduce((a,b)=>a+b,0) / assertsDia.length;
+                        dataAssertReal.push(mediaDia);
+                    } else {
+                        dataAssertReal.push(null);
+                    }
+                    dataAssertMeta.push(metaConfig.assert);
                 }
-            });
-
-            // 5. Atualização da Interface (Cards)
-            
-            // Assertividade
-            const mediaAssertReal = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
-            const mediaAssertMeta = diasMetaAssert > 0 ? (somaMetaAssert / diasMetaAssert) : 98.0;
-            
-            this.setTxt('meta-assert-real', mediaAssertReal.toLocaleString('pt-BR', {minimumFractionDigits: 2}) + '%');
-            this.setTxt('meta-assert-meta', mediaAssertMeta.toLocaleString('pt-BR', {minimumFractionDigits: 1}) + '%');
-            
-            const barAssert = document.getElementById('bar-meta-assert');
-            if(barAssert) {
-                const pctBar = (mediaAssertReal / mediaAssertMeta) * 100;
-                barAssert.style.width = Math.min(pctBar, 100) + '%';
-                barAssert.className = `h-full rounded-full transition-all duration-1000 ${mediaAssertReal >= mediaAssertMeta ? 'bg-emerald-500' : 'bg-rose-500'}`;
             }
 
-            // Produtividade
-            this.setTxt('meta-prod-real', totalReal.toLocaleString('pt-BR'));
-            this.setTxt('meta-prod-meta', totalMetaEsperada.toLocaleString('pt-BR'));
-            
-            const barProd = document.getElementById('bar-meta-prod');
-            if(barProd) {
-                const pctBar = totalMetaEsperada > 0 ? (totalReal / totalMetaEsperada) * 100 : 0;
-                barProd.style.width = Math.min(pctBar, 100) + '%';
-                barProd.className = `h-full rounded-full transition-all duration-1000 ${pctBar >= 100 ? 'bg-blue-600' : (pctBar >= 80 ? 'bg-blue-400' : 'bg-rose-400')}`;
+            // 5. Pós-Processamento Mensal
+            if (modoMensal) {
+                for (const [key, val] of aggMensal.entries()) {
+                    labels.push(val.label); 
+                    dataProdReal.push(val.prodReal);
+                    dataProdMeta.push(val.prodMeta);
+
+                    const mediaMensal = val.assertQtd > 0 ? (val.assertSoma / val.assertQtd) : null; 
+                    dataAssertReal.push(mediaMensal);
+                    dataAssertMeta.push(val.assertMetaSoma); 
+                }
             }
 
-            // Acumulado
-            this.setTxt('meta-acum-total', totalReal.toLocaleString('pt-BR'));
-            const mediaDiaria = totalFator > 0 ? Math.round(totalReal / totalFator) : 0;
-            this.setTxt('meta-acum-media', mediaDiaria.toLocaleString('pt-BR'));
-            this.setTxt('meta-acum-dias', totalFator.toLocaleString('pt-BR', {maximumFractionDigits: 1}));
+            // 6. KPIs (Calculados independentemente para precisão total do período)
+            this.atualizarCardsKPI(prodRes.data, assertRes.data, mapMetas, dtInicio, dtFim);
 
-            // 6. Renderização do Gráfico
-            acumuladorGrafico.forEach((val, key) => {
-                labelsGrafico.push(key);
-                dataRealGrafico.push(val.real);
-                dataMetaGrafico.push(val.meta);
-            });
+            // 7. Renderiza Gráficos Separados
+            document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
 
-            this.setTxt('meta-periodo-label', modoMensal ? 'Mensal' : 'Diária');
-            this.renderizarGrafico(labelsGrafico, dataRealGrafico, dataMetaGrafico, modoMensal);
+            this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Produção (Docs)', '#2563eb', false);
+            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade (%)', '#059669', true);
 
         } catch (err) {
             console.error("Erro Metas:", err);
         }
     },
 
-    renderizarGrafico: function(labels, prod, metas, modoMensal) {
-        const ctx = document.getElementById('graficoEvolucaoMeta');
-        if (!ctx) return;
-        
-        if (this.chart) this.chart.destroy();
+    atualizarCardsKPI: function(prods, asserts, mapMetas, dtInicio, dtFim) {
+        let totalReal = 0, totalMeta = 0;
+        let somaAssert = 0, qtdAssert = 0;
+        let diasProdutivos = 0;
 
-        this.chart = new Chart(ctx, {
+        const mapProd = new Map();
+        (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
+
+        // Loop para cálculo preciso dos acumulados
+        for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
+            const isFDS = (d.getDay() === 0 || d.getDay() === 6);
+            const dataStr = d.toISOString().split('T')[0];
+            const ano = d.getFullYear();
+            const mes = d.getMonth() + 1;
+            const metaConfig = mapMetas[ano]?.[mes] || { prod: 650, assert: 98.0 };
+
+            const prodDia = mapProd.get(dataStr);
+            const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1);
+            
+            if (prodDia) {
+                totalReal += Number(prodDia.quantidade || 0);
+                if (Number(prodDia.fator) > 0) diasProdutivos += Number(prodDia.fator);
+            }
+            totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
+        }
+
+        (asserts || []).forEach(a => {
+            let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
+            if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
+        });
+
+        const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
+        
+        // Atualiza UI dos Cards
+        this.setTxt('meta-prod-real', totalReal.toLocaleString('pt-BR'));
+        this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
+        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalReal/totalMeta)*100 : 0, 'bg-blue-600');
+
+        this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2})+'%');
+        const metaAssertRef = 98.0; 
+        this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
+        this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
+
+        this.setTxt('meta-acum-total', totalReal.toLocaleString('pt-BR'));
+        const mediaDiaria = diasProdutivos > 0 ? Math.round(totalReal / diasProdutivos) : 0;
+        this.setTxt('meta-acum-media', mediaDiaria.toLocaleString('pt-BR'));
+        this.setTxt('meta-acum-dias', diasProdutivos.toLocaleString('pt-BR', {maximumFractionDigits: 1}));
+    },
+
+    renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorReal, isPercent) {
+        const ctx = document.getElementById(canvasId);
+        if (!ctx) return;
+
+        if (canvasId === 'graficoEvolucaoProducao') {
+            if (this.chartProd) this.chartProd.destroy();
+        } else {
+            if (this.chartAssert) this.chartAssert.destroy();
+        }
+
+        const config = {
             type: 'bar',
             data: {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'Produção Realizada',
-                        data: prod,
-                        backgroundColor: '#2563eb', // Blue 600
+                        label: 'Realizado',
+                        data: dataReal,
+                        backgroundColor: colorReal,
                         borderRadius: 4,
                         barPercentage: 0.6,
                         order: 2
                     },
                     {
                         label: 'Meta Esperada',
-                        data: metas,
+                        data: dataMeta,
                         type: 'line',
-                        borderColor: '#059669', // Emerald 600
+                        borderColor: '#94a3b8',
                         borderWidth: 2,
                         pointBackgroundColor: '#fff',
-                        pointBorderColor: '#059669',
-                        pointRadius: modoMensal ? 4 : 2,
+                        pointBorderColor: '#94a3b8',
+                        pointRadius: 3,
                         borderDash: [5, 5],
                         tension: 0.3,
                         order: 1
@@ -204,17 +240,32 @@ MinhaArea.Metas = {
                         borderWidth: 1,
                         callbacks: {
                             label: function(ctx) {
-                                return ctx.dataset.label + ': ' + ctx.raw.toLocaleString('pt-BR');
+                                let val = ctx.raw;
+                                if (val === null || val === undefined) return ctx.dataset.label + ': -';
+                                val = val.toLocaleString('pt-BR', { minimumFractionDigits: isPercent ? 2 : 0, maximumFractionDigits: isPercent ? 2 : 0 });
+                                return ctx.dataset.label + ': ' + val + (isPercent ? '%' : '');
                             }
                         }
                     }
                 },
                 scales: {
-                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#f1f5f9' }, 
+                        ticks: { 
+                            font: { size: 10 },
+                            callback: function(val) { return isPercent ? val + '%' : val; }
+                        } 
+                    },
                     x: { grid: { display: false }, ticks: { font: { size: 10 } } }
                 }
             }
-        });
+        };
+
+        const newChart = new Chart(ctx, config);
+
+        if (canvasId === 'graficoEvolucaoProducao') this.chartProd = newChart;
+        else this.chartAssert = newChart;
     },
 
     resetarCards: function() {
@@ -222,5 +273,12 @@ MinhaArea.Metas = {
         ['bar-meta-assert','bar-meta-prod'].forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
     },
 
-    setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
+    setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; },
+    setBar: function(id, pct, colorClass) {
+        const el = document.getElementById(id);
+        if(el) {
+            el.style.width = Math.min(pct, 100) + '%';
+            el.className = `h-full rounded-full transition-all duration-1000 ${colorClass}`;
+        }
+    }
 };
