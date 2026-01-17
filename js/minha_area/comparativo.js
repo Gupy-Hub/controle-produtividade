@@ -1,7 +1,7 @@
 MinhaArea.Comparativo = {
     chartOfensores: null,
     dadosNoksCache: [],
-    visaoAtual: 'doc', // 'doc' ou 'empresa'
+    visaoAtual: 'doc', // 'doc', 'empresa', 'ndf'
 
     carregar: async function() {
         console.log("🚀 UX Dashboard: Iniciando...");
@@ -12,15 +12,13 @@ MinhaArea.Comparativo = {
         
         const containerFeed = document.getElementById('feed-erros-container');
         const containerTotal = document.getElementById('total-nok-detalhe');
-        const containerNdf = document.getElementById('total-ndf-detalhe');
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
-        // Reset da interface
         if(btnLimpar) btnLimpar.classList.add('hidden');
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
-            // 1. Buscar Dados (Paginada)
+            // 1. Buscar Dados
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
             // 2. Filtrar apenas NOKs
@@ -30,25 +28,17 @@ MinhaArea.Comparativo = {
                 return qtd > 0 || isNokStatus;
             });
             
-            // 3. Atualizar Contadores
-            if(containerTotal) containerTotal.innerText = this.dadosNoksCache.length;
-            
-            // Contagem NDF (Inicia com "DOC_NDF_")
-            const totalNdf = this.dadosNoksCache.filter(d => 
-                (d.nome_documento || '').toUpperCase().startsWith('DOC_NDF_')
-            ).length;
-            
-            if(containerNdf) containerNdf.innerText = totalNdf;
-
             if (this.dadosNoksCache.length === 0) {
+                if(containerTotal) containerTotal.innerText = "0";
                 this.renderizarVazio(containerFeed);
                 this.renderizarGraficoVazio();
                 return;
             }
 
-            // 4. Renderizar Gráfico e Feed Inicial
+            // 3. Renderizar Inicial
             this.atualizarGrafico();
-            this.renderizarFeed(this.dadosNoksCache, containerFeed);
+            // Ao carregar, o feed segue a visão padrão (Doc)
+            this.atualizarFeedPorVisao();
 
         } catch (err) {
             console.error(err);
@@ -61,37 +51,57 @@ MinhaArea.Comparativo = {
         
         const btnDoc = document.getElementById('btn-view-doc');
         const btnEmpresa = document.getElementById('btn-view-empresa');
+        const btnNdf = document.getElementById('btn-view-ndf');
         
-        if (novaVisao === 'doc') {
-            btnDoc.className = "px-3 py-1 text-[10px] font-bold rounded bg-white text-rose-600 shadow-sm transition";
-            btnEmpresa.className = "px-3 py-1 text-[10px] font-bold rounded text-slate-500 hover:bg-white transition";
-        } else {
-            btnDoc.className = "px-3 py-1 text-[10px] font-bold rounded text-slate-500 hover:bg-white transition";
-            btnEmpresa.className = "px-3 py-1 text-[10px] font-bold rounded bg-white text-rose-600 shadow-sm transition";
-        }
+        // Reset classes
+        const baseClass = "px-3 py-1 text-[10px] font-bold rounded transition ";
+        const activeClass = "bg-white text-rose-600 shadow-sm";
+        const inactiveClass = "text-slate-500 hover:bg-white";
 
+        btnDoc.className = baseClass + (novaVisao === 'doc' ? activeClass : inactiveClass);
+        btnEmpresa.className = baseClass + (novaVisao === 'empresa' ? activeClass : inactiveClass);
+        btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
+
+        this.limparFiltro(false); // Limpa filtros ao mudar de aba, mas não redesenha feed ainda
         this.atualizarGrafico();
+        this.atualizarFeedPorVisao();
     },
 
     atualizarGrafico: function() {
         const agrupamento = {};
-        
-        this.dadosNoksCache.forEach(item => {
+        let dadosFiltrados = this.dadosNoksCache;
+
+        // Se a visão for NDF, filtramos apenas os dados NDF antes de agrupar
+        if (this.visaoAtual === 'ndf') {
+            dadosFiltrados = this.dadosNoksCache.filter(d => this.isNDF(d));
+        }
+
+        dadosFiltrados.forEach(item => {
             let chave = 'Outros';
-            if (this.visaoAtual === 'doc') {
-                // Tenta pegar o nome amigável se for NDF, ou a categoria normal
-                const cat = item.nome_documento || 'Geral';
-                chave = cat.startsWith('DOC_NDF_') ? 'NDF (Outros)' : cat;
-                
-                // Se for muito longo, trunca
-                if(chave.length > 25) chave = chave.substring(0, 22) + '...';
-            } else {
+            
+            if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
+            } else {
+                // Para Doc e NDF, usamos o tipo do documento
+                const cat = this.getDocType(item);
+                chave = cat;
+                
+                // Se estiver na visão geral de Docs, agrupa NDFs num bucket só pra não poluir
+                if (this.visaoAtual === 'doc' && this.isNDF(item)) {
+                    chave = 'NDF (Geral)';
+                }
             }
             
+            // Trunca nomes longos
+            if(chave.length > 25) chave = chave.substring(0, 22) + '...';
+
             if (!agrupamento[chave]) agrupamento[chave] = 0;
             agrupamento[chave]++;
         });
+
+        // Atualiza contador total baseado na visão
+        const containerTotal = document.getElementById('total-nok-detalhe');
+        if(containerTotal) containerTotal.innerText = dadosFiltrados.length;
 
         const topOfensores = Object.entries(agrupamento)
             .sort((a, b) => b[1] - a[1])
@@ -100,54 +110,57 @@ MinhaArea.Comparativo = {
         this.renderizarGraficoOfensores(topOfensores);
     },
 
-    filtrarNdf: function() {
-        console.log("Filtrando NDF...");
-        const filtrados = this.dadosNoksCache.filter(d => 
-            (d.nome_documento || '').toUpperCase().startsWith('DOC_NDF_')
-        );
-        this.aplicarFiltroVisual(filtrados, "Documentos NDF");
+    atualizarFeedPorVisao: function() {
+        const container = document.getElementById('feed-erros-container');
+        let lista = this.dadosNoksCache;
+        
+        if (this.visaoAtual === 'ndf') {
+            lista = this.dadosNoksCache.filter(d => this.isNDF(d));
+        }
+        
+        this.renderizarFeed(lista, container);
     },
 
     filtrarPorSelecao: function(valor) {
-        const filtrados = this.dadosNoksCache.filter(d => {
-            if (this.visaoAtual === 'doc') {
-                // Se o valor for "NDF (Outros)", filtra todos os NDFs
-                if(valor === 'NDF (Outros)') {
-                    return (d.nome_documento || '').toUpperCase().startsWith('DOC_NDF_');
-                }
-                const cat = d.nome_documento || 'Geral';
-                const catTrunc = cat.length > 25 ? cat.substring(0, 22) + '...' : cat;
-                return catTrunc === valor || cat === valor;
-            } else {
-                return (d.empresa || d.empresa_nome) === valor;
-            }
-        });
-        this.aplicarFiltroVisual(filtrados, valor);
-    },
-
-    aplicarFiltroVisual: function(lista, nomeFiltro) {
+        let filtrados = [];
+        
+        if (this.visaoAtual === 'empresa') {
+            filtrados = this.dadosNoksCache.filter(d => {
+                const emp = d.empresa || d.empresa_nome || 'Desconhecida';
+                return emp.includes(valor.replace('...', '')); // Match parcial por causa do truncate
+            });
+        } else {
+            // Lógica para Doc e NDF
+            filtrados = this.dadosNoksCache.filter(d => {
+                if (valor === 'NDF (Geral)') return this.isNDF(d);
+                
+                const tipo = this.getDocType(d);
+                return tipo.includes(valor.replace('...', ''));
+            });
+        }
+        
         const container = document.getElementById('feed-erros-container');
-        this.renderizarFeed(lista, container);
+        this.renderizarFeed(filtrados, container);
         
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) {
             btn.classList.remove('hidden');
-            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${nomeFiltro}`;
+            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${valor}`;
         }
     },
 
-    limparFiltro: function() {
-        const container = document.getElementById('feed-erros-container');
-        this.renderizarFeed(this.dadosNoksCache, container);
+    limparFiltro: function(renderizar = true) {
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) btn.classList.add('hidden');
+        
+        if (renderizar) this.atualizarFeedPorVisao();
     },
 
     renderizarFeed: function(listaNok, container) {
         if(!container) return;
         
         if (listaNok.length === 0) {
-            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado com este filtro.</div>';
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado nesta visão.</div>';
             return;
         }
 
@@ -157,14 +170,14 @@ MinhaArea.Comparativo = {
         listaNok.forEach(doc => {
             const data = doc.data_auditoria ? new Date(doc.data_auditoria).toLocaleDateString('pt-BR') : '-';
             const nome = doc.doc_name || 'Sem Nome';
-            const tipo = doc.nome_documento || 'Geral';
+            const tipo = this.getDocType(doc);
             const empresa = doc.empresa || doc.empresa_nome || '';
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             
-            const isNdf = tipo.toUpperCase().startsWith('DOC_NDF_');
+            const isNdf = this.isNDF(doc);
             const borderClass = isNdf ? 'border-l-amber-500' : 'border-l-rose-500';
             const badgeClass = isNdf ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600';
-            const badgeText = isNdf ? 'NOK (NDF)' : 'NOK';
+            const badgeText = isNdf ? 'NDF' : 'NOK';
 
             html += `
             <div class="bg-white p-4 rounded-lg border-l-4 ${borderClass} shadow-sm hover:shadow-md transition border border-slate-100 group">
@@ -190,6 +203,17 @@ MinhaArea.Comparativo = {
         container.innerHTML = html;
     },
 
+    // Funções Auxiliares Robustas
+    getDocType: function(d) {
+        // Tenta pegar a categoria do CSV (coluna DOCUMENTO mapeada como nome_documento ou documento)
+        return d.nome_documento || d.documento || d.doc_name || 'Geral';
+    },
+
+    isNDF: function(d) {
+        const tipo = this.getDocType(d).toUpperCase();
+        return tipo.startsWith('DOC_NDF') || tipo.includes('NDF');
+    },
+
     renderizarGraficoOfensores: function(dadosTop5) {
         const ctx = document.getElementById('graficoTopOfensores');
         if (!ctx) return;
@@ -200,6 +224,11 @@ MinhaArea.Comparativo = {
         const values = dadosTop5.map(d => d[1]);
         const _this = this;
 
+        // Cor dinâmica baseada na visão
+        let barColor = '#f43f5e'; // Rose (Doc)
+        if (this.visaoAtual === 'empresa') barColor = '#3b82f6'; // Blue
+        if (this.visaoAtual === 'ndf') barColor = '#d97706'; // Amber
+
         this.chartOfensores = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -207,10 +236,10 @@ MinhaArea.Comparativo = {
                 datasets: [{
                     label: 'Reprovações',
                     data: values,
-                    backgroundColor: '#f43f5e',
+                    backgroundColor: barColor,
                     borderRadius: 4,
                     barThickness: 25,
-                    hoverBackgroundColor: '#be123c'
+                    hoverBackgroundColor: 'rgba(0,0,0,0.7)'
                 }]
             },
             options: {
@@ -239,8 +268,8 @@ MinhaArea.Comparativo = {
                 <div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500">
                     <i class="fas fa-trophy text-3xl"></i>
                 </div>
-                <h3 class="text-lg font-bold text-slate-700">Parabéns!</h3>
-                <p class="text-sm text-slate-500">Nenhum erro encontrado neste período.</p>
+                <h3 class="text-lg font-bold text-slate-700">Tudo Certo!</h3>
+                <p class="text-sm text-slate-500">Nenhum erro encontrado com os filtros atuais.</p>
             </div>`;
     },
 
