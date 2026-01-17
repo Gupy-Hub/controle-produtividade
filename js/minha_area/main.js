@@ -13,6 +13,7 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
+        // Configura container, mas a lista será carregada dinamicamente
         await this.setupAdminAccess();
         if (!this.isAdmin()) {
             this.usuarioAlvoId = this.usuario.id;
@@ -21,8 +22,11 @@ const MinhaArea = {
         // 1. Popula Selects Iniciais
         this.popularSeletoresIniciais();
 
-        // 2. Carrega Estado Salvo (Persistência) ou usa padrão
+        // 2. Carrega Estado Salvo e Força Atualização Inicial
         this.carregarEstadoSalvo();
+        
+        // Garante que lista e grid sejam carregados na entrada
+        this.atualizarTudo();
 
         this.mudarAba('diario');
     },
@@ -34,26 +38,74 @@ const MinhaArea = {
     setupAdminAccess: async function() {
         if (this.isAdmin()) {
             const container = document.getElementById('admin-selector-container');
-            const select = document.getElementById('admin-user-selector');
-            if (container && select) {
-                container.classList.remove('hidden');
-                try {
-                    const { data: users, error } = await Sistema.supabase
-                        .from('usuarios').select('id, nome').eq('ativo', true).order('nome');
-                    if (!error && users) {
-                        let options = `<option value="" disabled selected>👉 Selecionar Colaboradora...</option>`;
-                        users.forEach(u => { if (u.id !== this.usuario.id) options += `<option value="${u.id}">${u.nome}</option>`; });
-                        select.innerHTML = options;
-                    }
-                } catch (e) { console.error(e); }
+            // Apenas exibe o container. As opções serão carregadas via atualizarListaAssistentes()
+            if (container) container.classList.remove('hidden');
+        }
+    },
+
+    // --- NOVA FUNÇÃO: Filtra assistentes por atividade no período ---
+    atualizarListaAssistentes: async function() {
+        if (!this.isAdmin()) return;
+
+        const select = document.getElementById('admin-user-selector');
+        if (!select) return;
+
+        const { inicio, fim } = this.getDatasFiltro();
+
+        try {
+            // 1. Busca IDs únicos que têm produção no período
+            const { data: prodData, error: prodError } = await Sistema.supabase
+                .from('producao')
+                .select('usuario_id')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim);
+
+            if (prodError) throw prodError;
+
+            // Extrai IDs únicos (Set)
+            const idsComDados = [...new Set(prodData.map(p => p.usuario_id))];
+
+            if (idsComDados.length === 0) {
+                select.innerHTML = '<option value="" disabled selected>🚫 Ninguém com dados neste período</option>';
+                return;
             }
+
+            // 2. Busca nomes desses usuários
+            const { data: users, error: userError } = await Sistema.supabase
+                .from('usuarios')
+                .select('id, nome')
+                .in('id', idsComDados)
+                .eq('ativo', true)
+                .order('nome');
+
+            if (userError) throw userError;
+
+            // 3. Reconstrói o Select
+            let options = `<option value="" disabled ${!this.usuarioAlvoId ? 'selected' : ''}>👉 Selecionar Colaboradora...</option>`;
+            
+            users.forEach(u => {
+                if (u.id !== this.usuario.id) {
+                    const isSelected = (u.id == this.usuarioAlvoId);
+                    options += `<option value="${u.id}" ${isSelected ? 'selected' : ''}>${u.nome}</option>`;
+                }
+            });
+
+            select.innerHTML = options;
+
+        } catch (e) {
+            console.error("Erro ao atualizar lista de assistentes:", e);
         }
     },
 
     mudarUsuarioAlvo: function(novoId) {
         if (!novoId) return;
         this.usuarioAlvoId = parseInt(novoId);
-        this.atualizarTudo();
+        // Chama carregarDadosAba diretamente para não recarregar a lista de assistentes (loop)
+        const abaAtiva = document.querySelector('.tab-btn.active');
+        if (abaAtiva) {
+            const id = abaAtiva.id.replace('btn-ma-', '');
+            this.carregarDadosAba(id);
+        }
     },
 
     getUsuarioAlvo: function() { return this.usuarioAlvoId; },
@@ -75,7 +127,6 @@ const MinhaArea = {
     // --- PERSISTÊNCIA E EVENTOS ---
 
     salvarEAtualizar: function() {
-        // Salva estado no LocalStorage
         const estado = {
             tipo: this.filtroPeriodo,
             ano: document.getElementById('sel-ano').value,
@@ -93,20 +144,15 @@ const MinhaArea = {
         if (salvo) {
             try {
                 const s = JSON.parse(salvo);
-                
-                // Restaura valores dos inputs
                 if(document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
                 if(document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
                 if(document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
                 if(document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
                 
-                // Restaura o tipo e a UI
-                this.mudarPeriodo(s.tipo, false); // false = não salvar de novo agora
+                this.mudarPeriodo(s.tipo, false);
                 return;
             } catch(e) { console.error("Erro ao ler estado salvo", e); }
         }
-        
-        // Padrão se não houver salvo
         this.mudarPeriodo('mes', false);
     },
 
@@ -185,6 +231,10 @@ const MinhaArea = {
     },
 
     atualizarTudo: function() {
+        // 1. Atualiza a lista de assistentes com base nas datas selecionadas
+        this.atualizarListaAssistentes();
+
+        // 2. Atualiza os dados da aba ativa
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
