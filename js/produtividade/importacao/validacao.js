@@ -88,34 +88,29 @@ window.Produtividade.Importacao.Validacao = {
         }
     },
 
-    salvarNoBanco: async function() {
-        const statusEl = document.getElementById('status-importacao-prod');
-        try {
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Gravando...</span>`;
+    // Substitua apenas o método salvarNoBanco para um modo "Direct Bypass"
+salvarNoBanco: async function() {
+    const statusEl = document.getElementById('status-importacao-prod');
+    try {
+        if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Tentando gravação direta...</span>`;
 
-            // Tenta o upsert diretamente. Se houver erro de Auth, o Supabase retornará no 'error'
-            const { error } = await Sistema.supabase
-                .from('producao')
-                .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
+        // Tenta enviar os dados sem validar a sessão antes no JS
+        // Se falhar aqui, o erro virá direto do PostgreSQL/RLS
+        const { error } = await Sistema.supabase
+            .from('producao')
+            .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
 
-            if (error) {
-                // Se der erro de permissão (42501) ou Auth (401)
-                if (error.code === '42501' || error.status === 401) {
-                    throw new Error("O banco recusou a gravação. Verifique se você está logado ou se as políticas RLS permitem o UPSERT.");
-                }
-                throw error;
-            }
+        if (error) throw error;
 
-            alert("✅ Importação concluída com sucesso!");
-            if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
+        alert("✅ Importação concluída!");
+        if (window.Produtividade.Geral?.carregarTela) window.Produtividade.Geral.carregarTela();
 
-        } catch (e) {
-            console.error("Erro Crítico no Upsert:", e);
-            alert("Erro: " + e.message);
-        } finally {
-            if(statusEl) statusEl.innerHTML = "";
-        }
+    } catch (e) {
+        console.error("Erro no Banco:", e);
+        alert("Erro no Banco: " + (e.message || "Acesso negado. Verifique as políticas de RLS no Supabase."));
+    } finally {
+        if(statusEl) statusEl.innerHTML = "";
     }
-};
+}
 
 window.Produtividade.Importacao.Validacao.init();
