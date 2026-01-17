@@ -7,33 +7,42 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V22 (Tooltip Justificativa + Botão Massa Injetado)...");
-        this.injectToolbar(); // Cria o botão se não existir
+        console.log("🚀 [NEXUS] Produtividade: Engine V23 (Botão Massa no Header)...");
+        // Removemos o injectToolbar antigo e usamos o updateHeader
+        this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
     },
 
     setTxt: function(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; },
 
-    // CRIA A BARRA DE AÇÕES AUTOMATICAMENTE (Para garantir que o botão exista)
-    injectToolbar: function() {
-        const tableContainer = document.querySelector('table')?.parentNode;
-        if (tableContainer && !document.getElementById('toolbar-produtividade')) {
-            const toolbar = document.createElement('div');
-            toolbar.id = 'toolbar-produtividade';
-            toolbar.className = "flex justify-end mb-2 gap-2";
-            toolbar.innerHTML = `
-                <button onclick="Produtividade.Geral.abonarEmMassa()" class="bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300 px-3 py-1 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition">
-                    <i class="fas fa-edit"></i> Abonar Selecionados
+    // --- NOVO: INJETA O BOTÃO MASSA DIRETO NO CABEÇALHO DA COLUNA ---
+    updateHeader: function() {
+        // Tenta localizar o cabeçalho da segunda coluna (onde ficam os botões de ação)
+        // Assumindo que a estrutura é <thead><tr><th>...
+        const thAction = document.querySelector('thead tr th:nth-child(2)');
+        
+        if (thAction) {
+            // Limpa o "seletor antigo" ou texto que estava lá e coloca o botão compacto
+            thAction.innerHTML = `
+                <button onclick="Produtividade.Geral.abonarEmMassa()" 
+                    class="bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-300 rounded px-2 py-1 text-[10px] font-bold shadow-sm transition w-full flex justify-center items-center gap-1" 
+                    title="Aplicar Abono/Fator para todos os selecionados">
+                    <i class="fas fa-users-cog"></i> Massa
                 </button>
             `;
-            tableContainer.insertBefore(toolbar, tableContainer.firstChild);
+        } else {
+            // Fallback: Se não achar o header agora, tenta de novo em 1s (caso o HTML demore a renderizar)
+            setTimeout(() => this.updateHeader(), 1000);
         }
     },
 
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
+
+        // Garante que o header esteja atualizado sempre que carregar
+        this.updateHeader();
 
         const datas = Produtividade.getDatasFiltro();
         const dataInicio = datas.inicio;
@@ -44,7 +53,6 @@ Produtividade.Geral = {
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados...</td></tr>`;
 
         try {
-            // RPC V15 (Com Justificativa)
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: dataInicio, 
@@ -75,7 +83,6 @@ Produtividade.Geral = {
                 totais: {
                     qty: row.total_qty,
                     diasUteis: Number(row.total_dias_uteis), 
-                    // Captura a justificativa vinda do SQL
                     justificativa: row.justificativas, 
                     fifo: row.total_fifo,
                     gt: row.total_gt,
@@ -137,11 +144,9 @@ Produtividade.Geral = {
                 ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
                 : '-';
 
-            // VISUALIZAÇÃO DA JUSTIFICATIVA (TOOLTIP)
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
             
-            // Se tiver justificativa, coloca borda tracejada ou ícone
             const styleAbono = (isAbonado || temJustificativa) 
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
                 : 'font-mono';
@@ -156,7 +161,7 @@ Produtividade.Geral = {
                     <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
                 </td>
                 <td class="px-2 py-3 text-center">
-                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar Dia Individualmente">AB</button>
+                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar Individualmente">AB</button>
                 </td>
                 <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                     <div class="flex flex-col">
