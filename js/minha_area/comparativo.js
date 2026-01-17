@@ -1,8 +1,8 @@
-MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
+MinhaArea.Comparativo = {
     chartOfensores: null,
 
     carregar: async function() {
-        console.log("🚀 UX Dashboard: Iniciando...");
+        console.log("🚀 UX Dashboard (Assertividade): Iniciando...");
         const uid = MinhaArea.getUsuarioAlvo();
         if (!uid) return;
 
@@ -11,17 +11,26 @@ MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
         const containerFeed = document.getElementById('feed-erros-container');
         const containerTotal = document.getElementById('total-nok-detalhe');
         
+        // Proteção contra container não encontrado
+        if(!containerFeed) { console.error("Container do feed não encontrado!"); return; }
+
         containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
             // 1. Buscar Dados (Paginação Robusta)
-            // Trazemos tudo para filtrar no cliente
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
+            console.log(`📦 Dados baixados para detalhamento: ${dados.length}`);
 
             // 2. Filtrar apenas NOKs (Gestão por Exceção)
-            const noks = dados.filter(d => Number(d.qtd_nok) > 0);
+            // Lógica dupla: verifica qtd_nok (número) ou nok (se vier string do CSV)
+            const noks = dados.filter(d => {
+                const qtd = Number(d.qtd_nok || 0);
+                const isNokStatus = (d.status || '').toUpperCase() === 'NOK';
+                // Consideramos NOK se tiver quantidade > 0 OU se o status for NOK
+                return qtd > 0 || isNokStatus;
+            });
             
-            containerTotal.innerText = noks.length;
+            if(containerTotal) containerTotal.innerText = noks.length;
 
             if (noks.length === 0) {
                 this.renderizarVazio(containerFeed);
@@ -32,26 +41,23 @@ MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
             // 3. Processar Dados para o Gráfico (Top Ofensores)
             const ofensores = {};
             noks.forEach(item => {
-                const tipo = item.nome_documento || 'Outros'; // Nome da Categoria
+                const tipo = item.nome_documento || 'Outros'; 
                 if (!ofensores[tipo]) ofensores[tipo] = 0;
                 ofensores[tipo]++;
             });
 
-            // Ordenar e pegar Top 5
             const topOfensores = Object.entries(ofensores)
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 5);
 
-            // 4. Renderizar Gráfico
+            // 4. Renderizar Gráfico e Feed
             this.renderizarGraficoOfensores(topOfensores);
-
-            // 5. Renderizar Feed de Cards
-            // Ordenar por data (mais recente no topo)
+            
             noks.sort((a, b) => new Date(b.data_auditoria) - new Date(a.data_auditoria));
             this.renderizarFeed(noks, containerFeed);
 
         } catch (err) {
-            console.error(err);
+            console.error("Erro no detalhamento:", err);
             containerFeed.innerHTML = '<div class="text-rose-500 text-center py-8">Erro ao carregar dashboard.</div>';
         }
     },
@@ -63,7 +69,7 @@ MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
             const data = doc.data_auditoria ? new Date(doc.data_auditoria).toLocaleDateString('pt-BR') : '-';
             const nome = doc.doc_name || 'Sem Nome';
             const tipo = doc.nome_documento || 'Geral';
-            // Tenta pegar a observação de várias colunas possíveis
+            // Prioridade de campos para achar a observação
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação registrada.';
             
             html += `
@@ -81,13 +87,11 @@ MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
                         NOK
                     </div>
                 </div>
-                
                 <div class="bg-slate-50 p-3 rounded text-xs text-slate-600 italic border border-slate-100">
                     <i class="fas fa-quote-left text-slate-300 mr-1"></i>
                     ${obs}
                 </div>
-            </div>
-            `;
+            </div>`;
         });
 
         container.innerHTML = html;
@@ -103,44 +107,25 @@ MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
         const values = dadosTop5.map(d => d[1]);
 
         this.chartOfensores = new Chart(ctx, {
-            type: 'bar', // Barra horizontal é melhor para ler nomes longos
+            type: 'bar', 
             data: {
                 labels: labels,
                 datasets: [{
                     label: 'Reprovações',
                     data: values,
-                    backgroundColor: '#f43f5e', // Rose-500
+                    backgroundColor: '#f43f5e', 
                     borderRadius: 4,
                     barThickness: 20
                 }]
             },
             options: {
-                indexAxis: 'y', // Faz a barra ser horizontal
+                indexAxis: 'y', 
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: '#fff',
-                        titleColor: '#1e293b',
-                        bodyColor: '#e11d48',
-                        borderColor: '#e2e8f0',
-                        borderWidth: 1
-                    }
-                },
+                plugins: { legend: { display: false } },
                 scales: {
-                    x: {
-                        beginAtZero: true,
-                        grid: { color: '#f1f5f9' },
-                        ticks: { stepSize: 1, font: { size: 10 } }
-                    },
-                    y: {
-                        grid: { display: false },
-                        ticks: { 
-                            font: { size: 10, weight: 'bold' },
-                            color: '#64748b'
-                        }
-                    }
+                    x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { stepSize: 1, font: { size: 10 } } },
+                    y: { grid: { display: false }, ticks: { font: { size: 10, weight: 'bold' }, color: '#64748b' } }
                 }
             }
         });
@@ -154,15 +139,13 @@ MinhaArea.Comparativo = { // Mantive o nome do objeto para compatibilidade
                 </div>
                 <h3 class="text-lg font-bold text-slate-700">Parabéns!</h3>
                 <p class="text-sm text-slate-500">Nenhum erro encontrado neste período.</p>
-            </div>
-        `;
+            </div>`;
     },
 
     renderizarGraficoVazio: function() {
         const ctx = document.getElementById('graficoTopOfensores');
         if (!ctx) return;
         if (this.chartOfensores) this.chartOfensores.destroy();
-        // Pode deixar em branco ou desenhar algo simples
     },
 
     buscarAuditoriasPaginadas: async function(uid, inicio, fim) {
