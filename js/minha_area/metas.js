@@ -15,30 +15,18 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 1. Buscas Otimizadas
-            const [prodRes, assertRes, metasRes] = await Promise.all([
-                // Produção: Trazemos tudo para somar o volume total validado
+            // 1. Buscas Simples (Produção e Metas)
+            const [prodRes, metasRes] = await Promise.all([
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
-                
-                // Assertividade: FILTRAGEM NO BANCO (Traz apenas quem TEM auditora preenchida)
-                // Isso evita baixar as 14 mil linhas vazias e resolve o problema do limite de 1000
-                Sistema.supabase
-                    .from('assertividade')
-                    .select('*')
-                    .eq('usuario_id', uid)
-                    .gte('data_auditoria', inicio)
-                    .lte('data_auditoria', fim)
-                    .neq('auditora', null) // Filtra nulos
-                    .neq('auditora', '')   // Filtra vazios
-                    .limit(10000),         // Limite de segurança aumentado
-                
                 Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim)
             ]);
 
             if (prodRes.error) throw prodRes.error;
-            if (assertRes.error) throw assertRes.error;
 
-            // 2. Mapas e Estruturas
+            // 2. Busca Complexa (Auditoria com Paginação para driblar limite de 1000)
+            const assertData = await this.buscarTodosRegistros(uid, inicio, fim);
+
+            // 3. Processamento dos Dados
             const mapMetas = {};
             (metasRes.data || []).forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
@@ -49,14 +37,13 @@ MinhaArea.Metas = {
             (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
 
             const mapAssert = new Map();
-            // Como já filtramos no banco, tudo que veio aqui É auditado
-            (assertRes.data || []).forEach(a => {
+            assertData.forEach(a => {
                 if(!mapAssert.has(a.data_auditoria)) mapAssert.set(a.data_auditoria, []);
                 let val = String(a.porcentagem).replace('%','').replace(',','.');
                 mapAssert.get(a.data_auditoria).push(parseFloat(val));
             });
 
-            // 3. Processamento para Gráficos
+            // 4. Preparação dos Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -69,7 +56,6 @@ MinhaArea.Metas = {
             const aggMensal = new Map(); 
             const mesesNomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-            // Loop Calendário
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 const diaSemana = d.getDay();
                 const isFDS = (diaSemana === 0 || diaSemana === 6);
@@ -133,18 +119,46 @@ MinhaArea.Metas = {
                 }
             }
 
-            // 6. Atualização dos Cards
-            this.atualizarCardsKPI(prodRes.data, assertRes.data, mapMetas, dtInicio, dtFim);
+            this.atualizarCardsKPI(prodRes.data, assertData, mapMetas, dtInicio, dtFim);
 
-            // 7. Renderiza Gráficos
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
-
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
             this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade (%)', '#059669', true);
 
         } catch (err) {
             console.error("Erro Metas:", err);
         }
+    },
+
+    // --- FUNÇÃO AUXILIAR PARA PAGINAÇÃO AUTOMÁTICA ---
+    buscarTodosRegistros: async function(uid, inicio, fim) {
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while(hasMore) {
+            const { data, error } = await Sistema.supabase
+                .from('assertividade')
+                .select('*')
+                .eq('usuario_id', uid)
+                .gte('data_auditoria', inicio)
+                .lte('data_auditoria', fim)
+                .neq('auditora', null) // Traz apenas auditados
+                .neq('auditora', '')
+                .range(page * pageSize, (page + 1) * pageSize - 1); // Paginação manual
+
+            if(error) throw error;
+
+            allData = allData.concat(data);
+            
+            if(data.length < pageSize) {
+                hasMore = false; // Acabou os registros
+            } else {
+                page++; // Próxima página
+            }
+        }
+        return allData;
     },
 
     atualizarCardsKPI: function(prods, asserts, mapMetas, dtInicio, dtFim) {
@@ -155,7 +169,6 @@ MinhaArea.Metas = {
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
 
-        // 1. Calcula Validados (Produção)
         for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
@@ -172,10 +185,7 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // 2. Calcula Auditados (Apenas contar o array, pois já foi filtrado no banco)
-        const totalAuditados = (asserts || []).length;
-
-        // 3. Calcula Média Assertividade
+        // Assertividade
         (asserts || []).forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
             if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
@@ -183,21 +193,19 @@ MinhaArea.Metas = {
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
         
-        // --- ATUALIZAÇÃO DA INTERFACE ---
-
-        // Card 1: Validação
+        // 1. Validação
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
-        // Card 2: Assertividade
+        // 2. Assertividade
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Card 3: Auditoria
-        // Lógica: Validados (Total) - Auditados (Amostra) = Sem Auditoria
+        // 3. Auditoria
+        const totalAuditados = (asserts || []).length;
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
