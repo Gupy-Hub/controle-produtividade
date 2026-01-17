@@ -4,9 +4,10 @@ Produtividade.Consolidado = {
     initialized: false,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Layout Validação Iniciado...");
+        console.log("🚀 [NEXUS] Consolidado: Iniciando Engine V3.0 (Diagnóstico Ativo)...");
         this.renderizarFiltros(); 
-        this.carregarDados();
+        // Pequeno delay para garantir que o DOM renderizou os filtros antes de buscar dados
+        setTimeout(() => this.carregarDados(), 100);
         this.initialized = true;
     },
 
@@ -16,10 +17,11 @@ Produtividade.Consolidado = {
         
         if (!selAno || !selPeriodo) return;
 
-        const anoAtual = new Date().getFullYear();
+        // Configuração de Anos: Inclui 2026, 2025 e 2024 para garantir compatibilidade histórica
+        const anoAtual = new Date().getFullYear(); 
         selAno.innerHTML = `
-            <option value="${anoAtual}" selected>${anoAtual}</option>
-            <option value="${anoAtual - 1}">${anoAtual - 1}</option>
+            <option value="${anoAtual}">${anoAtual}</option>
+            <option value="${anoAtual - 1}" selected>${anoAtual - 1}</option> <option value="${anoAtual - 2}">${anoAtual - 2}</option>
         `;
 
         selPeriodo.innerHTML = `
@@ -35,18 +37,10 @@ Produtividade.Consolidado = {
                 <option value="t4">4º Trimestre (Out-Dez)</option>
             </optgroup>
             <optgroup label="Meses">
-                <option value="1">Janeiro</option>
-                <option value="2">Fevereiro</option>
-                <option value="3">Março</option>
-                <option value="4">Abril</option>
-                <option value="5">Maio</option>
-                <option value="6">Junho</option>
-                <option value="7">Julho</option>
-                <option value="8">Agosto</option>
-                <option value="9">Setembro</option>
-                <option value="10">Outubro</option>
-                <option value="11">Novembro</option>
-                <option value="12">Dezembro</option>
+                <option value="1">Janeiro</option> <option value="2">Fevereiro</option> <option value="3">Março</option>
+                <option value="4">Abril</option> <option value="5">Maio</option> <option value="6">Junho</option>
+                <option value="7">Julho</option> <option value="8">Agosto</option> <option value="9">Setembro</option>
+                <option value="10">Outubro</option> <option value="11">Novembro</option> <option value="12">Dezembro</option>
             </optgroup>
         `;
 
@@ -58,6 +52,7 @@ Produtividade.Consolidado = {
         const elAno = document.getElementById('sel-consolidado-ano');
         const elPeriodo = document.getElementById('sel-consolidado-periodo');
         
+        // Fallback seguro se elementos não existirem
         if (!elAno || !elPeriodo) {
             const y = new Date().getFullYear();
             return { inicio: `${y}-01-01`, fim: `${y}-12-31` };
@@ -87,6 +82,12 @@ Produtividade.Consolidado = {
                 break;
         }
 
+        // Atualiza display de debug na tela
+        const debugInicio = document.getElementById('debug-data-inicio');
+        const debugFim = document.getElementById('debug-data-fim');
+        if(debugInicio) debugInicio.innerText = inicio;
+        if(debugFim) debugFim.innerText = fim;
+
         return { inicio, fim };
     },
 
@@ -112,28 +113,46 @@ Produtividade.Consolidado = {
         const { inicio, fim } = this.getDatasIntervalo();
         const diasUteisPeriodo = this.countDiasUteis(inicio, fim);
 
-        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando dados...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400 flex flex-col items-center gap-2"><i class="fas fa-circle-notch fa-spin text-2xl text-blue-500"></i><span>Buscando dados no Supabase...</span></td></tr>';
 
         try {
+            if(!Sistema || !Sistema.supabase) throw new Error("Sistema/Supabase não inicializado.");
+
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { data_inicio: inicio, data_fim: fim });
 
             if (error) throw error;
+            
+            console.log("✅ [CONSOLIDADO] Dados Recebidos:", data);
             this.processarDados(data, diasUteisPeriodo);
 
         } catch (error) {
-            console.error(error);
-            if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-rose-500">Erro: ${error.message}</td></tr>`;
+            console.error("❌ Erro ao carregar:", error);
+            if (tbody) tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="p-8 text-center text-rose-500 bg-rose-50 rounded-lg">
+                        <div class="font-bold mb-1">Erro ao carregar dados:</div>
+                        <div class="text-xs font-mono">${error.message || error}</div>
+                        <div class="mt-2 text-xs text-slate-500">Verifique se a função RPC 'get_painel_produtividade' existe no banco.</div>
+                    </td>
+                </tr>`;
         }
     },
 
     processarDados: function(data, diasUteisPeriodo) {
-        const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
+        if (!data || data.length === 0) {
+            this.renderizarTabela([]);
+            this.zerarKPIs();
+            return;
+        }
 
-        // --- 1. Total Assistentes ---
-        const totalAssistentes = assistentes.length;
+        // Filtro mais permissivo: Só remove se for explicitamente AUDITORA ou GESTORA
+        const assistentes = data.filter(d => {
+            const funcao = (d.funcao || '').toUpperCase();
+            return !['AUDITORA', 'GESTORA'].includes(funcao);
+        });
 
-        // --- Variáveis de Acumulação ---
+        // Totais Gerais
         let totalValidados = 0;
         let totalFifo = 0;
         let totalGradualTotal = 0;
@@ -141,24 +160,27 @@ Produtividade.Consolidado = {
         let totalPerfilFc = 0;
 
         const dadosMapeados = assistentes.map(u => {
-            const prod = Number(u.total_qty || 0);
+            // Mapeamento Flexível de Colunas (previne zeros se o nome da coluna mudar)
+            const prod = Number(u.total_qty || u.producao || u.quantidade || 0);
             const fifo = Number(u.total_fifo || u.fifo || 0);
             const gradTotal = Number(u.total_gradual_total || u.gradual_total || 0);
             const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
             const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
             
+            // Acumula
             totalValidados += prod;
             totalFifo += fifo;
             totalGradualTotal += gradTotal;
             totalGradualParcial += gradParcial;
             totalPerfilFc += perfilFc;
 
+            // Cálculos
             const mediaDiaria = diasUteisPeriodo > 0 ? (prod / diasUteisPeriodo) : 0;
             const metaPeriodo = Number(u.meta_producao || 0) * diasUteisPeriodo;
             const atingimento = metaPeriodo > 0 ? (prod / metaPeriodo * 100) : 0;
 
             return {
-                nome: u.nome,
+                nome: u.nome || 'Desconhecido',
                 fifo, gradTotal, gradParcial, perfilFc,
                 total: prod,
                 mediaDiaria,
@@ -166,55 +188,51 @@ Produtividade.Consolidado = {
             };
         });
 
+        // Ordena por produção
         dadosMapeados.sort((a,b) => b.total - a.total);
 
-        // --- ATUALIZAÇÃO DOS 5 CARDS (10 KPIs) ---
-
-        // CARD 1: Produção Global
-        // - Principal: Total Validados
-        // - Sub: Validação Diária (Time) = Total / Dias Úteis
+        // --- ATUALIZA KPI'S ---
+        const totalAssistentes = assistentes.length;
         const validacaoDiariaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
-        this.setVal('cons-total-validados', totalValidados.toLocaleString('pt-BR'));
-        this.setVal('cons-validacao-diaria-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
-
-        // CARD 2: Recursos
-        // - Principal: Total Assistentes
-        // - Sub: Dias Úteis
-        this.setVal('cons-total-assistentes', totalAssistentes);
-        this.setVal('cons-dias-uteis', diasUteisPeriodo);
-
-        // CARD 3: Performance Média
-        // - Principal: Média Diária (Por Assistente)
-        // - Sub: Média Período (Por Assistente)
+        
+        // Média Período = Total Geral / Num Assistentes
         const mediaPeriodoPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
+        
+        // Média Diária = (Total Geral / Dias) / Num Assistentes
         const mediaDiariaPorAssistente = (totalAssistentes > 0 && diasUteisPeriodo > 0) 
             ? (totalValidados / diasUteisPeriodo / totalAssistentes) 
             : 0;
-        this.setVal('cons-media-diaria-assistente', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
-        this.setVal('cons-media-periodo-assistente', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
 
-        // CARD 4: Tipos Prioritários
-        // - Principal: FIFO
-        // - Sub: Perfil FC
-        this.setVal('cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
-        this.setVal('cons-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
+        // Injeção nos IDs (usando safeSet para não quebrar se ID faltar)
+        const safeSet = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
 
-        // CARD 5: Tipos Graduais (Split View)
-        // - Esq: Gradual Total
-        // - Dir: Gradual Parcial
-        this.setVal('cons-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
-        this.setVal('cons-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
+        safeSet('cons-total-validados', totalValidados.toLocaleString('pt-BR'));
+        safeSet('cons-validacao-diaria-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
+        
+        safeSet('cons-total-assistentes', totalAssistentes);
+        safeSet('cons-dias-uteis', diasUteisPeriodo);
+        
+        safeSet('cons-media-diaria-assistente', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
+        safeSet('cons-media-periodo-assistente', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
+        
+        safeSet('cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
+        safeSet('cons-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
+        
+        safeSet('cons-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
+        safeSet('cons-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
 
-        // Footer Table
-        const footerCount = document.getElementById('total-consolidado-registros');
-        if(footerCount) footerCount.innerText = totalAssistentes;
+        safeSet('total-consolidado-registros', totalAssistentes);
 
         this.renderizarTabela(dadosMapeados);
     },
 
-    setVal: function(id, val) {
-        const el = document.getElementById(id);
-        if(el) el.innerText = val;
+    zerarKPIs: function() {
+        const ids = [
+            'cons-total-validados', 'cons-validacao-diaria-time', 'cons-total-assistentes',
+            'cons-dias-uteis', 'cons-media-diaria-assistente', 'cons-media-periodo-assistente',
+            'cons-total-fifo', 'cons-perfil-fc', 'cons-grad-total', 'cons-grad-parcial', 'total-consolidado-registros'
+        ];
+        ids.forEach(id => { const el = document.getElementById(id); if(el) el.innerText = '-'; });
     },
 
     renderizarTabela: function(dados) {
@@ -222,8 +240,16 @@ Produtividade.Consolidado = {
         if(!tbody) return;
 
         tbody.innerHTML = '';
+
         if(dados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">Nenhum registro.</td></tr>';
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="9" class="p-8 text-center text-slate-400 bg-slate-50 border border-dashed border-slate-200 rounded-lg">
+                        <i class="fas fa-inbox text-3xl mb-2 block text-slate-300"></i>
+                        <span class="font-bold">Nenhum registro encontrado para este período.</span>
+                        <div class="text-xs mt-1">Tente selecionar outro ano ou mês no filtro acima.</div>
+                    </td>
+                </tr>`;
             return;
         }
 

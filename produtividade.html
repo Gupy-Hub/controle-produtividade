@@ -16,9 +16,13 @@
     
     <style> 
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #334155; } 
+        
+        /* Componentes de Navegação */
         .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #64748b; }
         .tab-btn:hover { background-color: #f1f5f9; color: #0f172a; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
+        
+        /* Utilitários de Animação e Scroll */
         .animate-fade-in { animation: fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
@@ -27,6 +31,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+        /* Estilo Unificado dos Cards KPI */
         .kpi-card { 
             background: white; 
             border-radius: 12px; 
@@ -58,6 +63,7 @@
 
     <div class="bg-white/80 backdrop-blur-md border-b border-slate-200 fixed top-12 left-0 w-full z-40 h-14 flex items-center transition-all">
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
+            
             <div class="flex gap-1 overflow-x-auto no-scrollbar">
                 <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Validação</button>
                 <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-table"></i> Consolidado</button>
@@ -160,7 +166,11 @@
                     <span class="text-[10px] font-bold text-slate-500 uppercase px-2"><i class="fas fa-filter mr-1"></i> Período Consolidado</span>
                     <select id="sel-consolidado-ano" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer hover:bg-white transition"></select>
                     <select id="sel-consolidado-periodo" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded px-2 py-1.5 outline-none focus:border-blue-500 cursor-pointer min-w-[150px] hover:bg-white transition"></select>
-                    <button onclick="Produtividade.Consolidado.carregarDados()" class="ml-2 text-slate-400 hover:text-blue-600 transition" title="Atualizar"><i class="fas fa-sync-alt"></i></button>
+                    
+                    <button onclick="Produtividade.Consolidado.carregarDados()" class="ml-2 text-slate-400 hover:text-blue-600 transition" title="Forçar Atualização"><i class="fas fa-sync-alt"></i></button>
+                </div>
+                <div class="text-[10px] text-slate-400 font-bold">
+                    <i class="fas fa-info-circle mr-1"></i> Exibindo dados de <span id="debug-data-inicio">--</span> até <span id="debug-data-fim">--</span>
                 </div>
             </div>
 
@@ -254,7 +264,8 @@
                                 <th class="px-2 py-3 text-center w-[10%] text-emerald-700 bg-emerald-50">% Ating.</th>
                             </tr>
                         </thead>
-                        <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white"></tbody>
+                        <tbody id="cons-table-body" class="divide-y divide-slate-200 bg-white">
+                            </tbody>
                     </table>
                 </div>
                 <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
@@ -264,8 +275,74 @@
             </div>
         </div>
 
-        <div id="tab-performance" class="view-section hidden animate-fade-in"></div>
-        <div id="tab-matriz" class="view-section hidden animate-fade-in"></div>
+        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
+            <div class="grid grid-cols-12 gap-6 h-[calc(100vh-200px)]">
+                <div class="col-span-8 flex flex-col gap-4">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução do Time</span></h3>
+                            <p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Visão geral da produção no período</p>
+                        </div>
+                        <button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2">
+                            <i class="fas fa-arrow-left"></i> Voltar para Visão Time
+                        </button>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[400px]">
+                        <canvas id="evolutionChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="col-span-4 flex flex-col gap-4">
+                    <div class="bg-blue-50 border border-blue-100 p-3 rounded-lg flex items-start gap-3">
+                        <i class="fas fa-info-circle text-blue-500 mt-0.5"></i>
+                        <p class="text-xs text-blue-800">Clique em uma assistente abaixo para ver a <strong>evolução individual</strong>.</p>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
+                        <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Ranking de Produção</span>
+                            <i class="fas fa-filter text-slate-300"></i>
+                        </div>
+                        <div class="overflow-y-auto custom-scrollbar flex-1 p-2" id="ranking-list-container">
+                            <div class="text-center text-slate-400 py-10 text-xs">Carregando...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="tab-matriz" class="view-section hidden animate-fade-in space-y-6">
+            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-170px)]">
+                <div class="overflow-auto custom-scrollbar flex-1">
+                    <table class="w-full text-xs text-left border-collapse">
+                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase tracking-wider text-center border-b-2 border-slate-200">
+                            <tr>
+                                <th class="px-4 py-4 text-left sticky left-0 bg-slate-50 z-20 border-r border-slate-200 shadow-sm min-w-[200px]">Assistente</th>
+                                <th class="px-3 py-4 min-w-[70px]">Jan</th>
+                                <th class="px-3 py-4 min-w-[70px]">Fev</th>
+                                <th class="px-3 py-4 min-w-[70px]">Mar</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">1º Tri</th>
+                                <th class="px-3 py-4 min-w-[70px]">Abr</th>
+                                <th class="px-3 py-4 min-w-[70px]">Mai</th>
+                                <th class="px-3 py-4 min-w-[70px]">Jun</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">2º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">1º Sem</th>
+                                <th class="px-3 py-4 min-w-[70px]">Jul</th>
+                                <th class="px-3 py-4 min-w-[70px]">Ago</th>
+                                <th class="px-3 py-4 min-w-[70px]">Set</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">3º Tri</th>
+                                <th class="px-3 py-4 min-w-[70px]">Out</th>
+                                <th class="px-3 py-4 min-w-[70px]">Nov</th>
+                                <th class="px-3 py-4 min-w-[70px]">Dez</th>
+                                <th class="px-3 py-4 bg-blue-50 text-blue-700 border-x border-blue-100 min-w-[80px]">4º Tri</th>
+                                <th class="px-3 py-4 bg-indigo-50 text-indigo-700 border-r border-indigo-100 min-w-[90px]">2º Sem</th>
+                                <th class="px-4 py-4 bg-slate-100 text-slate-800 font-black min-w-[100px]">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody id="matriz-body" class="divide-y divide-slate-100 bg-white"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="js/produtividade/assertividade.js"></script> 
