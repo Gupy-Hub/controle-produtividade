@@ -1,3 +1,4 @@
+// ARQUIVO: js/minha_area/geral.js
 MinhaArea.Geral = {
     carregar: async function() {
         const uid = MinhaArea.getUsuarioAlvo();
@@ -13,7 +14,7 @@ MinhaArea.Geral = {
         if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados...</span></div></td></tr>';
 
         try {
-            // 1. Buscas em Paralelo (Performance)
+            // 1. Buscas em Paralelo
             const [prodRes, assertRes, metaRes] = await Promise.all([
                 // Produção
                 Sistema.supabase
@@ -23,10 +24,10 @@ MinhaArea.Geral = {
                     .gte('data_referencia', inicio)
                     .lte('data_referencia', fim),
                 
-                // Assertividade (Auditorias)
+                // Assertividade (Trazendo a coluna porcentagem)
                 Sistema.supabase
                     .from('assertividade')
-                    .select('data_auditoria, ok, num_campos, porcentagem')
+                    .select('data_auditoria, porcentagem') 
                     .eq('usuario_id', uid)
                     .gte('data_auditoria', inicio)
                     .lte('data_auditoria', fim),
@@ -36,27 +37,27 @@ MinhaArea.Geral = {
                     .from('metas')
                     .select('meta, meta_assertividade')
                     .eq('usuario_id', uid)
-                    .eq('mes', parseInt(inicio.split('-')[1])) // Pega mês da data inicial
-                    .eq('ano', parseInt(inicio.split('-')[0])) // Pega ano da data inicial
+                    .eq('mes', parseInt(inicio.split('-')[1])) 
+                    .eq('ano', parseInt(inicio.split('-')[0])) 
                     .maybeSingle()
             ]);
 
             if (prodRes.error) throw prodRes.error;
+            if (assertRes.error) throw assertRes.error;
             
-            // 2. Define Metas Padrão se não encontrar
+            // 2. Define Metas Padrão
             const metaProducaoPadrao = metaRes.data?.meta || 650;
             const metaAssertPadrao = metaRes.data?.meta_assertividade || 98.0;
 
             // 3. Unificação dos Dados (Merge por Data)
             const mapaDados = new Map();
 
-            // Helper para inicializar o dia no mapa
             const getDia = (dataStr) => {
                 if (!mapaDados.has(dataStr)) {
                     mapaDados.set(dataStr, {
                         data: dataStr,
                         prod: { qtd: 0, fifo: 0, gt: 0, gp: 0, fator: 0, justificativa: '' },
-                        assert: { ok: 0, campos: 0, count: 0 }
+                        assert: { somaPorcentagem: 0, count: 0 }
                     });
                 }
                 return mapaDados.get(dataStr);
@@ -69,50 +70,49 @@ MinhaArea.Geral = {
                 dia.prod.fifo = Number(p.fifo || 0);
                 dia.prod.gt = Number(p.gradual_total || 0);
                 dia.prod.gp = Number(p.gradual_parcial || 0);
-                dia.prod.fator = Number(p.fator); // Pode ser null/undefined se não tiver
+                dia.prod.fator = Number(p.fator);
                 dia.prod.justificativa = p.justificativa;
             });
 
-            // Processa Assertividade
+            // Processa Assertividade (Lógica da Média Aritmética)
             (assertRes.data || []).forEach(a => {
                 const dia = getDia(a.data_auditoria);
-                dia.assert.ok += Number(a.ok || 0);
-                dia.assert.campos += Number(a.num_campos || 0);
+                const valor = this.parseValorPorcentagem(a.porcentagem); // Converte "100%" para 100
+                dia.assert.somaPorcentagem += valor;
                 dia.assert.count++;
             });
 
-            // Converte Map para Array e Ordena (Data Decrescente)
+            // Ordena por data decrescente
             const lista = Array.from(mapaDados.values()).sort((a, b) => b.data.localeCompare(a.data));
 
             // 4. Renderização
             if(tbody) tbody.innerHTML = '';
             
-            // Acumuladores para KPI Total
             let totalProd = 0, totalMeta = 0, somaFator = 0, diasComProducao = 0;
-            let totalAssertOk = 0, totalAssertCampos = 0;
 
             const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
             const fmtNum = (val) => val.toLocaleString('pt-BR');
 
             lista.forEach(item => {
-                // Cálculos Produção
-                const fator = isNaN(item.prod.fator) ? 0 : item.prod.fator; // Se não tem prod, fator é 0
+                // --- Produção ---
+                const fator = isNaN(item.prod.fator) ? 0 : item.prod.fator;
                 const metaDia = Math.round(metaProducaoPadrao * fator);
                 const pctProd = metaDia > 0 ? (item.prod.qtd / metaDia) * 100 : 0;
                 
-                // Cores Produção
                 let corProd = 'text-slate-400';
                 if (metaDia > 0) {
                     corProd = pctProd >= 100 ? 'text-emerald-600 font-bold' : (pctProd >= 80 ? 'text-amber-600 font-bold' : 'text-rose-600 font-bold');
                 }
 
-                // Cálculos Assertividade Dia
+                // --- Assertividade (Soma / Qtd) ---
                 let pctAssert = 0;
                 let displayAssert = '-';
                 let corAssert = 'text-slate-300';
 
-                if (item.assert.campos > 0) {
-                    pctAssert = (item.assert.ok / item.assert.campos) * 100;
+                if (item.assert.count > 0) {
+                    // Cálculo solicitado: Soma das % / Quantidade de Auditorias
+                    pctAssert = item.assert.somaPorcentagem / item.assert.count;
+                    
                     displayAssert = pctAssert.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%';
                     
                     if (pctAssert >= metaAssertPadrao) {
@@ -120,19 +120,15 @@ MinhaArea.Geral = {
                     } else {
                         corAssert = 'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
                     }
-
-                    // Acumula para KPI Geral
-                    totalAssertOk += item.assert.ok;
-                    totalAssertCampos += item.assert.campos;
                 }
 
-                // Acumula KPIs Produção
+                // KPIs Globais
                 totalProd += item.prod.qtd;
                 totalMeta += metaDia;
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
 
-                // Formatação Data
+                // Data formatada
                 const dateObj = new Date(item.data + 'T12:00:00');
                 const diaStr = String(dateObj.getDate()).padStart(2, '0');
                 const mesStr = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -154,7 +150,7 @@ MinhaArea.Geral = {
                         
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${metaAssertPadrao}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center">
-                            <span class="${corAssert}">${displayAssert}</span>
+                            <span class="${corAssert}" title="${item.assert.count} auditorias realizadas">${displayAssert}</span>
                         </td>
 
                         <td class="px-3 py-2 border-r border-slate-100 last:border-0 truncate max-w-[150px]" title="${item.prod.justificativa || ''}">
@@ -165,27 +161,19 @@ MinhaArea.Geral = {
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // 5. Atualiza KPIs do Topo
+            // Atualiza KPIs Topo
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
-            // Se houver auditoria, calcula média ponderada geral
-            // OBS: Pode-se usar média simples das % diárias ou (Total OK / Total Campos). (Total OK / Total Campos) é mais preciso matematicamente.
-            // Porem, se quiser compatibilidade com média de notas, usar a outra lógica. Vou usar a ponderada (OK/Campos) pois temos os números brutos.
-            
-            // Vamos atualizar apenas os cards existentes no HTML do Minha Area
+
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
-            
             this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
             this.setStatus(atingimentoGeral);
-
-            this.setTxt('kpi-dias', Math.ceil(somaFator)); // Dias Produtivos (Soma dos fatores)
-            this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim)); // Dias Úteis Calendário
-            
+            this.setTxt('kpi-dias', Math.ceil(somaFator));
+            this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
             this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-dia', metaProducaoPadrao);
 
-            // Atualiza barra de progresso
             const bar = document.getElementById('bar-progress');
             if(bar) {
                 bar.style.width = `${Math.min(atingimentoGeral, 100)}%`;
@@ -196,6 +184,15 @@ MinhaArea.Geral = {
             console.error(err);
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
+    },
+
+    // Função Auxiliar para Tratar Strings como "100%", "98,5", "100"
+    parseValorPorcentagem: function(val) {
+        if (typeof val === 'number') return val;
+        if (!val) return 0;
+        // Remove % e converte vírgula para ponto
+        let str = String(val).replace('%', '').replace(',', '.').trim();
+        return parseFloat(str) || 0;
     },
 
     setStatus: function(pct) {
