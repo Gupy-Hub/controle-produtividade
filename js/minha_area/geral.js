@@ -2,12 +2,14 @@ MinhaArea.Geral = {
     carregar: async function() {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
-        const alertContainer = document.getElementById('container-checkin-alert');
         
-        // Limpa alerta anterior
-        if (alertContainer) alertContainer.innerHTML = '';
-        if (alertContainer) alertContainer.classList.add('hidden');
-
+        // Limpa estado anterior do alerta
+        const alertContainer = document.getElementById('container-checkin-alert');
+        if (alertContainer) {
+            alertContainer.innerHTML = '';
+            alertContainer.classList.add('hidden');
+        }
+        
         if (!uid) {
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p></td></tr>';
             this.zerarKPIs();
@@ -18,29 +20,27 @@ MinhaArea.Geral = {
         if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Processando dados e validações...</span></div></td></tr>';
 
         try {
-            // Conversão de datas para Date objects
             const dtInicio = new Date(inicio + 'T12:00:00');
             const dtFim = new Date(fim + 'T12:00:00');
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // 1. Buscas Otimizadas (INCLUINDO CHECKING)
+            // 1. Buscas Otimizadas
             const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim).limit(2000), 
                 Sistema.supabase.from('assertividade').select('data_auditoria, porcentagem').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim).not('porcentagem', 'is', null).neq('porcentagem', '').limit(5000), 
                 Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim),
-                
-                // Busca Validações (Checkings) no período
-                Sistema.supabase.from('checking_diario').select('data_referencia, status, data_checkin').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim)
+                // Busca histórico de validações
+                Sistema.supabase.from('checking_diario').select('data_referencia, status').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim)
             ]);
 
             if (prodRes.error) throw prodRes.error;
             if (checkRes.error) throw checkRes.error;
 
-            // --- LÓGICA DO CHECKING DIÁRIO (ONTEM) ---
+            // --- PROCESSA A INTERFACE DE CHECKING (Topo da Tela) ---
             await this.processarCheckingInterface(uid, checkRes.data || []);
 
-            // 2. Mapas de Acesso Rápido
+            // 2. Mapas de Dados
             const mapMetas = {};
             (metasRes.data || []).forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
@@ -61,11 +61,10 @@ MinhaArea.Geral = {
                 }
             });
 
-            // Mapa de Checkings (Para pintar o grid)
             const mapCheckins = new Set();
             (checkRes.data || []).forEach(c => mapCheckins.add(c.data_referencia));
 
-            // 5. CÁLCULO CALENDÁRIO
+            // 5. Cálculo do Calendário
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0, diasComProducaoReal = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
@@ -127,7 +126,6 @@ MinhaArea.Geral = {
                         fifo: Number(prodDoDia.fifo || 0),
                         gt: Number(prodDoDia.gradual_total || 0),
                         gp: Number(prodDoDia.gradual_parcial || 0),
-                        // Flag para saber se este dia foi validado
                         validado: mapCheckins.has(dataStr)
                     });
                 }
@@ -154,13 +152,13 @@ MinhaArea.Geral = {
                 const temJust = item.justificativa && item.justificativa.length > 0;
                 const classJust = temJust ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" : "text-slate-200 text-center block";
 
-                // ÍCONE DE VALIDAÇÃO (CHECK) NO GRID
+                // ÍCONE DE VALIDAÇÃO (CHECK) PARA GESTORES E ASSISTENTES
                 const iconValidado = item.validado 
-                    ? `<i class="fas fa-check-circle text-emerald-500 ml-1" title="Validado pela assistente"></i>` 
-                    : `<i class="far fa-circle text-slate-200 ml-1 text-[8px]" title="Não validado"></i>`;
+                    ? `<i class="fas fa-check-circle text-emerald-500 ml-1" title="Validado (Checking Diário)"></i>` 
+                    : `<i class="far fa-circle text-slate-200 ml-1 text-[8px]" title="Pendente de checking"></i>`;
 
                 tbody.innerHTML += `
-                    <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600 ${item.validado ? 'bg-emerald-50/10' : ''}">
+                    <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600 ${item.validado ? 'bg-emerald-50/5' : ''}">
                         <td class="px-3 py-2 border-r border-slate-100 last:border-0 truncate font-bold text-slate-700 bg-slate-50/30">
                             <span class="text-[9px] text-slate-400 font-normal mr-1 w-6 inline-block">${diaSemana}</span>${dia}/${mes}/${ano} ${iconValidado}
                         </td>
@@ -177,7 +175,7 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // 7. KPIs
+            // 7. KPIs Atualizados
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
@@ -212,54 +210,51 @@ MinhaArea.Geral = {
         }
     },
 
-    // --- LÓGICA DE CHECKING / VALIDAÇÃO ---
+    // --- NOVA LÓGICA DE CHECKING (COM ESTADO CONFIRMADO) ---
     processarCheckingInterface: async function(uid, checkins) {
-        // Se eu não sou o usuário dono da conta (sou gestor olhando), não mostro botão de ação
+        // Se for gestor vendo outra pessoa, não mostra o card de topo (apenas ícones no grid)
         if (MinhaArea.usuario.id !== parseInt(uid)) return;
 
-        // 1. Calcula "Ontem" (Regra de Negócio: Só valida D-1)
+        // 1. Define "Ontem"
         const hoje = new Date();
         const ontem = new Date(hoje);
         ontem.setDate(ontem.getDate() - 1);
         
-        // Pula Fim de Semana (Se hoje é seg (1), ontem foi dom (0) -> valida sexta?)
-        // Regra simples: Valida o dia cronológico anterior. Se foi domingo, valida domingo. 
-        // Se a empresa não trabalha domingo, ok, valida que não trabalhou.
-        // *Ajuste Fino:* Se ontem foi Domingo (0), recua para Sexta? 
-        // Para simplificar e evitar erros de lógica complexa, vamos validar D-1 cronológico.
-        // Se D-1 foi domingo e não teve produção, ela valida "Zero Produção".
-        
         const ontemStr = ontem.toISOString().split('T')[0];
         const ontemFormatado = ontem.toLocaleDateString('pt-BR');
 
-        // 2. Verifica se já validou "Ontem"
+        // 2. Verifica Status
         const jaValidou = checkins.some(c => c.data_referencia === ontemStr);
 
         const container = document.getElementById('container-checkin-alert');
         if (!container) return;
 
         if (!jaValidou) {
-            // MOSTRA BOTÃO DE AÇÃO
+            // ESTADO 1: PENDENTE (Card com Ação)
             container.innerHTML = `
-                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between shadow-sm animate-pulse">
+                <div class="bg-white border-l-4 border-blue-500 shadow-md rounded-r-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
                     <div class="flex items-center gap-3">
-                        <div class="bg-blue-100 p-2 rounded-full text-blue-600"><i class="fas fa-calendar-check text-xl"></i></div>
+                        <div class="bg-blue-50 p-3 rounded-full text-blue-600"><i class="fas fa-clipboard-check text-xl"></i></div>
                         <div>
-                            <h4 class="font-bold text-blue-900 text-sm">Checking Diário Pendente</h4>
-                            <p class="text-xs text-blue-700">Por favor, confirme que analisou seus dados de ontem (${ontemFormatado}).</p>
+                            <h4 class="font-bold text-slate-700 text-sm">Checking Diário Pendente</h4>
+                            <p class="text-xs text-slate-500">Confirme a conferência dos dados de ontem (${ontemFormatado}).</p>
                         </div>
                     </div>
                     <button onclick="MinhaArea.Geral.realizarCheckin('${ontemStr}')" 
-                        class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold shadow transition flex items-center gap-2">
-                        <i class="fas fa-check"></i> Validar ${ontemFormatado}
+                        class="group bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:shadow-md active:scale-95 whitespace-nowrap">
+                        <span>Validar Dados</span>
+                        <i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
                     </button>
                 </div>`;
             container.classList.remove('hidden');
         } else {
-            // (Opcional) Mostra confirmação discreta ou nada
-            // container.innerHTML = `<div class="text-center text-xs text-emerald-600 font-bold py-1"><i class="fas fa-check-circle"></i> Dados de ontem (${ontemFormatado}) validados com sucesso.</div>`;
-            // container.classList.remove('hidden');
-            container.classList.add('hidden'); // Melhor esconder para não poluir
+            // ESTADO 2: CONFIRMADO (Feedback Estático sem botão)
+            container.innerHTML = `
+                <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-center gap-2 shadow-sm opacity-90 transition-all">
+                    <i class="fas fa-check-circle text-emerald-600"></i>
+                    <span class="text-emerald-800 font-bold text-xs">Dados confirmados (Checking Realizado)</span>
+                </div>`;
+            container.classList.remove('hidden');
         }
     },
 
@@ -274,13 +269,8 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // Feedback visual e recarrega
-            const container = document.getElementById('container-checkin-alert');
-            container.innerHTML = `<div class="bg-emerald-100 text-emerald-700 p-3 rounded-lg text-center font-bold border border-emerald-200"><i class="fas fa-check-circle"></i> Sucesso! Validação registrada.</div>`;
-            
-            setTimeout(() => {
-                this.carregar(); // Recarrega para pintar o grid
-            }, 1500);
+            // Recarrega para atualizar o grid (ícones) e mudar o estado do card para "Confirmado"
+            this.carregar();
 
         } catch (e) {
             alert('Erro ao validar: ' + e.message);
