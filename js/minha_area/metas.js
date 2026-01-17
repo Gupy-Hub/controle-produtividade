@@ -24,9 +24,8 @@ MinhaArea.Metas = {
 
             if (prodRes.error) throw prodRes.error;
 
-            // 2. BUSCA ROBUSTA DE AUDITORIA (Paginação Automática)
+            // 2. BUSCA ROBUSTA DE AUDITORIA (Paginada)
             const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
-            
             console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
 
             // 3. Processamento dos Mapas
@@ -48,10 +47,7 @@ MinhaArea.Metas = {
                 
                 let valStr = String(a.porcentagem || '0').replace('%','').replace(',','.');
                 let val = parseFloat(valStr);
-                
-                if (!isNaN(val)) {
-                    mapAssert.get(dataKey).push(val);
-                }
+                if (!isNaN(val)) mapAssert.get(dataKey).push(val);
             });
 
             // 4. Construção dos Arrays do Gráfico
@@ -116,7 +112,8 @@ MinhaArea.Metas = {
                     } else {
                         dataAssertReal.push(null);
                     }
-                    dataAssertMeta.push(metaConfig.assert);
+                    // Garante que a meta seja número
+                    dataAssertMeta.push(Number(metaConfig.assert));
                 }
             }
 
@@ -127,11 +124,11 @@ MinhaArea.Metas = {
                     dataProdMeta.push(val.prodMeta);
                     const mediaMensal = val.assertQtd > 0 ? (val.assertSoma / val.assertQtd) : null; 
                     dataAssertReal.push(mediaMensal);
-                    dataAssertMeta.push(val.assertMetaSoma); 
+                    dataAssertMeta.push(Number(val.assertMetaSoma)); 
                 }
             }
 
-            // 5. Renderização (Cards + Gráficos)
+            // 5. Renderização
             this.atualizarCardsKPI(prodRes.data, assertData, mapMetas, dtInicio, dtFim);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
@@ -183,7 +180,6 @@ MinhaArea.Metas = {
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
 
-        // Validados
         for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
@@ -200,27 +196,19 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // Auditoria & Resultados (OK/NOK CORRIGIDOS)
         asserts.forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
             if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
             
-            // CORREÇÃO: Conta DOCUMENTOS, não soma erros
-            if (Number(a.qtd_nok) > 0) {
-                totalNok++; // Documento Reprovado
-            }
-            
-            // CORREÇÃO: Conta STATUS exato para OK (ignora REV, JUST, etc)
-            if ((a.status || '').toUpperCase() === 'OK') {
-                totalOk++; // Documento Aprovado
-            }
+            if (Number(a.qtd_nok) > 0) totalNok++; 
+            if ((a.status || '').toUpperCase() === 'OK') totalOk++; 
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
         const totalAuditados = asserts.length; 
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
-        // --- UPDATE UI ---
+        // UI Updates
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
@@ -233,8 +221,6 @@ MinhaArea.Metas = {
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
-        
-        // Exibe os novos contadores corrigidos
         this.setTxt('auditoria-total-ok', totalOk.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-nok', totalNok.toLocaleString('pt-BR'));
     },
@@ -272,8 +258,9 @@ MinhaArea.Metas = {
                         pointBorderColor: '#94a3b8',
                         pointRadius: 3,
                         borderDash: [5, 5],
-                        tension: 0.3,
-                        order: 1
+                        tension: 0.1,
+                        order: 1,
+                        spanGaps: true // CORREÇÃO: Permite linha contínua mesmo com gaps
                     }
                 ]
             },
