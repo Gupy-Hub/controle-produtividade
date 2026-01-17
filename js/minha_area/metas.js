@@ -18,7 +18,7 @@ MinhaArea.Metas = {
             // 1. Buscas
             const [prodRes, assertRes, metasRes] = await Promise.all([
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
-                // Trazemos 'quantidade' se existir na assertividade, senão contamos linhas
+                // Garante que trazemos a coluna 'quantidade' para saber o volume de amostra auditada
                 Sistema.supabase.from('assertividade').select('*').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim),
                 Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim)
             ]);
@@ -38,7 +38,6 @@ MinhaArea.Metas = {
             const mapAssert = new Map();
             (assertRes.data || []).forEach(a => {
                 if(!mapAssert.has(a.data_auditoria)) mapAssert.set(a.data_auditoria, []);
-                // Usa porcentagem para o cálculo de assertividade
                 let val = String(a.porcentagem).replace('%','').replace(',','.');
                 mapAssert.get(a.data_auditoria).push(parseFloat(val));
             });
@@ -120,10 +119,10 @@ MinhaArea.Metas = {
                 }
             }
 
-            // 6. Atualização dos Cards (Invocando função atualizada)
+            // 6. Atualização dos Cards
             this.atualizarCardsKPI(prodRes.data, assertRes.data, mapMetas, dtInicio, dtFim);
 
-            // 7. Renderiza Gráficos (Nomes Atualizados)
+            // 7. Renderiza Gráficos
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
 
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
@@ -139,6 +138,7 @@ MinhaArea.Metas = {
         let totalValidados = 0; // Total Produzido
         let totalMeta = 0;
         let somaAssert = 0, qtdAssert = 0;
+        let totalAuditados = 0; // Novo acumulador
         
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
@@ -159,39 +159,35 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // Assertividade
+        // Assertividade e Total Auditados
         (asserts || []).forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
             if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
+            
+            // SOMATÓRIA DE VOLUME AUDITADO
+            // Tenta pegar a coluna 'quantidade', 'amostra' ou 'qtd_auditada'.
+            // Se não existir, assume 0 (para não inflar dados falsos, mas corrigir o bug).
+            // Com base na correção solicitada, existe um campo de volume na tabela assertividade.
+            let qtd = Number(a.quantidade || a.amostra || 0);
+            totalAuditados += qtd;
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
         
-        // Popula Card 1 (Assertividade)
+        // Card 1: Validação (Volume)
+        this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
+        this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
+        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
+
+        // Card 2: Assertividade
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Popula Card 2 (Produtividade)
-        this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
-        this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
-
-        // --- CÁLCULO CARD 3 (Cobertura da Auditoria) ---
-        
-        // 1. Total Validados (Já calculado acima: totalValidados)
-        
-        // 2. Total Auditados
-        // Considera cada registro na tabela assertividade como 1 documento auditado
-        const totalAuditados = (asserts || []).length;
-        
-        // 3. Sem Auditoria
-        // Cálculo simples: Tudo que foi produzido - Tudo que foi auditado
-        // Nota: Isso é uma aproximação. Se a auditoria é por amostragem, isso mostra exatamente o "gap".
+        // Card 3: Auditoria
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
-        // Popula Card 3
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
@@ -213,7 +209,7 @@ MinhaArea.Metas = {
                 labels: labels,
                 datasets: [
                     {
-                        label: labelReal, // Nome dinâmico (Validação ou Assertividade)
+                        label: labelReal,
                         data: dataReal,
                         backgroundColor: colorReal,
                         borderRadius: 4,
