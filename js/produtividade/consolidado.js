@@ -2,10 +2,9 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Consolidado = {
     initialized: false,
-    chartInstance: null,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Engine V2 (KPIs Detalhados)...");
+        console.log("🚀 [NEXUS] Consolidado: Grid View Loaded...");
         this.renderizarFiltros(); 
         this.carregarDados();
         this.initialized = true;
@@ -72,15 +71,12 @@ Produtividade.Consolidado = {
 
         switch (periodo) {
             case 'anual': break;
-            
             case 's1': inicio = `${ano}-01-01`; fim = `${ano}-06-30`; break;
             case 's2': inicio = `${ano}-07-01`; fim = `${ano}-12-31`; break;
-
             case 't1': inicio = `${ano}-01-01`; fim = `${ano}-03-31`; break;
             case 't2': inicio = `${ano}-04-01`; fim = `${ano}-06-30`; break;
             case 't3': inicio = `${ano}-07-01`; fim = `${ano}-09-30`; break;
             case 't4': inicio = `${ano}-10-01`; fim = `${ano}-12-31`; break;
-
             default:
                 const mes = parseInt(periodo);
                 if (mes >= 1 && mes <= 12) {
@@ -94,15 +90,13 @@ Produtividade.Consolidado = {
         return { inicio, fim };
     },
 
-    // Função Auxiliar para contar Dias Úteis (Seg-Sex)
     countDiasUteis: function(inicioStr, fimStr) {
         let count = 0;
         let cur = new Date(inicioStr + 'T12:00:00'); 
         const end = new Date(fimStr + 'T12:00:00');
-        
         while (cur <= end) {
             const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++; // 0=Dom, 6=Sab
+            if (day !== 0 && day !== 6) count++;
             cur.setDate(cur.getDate() + 1);
         }
         return count > 0 ? count : 1;
@@ -114,101 +108,97 @@ Produtividade.Consolidado = {
     },
 
     carregarDados: async function() {
-        const container = document.getElementById('grafico-consolidado-container'); 
-        
+        const tbody = document.getElementById('cons-table-body');
         const { inicio, fim } = this.getDatasIntervalo();
         const diasUteisPeriodo = this.countDiasUteis(inicio, fim);
 
-        console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}. Dias úteis: ${diasUteisPeriodo}`);
+        // Atualiza Badge de Dias Úteis
+        const badgeDias = document.getElementById('cons-dias-uteis-badge');
+        if(badgeDias) badgeDias.innerText = diasUteisPeriodo;
 
-        if (container) container.innerHTML = '<div class="flex h-64 items-center justify-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-4 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando dados consolidados...</td></tr>';
 
         try {
             const { data, error } = await Sistema.supabase
-                .rpc('get_painel_produtividade', { 
-                    data_inicio: inicio, 
-                    data_fim: fim 
-                });
+                .rpc('get_painel_produtividade', { data_inicio: inicio, data_fim: fim });
 
             if (error) throw error;
             this.processarDados(data, diasUteisPeriodo);
 
         } catch (error) {
             console.error(error);
-            if (container) container.innerHTML = `<div class="text-center text-rose-500 py-10">Erro: ${error.message}</div>`;
+            if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="p-4 text-center text-rose-500">Erro: ${error.message}</td></tr>`;
         }
     },
 
     processarDados: function(data, diasUteisPeriodo) {
-        // Filtrar Auditoria/Gestão se necessário
+        // Filtrar e preparar dados
         const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
-
-        // --- Cálculos de KPIs ---
-        const totalAssistentes = assistentes.length;
         
-        // Somas Totais
+        // Variáveis de Acumulação
         let totalValidados = 0;
         let totalFifo = 0;
         let totalGradualTotal = 0;
         let totalGradualParcial = 0;
         let totalPerfilFc = 0;
-        
-        const ranking = assistentes.map(u => {
+
+        const dadosMapeados = assistentes.map(u => {
             const prod = Number(u.total_qty || 0);
-            
-            // Tenta obter os detalhes por tipo. Se a RPC não retornar, assume 0.
             const fifo = Number(u.total_fifo || u.fifo || 0);
             const gradTotal = Number(u.total_gradual_total || u.gradual_total || 0);
             const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
             const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
+            const metaDiaria = Number(u.meta_producao || 0);
+            const metaPeriodo = metaDiaria * diasUteisPeriodo;
 
+            // Acumula Totais
             totalValidados += prod;
             totalFifo += fifo;
             totalGradualTotal += gradTotal;
             totalGradualParcial += gradParcial;
             totalPerfilFc += perfilFc;
-            
+
+            // Cálculos Individuais
+            const mediaDiaria = prod / diasUteisPeriodo;
+            const atingimento = metaPeriodo > 0 ? (prod / metaPeriodo * 100) : 0;
+
             return {
-                nome: u.nome.split(' ')[0], 
+                nome: u.nome,
+                diasUteis: diasUteisPeriodo,
+                fifo,
+                gradTotal,
+                gradParcial,
+                perfilFc,
                 total: prod,
-                meta: Number(u.meta_producao) * diasUteisPeriodo, // Meta ajustada aos dias úteis do período
-                atingimento: (Number(u.meta_producao) * diasUteisPeriodo) > 0 
-                    ? (prod / (Number(u.meta_producao) * diasUteisPeriodo) * 100) 
-                    : 0
+                mediaDiaria,
+                atingimento
             };
         });
 
-        // Ordenar ranking para o gráfico
-        ranking.sort((a,b) => b.total - a.total);
+        // Ordenar por maior produção
+        dadosMapeados.sort((a,b) => b.total - a.total);
 
-        // --- Cálculos Médias ---
-        // 8. Total validação diária (Dias uteis) = Soma Total / dias uteis
-        const validacaoDiariaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
+        // --- Atualizar KPIs (Cards) ---
+        const totalAssistentes = assistentes.length;
+        const mediaDiaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
+        const mediaDiaInd = (totalAssistentes > 0 && diasUteisPeriodo > 0) ? (totalValidados / diasUteisPeriodo / totalAssistentes) : 0;
 
-        // 9. Média validação diária (Todas assistentes) = Soma Total / Total de Assistentes
-        // * Interpretação: Média total que cada assistente fez no PERÍODO
-        const mediaPeriodoPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
-
-        // 10. Média validação diária (Por Assistentes) = Soma Total / Total de dias Uteis / Total de Assistentes
-        const mediaDiariaPorAssistente = (totalAssistentes > 0 && diasUteisPeriodo > 0) 
-            ? (totalValidados / diasUteisPeriodo / totalAssistentes) 
-            : 0;
-
-        // --- Renderização no DOM ---
-        this.setVal('cons-total-assistentes', totalAssistentes);
-        this.setVal('cons-dias-uteis', diasUteisPeriodo);
-        this.setVal('cons-total-validados', totalValidados.toLocaleString('pt-BR'));
+        this.setVal('cons-kpi-total', totalValidados.toLocaleString('pt-BR'));
+        this.setVal('cons-kpi-assistentes', totalAssistentes);
+        this.setVal('cons-kpi-media-time', Math.round(mediaDiaTime).toLocaleString('pt-BR'));
+        this.setVal('cons-kpi-media-ind', mediaDiaInd.toFixed(1).replace('.', ','));
         
-        this.setVal('cons-media-dia-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
-        this.setVal('cons-media-periodo-ind', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
-        this.setVal('cons-media-dia-ind', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
+        this.setVal('cons-kpi-fifo', totalFifo.toLocaleString('pt-BR'));
+        this.setVal('cons-kpi-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
+        this.setVal('cons-kpi-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
+        this.setVal('cons-kpi-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
 
-        this.setVal('cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
-        this.setVal('cons-total-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
-        this.setVal('cons-total-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
-        this.setVal('cons-total-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
+        // Atualizar contador footer
+        const footerCount = document.getElementById('total-consolidado-registros');
+        if(footerCount) footerCount.innerText = totalAssistentes;
 
-        this.renderizarGrafico(ranking);
+        // --- Renderizar Tabela ---
+        this.renderizarTabela(dadosMapeados);
     },
 
     setVal: function(id, val) {
@@ -216,72 +206,49 @@ Produtividade.Consolidado = {
         if(el) el.innerText = val;
     },
 
-    renderizarGrafico: function(dados) {
-        const container = document.getElementById('grafico-consolidado-container');
-        if(container) {
-             container.innerHTML = '<canvas id="grafico-consolidado"></canvas>';
+    renderizarTabela: function(dados) {
+        const tbody = document.getElementById('cons-table-body');
+        if(!tbody) return;
+
+        tbody.innerHTML = '';
+
+        if(dados.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">Nenhum dado encontrado para o período selecionado.</td></tr>';
+            return;
         }
 
-        const ctx = document.getElementById('grafico-consolidado');
-        if (!ctx) return;
+        dados.forEach(d => {
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-blue-50/50 transition-colors group";
 
-        if (this.chartInstance) {
-            this.chartInstance.destroy();
-        }
+            // Cor do atingimento
+            let corAting = "text-slate-500";
+            if(d.atingimento >= 100) corAting = "text-emerald-600 font-bold";
+            else if(d.atingimento < 95) corAting = "text-rose-600 font-bold";
 
-        const labels = dados.map(d => d.nome);
-        const valores = dados.map(d => d.total);
-        const metas = dados.map(d => d.meta);
-        const cores = dados.map(d => d.atingimento >= 100 ? '#10b981' : '#f43f5e'); 
+            // Formatação de nome curto
+            const nomeCurto = d.nome.split(' ').slice(0, 2).join(' ');
 
-        this.chartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: 'Produção Real',
-                        data: valores,
-                        backgroundColor: cores,
-                        borderRadius: 4,
-                        order: 2
-                    },
-                    {
-                        label: 'Meta Esperada',
-                        data: metas,
-                        type: 'line',
-                        borderColor: '#94a3b8',
-                        borderWidth: 2,
-                        borderDash: [5, 5],
-                        pointRadius: 0,
-                        order: 1,
-                        tension: 0.4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: true, position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                let label = context.dataset.label || '';
-                                if (label) { label += ': '; }
-                                if (context.parsed.y !== null) {
-                                    label += context.parsed.y.toLocaleString('pt-BR');
-                                }
-                                return label;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: { beginAtZero: true, grid: { display: false } },
-                    x: { grid: { display: false } }
-                }
-            }
+            tr.innerHTML = `
+                <td class="px-3 py-3 border-r border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
+                            ${d.nome.charAt(0)}
+                        </div>
+                        <span class="font-bold text-slate-700 text-xs">${nomeCurto}</span>
+                    </div>
+                </td>
+                <td class="px-2 py-3 text-center text-slate-500 border-r border-slate-100 font-mono text-xs">${d.diasUteis}</td>
+                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.fifo.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.gradTotal.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.gradParcial.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.perfilFc.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center font-bold text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">${d.total.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-700 font-bold border-r border-slate-100 text-xs">${Math.round(d.mediaDiaria)}</td>
+                <td class="px-2 py-3 text-center ${corAting} text-xs">${d.atingimento.toFixed(1)}%</td>
+            `;
+
+            tbody.appendChild(tr);
         });
     }
 };
