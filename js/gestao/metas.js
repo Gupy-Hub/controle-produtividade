@@ -34,33 +34,71 @@ Gestao.Metas = {
         const tbody = document.getElementById('lista-metas');
         if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>';
 
-        // 1. Busca Usuários Ativos
-        const { data: usuarios, error: errUser } = await Sistema.supabase
-            .from('usuarios')
-            .select('*')
-            .eq('ativo', true)
-            .order('nome');
+        const mesStr = String(this.estado.mes).padStart(2, '0');
+        const ultimoDia = new Date(this.estado.ano, this.estado.mes, 0).getDate();
+        const dataInicio = `${this.estado.ano}-${mesStr}-01`;
+        const dataFim = `${this.estado.ano}-${mesStr}-${ultimoDia}`;
 
-        if (errUser) { console.error(errUser); return; }
+        try {
+            // 1. Busca TODOS os usuários (Removemos o filtro .eq('ativo', true))
+            const { data: usuarios, error: errUser } = await Sistema.supabase
+                .from('usuarios')
+                .select('*')
+                .order('nome');
+            if (errUser) throw errUser;
 
-        // 2. Busca Metas do Mês
-        const { data: metasExistentes, error: errMeta } = await Sistema.supabase
-            .from('metas')
-            .select('*')
-            .eq('mes', this.estado.mes)
-            .eq('ano', this.estado.ano);
+            // 2. Busca Metas já cadastradas para este mês
+            const { data: metasExistentes, error: errMeta } = await Sistema.supabase
+                .from('metas')
+                .select('*')
+                .eq('mes', this.estado.mes)
+                .eq('ano', this.estado.ano);
+            if (errMeta) throw errMeta;
 
-        // 3. Mesclagem (Usuário + Metas)
-        this.estado.lista = usuarios.map(u => {
-            const meta = metasExistentes?.find(m => m.usuario_id === u.id);
-            return {
-                ...u,
-                meta_prod: meta ? meta.meta_producao : null,
-                meta_assert: meta ? meta.meta_assertividade : null
-            };
-        });
+            // 3. Busca quem TRABALHOU no mês (Produção)
+            const { data: producaoMes } = await Sistema.supabase
+                .from('producao')
+                .select('usuario_id')
+                .gte('data_referencia', dataInicio)
+                .lte('data_referencia', dataFim);
+            
+            // 4. Busca quem AUDITOU no mês (Assertividade)
+            // (Caso a pessoa só tenha feito auditoria e não produção)
+            const { data: assertMes } = await Sistema.supabase
+                .from('assertividade')
+                .select('usuario_id')
+                .gte('data_referencia', dataInicio)
+                .lte('data_referencia', dataFim);
 
-        this.renderizar();
+            // Cria um conjunto (Set) de IDs ativos no mês
+            const idsAtivosNoMes = new Set();
+            producaoMes?.forEach(p => idsAtivosNoMes.add(p.usuario_id));
+            assertMes?.forEach(a => idsAtivosNoMes.add(a.usuario_id));
+
+            // 5. FILTRAGEM INTELIGENTE
+            this.estado.lista = usuarios.filter(u => {
+                const temMeta = metasExistentes?.some(m => m.usuario_id === u.id);
+                const trabalhouNoMes = idsAtivosNoMes.has(u.id);
+                
+                // REGRA DE OURO:
+                // Mostra se: É Ativo OU (Tem Meta Salva) OU (Trabalhou no Mês)
+                return u.ativo === true || temMeta || trabalhouNoMes;
+
+            }).map(u => {
+                const meta = metasExistentes?.find(m => m.usuario_id === u.id);
+                return {
+                    ...u,
+                    meta_prod: meta ? meta.meta_producao : null,
+                    meta_assert: meta ? meta.meta_assertividade : null
+                };
+            });
+
+            this.renderizar();
+
+        } catch (error) {
+            console.error(error);
+            if(tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-red-500 py-4">Erro ao carregar: ${error.message}</td></tr>`;
+        }
     },
 
     renderizar: function() {
@@ -74,14 +112,22 @@ Gestao.Metas = {
             const assertVal = item.meta_assert !== null ? item.meta_assert : '';
             
             const contratoClass = item.contrato === 'PJ' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200';
+            
+            // Visual para Inativos
+            const inativoClass = !item.ativo ? 'opacity-70 bg-gray-50' : '';
+            const nomeStyle = !item.ativo ? 'text-slate-500 line-through decoration-slate-300 decoration-2' : 'text-slate-700';
+            const badgeInativo = !item.ativo ? '<span class="ml-2 text-[9px] bg-slate-200 text-slate-500 px-1 rounded">INATIVO</span>' : '';
 
             html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-50 transition group">
+            <tr class="hover:bg-slate-50 border-b border-slate-50 transition group ${inativoClass}">
                 <td class="px-6 py-4 text-center">
                     <input type="checkbox" class="check-meta-item w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" value="${item.id}">
                 </td>
                 <td class="px-6 py-4 font-mono text-slate-400 text-xs">#${item.id}</td>
-                <td class="px-6 py-4 font-bold text-slate-700">${item.nome}</td>
+                <td class="px-6 py-4 font-bold ${nomeStyle}">
+                    ${item.nome}
+                    ${badgeInativo}
+                </td>
                 <td class="px-6 py-4">
                     <span class="px-2 py-1 rounded text-[10px] font-bold border ${contratoClass}">${item.contrato || 'ND'}</span>
                 </td>
@@ -103,13 +149,15 @@ Gestao.Metas = {
                 </td>
 
                 <td class="px-6 py-4 text-right">
-                    <button class="text-xs text-blue-500 hover:underline opacity-50 hover:opacity-100">Ver</button>
+                    <span class="text-xs text-slate-300 italic">
+                        ${!item.ativo ? 'Histórico' : 'Ativo'}
+                    </span>
                 </td>
             </tr>`;
         });
 
         tbody.innerHTML = html;
-        if(footer) footer.innerText = `${this.estado.lista.length} assistentes ativos`;
+        if(footer) footer.innerText = `${this.estado.lista.length} assistentes listados (Incluindo inativos com histórico)`;
     },
 
     toggleSelecionarTodos: function() {
@@ -129,7 +177,6 @@ Gestao.Metas = {
 
         checks.forEach(chk => {
             const uid = chk.value;
-            // Só sobrescreve se o input de massa tiver valor
             if (valProd) {
                 const inp = document.getElementById(`prod-${uid}`);
                 if(inp) inp.value = valProd;
@@ -145,9 +192,11 @@ Gestao.Metas = {
 
     salvarTodas: async function() {
         const btn = document.querySelector('button[onclick="Gestao.Metas.salvarTodas()"]');
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
-        btn.disabled = true;
+        const originalText = btn ? btn.innerHTML : 'Salvar';
+        if(btn) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+            btn.disabled = true;
+        }
 
         const upserts = [];
         
@@ -155,7 +204,7 @@ Gestao.Metas = {
             const valProd = document.getElementById(`prod-${item.id}`)?.value;
             const valAssert = document.getElementById(`assert-${item.id}`)?.value;
 
-            // Se tiver qualquer dado preenchido, salva
+            // Salva se tiver algum valor preenchido
             if ((valProd !== '' && valProd !== null) || (valAssert !== '' && valAssert !== null)) {
                 upserts.push({
                     usuario_id: item.id,
@@ -163,30 +212,31 @@ Gestao.Metas = {
                     mes: this.estado.mes,
                     ano: this.estado.ano,
                     meta_producao: valProd ? parseInt(valProd) : 0,
-                    meta_assertividade: valAssert ? parseFloat(valAssert) : 0
+                    meta_assertividade: valAssert ? parseFloat(valAssert.replace(',', '.')) : 0
                 });
             }
         });
 
         if (upserts.length === 0) {
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+            if(btn) { btn.innerHTML = originalText; btn.disabled = false; }
             return alert("Nada para salvar.");
         }
 
-        const { error } = await Sistema.supabase
-            .from('metas')
-            .upsert(upserts, { onConflict: 'usuario_id, mes, ano' });
+        try {
+            const { error } = await Sistema.supabase
+                .from('metas')
+                .upsert(upserts, { onConflict: 'usuario_id, mes, ano' });
 
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+            if (error) throw error;
 
-        if (error) {
+            alert("✅ Metas salvas com sucesso!");
+            this.carregar(); 
+
+        } catch (error) {
             console.error(error);
             alert("Erro ao salvar: " + error.message);
-        } else {
-            alert("Metas salvas com sucesso!");
-            this.carregar(); 
+        } finally {
+            if(btn) { btn.innerHTML = originalText; btn.disabled = false; }
         }
     }
 };
