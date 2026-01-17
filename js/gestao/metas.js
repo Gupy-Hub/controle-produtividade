@@ -34,13 +34,8 @@ Gestao.Metas = {
         const tbody = document.getElementById('lista-metas');
         if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>';
 
-        const mesStr = String(this.estado.mes).padStart(2, '0');
-        const ultimoDia = new Date(this.estado.ano, this.estado.mes, 0).getDate();
-        const dataInicio = `${this.estado.ano}-${mesStr}-01`;
-        const dataFim = `${this.estado.ano}-${mesStr}-${ultimoDia}`;
-
         try {
-            // 1. Busca TODOS os usuários (Removemos o filtro .eq('ativo', true))
+            // 1. Busca TODOS os usuários (Sem filtros)
             const { data: usuarios, error: errUser } = await Sistema.supabase
                 .from('usuarios')
                 .select('*')
@@ -55,42 +50,24 @@ Gestao.Metas = {
                 .eq('ano', this.estado.ano);
             if (errMeta) throw errMeta;
 
-            // 3. Busca quem TRABALHOU no mês (Produção)
-            const { data: producaoMes } = await Sistema.supabase
-                .from('producao')
-                .select('usuario_id')
-                .gte('data_referencia', dataInicio)
-                .lte('data_referencia', dataFim);
-            
-            // 4. Busca quem AUDITOU no mês (Assertividade)
-            // (Caso a pessoa só tenha feito auditoria e não produção)
-            const { data: assertMes } = await Sistema.supabase
-                .from('assertividade')
-                .select('usuario_id')
-                .gte('data_referencia', dataInicio)
-                .lte('data_referencia', dataFim);
-
-            // Cria um conjunto (Set) de IDs ativos no mês
-            const idsAtivosNoMes = new Set();
-            producaoMes?.forEach(p => idsAtivosNoMes.add(p.usuario_id));
-            assertMes?.forEach(a => idsAtivosNoMes.add(a.usuario_id));
-
-            // 5. FILTRAGEM INTELIGENTE
-            this.estado.lista = usuarios.filter(u => {
-                const temMeta = metasExistentes?.some(m => m.usuario_id === u.id);
-                const trabalhouNoMes = idsAtivosNoMes.has(u.id);
-                
-                // REGRA DE OURO:
-                // Mostra se: É Ativo OU (Tem Meta Salva) OU (Trabalhou no Mês)
-                return u.ativo === true || temMeta || trabalhouNoMes;
-
-            }).map(u => {
+            // 3. Monta a lista completa
+            this.estado.lista = usuarios.map(u => {
                 const meta = metasExistentes?.find(m => m.usuario_id === u.id);
                 return {
                     ...u,
                     meta_prod: meta ? meta.meta_producao : null,
                     meta_assert: meta ? meta.meta_assertividade : null
                 };
+            });
+
+            // 4. Ordenação: Ativos primeiro, depois Inativos (e alfabética dentro de cada grupo)
+            this.estado.lista.sort((a, b) => {
+                // Se o status for igual, ordena por nome
+                if (a.ativo === b.ativo) {
+                    return (a.nome || '').localeCompare(b.nome || '');
+                }
+                // Ativos (true) vêm antes de Inativos (false)
+                return a.ativo ? -1 : 1;
             });
 
             this.renderizar();
@@ -113,10 +90,10 @@ Gestao.Metas = {
             
             const contratoClass = item.contrato === 'PJ' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200';
             
-            // Visual para Inativos
-            const inativoClass = !item.ativo ? 'opacity-70 bg-gray-50' : '';
-            const nomeStyle = !item.ativo ? 'text-slate-500 line-through decoration-slate-300 decoration-2' : 'text-slate-700';
-            const badgeInativo = !item.ativo ? '<span class="ml-2 text-[9px] bg-slate-200 text-slate-500 px-1 rounded">INATIVO</span>' : '';
+            // Visual diferenciado para Inativos (mas editável)
+            const inativoClass = !item.ativo ? 'bg-gray-50' : '';
+            const nomeStyle = !item.ativo ? 'text-slate-500' : 'text-slate-700';
+            const badgeInativo = !item.ativo ? '<span class="ml-2 text-[9px] bg-slate-200 text-slate-500 px-1 rounded font-normal uppercase">Inativo</span>' : '';
 
             html += `
             <tr class="hover:bg-slate-50 border-b border-slate-50 transition group ${inativoClass}">
@@ -150,14 +127,14 @@ Gestao.Metas = {
 
                 <td class="px-6 py-4 text-right">
                     <span class="text-xs text-slate-300 italic">
-                        ${!item.ativo ? 'Histórico' : 'Ativo'}
+                        ${!item.ativo ? 'Inativo' : 'Ativo'}
                     </span>
                 </td>
             </tr>`;
         });
 
         tbody.innerHTML = html;
-        if(footer) footer.innerText = `${this.estado.lista.length} assistentes listados (Incluindo inativos com histórico)`;
+        if(footer) footer.innerText = `${this.estado.lista.length} assistentes (Total cadastrado)`;
     },
 
     toggleSelecionarTodos: function() {
@@ -187,7 +164,7 @@ Gestao.Metas = {
             }
         });
         
-        alert(`Aplicado para ${checks.length} assistentes! Não esqueça de Salvar.`);
+        // alert(`Aplicado para ${checks.length} assistentes! Não esqueça de Salvar.`);
     },
 
     salvarTodas: async function() {
@@ -204,8 +181,9 @@ Gestao.Metas = {
             const valProd = document.getElementById(`prod-${item.id}`)?.value;
             const valAssert = document.getElementById(`assert-${item.id}`)?.value;
 
-            // Salva se tiver algum valor preenchido
-            if ((valProd !== '' && valProd !== null) || (valAssert !== '' && valAssert !== null)) {
+            // Salva se tiver qualquer dado preenchido (ou se já tinha meta e o usuário limpou/zerou)
+            // Lógica: se o campo existe na tela, pegamos o valor.
+            if (document.getElementById(`prod-${item.id}`)) {
                 upserts.push({
                     usuario_id: item.id,
                     usuario_nome: item.nome,
