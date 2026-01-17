@@ -1,9 +1,15 @@
+/**
+ * MÓDULO: Produtividade.Consolidado
+ * FUNÇÃO: Visão gerencial agrupada por período (Dinâmica)
+ * VERSÃO: 2.1 - Filtros de Semestre/Trimestre
+ */
 Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
     baseManualHC: 0, 
     overridesHC: {}, 
     dadosCalculados: null, 
+    monthToColMap: null, // Novo mapa para alinhar mês real -> coluna visual
 
     init: async function() { 
         console.log("🔧 Consolidado: Iniciando...");
@@ -39,12 +45,24 @@ Produtividade.Consolidado = {
 
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
-        if (isNaN(val) || val <= 0) { delete this.overridesHC[colIndex]; this.renderizar(this.dadosCalculados); return; }
+        if (isNaN(val) || val <= 0) { 
+            delete this.overridesHC[colIndex]; 
+            this.renderizar(this.dadosCalculados); 
+            return; 
+        }
+        
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
+        
         await new Promise(r => setTimeout(r, 50));
         const motivo = prompt(`Motivo da alteração para ${val} (Obrigatório):`);
-        if (!motivo || motivo.trim() === "") { alert("Justificativa obrigatória."); this.renderizar(this.dadosCalculados); return; }
+        
+        if (!motivo || motivo.trim() === "") { 
+            alert("Justificativa obrigatória."); 
+            this.renderizar(this.dadosCalculados); 
+            return; 
+        }
+        
         this.overridesHC[colIndex] = { valor: val, motivo: motivo.trim() };
         if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
     },
@@ -89,6 +107,9 @@ Produtividade.Consolidado = {
             return; 
         }
         
+        // Limpa overrides antigos ao carregar novo contexto (evita dados fantasmas)
+        this.overridesHC = {}; 
+        
         if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados massivos...</td></tr>';
 
         try {
@@ -118,13 +139,15 @@ Produtividade.Consolidado = {
         let cols = []; 
         let datesMap = {}; 
         
-        // Extrai componentes da data inicial para lógica de mês/ano
+        // Reset do mapa
+        this.monthToColMap = {};
+
         const dIni = new Date(dataInicio + 'T12:00:00');
         const currentYear = dIni.getFullYear();
         const currentMonth = dIni.getMonth() + 1;
 
+        // --- LÓGICA DE GERAÇÃO DE COLUNAS ---
         if (t === 'dia' || t === 'dia-detalhe') { 
-            // Se for dia ou semana, lista cada dia do intervalo
             let curr = new Date(dataInicio + 'T12:00:00');
             const end = new Date(dataFim + 'T12:00:00');
             let idx = 1;
@@ -147,12 +170,24 @@ Produtividade.Consolidado = {
             }); 
         } 
         else if (t === 'ano') { 
-            cols = mesesNomes; 
-            for(let i=0; i<12; i++) { 
-                const m = i + 1; 
-                datesMap[i+1] = { 
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, 
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}` 
+            // Agora o 'ano' respeita o range exato de datas (ex: só Jan-Jun para S1)
+            const dFimObj = new Date(dataFim + 'T12:00:00');
+            const startMonthIdx = dIni.getMonth(); // 0-11
+            const endMonthIdx = dFimObj.getMonth(); // 0-11
+            
+            for(let i = startMonthIdx; i <= endMonthIdx; i++) { 
+                const mName = mesesNomes[i];
+                cols.push(mName);
+                
+                const realMonth = i + 1; // 1-12
+                const displayIndex = cols.length; // 1-based (Coluna atual)
+                
+                // Mapeia o mês real para a coluna visual correta
+                this.monthToColMap[realMonth] = displayIndex;
+                
+                datesMap[displayIndex] = { 
+                    ini: `${currentYear}-${String(realMonth).padStart(2,'0')}-01`, 
+                    fim: `${currentYear}-${String(realMonth).padStart(2,'0')}-${new Date(currentYear, realMonth, 0).getDate()}` 
                 }; 
             } 
         }
@@ -162,26 +197,33 @@ Produtividade.Consolidado = {
         for(let i=1; i<=numCols; i++) st[i] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
         st[99] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
 
+        // --- POPULAÇÃO DOS DADOS ---
         if(rawData) {
             rawData.forEach(r => {
                 const sys = Number(r.quantidade) || 0; 
                 let b = -1; 
 
                 if (t === 'dia' || t === 'dia-detalhe') { 
-                    // Busca qual coluna corresponde à data
+                    // Busca por data exata
                     for(let k=1; k<=numCols; k++) {
                         if (datesMap[k].ini === r.data_referencia) { b = k; break; }
                     }
                 } 
                 else if (t === 'mes') { 
+                    // Busca por intervalo da semana
                     for(let k=1; k<=numCols; k++) { 
                         if(r.data_referencia >= datesMap[k].ini && r.data_referencia <= datesMap[k].fim) { b = k; break; } 
                     } 
                 } 
                 else if (t === 'ano') { 
-                    b = parseInt(r.data_referencia.split('-')[1]); 
+                    // Busca pelo mapa Mês -> Coluna
+                    const mesData = parseInt(r.data_referencia.split('-')[1]); 
+                    if (this.monthToColMap && this.monthToColMap[mesData] !== undefined) {
+                        b = this.monthToColMap[mesData];
+                    }
                 }
 
+                // Se encontrou a coluna válida (b)
                 if(b >= 1 && b <= numCols) {
                     const populate = (k) => { 
                         const x = st[k]; 
