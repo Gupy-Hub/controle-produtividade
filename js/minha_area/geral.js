@@ -3,7 +3,6 @@ MinhaArea.Geral = {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
         
-        // Validação de Usuário Selecionado
         if (!uid) {
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p></td></tr>';
             this.zerarKPIs();
@@ -16,7 +15,7 @@ MinhaArea.Geral = {
         try {
             // 1. Buscas Otimizadas
             const [prodRes, assertRes, metaRes] = await Promise.all([
-                // Produção: Trazemos 'justificativa' (singular) que é o padrão do Abono.
+                // Produção: Seleciona TUDO (*), trazendo tanto 'justificativa' quanto 'justificativas'
                 Sistema.supabase
                     .from('producao')
                     .select('*') 
@@ -25,8 +24,7 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim)
                     .limit(2000), 
                 
-                // Assertividade: TRAVA DE SEGURANÇA.
-                // Não trazemos 'obs', 'observacao' ou 'apontamentos'. Apenas dados numéricos.
+                // Assertividade: Apenas numérico
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -50,14 +48,12 @@ MinhaArea.Geral = {
             if (prodRes.error) throw prodRes.error;
             if (assertRes.error) throw assertRes.error;
             
-            // 2. Define Metas
             const metaProducaoPadrao = metaRes.data?.meta || 650;
             const metaAssertPadrao = metaRes.data?.meta_assertividade || 98.0;
 
             // 3. Unificação dos Dados
             const mapaDados = new Map();
 
-            // Helper para data (YYYY-MM-DD)
             const getDia = (dataFull) => {
                 if(!dataFull) return null;
                 const dataStr = dataFull.split('T')[0];
@@ -71,7 +67,7 @@ MinhaArea.Geral = {
                 return mapaDados.get(dataStr);
             };
 
-            // Processa Produção (Foco Estrito no Abono)
+            // Processa Produção (CORREÇÃO AQUI)
             (prodRes.data || []).forEach(p => {
                 const dia = getDia(p.data_referencia);
                 if(dia) {
@@ -81,27 +77,34 @@ MinhaArea.Geral = {
                     dia.prod.gp += Number(p.gradual_parcial || 0);
                     
                     const fator = Number(p.fator);
-                    if (!isNaN(fator) && fator !== 1) {
+                    // Detecta se é Abono
+                    const ehAbono = (!isNaN(fator) && fator !== 1);
+
+                    if (ehAbono) {
                         dia.prod.fator = fator;
                     }
 
-                    // --- TRAVA DE SEGURANÇA NA JUSTIFICATIVA ---
-                    // Ignora p.justificativas (plural) que pode conter lixo de auditoria.
-                    // Foca apenas em p.justificativa (singular) que vem da tela de Validação/Abono.
-                    const justifAbono = (p.justificativa || '').trim();
+                    // --- LÓGICA DE JUSTIFICATIVA UNIFICADA ---
+                    // 1. Tenta singular (Padrão Novo)
+                    let texto = (p.justificativa || '').trim();
                     
-                    if (justifAbono !== '') {
-                        const ehAbono = (!isNaN(fator) && fator !== 1);
-                        // Se for um registro de abono explícito, ele sobrescreve qualquer outro.
-                        // Se não tivermos nada ainda, pegamos a primeira justificativa que aparecer.
+                    // 2. Se vazio, tenta plural (Padrão RPC/Legado)
+                    if (texto === '') {
+                        texto = (p.justificativas || '').trim();
+                    }
+
+                    // 3. Aplica apenas se tiver conteúdo
+                    if (texto !== '') {
+                        // Se for abono, sobrescreve qualquer coisa anterior. 
+                        // Se não for, só preenche se estiver vazio.
                         if (dia.prod.justificativa === '' || ehAbono) {
-                            dia.prod.justificativa = justifAbono;
+                            dia.prod.justificativa = texto;
                         }
                     }
                 }
             });
 
-            // Processa Assertividade (Apenas Cálculo)
+            // Processa Assertividade
             (assertRes.data || []).forEach(a => {
                 const dia = getDia(a.data_auditoria);
                 if(dia) {
@@ -111,7 +114,6 @@ MinhaArea.Geral = {
                         dia.assert.somaNotas += nota;
                         dia.assert.qtdAuditorias++;
                     }
-                    // NOTA: Nenhuma string de obs é lida aqui. Conflito impossível.
                 }
             });
 
@@ -165,15 +167,16 @@ MinhaArea.Geral = {
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
 
-                // --- EXIBIÇÃO DA JUSTIFICATIVA (SOMENTE ABONO) ---
+                // --- EXIBIÇÃO DA JUSTIFICATIVA ---
                 const temJustificativa = item.prod.justificativa && item.prod.justificativa.length > 0;
                 const textoJustificativa = item.prod.justificativa || '-';
                 
+                // Destaque visual
                 const classJustificativa = temJustificativa 
                     ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" 
                     : "text-slate-200 text-center block";
 
-                const tooltipJustificativa = temJustificativa ? `Motivo do Abono: ${item.prod.justificativa}` : "";
+                const tooltipJustificativa = temJustificativa ? `Obs: ${item.prod.justificativa}` : "";
 
                 // Data
                 const dateObj = new Date(item.data + 'T12:00:00');
