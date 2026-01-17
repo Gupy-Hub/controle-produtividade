@@ -178,7 +178,8 @@ Produtividade.Consolidado = {
 
         this.renderizarTabela(dadosMapeados, {
             totalValidados, totalFifo, totalGradualTotal, totalGradualParcial, totalPerfilFc,
-            validacaoDiariaTime, mediaDiariaPorAssistente
+            totalAssistentes, diasUteisPeriodo,
+            validacaoDiariaTime, mediaDiariaPorAssistente, mediaPeriodoPorAssistente
         });
     },
 
@@ -218,19 +219,30 @@ Produtividade.Consolidado = {
             tbody.appendChild(tr);
         });
 
-        // Renderiza Footer com os Totais Solicitados "No Grid"
+        // Renderiza Footer com os 10 Indicadores Solicitados
+        // Dividido em 2 linhas para acomodar todas as informações de forma limpa
         if(tfoot) {
             tfoot.innerHTML = `
-                <tr class="bg-slate-100">
-                    <td class="px-3 py-3 text-right text-slate-500 uppercase">TOTAIS:</td>
-                    <td class="px-2 py-3 text-center text-slate-400">-</td>
-                    <td class="px-2 py-3 text-center text-slate-800">${totais.totalFifo.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-3 text-center text-slate-800">${totais.totalGradualTotal.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-3 text-center text-slate-800">${totais.totalGradualParcial.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-3 text-center text-slate-800">${totais.totalPerfilFc.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-3 text-center text-blue-800 bg-blue-100/50 border-x border-blue-200">${totais.totalValidados.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-3 text-center text-slate-800 bg-slate-200/50" title="Média Diária por Assistente">${totais.mediaDiariaPorAssistente.toFixed(1).replace('.',',')}</td>
-                    <td class="px-2 py-3 text-center text-slate-400">-</td>
+                <tr class="bg-slate-50 border-t border-slate-300">
+                    <td class="px-3 py-2 text-right text-slate-500 uppercase text-[10px]">SOMAS:</td>
+                    <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
+                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalFifo.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalGradualTotal.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalGradualParcial.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-700 font-bold">${totais.totalPerfilFc.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-blue-800 font-bold bg-blue-100/30 border-x border-blue-200 text-sm">${totais.totalValidados.toLocaleString('pt-BR')}</td>
+                    <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
+                    <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
+                </tr>
+                <tr class="bg-slate-100 border-t border-slate-200">
+                    <td class="px-3 py-2 text-left text-slate-600 text-[10px] uppercase font-bold pl-4">
+                        <i class="fas fa-users mr-1"></i> ${totais.totalAssistentes} Assistentes &nbsp;|&nbsp; 
+                        <i class="fas fa-calendar-day mr-1"></i> ${totais.diasUteisPeriodo} Dias Úteis
+                    </td>
+                    <td colspan="5" class="px-2 py-2 text-right text-slate-500 text-[10px] uppercase font-bold">MÉDIAS DO PERÍODO:</td>
+                    <td class="px-2 py-2 text-center text-blue-600 font-bold text-[10px] border-l border-slate-200" title="Validação Diária (Time)">${Math.round(totais.validacaoDiariaTime).toLocaleString('pt-BR')}/dia</td>
+                    <td class="px-2 py-2 text-center text-slate-700 font-bold text-[10px] bg-slate-200/50" title="Média Diária por Assistente">${totais.mediaDiariaPorAssistente.toFixed(1).replace('.',',')}</td>
+                    <td class="px-2 py-2 text-center text-[10px] text-purple-600 font-bold" title="Média Total por Assistente">Avg: ${Math.round(totais.mediaPeriodoPorAssistente)}</td>
                 </tr>
             `;
         }
