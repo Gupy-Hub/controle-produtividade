@@ -47,7 +47,10 @@ MinhaArea.Metas = {
                 
                 let valStr = String(a.porcentagem || '0').replace('%','').replace(',','.');
                 let val = parseFloat(valStr);
-                if (!isNaN(val)) mapAssert.get(dataKey).push(val);
+                
+                if (!isNaN(val)) {
+                    mapAssert.get(dataKey).push(val);
+                }
             });
 
             // 4. Construção dos Arrays do Gráfico
@@ -112,7 +115,6 @@ MinhaArea.Metas = {
                     } else {
                         dataAssertReal.push(null);
                     }
-                    // Garante que a meta seja número
                     dataAssertMeta.push(Number(metaConfig.assert));
                 }
             }
@@ -180,6 +182,7 @@ MinhaArea.Metas = {
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
 
+        // Validados
         for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
@@ -196,6 +199,7 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
+        // Auditoria & Resultados
         asserts.forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
             if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
@@ -208,16 +212,21 @@ MinhaArea.Metas = {
         const totalAuditados = asserts.length; 
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
-        // UI Updates
+        // --- UPDATE UI (FORMATADO COM 2 CASAS DECIMAIS) ---
+        
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
-        this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2})+'%');
+        // ASSERTIVIDADE: Formatação rigorosa de 2 casas decimais
+        this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
+        
         const metaAssertRef = 98.0; 
-        this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
+        this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
+        
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
+        // AUDITORIA
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
@@ -260,7 +269,7 @@ MinhaArea.Metas = {
                         borderDash: [5, 5],
                         tension: 0.1,
                         order: 1,
-                        spanGaps: true // CORREÇÃO: Permite linha contínua mesmo com gaps
+                        spanGaps: true
                     }
                 ]
             },
