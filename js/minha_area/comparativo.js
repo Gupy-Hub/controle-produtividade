@@ -1,8 +1,8 @@
 MinhaArea.Comparativo = {
     chartOfensores: null,
     dadosNoksCache: [],
-    visaoAtual: 'doc', // 'doc', 'empresa', 'ndf'
-    mostrarTodos: false, // Estado do toggle
+    visaoAtual: 'doc', 
+    mostrarTodos: false,
 
     carregar: async function() {
         console.log("🚀 UX Dashboard: Iniciando...");
@@ -16,14 +16,12 @@ MinhaArea.Comparativo = {
         const containerNdf = document.getElementById('total-ndf-detalhe');
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
-        // Reset
         if(btnLimpar) btnLimpar.classList.add('hidden');
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
-            // Filtro de NOKs
             this.dadosNoksCache = dados.filter(d => {
                 const qtd = Number(d.qtd_nok || 0);
                 const isNokStatus = (d.status || '').toUpperCase() === 'NOK';
@@ -50,13 +48,29 @@ MinhaArea.Comparativo = {
         }
     },
 
-    // Nova função para alternar visualização
+    // --- FILTROS E INTERAÇÕES ---
+
+    filtrarPorBusca: function(texto) {
+        if (!texto) {
+            this.limparFiltro(true);
+            return;
+        }
+        
+        const termo = texto.toLowerCase();
+        const filtrados = this.dadosNoksCache.filter(d => 
+            (d.doc_name || '').toLowerCase().includes(termo) ||
+            (this.getDocType(d) || '').toLowerCase().includes(termo) ||
+            (d.observacao || d.obs || '').toLowerCase().includes(termo)
+        );
+
+        const container = document.getElementById('feed-erros-container');
+        this.renderizarFeed(filtrados, container);
+    },
+
     toggleMostrarTodos: function() {
         this.mostrarTodos = !this.mostrarTodos;
-        
         const btn = document.getElementById('btn-ver-todos');
         if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        
         this.atualizarGrafico();
     },
 
@@ -79,6 +93,25 @@ MinhaArea.Comparativo = {
         this.atualizarGrafico();
         this.atualizarFeedPorVisao();
     },
+
+    filtrarPorSelecao: function(valor) {
+        let filtrados = [];
+        if (this.visaoAtual === 'empresa') {
+            filtrados = this.dadosNoksCache.filter(d => {
+                const emp = d.empresa || d.empresa_nome || 'Desconhecida';
+                return emp.includes(valor.replace('...', ''));
+            });
+        } else {
+            filtrados = this.dadosNoksCache.filter(d => {
+                if (valor === 'NDF (Geral)') return this.isNDF(d);
+                const tipo = this.getDocType(d);
+                return tipo.includes(valor.replace('...', ''));
+            });
+        }
+        this.aplicarFiltroVisual(filtrados, valor);
+    },
+
+    // --- LÓGICA DE DADOS ---
 
     atualizarGrafico: function() {
         const agrupamento = {};
@@ -104,16 +137,11 @@ MinhaArea.Comparativo = {
             agrupamento[chave]++;
         });
 
-        // Atualiza total com base no filtro
         const containerTotal = document.getElementById('total-nok-detalhe');
         if(containerTotal) containerTotal.innerText = dadosFiltrados.length;
 
-        // Ordenação e Slice (Top 5 vs Todos)
         let dadosGrafico = Object.entries(agrupamento).sort((a, b) => b[1] - a[1]);
-        
-        if (!this.mostrarTodos) {
-            dadosGrafico = dadosGrafico.slice(0, 5);
-        }
+        if (!this.mostrarTodos) dadosGrafico = dadosGrafico.slice(0, 5);
 
         this.renderizarGraficoOfensores(dadosGrafico);
     },
@@ -127,43 +155,12 @@ MinhaArea.Comparativo = {
         this.renderizarFeed(lista, container);
     },
 
-    filtrarPorSelecao: function(valor) {
-        let filtrados = [];
-        if (this.visaoAtual === 'empresa') {
-            filtrados = this.dadosNoksCache.filter(d => {
-                const emp = d.empresa || d.empresa_nome || 'Desconhecida';
-                return emp.includes(valor.replace('...', ''));
-            });
-        } else {
-            filtrados = this.dadosNoksCache.filter(d => {
-                if (valor === 'NDF (Geral)') return this.isNDF(d);
-                const tipo = this.getDocType(d);
-                return tipo.includes(valor.replace('...', ''));
-            });
-        }
-        this.aplicarFiltroVisual(filtrados, valor);
-    },
-
-    aplicarFiltroVisual: function(lista, nomeFiltro) {
-        const container = document.getElementById('feed-erros-container');
-        this.renderizarFeed(lista, container);
-        const btn = document.getElementById('btn-limpar-filtro');
-        if(btn) {
-            btn.classList.remove('hidden');
-            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${nomeFiltro}`;
-        }
-    },
-
-    limparFiltro: function(renderizar = true) {
-        const btn = document.getElementById('btn-limpar-filtro');
-        if(btn) btn.classList.add('hidden');
-        if (renderizar) this.atualizarFeedPorVisao();
-    },
+    // --- RENDERIZAÇÃO ---
 
     renderizarFeed: function(listaNok, container) {
         if(!container) return;
         if (listaNok.length === 0) {
-            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado nesta visão.</div>';
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado.</div>';
             return;
         }
         listaNok.sort((a, b) => new Date(b.data_auditoria) - new Date(a.data_auditoria));
@@ -196,16 +193,6 @@ MinhaArea.Comparativo = {
             </div>`;
         });
         container.innerHTML = html;
-    },
-
-    getDocType: function(d) {
-        // Tenta pegar a coluna DOCUMENTO original, ou fallback para doc_name
-        return d.nome_documento || d.documento || d.doc_name || 'Geral';
-    },
-
-    isNDF: function(d) {
-        const tipo = this.getDocType(d).toUpperCase();
-        return tipo.startsWith('DOC_NDF') || tipo.includes('NDF');
     },
 
     renderizarGraficoOfensores: function(dados) {
@@ -252,8 +239,24 @@ MinhaArea.Comparativo = {
         });
     },
 
+    aplicarFiltroVisual: function(lista, nomeFiltro) {
+        const container = document.getElementById('feed-erros-container');
+        this.renderizarFeed(lista, container);
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) {
+            btn.classList.remove('hidden');
+            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${nomeFiltro}`;
+        }
+    },
+
+    limparFiltro: function(renderizar = true) {
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) btn.classList.add('hidden');
+        if (renderizar) this.atualizarFeedPorVisao();
+    },
+
     renderizarVazio: function(container) {
-        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Parabéns!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado neste período.</p></div>';
+        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Tudo Certo!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado.</p></div>';
     },
 
     renderizarGraficoVazio: function() {
@@ -261,11 +264,21 @@ MinhaArea.Comparativo = {
         if (ctx && this.chartOfensores) this.chartOfensores.destroy();
     },
 
+    getDocType: function(d) {
+        return d.nome_documento || d.documento || d.doc_name || 'Geral';
+    },
+
+    isNDF: function(d) {
+        const tipo = this.getDocType(d).toUpperCase();
+        return tipo.startsWith('DOC_NDF') || tipo.includes('NDF');
+    },
+
     buscarAuditoriasPaginadas: async function(uid, inicio, fim) {
         let todos = [];
         let page = 0;
         let continuar = true;
         while(continuar) {
+            // Buscando nome_documento (mapeado de DOCUMENTO)
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
