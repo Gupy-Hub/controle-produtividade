@@ -10,30 +10,30 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Processando dados...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados...</span></div></td></tr>';
 
         try {
-            // 1. Buscas Otimizadas (Com Filtros e Limites Aumentados)
+            // 1. Buscas Otimizadas
             const [prodRes, assertRes, metaRes] = await Promise.all([
-                // Produção
+                // Produção (Garante trazer a coluna justificativa)
                 Sistema.supabase
                     .from('producao')
-                    .select('*')
+                    .select('*') 
                     .eq('usuario_id', uid)
                     .gte('data_referencia', inicio)
                     .lte('data_referencia', fim)
-                    .limit(2000), // Aumentado limite de segurança
+                    .limit(2000), 
                 
-                // Assertividade (APENAS O QUE IMPORTA)
+                // Assertividade
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
                     .eq('usuario_id', uid)
                     .gte('data_auditoria', inicio)
                     .lte('data_auditoria', fim)
-                    .not('porcentagem', 'is', null) // Ignora nulos no banco
-                    .neq('porcentagem', '')         // Ignora vazios no banco
-                    .limit(5000), // Garante que trará todas as auditorias do mês
+                    .not('porcentagem', 'is', null)
+                    .neq('porcentagem', '')
+                    .limit(5000), 
                 
                 // Metas
                 Sistema.supabase
@@ -61,23 +61,38 @@ MinhaArea.Geral = {
                 if (!mapaDados.has(dataStr)) {
                     mapaDados.set(dataStr, {
                         data: dataStr,
-                        prod: { qtd: 0, fifo: 0, gt: 0, gp: 0, fator: 0, justificativa: '' },
+                        prod: { qtd: 0, fifo: 0, gt: 0, gp: 0, fator: 1, justificativa: '' }, // Fator padrão 1
                         assert: { somaNotas: 0, qtdAuditorias: 0 } 
                     });
                 }
                 return mapaDados.get(dataStr);
             };
 
-            // Processa Produção
+            // Processa Produção (COM CORREÇÃO DE SOBRESCRITA)
             (prodRes.data || []).forEach(p => {
                 const dia = getDia(p.data_referencia);
                 if(dia) {
-                    dia.prod.qtd = Number(p.quantidade || 0);
-                    dia.prod.fifo = Number(p.fifo || 0);
-                    dia.prod.gt = Number(p.gradual_total || 0);
-                    dia.prod.gp = Number(p.gradual_parcial || 0);
-                    dia.prod.fator = Number(p.fator);
-                    dia.prod.justificativa = p.justificativa;
+                    // Soma valores caso haja múltiplas linhas
+                    dia.prod.qtd += Number(p.quantidade || 0);
+                    dia.prod.fifo += Number(p.fifo || 0);
+                    dia.prod.gt += Number(p.gradual_total || 0);
+                    dia.prod.gp += Number(p.gradual_parcial || 0);
+                    
+                    // Prioriza o Fator diferente de 1 (se houver abono)
+                    const fator = Number(p.fator);
+                    if (!isNaN(fator) && fator !== 1) {
+                        dia.prod.fator = fator;
+                    }
+
+                    // Prioriza a Justificativa não vazia
+                    // (Isso evita que uma linha vazia apague a justificativa da outra)
+                    if (p.justificativa && p.justificativa.trim() !== '') {
+                        dia.prod.justificativa = p.justificativa;
+                    }
+                    // Tenta coluna plural se existir (fallback)
+                    else if (p.justificativas && p.justificativas.trim() !== '') {
+                        dia.prod.justificativa = p.justificativas;
+                    }
                 }
             });
 
@@ -85,11 +100,12 @@ MinhaArea.Geral = {
             (assertRes.data || []).forEach(a => {
                 const dia = getDia(a.data_auditoria);
                 if(dia) {
-                    // Como já filtramos no banco, a validação aqui é apenas preventiva
                     const valRaw = a.porcentagem;
-                    const nota = this.parseValorPorcentagem(valRaw);
-                    dia.assert.somaNotas += nota;
-                    dia.assert.qtdAuditorias++;
+                    if (valRaw !== null && valRaw !== undefined && String(valRaw).trim() !== '') {
+                        const nota = this.parseValorPorcentagem(valRaw);
+                        dia.assert.somaNotas += nota;
+                        dia.assert.qtdAuditorias++;
+                    }
                 }
             });
 
@@ -107,7 +123,7 @@ MinhaArea.Geral = {
 
             lista.forEach(item => {
                 // --- Produção ---
-                const fator = isNaN(item.prod.fator) ? 0 : item.prod.fator;
+                const fator = item.prod.fator;
                 const metaDia = Math.round(metaProducaoPadrao * fator);
                 const pctProd = metaDia > 0 ? (item.prod.qtd / metaDia) * 100 : 0;
                 
@@ -124,7 +140,6 @@ MinhaArea.Geral = {
 
                 if (item.assert.qtdAuditorias > 0) {
                     pctAssert = item.assert.somaNotas / item.assert.qtdAuditorias;
-                    
                     displayAssert = pctAssert.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%';
                     tooltipAssert = `Média: ${displayAssert} (${item.assert.qtdAuditorias} auditorias)`;
                     
@@ -133,7 +148,7 @@ MinhaArea.Geral = {
                     } else {
                         corAssert = 'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
                     }
-
+                    
                     somaNotasGlobal += item.assert.somaNotas;
                     qtdAuditoriasGlobal += item.assert.qtdAuditorias;
                 }
@@ -143,6 +158,12 @@ MinhaArea.Geral = {
                 totalMeta += metaDia;
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
+
+                // Tratamento Visual da Justificativa
+                const temJustificativa = item.prod.justificativa && item.prod.justificativa.length > 0;
+                const classJustificativa = temJustificativa 
+                    ? "text-slate-600 font-medium bg-amber-50 px-2 py-0.5 rounded border border-amber-100 inline-block truncate max-w-[140px]" 
+                    : "text-slate-200";
 
                 // Data
                 const dateObj = new Date(item.data + 'T12:00:00');
@@ -169,15 +190,15 @@ MinhaArea.Geral = {
                             <span class="${corAssert}">${displayAssert}</span>
                         </td>
 
-                        <td class="px-3 py-2 border-r border-slate-100 last:border-0 truncate max-w-[150px]" title="${item.prod.justificativa || ''}">
-                            ${item.prod.justificativa || '<span class="text-slate-200">-</span>'}
+                        <td class="px-3 py-2 border-r border-slate-100 last:border-0" title="${item.prod.justificativa || ''}">
+                            <span class="${classJustificativa}">${item.prod.justificativa || '-'}</span>
                         </td>
                     </tr>`;
             });
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // Atualiza KPIs Topo
+            // 5. Atualiza KPIs Topo
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
 
