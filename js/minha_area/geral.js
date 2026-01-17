@@ -13,10 +13,10 @@ MinhaArea.Geral = {
         tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
 
         try {
-            // 1. Busca Produção
+            // 1. Busca Produção (CORREÇÃO: Incluindo 'justificativa' no select)
             const { data, error } = await Sistema.supabase
                 .from('producao')
-                .select('*')
+                .select('id, quantidade, fifo, gradual_total, gradual_parcial, fator, data_referencia, justificativa')
                 .eq('usuario_id', uid)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
@@ -24,8 +24,7 @@ MinhaArea.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca Meta (CORREÇÃO DE DATA SEGURA)
-            // Extrai mês e ano diretamente da string YYYY-MM-DD para evitar erro de fuso horário
+            // 2. Busca Meta
             const [anoStr, mesStr] = inicio.split('-');
             const mesAtual = parseInt(mesStr);
             const anoAtual = parseInt(anoStr);
@@ -38,7 +37,6 @@ MinhaArea.Geral = {
                 .eq('ano', anoAtual)
                 .maybeSingle();
 
-            // CORREÇÃO CRÍTICA: Não divide mais por 22. Usa o valor direto do banco.
             const metaDiariaPadrao = metaData ? metaData.meta : 650;
 
             // 3. Processamento
@@ -56,7 +54,6 @@ MinhaArea.Geral = {
                 const gp = Number(item.gradual_parcial || 0);
                 const fator = Number(item.fator);
                 
-                // Meta do dia proporcional ao fator
                 const metaDia = Math.round(metaDiariaPadrao * fator);
                 
                 totalProd += qtd; totalFifo += fifo; totalGT += gt; totalGP += gp;
@@ -74,6 +71,7 @@ MinhaArea.Geral = {
                 const ano = dateObj.getFullYear();
                 const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase().replace('.', '');
                 
+                // Renderização da Linha (CORREÇÃO: Mapeando justificativa para a coluna final)
                 tbody.innerHTML += `
                     <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600">
                         <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate font-bold text-slate-700 bg-slate-50/30"><span class="text-[9px] text-slate-400 font-normal mr-1 w-6 inline-block">${diaSemana}</span>${dia}/${mes}/${ano}</td>
@@ -84,13 +82,15 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${qtd}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center">${metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-bold ${corPct}">${fmtPct(pct)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate max-w-[200px]" title="${item.justificativa || ''}">${item.justificativa || '<span class="text-slate-300">-</span>'}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate max-w-[200px]" title="${item.justificativa || ''}">
+                            ${item.justificativa || '<span class="text-slate-300">-</span>'}
+                        </td>
                     </tr>`;
             });
 
             this.setTxt('total-registros-footer', data.length);
             
-            // KPIs
+            // Cálculos de KPIs
             const diasUteisCalculados = Math.ceil(somaFator);
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
@@ -102,7 +102,7 @@ MinhaArea.Geral = {
             this.setTxt('kpi-dias', diasUteisCalculados);
             this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
             this.setTxt('kpi-media', mediaDiaria);
-            this.setTxt('kpi-meta-dia', metaDiariaPadrao); // Mostra a meta diária usada (ex: 450)
+            this.setTxt('kpi-meta-dia', metaDiariaPadrao);
 
             const bar = document.getElementById('bar-progress');
             if(bar) {
@@ -129,8 +129,8 @@ MinhaArea.Geral = {
 
     calcularDiasUteisMes: function(inicio, fim) {
         let count = 0;
-        const cur = new Date(inicio);
-        const end = new Date(fim);
+        const cur = new Date(inicio + 'T12:00:00');
+        const end = new Date(fim + 'T12:00:00');
         while (cur <= end) {
             const day = cur.getDay();
             if (day !== 0 && day !== 6) count++;
