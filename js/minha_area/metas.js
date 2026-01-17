@@ -25,6 +25,7 @@ MinhaArea.Metas = {
             if (prodRes.error) throw prodRes.error;
 
             // 2. BUSCA ROBUSTA DE AUDITORIA (Paginada)
+            // Trazemos tudo para o volume, mas filtraremos para a assertividade
             const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
             console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
 
@@ -39,9 +40,17 @@ MinhaArea.Metas = {
             (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
 
             const mapAssert = new Map();
+            
+            // LISTA DE STATUS QUE NÃO ENTRAM NA MÉDIA (Neutros)
+            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
+
             assertData.forEach(a => {
                 const dataKey = a.data_auditoria ? a.data_auditoria.split('T')[0] : null;
                 if (!dataKey) return;
+
+                // FILTRO DO GRÁFICO: Só adiciona se for status válido (OK, NOK, JUST, REC)
+                const status = (a.status || '').toUpperCase();
+                if (STATUS_IGNORAR.includes(status)) return; 
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                 
@@ -179,6 +188,9 @@ MinhaArea.Metas = {
         let totalOk = 0;
         let totalNok = 0;
 
+        // Lista de status neutros (Igual ao gráfico)
+        const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
+
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
 
@@ -201,32 +213,39 @@ MinhaArea.Metas = {
 
         // Auditoria & Resultados
         asserts.forEach(a => {
-            let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
-            if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
+            const status = (a.status || '').toUpperCase();
             
+            // Só entra na conta de média se NÃO for neutro
+            if (!STATUS_IGNORAR.includes(status)) {
+                let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
+                if(!isNaN(val)) { 
+                    somaAssert += val; 
+                    qtdAssert++; 
+                }
+            }
+            
+            // Contagem OK/NOK (Independente da média)
             if (Number(a.qtd_nok) > 0) totalNok++; 
-            if ((a.status || '').toUpperCase() === 'OK') totalOk++; 
+            if (status === 'OK') totalOk++; 
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
+        
+        // Volume: Aqui contamos TUDO (incluindo REV, EMPR) porque foi trabalho feito
         const totalAuditados = asserts.length; 
+        
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
-        // --- UPDATE UI (FORMATADO COM 2 CASAS DECIMAIS) ---
-        
+        // --- UPDATE UI ---
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
-        // ASSERTIVIDADE: Formatação rigorosa de 2 casas decimais
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // AUDITORIA
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
