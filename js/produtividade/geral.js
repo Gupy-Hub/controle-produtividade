@@ -4,10 +4,10 @@ Produtividade.Geral = {
     initialized: false,
     dadosOriginais: [], 
     usuarioSelecionado: null,
-    diasAtivosGlobal: 1, // Armazena dias do calendário para referência
+    diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V20 (Abono + KPIs Ajustados)...");
+        console.log("🚀 [NEXUS] Produtividade: Engine V21 (Abono em Massa + Justificativa)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -27,7 +27,6 @@ Produtividade.Geral = {
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados...</td></tr>`;
 
         try {
-            // 1. Busca os Dados Detalhados (Engine V14 SQL com Fator de Abono)
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: dataInicio, 
@@ -36,7 +35,6 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca dias úteis reais (Calendário de Operação)
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: dataInicio,
@@ -58,7 +56,6 @@ Produtividade.Geral = {
                 meta_assertividade: row.meta_assertividade,
                 totais: {
                     qty: row.total_qty,
-                    // Agora este valor pode ser decimal (Ex: 15.5) devido ao abono
                     diasUteis: Number(row.total_dias_uteis), 
                     fifo: row.total_fifo,
                     gt: row.total_gt,
@@ -109,18 +106,20 @@ Produtividade.Geral = {
 
         const htmlParts = lista.map(d => {
             const metaDia = d.meta_real; 
-            // Cálculo de Atingimento: Real / (Meta * Dias Fatorados)
             const atingimento = (metaDia > 0 && d.totais.diasUteis > 0) 
                 ? (d.totais.qty / (metaDia * d.totais.diasUteis)) * 100 
                 : 0;
             
-            // Lógica Binária de Cores (Verde/Vermelho)
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
             const htmlAssertividade = window.Produtividade.Assertividade 
                 ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
                 : '-';
+
+            // Verifica se o dia é "quebrado" (ex: 0.5) para destacar visualmente
+            const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
+            const styleAbono = isAbonado ? 'text-amber-600 font-black bg-amber-50 border border-amber-200 rounded' : 'font-mono';
 
             return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
@@ -136,7 +135,11 @@ Produtividade.Geral = {
                         <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.funcao || 'ND'}</span>
                     </div>
                 </td>
-                <td class="px-2 py-3 text-center font-mono">${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}</td>
+                <td class="px-2 py-3 text-center">
+                    <span class="${styleAbono} px-1.5 py-0.5 inline-block">
+                        ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
+                    </span>
+                </td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
@@ -168,7 +171,6 @@ Produtividade.Geral = {
             nameSpan.innerText = nome;
         }
         this.renderizarTabela();
-        // Recalcula KPIs focando no usuário selecionado
         const dadosUser = this.dadosOriginais.filter(d => d.usuario.id == id);
         this.atualizarKPIsGlobal(dadosUser, true); 
     },
@@ -184,59 +186,44 @@ Produtividade.Geral = {
     atualizarKPIsGlobal: function(dados, isFiltrado) {
         let totalProd = 0, totalMeta = 0;
         let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
-        
-        // Acumuladores para Velocidade (Homem-Dia)
         let manDays = 0; 
         let ativosCount = 0;
 
         dados.forEach(d => {
             const isAssistente = !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase());
-            
             if (isAssistente || isFiltrado) {
                 ativosCount++;
                 const diasUser = Number(d.totais.diasUteis);
-                
                 manDays += diasUser;
                 totalProd += Number(d.totais.qty);
                 totalMeta += (Number(d.meta_real) * diasUser);
-            
                 somaNotasGlobal += Number(d.auditoria.soma || 0);
                 qtdAuditoriasGlobal += Number(d.auditoria.qtd || 0);
             }
         });
 
-        // 1. KPI VALIDAÇÃO REAL
         this.setTxt('kpi-validacao-real', totalProd.toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-esperado', totalMeta.toLocaleString('pt-BR'));
         
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMeta > 0 ? Math.min((totalProd/totalMeta)*100, 100) + '%' : '0%';
 
-        // 2. KPI ASSERTIVIDADE
         const mediaGlobalAssert = qtdAuditoriasGlobal > 0 ? (somaNotasGlobal / qtdAuditoriasGlobal) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
-        
-        // 3. KPI META PRODUÇÃO (%)
         this.setTxt('kpi-meta-producao-val', totalMeta > 0 ? ((totalProd/totalMeta)*100).toFixed(1) + '%' : '0%');
 
-        // 4. KPI CAPACIDADE (FIXO EM 17 - Padrão da Operação)
         const capacidadeTotalPadrao = 17;
-        
         this.setTxt('kpi-capacidade-info', `${ativosCount}/${capacidadeTotalPadrao}`);
-        
         const capPct = (ativosCount / capacidadeTotalPadrao) * 100;
         this.setTxt('kpi-capacidade-pct', Math.round(capPct) + '%');
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        // 5. KPI VELOCIDADE (REAL / META por Dia Trabalhado)
         const divisor = manDays > 0 ? manDays : 1;
         const velReal = Math.round(totalProd / divisor);
         const velMeta = Math.round(totalMeta / divisor);
-        
         this.setTxt('kpi-media-real', `${velReal} / ${velMeta}`);
         
-        // Exibe dias úteis do contexto (Usuario ou Global)
         const diasDisplay = isFiltrado && dados.length > 0 ? dados[0].totais.diasUteis.toLocaleString('pt-BR') : this.diasAtivosGlobal;
         this.setTxt('kpi-dias-uteis', diasDisplay); 
 
@@ -245,19 +232,15 @@ Produtividade.Geral = {
 
     renderTopLists: function(dados) {
         const op = dados.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
-        
-        // Top 3 Produção
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
         if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
 
-        // Top 3 Assertividade
         const topAssert = [...op]
             .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
             .filter(u => u.auditoria.qtd > 0)
             .sort((a,b) => b.mediaCalc - a.mediaCalc)
             .slice(0, 3);
-            
         const listAssert = document.getElementById('top-assert-list');
         if(listAssert) listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.mediaCalc.toFixed(1)}%</span></div>`).join('');
     },
@@ -266,54 +249,107 @@ Produtividade.Geral = {
         document.querySelectorAll('.check-user').forEach(c => c.checked = checked);
     },
 
-    /**
-     * Função para Abonar Dia ou Ajustar Fator
-     * Pergunta a data (se não selecionada) e o tipo de abono.
-     */
-    mudarFator: async function(uid, fatorAtual) {
-        // 1. Identifica a data alvo
+    // --- NOVA FUNÇÃO EM MASSA ---
+    abonarEmMassa: async function() {
+        // 1. Pega selecionados
+        const checks = document.querySelectorAll('.check-user:checked');
+        if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
+
+        // 2. Data
         let dataAlvo = document.getElementById('sel-data-dia').value; 
-        
-        // Se estiver vendo um período, pergunta a data exata
         if (!dataAlvo) {
-            dataAlvo = prompt("Digite a data para abonar (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
         }
 
-        // 2. Pergunta o Tipo de Abono
+        // 3. Fator
         const opcao = prompt(
-            `ABONAR DIA (${dataAlvo})\n\n` +
-            `Escolha o fator para este dia:\n` +
-            `1 - Dia Normal (1.0)\n` +
-            `2 - Meio Período (0.5)\n` +
-            `0 - Abonar Totalmente (0.0)\n\n` +
-            `Digite o código (1, 2 ou 0):`, 
+            `ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\n` +
+            `Escolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, 
             "0"
         );
-
-        if (opcao === null) return; // Cancelou
+        if (opcao === null) return;
 
         let novoFator = 1.0;
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
 
-        // 3. Envia ao Banco (RPC)
+        // 4. Justificativa (Obrigatória se fator != 1)
+        let justificativa = "";
+        if (novoFator !== 1.0) {
+            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA (Ex: Atestado, Falta injustificada, Folga):");
+            if (!justificativa || justificativa.trim() === "") {
+                return alert("❌ Cancelado: Justificativa é obrigatória para abonos.");
+            }
+        }
+
+        if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
+
+        // 5. Loop de Envio
+        let sucessos = 0;
+        for (const chk of checks) {
+            const uid = chk.value;
+            try {
+                await Sistema.supabase.rpc('abonar_producao', {
+                    p_usuario_id: uid,
+                    p_data: dataAlvo,
+                    p_fator: novoFator,
+                    p_justificativa: justificativa
+                });
+                sucessos++;
+            } catch (err) {
+                console.error(`Erro no user ${uid}:`, err);
+            }
+        }
+
+        alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
+        this.carregarTela();
+    },
+
+    mudarFator: async function(uid, fatorAtual) {
+        // 1. Data
+        let dataAlvo = document.getElementById('sel-data-dia').value; 
+        if (!dataAlvo) {
+            dataAlvo = prompt("Digite a data para abonar (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            if (!dataAlvo) return;
+        }
+
+        // 2. Fator
+        const opcao = prompt(
+            `ABONAR DIA (${dataAlvo})\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, 
+            "0"
+        );
+        if (opcao === null) return;
+
+        let novoFator = 1.0;
+        if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
+        if (opcao === '0') novoFator = 0.0;
+
+        // 3. Justificativa
+        let justificativa = "";
+        if (novoFator !== 1.0) {
+            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
+            if (!justificativa || justificativa.trim() === "") {
+                return alert("❌ Cancelado: Justificativa é obrigatória.");
+            }
+        }
+
         try {
             const { error } = await Sistema.supabase
                 .rpc('abonar_producao', {
                     p_usuario_id: uid,
                     p_data: dataAlvo,
-                    p_fator: novoFator
+                    p_fator: novoFator,
+                    p_justificativa: justificativa
                 });
 
             if (error) throw error;
-
-            alert(`✅ Sucesso! Dia ${dataAlvo} ajustado para fator ${novoFator}.`);
-            this.carregarTela(); // Recarrega para ver o impacto nos cálculos
+            alert(`✅ Sucesso!`);
+            this.carregarTela();
 
         } catch (error) {
             console.error(error);
-            alert("Erro ao abonar: " + error.message);
+            alert("Erro: " + error.message);
         }
     },
 
