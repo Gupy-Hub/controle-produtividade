@@ -27,7 +27,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; border: 2px solid #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Estilos dos Cards KPI - Design Heurístico (Igual Produtividade) */
+        /* Estilos dos Cards KPI */
         .kpi-card { 
             background: white; border-radius: 16px; 
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
@@ -116,12 +116,8 @@
     <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-32">
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
-    
-        <div id="container-checkin-alert" class="hidden mb-4"></div>
-
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            </div>
-        </div>
+            
+            <div id="container-checkin-alert" class="hidden mb-4"></div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 
@@ -211,14 +207,127 @@
                         <tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody>
                     </table>
                 </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center"><span><i class="fas fa-table mr-1"></i> Visão de Grade</span><span>Total Registros: <span id="total-registros-footer">0</span></span></div>
+                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
+                    <span><i class="fas fa-table mr-1"></i> Visão de Grade</span>
+                    <span>Total Registros: <span id="total-registros-footer">--</span></span>
+                </div>
             </div>
         </div>
 
-        <div id="ma-tab-metas" class="ma-view hidden animate-enter"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]"><h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i> Evolução Anual</h3><div class="h-[400px] w-full"><canvas id="graficoEvolucao"></canvas></div></div></div>
-        <div id="ma-tab-auditoria" class="ma-view hidden animate-enter space-y-4"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center min-h-[400px]"><div class="text-center"><div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-500 mb-4"><i class="fas fa-clipboard-check text-2xl"></i></div><h3 class="text-lg font-bold text-slate-700">Painel de Auditoria</h3><p class="text-sm text-slate-500 mt-2">Visualize aqui seus erros, acertos e pontos de atenção validados pela auditoria.</p><div id="auditoria-content" class="mt-8 w-full text-left"></div></div></div></div>
-        <div id="ma-tab-comparativo" class="ma-view hidden animate-enter"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]"><h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-users text-blue-500"></i> Comparativo no Período</h3><div class="h-[400px] w-full"><canvas id="graficoComparativo"></canvas></div></div></div>
-        <div id="ma-tab-feedback" class="ma-view hidden animate-enter space-y-4"><div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center min-h-[400px]"><div class="text-center"><div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-50 text-purple-500 mb-4"><i class="fas fa-comments text-2xl"></i></div><h3 class="text-lg font-bold text-slate-700">Meus Feedbacks</h3><p class="text-sm text-slate-500 mt-2">Histórico de feedbacks recebidos da gestão e planos de ação.</p><div id="feedback-content" class="mt-8 w-full"></div></div></div></div>
+        <div id="ma-tab-metas" class="ma-view hidden animate-enter space-y-6">
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition">
+                    <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-bullseye text-6xl text-emerald-600"></i></div>
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Qualidade (Assertividade)</h3>
+                        <div class="flex justify-between items-end mb-2">
+                            <div>
+                                <span class="text-4xl font-black text-emerald-600 tracking-tight" id="meta-assert-real">--%</span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Realizado</span>
+                            </div>
+                            <div class="text-right relative z-10">
+                                <span class="text-xl font-bold text-slate-400" id="meta-assert-meta">--%</span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Meta</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
+                        <div id="bar-meta-assert" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition">
+                    <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-cubes text-6xl text-blue-600"></i></div>
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Produtividade (Volume)</h3>
+                        <div class="flex justify-between items-end mb-2">
+                            <div>
+                                <span class="text-4xl font-black text-blue-600 tracking-tight" id="meta-prod-real">--</span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Realizado</span>
+                            </div>
+                            <div class="text-right relative z-10">
+                                <span class="text-xl font-bold text-slate-400" id="meta-prod-meta">--</span>
+                                <span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Meta Esperada</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2">
+                        <div id="bar-meta-prod" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition">
+                    <div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-chart-area text-6xl text-purple-600"></i></div>
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Acumulado do Período</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-slate-500 font-bold"><i class="fas fa-layer-group text-slate-300 mr-2"></i>Total Bruto</span>
+                            <span class="font-black text-lg text-slate-700" id="meta-acum-total">--</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-slate-500 font-bold"><i class="fas fa-tachometer-alt text-slate-300 mr-2"></i>Média Diária</span>
+                            <span class="font-bold text-lg text-indigo-600" id="meta-acum-media">--</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-xs text-slate-500 font-bold"><i class="fas fa-calendar-day text-slate-300 mr-2"></i>Dias Produtivos</span>
+                            <span class="font-bold text-lg text-slate-600" id="meta-acum-dias">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 min-h-[400px]">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="font-bold text-slate-700 flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600"><i class="fas fa-chart-bar"></i></div>
+                        <span>Evolução vs Meta</span>
+                    </h3>
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase" id="meta-periodo-label">Visualização</span>
+                </div>
+                <div class="h-[320px] w-full">
+                    <canvas id="graficoEvolucaoMeta"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="ma-tab-auditoria" class="ma-view hidden animate-enter space-y-4">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center min-h-[400px]">
+                <div class="text-center">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-500 mb-4">
+                        <i class="fas fa-clipboard-check text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-700">Painel de Auditoria</h3>
+                    <p class="text-sm text-slate-500 mt-2">Visualize aqui seus erros, acertos e pontos de atenção validados pela auditoria.</p>
+                    <div id="auditoria-content" class="mt-8 w-full text-left"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="ma-tab-comparativo" class="ma-view hidden animate-enter">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-[500px]">
+                <h3 class="font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    <i class="fas fa-users text-blue-500"></i> Comparativo no Período
+                </h3>
+                <div class="h-[400px] w-full">
+                    <canvas id="graficoComparativo"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div id="ma-tab-feedback" class="ma-view hidden animate-enter space-y-4">
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col items-center justify-center min-h-[400px]">
+                <div class="text-center">
+                    <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-50 text-purple-500 mb-4">
+                        <i class="fas fa-comments text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-700">Meus Feedbacks</h3>
+                    <p class="text-sm text-slate-500 mt-2">Histórico de feedbacks recebidos da gestão e planos de ação.</p>
+                    <div id="feedback-content" class="mt-8 w-full"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="js/minha_area/main.js"></script>
