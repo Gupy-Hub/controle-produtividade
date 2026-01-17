@@ -7,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V18 (KPI Velocidade Individual vs Meta)...");
+        console.log("🚀 [NEXUS] Produtividade: Engine V19 (Capacidade Fixa 17)...");
         this.carregarTela(); 
         this.initialized = true; 
     },
@@ -181,21 +181,19 @@ Produtividade.Geral = {
         let totalProd = 0, totalMeta = 0;
         let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
         
-        // Acumuladores para Velocidade (Homem-Dia)
         let manDays = 0; 
         let ativosCount = 0;
 
         dados.forEach(d => {
             const isAssistente = !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase());
             
-            // Só soma nos KPIs se for Assistente (ou se estiver filtrado especificamente)
             if (isAssistente || isFiltrado) {
                 ativosCount++;
                 const diasUser = Number(d.totais.diasUteis);
                 
                 manDays += diasUser;
                 totalProd += Number(d.totais.qty);
-                totalMeta += (Number(d.meta_real) * diasUser); // Meta Total Esperada
+                totalMeta += (Number(d.meta_real) * diasUser);
             
                 somaNotasGlobal += Number(d.auditoria.soma || 0);
                 qtdAuditoriasGlobal += Number(d.auditoria.qtd || 0);
@@ -216,28 +214,24 @@ Produtividade.Geral = {
         // 3. KPI META PRODUÇÃO (%)
         this.setTxt('kpi-meta-producao-val', totalMeta > 0 ? ((totalProd/totalMeta)*100).toFixed(1) + '%' : '0%');
 
-        // 4. KPI CAPACIDADE
-        // Conta total de assistentes na lista original para exibir capacidade total
-        const totalAtivosNaLista = this.dadosOriginais.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase())).length;
-        this.setTxt('kpi-capacidade-info', `${ativosCount}/${totalAtivosNaLista}`);
+        // 4. KPI CAPACIDADE (FIXO EM 17)
+        // Regra de Ouro: Denominador fixo em 17 (Padrão da Operação)
+        const capacidadeTotalPadrao = 17;
         
-        const capPct = totalAtivosNaLista > 0 ? (ativosCount / totalAtivosNaLista) * 100 : 0;
+        this.setTxt('kpi-capacidade-info', `${ativosCount}/${capacidadeTotalPadrao}`);
+        
+        const capPct = (ativosCount / capacidadeTotalPadrao) * 100;
         this.setTxt('kpi-capacidade-pct', Math.round(capPct) + '%');
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
         // 5. KPI VELOCIDADE (REAL / META)
-        // Fórmula: (Total Produção / ManDays) vs (Total Meta / ManDays)
         const divisor = manDays > 0 ? manDays : 1;
-        
         const velReal = Math.round(totalProd / divisor);
         const velMeta = Math.round(totalMeta / divisor);
         
-        // Exibe: "120 / 150"
         this.setTxt('kpi-media-real', `${velReal} / ${velMeta}`);
         
-        // Exibe Dias Úteis do Calendário no rodapé
-        // Se estiver filtrado (1 usuário), mostra os dias dele. Se for global, dias globais.
         const diasDisplay = isFiltrado && dados.length > 0 ? dados[0].totais.diasUteis : this.diasAtivosGlobal;
         this.setTxt('kpi-dias-uteis', diasDisplay); 
 
