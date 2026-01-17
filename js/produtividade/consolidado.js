@@ -5,18 +5,21 @@ Produtividade.Consolidado = {
     chartInstance: null,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Engine V3 (Conectado a Filtros.js)...");
-        this.carregarDados();
+        console.log("🚀 [NEXUS] Consolidado: Engine V4 (Correção Naming)...");
+        this.carregar(); // Chamada inicial
         this.initialized = true;
     },
 
-    carregarDados: async function() {
+    // RENOMEADO DE carregarDados PARA carregar (Padrão do seu sistema)
+    carregar: async function() {
         const container = document.getElementById('grafico-consolidado-container');
         
-        // --- USA O FILTRO GLOBAL ---
-        const { inicio, fim } = Produtividade.Filtros.getDatas();
-        // ---------------------------
+        // Garante datas válidas mesmo se o filtro ainda não carregou
+        const datas = (Produtividade.Filtros && typeof Produtividade.Filtros.getDatas === 'function')
+            ? Produtividade.Filtros.getDatas()
+            : { inicio: new Date().toISOString().split('T')[0], fim: new Date().toISOString().split('T')[0] };
 
+        const { inicio, fim } = datas;
         console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}`);
 
         if (container) container.innerHTML = '<div class="flex h-64 items-center justify-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
@@ -33,6 +36,7 @@ Produtividade.Consolidado = {
     },
 
     processarDados: function(data) {
+        // ... (Lógica igual, mantendo processamento)
         const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
         let totalProducao = 0;
         let totalDias = 0;
