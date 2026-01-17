@@ -15,18 +15,28 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 1. Buscas
+            // 1. Buscas Otimizadas
             const [prodRes, assertRes, metasRes] = await Promise.all([
                 // Produção: Trazemos tudo para somar o volume total validado
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
                 
-                // Assertividade: Trazemos TUDO (limit alto) para filtrar no JS quem tem auditora preenchida
-                Sistema.supabase.from('assertividade').select('*').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim).limit(20000),
+                // Assertividade: FILTRAGEM NO BANCO (Traz apenas quem TEM auditora preenchida)
+                // Isso evita baixar as 14 mil linhas vazias e resolve o problema do limite de 1000
+                Sistema.supabase
+                    .from('assertividade')
+                    .select('*')
+                    .eq('usuario_id', uid)
+                    .gte('data_auditoria', inicio)
+                    .lte('data_auditoria', fim)
+                    .neq('auditora', null) // Filtra nulos
+                    .neq('auditora', '')   // Filtra vazios
+                    .limit(10000),         // Limite de segurança aumentado
                 
                 Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim)
             ]);
 
             if (prodRes.error) throw prodRes.error;
+            if (assertRes.error) throw assertRes.error;
 
             // 2. Mapas e Estruturas
             const mapMetas = {};
@@ -38,15 +48,12 @@ MinhaArea.Metas = {
             const mapProd = new Map();
             (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
 
-            // Mapa Assertividade: Apenas para o gráfico (agrupa por dia)
             const mapAssert = new Map();
+            // Como já filtramos no banco, tudo que veio aqui É auditado
             (assertRes.data || []).forEach(a => {
-                // FILTRO CRÍTICO: Só entra no gráfico/cálculo se tiver Auditora preenchida
-                if (a.auditora && a.auditora.trim() !== '') {
-                    if(!mapAssert.has(a.data_auditoria)) mapAssert.set(a.data_auditoria, []);
-                    let val = String(a.porcentagem).replace('%','').replace(',','.');
-                    mapAssert.get(a.data_auditoria).push(parseFloat(val));
-                }
+                if(!mapAssert.has(a.data_auditoria)) mapAssert.set(a.data_auditoria, []);
+                let val = String(a.porcentagem).replace('%','').replace(',','.');
+                mapAssert.get(a.data_auditoria).push(parseFloat(val));
             });
 
             // 3. Processamento para Gráficos
@@ -144,7 +151,6 @@ MinhaArea.Metas = {
         let totalValidados = 0; 
         let totalMeta = 0;
         let somaAssert = 0, qtdAssert = 0;
-        let totalAuditados = 0; 
         
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
@@ -166,21 +172,19 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // 2. Calcula Auditados (Filtra quem tem auditora)
+        // 2. Calcula Auditados (Apenas contar o array, pois já foi filtrado no banco)
+        const totalAuditados = (asserts || []).length;
+
+        // 3. Calcula Média Assertividade
         (asserts || []).forEach(a => {
-            // SÓ CONTA SE TIVER AUDITORA
-            if (a.auditora && a.auditora.trim() !== '') {
-                totalAuditados++; // Contagem unitária (1 linha = 1 doc auditado)
-                
-                let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
-                if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
-            }
+            let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
+            if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
         
-        // 3. Atualiza Interface
-        
+        // --- ATUALIZAÇÃO DA INTERFACE ---
+
         // Card 1: Validação
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
@@ -192,7 +196,8 @@ MinhaArea.Metas = {
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Card 3: Auditoria (Com a lógica corrigida)
+        // Card 3: Auditoria
+        // Lógica: Validados (Total) - Auditados (Amostra) = Sem Auditoria
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
