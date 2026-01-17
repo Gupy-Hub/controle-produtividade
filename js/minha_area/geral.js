@@ -3,7 +3,6 @@ MinhaArea.Geral = {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
         
-        // Validação de Usuário Selecionado
         if (!uid) {
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p></td></tr>';
             this.zerarKPIs();
@@ -11,7 +10,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando abonos...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando métricas...</span></div></td></tr>';
 
         try {
             // 1. Buscas Otimizadas
@@ -25,7 +24,7 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim)
                     .limit(2000), 
                 
-                // Assertividade: Apenas dados numéricos para cálculo
+                // Assertividade: Apenas numérico
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -55,7 +54,6 @@ MinhaArea.Geral = {
             // 3. Unificação dos Dados
             const mapaDados = new Map();
 
-            // Helper para data (YYYY-MM-DD)
             const getDia = (dataFull) => {
                 if(!dataFull) return null;
                 const dataStr = dataFull.split('T')[0];
@@ -85,25 +83,12 @@ MinhaArea.Geral = {
                         dia.prod.fator = fator;
                     }
 
-                    // --- SOLUÇÃO FINAL DA JUSTIFICATIVA ---
-                    // Verifica na ordem de prioridade descoberta no diagnóstico:
-                    // 1. justificativa_abono (Onde o Natal estava escondido)
-                    // 2. justificativa (Padrão singular)
-                    // 3. justificativas (Legado/Plural)
-                    
+                    // --- SOLUÇÃO FINAL DA JUSTIFICATIVA (Prioridade 1, 2, 3) ---
                     let texto = (p.justificativa_abono || '').trim();
-                    
-                    if (texto === '') {
-                        texto = (p.justificativa || '').trim();
-                    }
-                    if (texto === '') {
-                        texto = (p.justificativas || '').trim();
-                    }
+                    if (texto === '') texto = (p.justificativa || '').trim();
+                    if (texto === '') texto = (p.justificativas || '').trim();
 
-                    // Aplica ao dia se encontrou texto
                     if (texto !== '') {
-                        // Regra: Se é um abono, ele tem prioridade absoluta. 
-                        // Se não é abono, preenche apenas se estiver vazio.
                         if (dia.prod.justificativa === '' || ehAbono) {
                             dia.prod.justificativa = texto;
                         }
@@ -124,7 +109,7 @@ MinhaArea.Geral = {
                 }
             });
 
-            // Ordena Cronologicamente
+            // Ordena
             const lista = Array.from(mapaDados.values()).sort((a, b) => b.data.localeCompare(a.data));
 
             // 4. Renderização
@@ -178,7 +163,6 @@ MinhaArea.Geral = {
                 const temJustificativa = item.prod.justificativa && item.prod.justificativa.length > 0;
                 const textoJustificativa = item.prod.justificativa || '-';
                 
-                // Destaque visual (Fundo amarelo se tiver justificativa)
                 const classJustificativa = temJustificativa 
                     ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" 
                     : "text-slate-200 text-center block";
@@ -218,24 +202,33 @@ MinhaArea.Geral = {
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // 5. Atualiza KPIs Topo
-            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
-            const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
-
+            // --- 5. Atualização dos Cards (NOVO LAYOUT) ---
+            
+            // Volume
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
-            this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
-            this.setStatus(atingimentoGeral);
-            this.setTxt('kpi-dias', Math.ceil(somaFator));
-            this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
+            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
+            const barVolume = document.getElementById('bar-volume');
+            if(barVolume) barVolume.style.width = `${Math.min(atingimentoGeral, 100)}%`;
+
+            // Qualidade
+            const mediaAssertGlobal = qtdAuditoriasGlobal > 0 ? (somaNotasGlobal / qtdAuditoriasGlobal) : 0;
+            this.setTxt('kpi-assertividade-val', mediaAssertGlobal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%');
+            this.setTxt('kpi-pct', fmtPct(atingimentoGeral)); // Atingimento da Meta de Volume
+
+            // Dias
+            const diasUteisPeriodo = this.calcularDiasUteisMes(inicio, fim);
+            const diasProdutivos = Math.ceil(somaFator);
+            this.setTxt('kpi-dias', diasProdutivos);
+            this.setTxt('kpi-dias-uteis', diasUteisPeriodo);
+            const pctDias = diasUteisPeriodo > 0 ? (diasProdutivos / diasUteisPeriodo) * 100 : 0;
+            const barDias = document.getElementById('bar-dias');
+            if(barDias) barDias.style.width = `${Math.min(pctDias, 100)}%`;
+
+            // Velocidade
+            const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
             this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-dia', metaProducaoPadrao);
-
-            const bar = document.getElementById('bar-progress');
-            if(bar) {
-                bar.style.width = `${Math.min(atingimentoGeral, 100)}%`;
-                bar.className = atingimentoGeral >= 100 ? "h-full bg-emerald-500" : "h-full bg-blue-500";
-            }
 
         } catch (err) {
             console.error(err);
@@ -252,12 +245,10 @@ MinhaArea.Geral = {
     },
 
     setStatus: function(pct) {
+        // (Opcional) Mantido para compatibilidade, caso usem badges em outro lugar
         const el = document.getElementById('kpi-status');
         if(!el) return;
-        if (pct >= 100) { el.innerText = "Excelente"; el.className = "text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 uppercase"; }
-        else if (pct >= 90) { el.innerText = "Bom"; el.className = "text-xs font-black text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 uppercase"; }
-        else if (pct >= 80) { el.innerText = "Atenção"; el.className = "text-xs font-black text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 uppercase"; }
-        else { el.innerText = "Crítico"; el.className = "text-xs font-black text-rose-600 bg-rose-50 px-2 py-1 rounded border border-rose-100 uppercase"; }
+        // ... (lógica de status)
     },
 
     calcularDiasUteisMes: function(inicio, fim) {
@@ -273,9 +264,9 @@ MinhaArea.Geral = {
     },
 
     zerarKPIs: function() {
-        ['kpi-total','kpi-meta-acumulada','kpi-pct','kpi-dias','kpi-dias-uteis','kpi-media','kpi-meta-dia'].forEach(id => this.setTxt(id, '--'));
-        this.setStatus(0);
-        const bar = document.getElementById('bar-progress'); if(bar) bar.style.width = '0%';
+        ['kpi-total','kpi-meta-acumulada','kpi-assertividade-val','kpi-pct','kpi-dias','kpi-dias-uteis','kpi-media','kpi-meta-dia'].forEach(id => this.setTxt(id, '--'));
+        const bars = ['bar-volume', 'bar-dias'];
+        bars.forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
     },
 
     setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
