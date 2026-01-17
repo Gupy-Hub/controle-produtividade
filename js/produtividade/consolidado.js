@@ -1,7 +1,7 @@
 /**
  * MÓDULO: Produtividade.Consolidado
- * FUNÇÃO: Visão gerencial agrupada por período (Dinâmica)
- * VERSÃO: 2.1 - Filtros de Semestre/Trimestre
+ * FUNÇÃO: Visão gerencial agrupada por período com suporte a filtros dinâmicos
+ * VERSÃO: 2.1 - Integração Total com Filtros de Semestre e Trimestre
  */
 Produtividade.Consolidado = {
     initialized: false,
@@ -9,14 +9,17 @@ Produtividade.Consolidado = {
     baseManualHC: 0, 
     overridesHC: {}, 
     dadosCalculados: null, 
-    monthToColMap: null, // Novo mapa para alinhar mês real -> coluna visual
+    monthToColMap: null, // Mapa para alinhar o mês real à coluna visual ativa
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando...");
+        console.log("🔧 Consolidado: Iniciando módulo...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
 
+    /**
+     * Calcula as janelas de datas para as semanas dentro de um mês específico
+     */
     getSemanasDoMes: function(year, month) {
         const weeks = [];
         const firstDay = new Date(year, month - 1, 1);
@@ -43,6 +46,9 @@ Produtividade.Consolidado = {
         return weeks;
     },
 
+    /**
+     * Atualiza manualmente o Headcount (HC) de uma coluna com exigência de justificativa
+     */
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
         if (isNaN(val) || val <= 0) { 
@@ -54,11 +60,11 @@ Produtividade.Consolidado = {
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
         
-        await new Promise(r => setTimeout(r, 50));
+        await new Promise(resolve => setTimeout(resolve, 50));
         const motivo = prompt(`Motivo da alteração para ${val} (Obrigatório):`);
         
         if (!motivo || motivo.trim() === "") { 
-            alert("Justificativa obrigatória."); 
+            alert("Justificativa obrigatória para prosseguir com a alteração."); 
             this.renderizar(this.dadosCalculados); 
             return; 
         }
@@ -67,6 +73,9 @@ Produtividade.Consolidado = {
         if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
     },
     
+    /**
+     * Calcula dias úteis excluindo fins de semana e feriados cadastrados no sistema
+     */
     calcularDiasUteisCalendario: function(dataInicio, dataFim) {
         const feriados = Produtividade.Geral && Produtividade.Geral.feriados ? Produtividade.Geral.feriados : [];
         let count = 0; 
@@ -75,7 +84,7 @@ Produtividade.Consolidado = {
         
         while (cur <= end) { 
             const day = cur.getDay(); 
-            if (day !== 0 && day !== 6) {
+            if (day !== 0 && day !== 6) { // Exclui Domingo (0) e Sábado (6)
                 const mes = String(cur.getMonth() + 1).padStart(2, '0');
                 const dia = String(cur.getDate()).padStart(2, '0');
                 if (!feriados.includes(`${mes}-${dia}`)) {
@@ -87,19 +96,19 @@ Produtividade.Consolidado = {
         return count;
     },
     
+    /**
+     * Recupera dados do Supabase baseando-se no filtro global de datas
+     */
     carregar: async function(forcar = false) {
         const tbody = document.getElementById('cons-table-body'); 
-        
-        // --- INTEGRAÇÃO COM MAIN.JS (FONTE DA VERDADE) ---
         const datas = Produtividade.getDatasFiltro();
         const s = datas.inicio;
         const e = datas.fim;
-        let t = Produtividade.filtroPeriodo || 'mes'; // dia, semana, mes, ano
+        let t = Produtividade.filtroPeriodo || 'mes'; 
 
-        // Ajuste: Tratar 'semana' como 'dia' para visualização detalhada
-        if (t === 'semana') t = 'dia';
+        if (t === 'semana') t = 'dia'; // Tratamento para visualização detalhada
 
-        console.log(`📊 Consolidado: ${t} | ${s} até ${e}`);
+        console.log(`📊 Consolidado: Modo ${t} | Range: ${s} até ${e}`);
 
         const cacheKey = `${t}_${s}_${e}`;
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) { 
@@ -107,10 +116,9 @@ Produtividade.Consolidado = {
             return; 
         }
         
-        // Limpa overrides antigos ao carregar novo contexto (evita dados fantasmas)
-        this.overridesHC = {}; 
+        this.overridesHC = {}; // Limpa ajustes manuais ao trocar o contexto temporal
         
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados massivos...</td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Processando dados consolidados...</td></tr>';
 
         try {
             const { data: rawData, error } = await Sistema.supabase
@@ -128,36 +136,34 @@ Produtividade.Consolidado = {
             this.ultimoCache = { key: cacheKey, data: rawData, tipo: t };
             this.processarEExibir(rawData, t, s, e);
 
-        } catch (e) { 
-            console.error(e); 
-            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`; 
+        } catch (error) { 
+            console.error("Erro ao carregar consolidado:", error); 
+            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro de carregamento: ${error.message}</td></tr>`; 
         }
     },
 
+    /**
+     * Organiza os dados brutos em colunas dinâmicas (Dias, Semanas ou Meses)
+     */
     processarDados: function(rawData, t, dataInicio, dataFim) {
         const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
         let cols = []; 
         let datesMap = {}; 
-        
-        // Reset do mapa
         this.monthToColMap = {};
 
         const dIni = new Date(dataInicio + 'T12:00:00');
         const currentYear = dIni.getFullYear();
         const currentMonth = dIni.getMonth() + 1;
 
-        // --- LÓGICA DE GERAÇÃO DE COLUNAS ---
-        if (t === 'dia' || t === 'dia-detalhe') { 
+        if (t === 'dia') { 
             let curr = new Date(dataInicio + 'T12:00:00');
             const end = new Date(dataFim + 'T12:00:00');
             let idx = 1;
-            
             while(curr <= end) {
                 const diaStr = String(curr.getDate()).padStart(2,'0');
                 cols.push(diaStr);
                 const dataFull = curr.toISOString().split('T')[0];
                 datesMap[idx] = { ini: dataFull, fim: dataFull, refDia: parseInt(diaStr) }; 
-                
                 curr.setDate(curr.getDate() + 1);
                 idx++;
             }
@@ -165,24 +171,19 @@ Produtividade.Consolidado = {
         else if (t === 'mes') { 
             const semanas = this.getSemanasDoMes(currentYear, currentMonth); 
             semanas.forEach((s, i) => { 
-                cols.push(`Sem ${i+1}`); 
+                cols.push(`Semana ${i+1}`); 
                 datesMap[i+1] = { ini: s.inicio, fim: s.fim }; 
             }); 
         } 
         else if (t === 'ano') { 
-            // Agora o 'ano' respeita o range exato de datas (ex: só Jan-Jun para S1)
             const dFimObj = new Date(dataFim + 'T12:00:00');
-            const startMonthIdx = dIni.getMonth(); // 0-11
-            const endMonthIdx = dFimObj.getMonth(); // 0-11
+            const startMonthIdx = dIni.getMonth(); 
+            const endMonthIdx = dFimObj.getMonth(); 
             
             for(let i = startMonthIdx; i <= endMonthIdx; i++) { 
-                const mName = mesesNomes[i];
-                cols.push(mName);
-                
-                const realMonth = i + 1; // 1-12
-                const displayIndex = cols.length; // 1-based (Coluna atual)
-                
-                // Mapeia o mês real para a coluna visual correta
+                cols.push(mesesNomes[i]);
+                const realMonth = i + 1;
+                const displayIndex = cols.length; 
                 this.monthToColMap[realMonth] = displayIndex;
                 
                 datesMap[displayIndex] = { 
@@ -197,33 +198,26 @@ Produtividade.Consolidado = {
         for(let i=1; i<=numCols; i++) st[i] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
         st[99] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
 
-        // --- POPULAÇÃO DOS DADOS ---
         if(rawData) {
             rawData.forEach(r => {
                 const sys = Number(r.quantidade) || 0; 
                 let b = -1; 
 
-                if (t === 'dia' || t === 'dia-detalhe') { 
-                    // Busca por data exata
+                if (t === 'dia') { 
                     for(let k=1; k<=numCols; k++) {
                         if (datesMap[k].ini === r.data_referencia) { b = k; break; }
                     }
                 } 
                 else if (t === 'mes') { 
-                    // Busca por intervalo da semana
                     for(let k=1; k<=numCols; k++) { 
                         if(r.data_referencia >= datesMap[k].ini && r.data_referencia <= datesMap[k].fim) { b = k; break; } 
                     } 
                 } 
                 else if (t === 'ano') { 
-                    // Busca pelo mapa Mês -> Coluna
                     const mesData = parseInt(r.data_referencia.split('-')[1]); 
-                    if (this.monthToColMap && this.monthToColMap[mesData] !== undefined) {
-                        b = this.monthToColMap[mesData];
-                    }
+                    if (this.monthToColMap[mesData] !== undefined) b = this.monthToColMap[mesData];
                 }
 
-                // Se encontrou a coluna válida (b)
                 if(b >= 1 && b <= numCols) {
                     const populate = (k) => { 
                         const x = st[k]; 
@@ -256,6 +250,9 @@ Produtividade.Consolidado = {
         this.renderizar(this.dadosCalculados);
     },
 
+    /**
+     * Renderiza fisicamente a tabela HTML baseando-se nos indicadores calculados
+     */
     renderizar: function({ cols, st, numCols }) {
         const tbody = document.getElementById('cons-table-body');
         const hRow = document.getElementById('cons-table-header');
@@ -267,28 +264,19 @@ Produtividade.Consolidado = {
                 const colIdx = index + 1;
                 const overrideObj = this.overridesHC[colIdx];
                 const valOverride = overrideObj ? overrideObj.valor : '';
-                const motivoOverride = overrideObj ? overrideObj.motivo : '';
                 const autoCount = st[colIdx].users.size || 17;
-                const inputClass = valOverride ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" : "bg-white border-slate-200 text-blue-600 font-bold focus:border-blue-400";
                 
                 headerHTML += `
-                    <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px] group">
+                    <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px]">
                         <div class="flex flex-col items-center gap-1">
                             <span class="text-xs font-bold text-slate-600 uppercase">${c}</span>
-                            <div class="relative w-full max-w-[50px]" title="${valOverride ? 'Motivo: ' + motivoOverride : 'Auto: ' + autoCount}">
-                                <input type="number" value="${valOverride}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 outline-none border transition placeholder-slate-300 ${inputClass}">
-                            </div>
+                            <input type="number" value="${valOverride}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 outline-none border transition">
                         </div>
                     </th>`;
             });
             
-            const overrideTotal = this.overridesHC[99];
-            const valTotal = overrideTotal ? overrideTotal.valor : '';
             const autoTotal = st[99].users.size || 17; 
-            const inputClassTotal = valTotal ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" : "bg-white border-blue-200 text-blue-700 font-bold focus:border-blue-500";
-            
-            headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span><input type="number" value="${valTotal}" placeholder="(${autoTotal})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 outline-none border transition placeholder-blue-300 ${inputClassTotal}"></div></th></tr>`;
-            
+            headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" placeholder="(${autoTotal})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 outline-none border transition"></div></th></tr>`;
             hRow.innerHTML = headerHTML;
         }
 
@@ -297,43 +285,27 @@ Produtividade.Consolidado = {
         idxs.push(99); 
 
         const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
-            const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
-            const iconColor = colorInfo || 'text-slate-400';
-            const textColor = isBold ? 'text-slate-800' : 'text-slate-600';
-            
-            let tr = `<tr class="${rowBg} border-b border-slate-100 last:border-0 group"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200 group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100"><i class="${icon} ${iconColor} text-sm"></i></div><span class="${textColor} ${isBold ? 'font-black' : 'font-medium'} text-xs uppercase tracking-wide">${label}</span></div></td>`;
+            let tr = `<tr class="hover:bg-slate-50 transition-colors border-b border-slate-100"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"><div class="flex items-center gap-3"><i class="${icon} ${colorInfo} text-sm"></i><span class="text-xs uppercase ${isBold ? 'font-black' : 'font-medium'}">${label}</span></div></td>`;
             
             idxs.forEach(i => {
                 const s = st[i]; 
                 const overrideObj = this.overridesHC[i]; 
-                const countAuto = s.users.size > 0 ? s.users.size : 17; 
-                const HF = overrideObj ? overrideObj.valor : countAuto;
-                
+                const HF = overrideObj ? overrideObj.valor : (s.users.size || 17);
                 let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s); 
-                if (val instanceof Set) val = val.size;
-                
-                const txt = (val !== undefined && val !== null && !isNaN(val) && isFinite(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
-                
-                let cellClass = `px-4 py-3 text-center text-xs border-l border-slate-100 `; 
-                if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`; 
-                else cellClass += `text-slate-500 font-medium`; 
-                
-                if (overrideObj && label === 'Total Assistentes') cellClass += " bg-amber-50/50 font-bold text-amber-700";
-
-                tr += `<td class="${cellClass}">${txt}</td>`;
+                const txt = (val !== undefined && !isNaN(val) && isFinite(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
+                tr += `<td class="px-4 py-3 text-center text-xs ${i === 99 ? 'bg-blue-50/30 font-bold' : ''}">${txt}</td>`;
             });
             return tr + '</tr>';
         };
 
+        // Injeção de Linhas de Indicadores
         h += mkRow('Total Assistentes', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
-        
         h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
         h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
         h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
         h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
         h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
         h += mkRow('Total Doc. Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-        
         h += mkRow('Total Val. Diária', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
         h += mkRow('Média Val. (Equipe)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
         h += mkRow('Média Val. Diária (Pessoa)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
@@ -341,24 +313,24 @@ Produtividade.Consolidado = {
         if(tbody) tbody.innerHTML = h;
     },
 
+    /**
+     * Gera relatório em Excel baseado na visualização consolidada atual
+     */
     exportarExcel: function() {
         if (!this.dadosCalculados) return alert("Nenhum dado para exportar.");
         const { cols, st, numCols } = this.dadosCalculados;
-        const wsData = [];
-        
-        const headers = ['Indicador', ...cols, 'TOTAL'];
-        wsData.push(headers);
+        const wsData = [['Indicador', ...cols, 'TOTAL']];
         
         const addRow = (label, getter, isCalc=false) => {
             const row = [label];
             for(let i=1; i<=numCols; i++) {
-                const s = st[i]; const overrideObj = this.overridesHC[i]; const HF = overrideObj ? overrideObj.valor : (s.users.size || 17);
-                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s); if (val instanceof Set) val = val.size;
+                const s = st[i]; const HF = this.overridesHC[i] ? this.overridesHC[i].valor : (s.users.size || 17);
+                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
             }
-            const sTotal = st[99]; const overrideTotal = this.overridesHC[99]; const HFTotal = overrideTotal ? overrideTotal.valor : (sTotal.users.size || 17);
-            let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal); if (valTotal instanceof Set) valTotal = valTotal.size;
-            row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
+            const sT = st[99]; const HFT = this.overridesHC[99] ? this.overridesHC[99].valor : (sT.users.size || 17);
+            let vT = isCalc ? getter(sT, sT.diasUteis, HFT) : getter(sT);
+            row.push((vT !== undefined && !isNaN(vT)) ? Math.round(vT) : 0);
             wsData.push(row);
         };
 
@@ -370,8 +342,8 @@ Produtividade.Consolidado = {
         addRow('Total Perfil FC', s => s.fc); 
         addRow('Total Documentos Validados', s => s.qty); 
         addRow('Total Validação Diária', (s, d) => d > 0 ? s.qty / d : 0, true); 
-        addRow('Média Validação (Todas Assistentes)', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true); 
-        addRow('Média Validação Diária (Por Assist.)', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
+        addRow('Média Validação (Equipe)', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true); 
+        addRow('Média Validação Diária (Pessoa)', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
         
         const wb = XLSX.utils.book_new(); 
         const ws = XLSX.utils.aoa_to_sheet(wsData); 
