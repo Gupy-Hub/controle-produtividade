@@ -3,6 +3,7 @@ MinhaArea.Geral = {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
         
+        // Validação de Usuário Selecionado
         if (!uid) {
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p></td></tr>';
             this.zerarKPIs();
@@ -10,12 +11,12 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando métricas...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando indicadores...</span></div></td></tr>';
 
         try {
             // 1. Buscas Otimizadas
             const [prodRes, assertRes, metaRes] = await Promise.all([
-                // Produção: Select * garante trazer 'justificativa_abono', 'justificativa' e 'justificativas'
+                // Produção
                 Sistema.supabase
                     .from('producao')
                     .select('*') 
@@ -24,7 +25,7 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim)
                     .limit(2000), 
                 
-                // Assertividade: Apenas numérico
+                // Assertividade (Numérico)
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -67,7 +68,7 @@ MinhaArea.Geral = {
                 return mapaDados.get(dataStr);
             };
 
-            // Processa Produção (COM A CORREÇÃO DE COLUNAS)
+            // Processa Produção
             (prodRes.data || []).forEach(p => {
                 const dia = getDia(p.data_referencia);
                 if(dia) {
@@ -83,7 +84,7 @@ MinhaArea.Geral = {
                         dia.prod.fator = fator;
                     }
 
-                    // --- SOLUÇÃO FINAL DA JUSTIFICATIVA (Prioridade 1, 2, 3) ---
+                    // Lógica de Justificativa (Abnon > Singular > Plural)
                     let texto = (p.justificativa_abono || '').trim();
                     if (texto === '') texto = (p.justificativa || '').trim();
                     if (texto === '') texto = (p.justificativas || '').trim();
@@ -118,8 +119,10 @@ MinhaArea.Geral = {
             let totalProd = 0, totalMeta = 0, somaFator = 0, diasComProducao = 0;
             let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
 
-            const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
+            // Helper de Formatação (2 casas decimais forçadas)
+            const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
             const fmtNum = (val) => val.toLocaleString('pt-BR');
+            const fmtDias = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 
             lista.forEach(item => {
                 // --- Produção ---
@@ -140,7 +143,7 @@ MinhaArea.Geral = {
 
                 if (item.assert.qtdAuditorias > 0) {
                     pctAssert = item.assert.somaNotas / item.assert.qtdAuditorias;
-                    displayAssert = pctAssert.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%';
+                    displayAssert = fmtPct(pctAssert); // Usa formatação padronizada
                     tooltipAssert = `Média: ${displayAssert} (${item.assert.qtdAuditorias} auditorias)`;
                     
                     if (pctAssert >= metaAssertPadrao) {
@@ -159,14 +162,12 @@ MinhaArea.Geral = {
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
 
-                // --- EXIBIÇÃO DA JUSTIFICATIVA ---
+                // Justificativa
                 const temJustificativa = item.prod.justificativa && item.prod.justificativa.length > 0;
                 const textoJustificativa = item.prod.justificativa || '-';
-                
                 const classJustificativa = temJustificativa 
                     ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" 
                     : "text-slate-200 text-center block";
-
                 const tooltipJustificativa = temJustificativa ? `Obs: ${item.prod.justificativa}` : "";
 
                 // Data
@@ -202,32 +203,44 @@ MinhaArea.Geral = {
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // --- 5. Atualização dos Cards (NOVO LAYOUT) ---
+            // --- ATUALIZAÇÃO DOS CARDS (Com Melhorias) ---
             
-            // Volume
+            // 1. Volume
             this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
-            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
+            const pctAtingimento = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const barVolume = document.getElementById('bar-volume');
-            if(barVolume) barVolume.style.width = `${Math.min(atingimentoGeral, 100)}%`;
+            if(barVolume) barVolume.style.width = Math.min(pctAtingimento, 100) + '%';
 
-            // Qualidade
+            // 2. Qualidade
             const mediaAssertGlobal = qtdAuditoriasGlobal > 0 ? (somaNotasGlobal / qtdAuditoriasGlobal) : 0;
-            this.setTxt('kpi-assertividade-val', mediaAssertGlobal.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%');
-            this.setTxt('kpi-pct', fmtPct(atingimentoGeral)); // Atingimento da Meta de Volume
+            // MELHORIA: Sempre com 2 casas decimais
+            this.setTxt('kpi-assertividade-val', fmtPct(mediaAssertGlobal));
+            this.setTxt('kpi-pct', fmtPct(pctAtingimento));
 
-            // Dias
+            // 3. Dias Produtivos
             const diasUteisPeriodo = this.calcularDiasUteisMes(inicio, fim);
-            const diasProdutivos = Math.ceil(somaFator);
-            this.setTxt('kpi-dias', diasProdutivos);
+            // MELHORIA: Soma Real (0.5 + 0.5 = 1.0)
+            const diasProdutivos = somaFator; 
+            
+            this.setTxt('kpi-dias', fmtDias(diasProdutivos));
             this.setTxt('kpi-dias-uteis', diasUteisPeriodo);
+            
             const pctDias = diasUteisPeriodo > 0 ? (diasProdutivos / diasUteisPeriodo) * 100 : 0;
             const barDias = document.getElementById('bar-dias');
-            if(barDias) barDias.style.width = `${Math.min(pctDias, 100)}%`;
+            if(barDias) barDias.style.width = Math.min(pctDias, 100) + '%';
 
-            // Velocidade
-            const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
-            this.setTxt('kpi-media', mediaDiaria);
+            // 4. Velocidade (Média/Dia)
+            const mediaDiaria = diasProdutivos > 0 ? Math.round(totalProd / diasProdutivos) : 0;
+            
+            // MELHORIA: Traz a % da Velocidade (Ex: 605 / 93,08%)
+            const pctVelocidade = metaProducaoPadrao > 0 ? (mediaDiaria / metaProducaoPadrao) * 100 : 0;
+            const textoVelocidade = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVelocidade >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${fmtPct(pctVelocidade)}</span>`;
+            
+            // Injeta HTML direto pois tem cores dinâmicas
+            const elMedia = document.getElementById('kpi-media');
+            if(elMedia) elMedia.innerHTML = textoVelocidade;
+
             this.setTxt('kpi-meta-dia', metaProducaoPadrao);
 
         } catch (err) {
@@ -242,13 +255,6 @@ MinhaArea.Geral = {
         let str = String(val).replace('%', '').replace(/\s/g, '').replace(',', '.');
         const num = parseFloat(str);
         return isNaN(num) ? 0 : num;
-    },
-
-    setStatus: function(pct) {
-        // (Opcional) Mantido para compatibilidade, caso usem badges em outro lugar
-        const el = document.getElementById('kpi-status');
-        if(!el) return;
-        // ... (lógica de status)
     },
 
     calcularDiasUteisMes: function(inicio, fim) {
