@@ -1,7 +1,7 @@
 MinhaArea.Comparativo = {
     chartOfensores: null,
     dadosNoksCache: [],
-    visaoAtual: 'doc', 
+    visaoAtual: 'doc', // 'doc', 'empresa', 'ndf'
     mostrarTodos: false,
 
     carregar: async function() {
@@ -16,20 +16,25 @@ MinhaArea.Comparativo = {
         const containerNdf = document.getElementById('total-ndf-detalhe');
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
+        // Reset da interface
         if(btnLimpar) btnLimpar.classList.add('hidden');
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
+            // 1. Buscar Dados (Paginada)
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
+            // 2. Filtrar apenas NOKs
             this.dadosNoksCache = dados.filter(d => {
                 const qtd = Number(d.qtd_nok || 0);
                 const isNokStatus = (d.status || '').toUpperCase() === 'NOK';
                 return qtd > 0 || isNokStatus;
             });
             
+            // 3. Atualizar Contadores
             if(containerTotal) containerTotal.innerText = this.dadosNoksCache.length;
             
+            // Contagem NDF
             const totalNdf = this.dadosNoksCache.filter(d => this.isNDF(d)).length;
             if(containerNdf) containerNdf.innerText = totalNdf;
 
@@ -39,6 +44,7 @@ MinhaArea.Comparativo = {
                 return;
             }
 
+            // 4. Renderizar Gráfico e Feed Inicial
             this.atualizarGrafico();
             this.atualizarFeedPorVisao();
 
@@ -48,23 +54,32 @@ MinhaArea.Comparativo = {
         }
     },
 
-    // --- FILTROS E INTERAÇÕES ---
+    // --- FUNÇÕES DE BUSCA E FILTRO ---
 
     filtrarPorBusca: function(texto) {
-        if (!texto) {
+        if (!texto || texto.trim() === '') {
             this.limparFiltro(true);
             return;
         }
         
         const termo = texto.toLowerCase();
-        const filtrados = this.dadosNoksCache.filter(d => 
-            (d.doc_name || '').toLowerCase().includes(termo) ||
-            (this.getDocType(d) || '').toLowerCase().includes(termo) ||
-            (d.observacao || d.obs || '').toLowerCase().includes(termo)
-        );
+        // Filtra sobre o cache atual
+        const filtrados = this.dadosNoksCache.filter(d => {
+            const nome = (d.doc_name || '').toLowerCase();
+            const tipo = (this.getDocType(d) || '').toLowerCase();
+            const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
+            const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
+            return nome.includes(termo) || tipo.includes(termo) || obs.includes(termo) || emp.includes(termo);
+        });
 
         const container = document.getElementById('feed-erros-container');
         this.renderizarFeed(filtrados, container);
+        
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) {
+            btn.classList.remove('hidden');
+            btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar Busca`;
+        }
     },
 
     toggleMostrarTodos: function() {
@@ -111,7 +126,7 @@ MinhaArea.Comparativo = {
         this.aplicarFiltroVisual(filtrados, valor);
     },
 
-    // --- LÓGICA DE DADOS ---
+    // --- LÓGICA DE DADOS E RENDERIZAÇÃO ---
 
     atualizarGrafico: function() {
         const agrupamento = {};
@@ -155,12 +170,10 @@ MinhaArea.Comparativo = {
         this.renderizarFeed(lista, container);
     },
 
-    // --- RENDERIZAÇÃO ---
-
     renderizarFeed: function(listaNok, container) {
         if(!container) return;
         if (listaNok.length === 0) {
-            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado.</div>';
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado nesta visão.</div>';
             return;
         }
         listaNok.sort((a, b) => new Date(b.data_auditoria) - new Date(a.data_auditoria));
@@ -278,7 +291,6 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         while(continuar) {
-            // Buscando nome_documento (mapeado de DOCUMENTO)
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
