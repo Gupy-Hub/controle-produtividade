@@ -12,7 +12,6 @@ MinhaArea.Geral = {
 
         // Bloqueio de segurança para evitar requisições com datas inválidas
         if (dataInicio.includes('NaN') || dataFim.includes('NaN')) {
-            console.warn("Nexus: Aguardando inicialização correta das datas...");
             return;
         }
 
@@ -25,7 +24,7 @@ MinhaArea.Geral = {
         corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>A carregar extrato de produção...</td></tr>';
 
         try {
-            // 1. Consulta ao Supabase (O '*' garante a captura de 'justificativa')
+            // 1. Consulta ao Supabase
             const { data: registros, error: erroProducao } = await Sistema.supabase
                 .from('producao')
                 .select('*')
@@ -36,7 +35,7 @@ MinhaArea.Geral = {
 
             if (erroProducao) throw erroProducao;
 
-            // 2. Busca da Meta Diária base para o mês filtrado
+            // 2. Busca da Meta Diária
             const partesData = dataInicio.split('-');
             const { data: metaData } = await Sistema.supabase
                 .from('metas')
@@ -68,7 +67,6 @@ MinhaArea.Geral = {
                 
                 const dataFormatada = item.data_referencia.split('-').reverse().join('/');
 
-                // Renderização da linha da tabela com justificativa integrada
                 corpoTabela.innerHTML += `
                     <tr class="hover:bg-slate-50 transition border-b border-slate-200 text-xs">
                         <td class="px-3 py-2 font-bold text-slate-700">${dataFormatada}</td>
@@ -85,7 +83,7 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // 4. Atualização dos Cards de KPI HUD
+            // 4. Atualização dos Cards de KPI
             const atingimentoFinalGeral = acumuladoMeta > 0 ? (acumuladoProducao / acumuladoMeta) * 100 : 0;
             
             this.setTxt('kpi-total', acumuladoProducao.toLocaleString('pt-BR'));
@@ -99,7 +97,6 @@ MinhaArea.Geral = {
             const barra = document.getElementById('bar-progress');
             if (barra) {
                 barra.style.width = `${Math.min(atingimentoFinalGeral, 100)}%`;
-                barra.className = atingimentoFinalGeral >= 100 ? "h-full bg-emerald-500 rounded-full" : "h-full bg-blue-500 rounded-full";
             }
 
             if (registros.length === 0) {
@@ -108,7 +105,7 @@ MinhaArea.Geral = {
 
         } catch (erro) {
             console.error("Erro na Área Pessoal:", erro);
-            corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao aceder aos dados de produção.</td></tr>';
+            corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao aceder aos dados.</td></tr>';
         }
     },
 

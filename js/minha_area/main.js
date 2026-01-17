@@ -30,20 +30,27 @@ Object.assign(window.MinhaArea, {
         }
 
         const seletorMes = document.getElementById('sel-mes');
-        if (seletorMes && seletorMes.value === "") {
+        if (seletorMes && (seletorMes.value === "" || seletorMes.value === null)) {
             seletorMes.value = new Date().getMonth();
         }
     },
 
     /**
      * Obtém o ID do utilizador alvo (próprio ou selecionado por admin)
+     * CORREÇÃO: Garante o retorno do utilizador logado caso o seletor admin falhe.
      */
     getUsuarioAlvo: function() {
         const seletorAdmin = document.getElementById('admin-user-selector');
-        if (seletorAdmin && seletorAdmin.value) return seletorAdmin.value;
+        if (seletorAdmin && seletorAdmin.value) {
+            return seletorAdmin.value;
+        }
         
         const usuarioLogado = localStorage.getItem('usuario_logado');
-        return usuarioLogado ? JSON.parse(usuarioLogado).id : null;
+        if (usuarioLogado) {
+            const user = JSON.parse(usuarioLogado);
+            return user.id;
+        }
+        return null;
     },
 
     /**
