@@ -7,17 +7,15 @@ Produtividade.Assertividade = {
     },
 
     /**
-     * Lógica validada: Soma das Notas / Quantidade
-     * Ex: 3400 / 37 = 91.89%
+     * Lógica de Cálculo:
+     * Exemplo da Samaria: Soma (3400) / Qtd (37) = 91.89%
      */
     calcularMedia: function(soma, qtd) {
+        // Blindagem contra divisão por zero
         if (!qtd || qtd <= 0) return 0;
         return (soma / qtd);
     },
 
-    /**
-     * Renderiza o badge colorido na tabela
-     */
     renderizarCelula: function(auditoria) {
         const qtd = parseInt(auditoria.qtd || 0);
         const soma = parseFloat(auditoria.soma || 0);
@@ -29,9 +27,10 @@ Produtividade.Assertividade = {
         if (qtd > 0) {
             const media = this.calcularMedia(soma, qtd);
             
-            // Formata para o padrão brasileiro: "91,89%"
+            // Formatação: 91.89 -> "91,89%"
             display = media.toFixed(2).replace('.', ',') + "%";
-            tooltip = `Auditorias: ${qtd} | Soma: ${soma} | Média: ${display}`;
+            
+            tooltip = `Auditorias: ${qtd} | Soma %: ${soma} | Média: ${display}`;
             
             // Regras de Cores (SLA)
             if (media >= 98) classeCor = "text-emerald-700 font-bold bg-emerald-50 border-emerald-200";
