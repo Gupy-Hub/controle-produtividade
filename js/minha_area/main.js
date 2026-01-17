@@ -1,143 +1,217 @@
-// ARQUIVO: js/minha_area/main.js
-window.MinhaArea = window.MinhaArea || {};
-
-Object.assign(window.MinhaArea, {
+const MinhaArea = {
+    usuario: null,
+    usuarioAlvoId: null,
     filtroPeriodo: 'mes',
 
-    /**
-     * Inicializa os componentes da Área do Utilizador
-     */
     init: async function() {
         console.log("Minha Área Iniciada");
+        
+        const storedUser = localStorage.getItem('usuario_logado');
+        if (!storedUser) {
+            window.location.href = 'index.html';
+            return;
+        }
+        this.usuario = JSON.parse(storedUser);
+        
+        await this.setupAdminAccess();
+        if (!this.isAdmin()) {
+            this.usuarioAlvoId = this.usuario.id;
+        }
+
+        // 1. Popula Selects Iniciais
         this.popularSeletoresIniciais();
+
+        // 2. Carrega Estado Salvo (Persistência) ou usa padrão
         this.carregarEstadoSalvo();
+
         this.mudarAba('diario');
     },
 
-    /**
-     * Preenche os seletores de Ano e Mês com valores padrão de segurança
-     */
+    isAdmin: function() {
+        return ['GESTORA', 'AUDITORA', 'ADMIN'].includes(this.usuario.funcao) || this.usuario.perfil === 'admin' || this.usuario.id == 1;
+    },
+
+    setupAdminAccess: async function() {
+        if (this.isAdmin()) {
+            const container = document.getElementById('admin-selector-container');
+            const select = document.getElementById('admin-user-selector');
+            if (container && select) {
+                container.classList.remove('hidden');
+                try {
+                    const { data: users, error } = await Sistema.supabase
+                        .from('usuarios').select('id, nome').eq('ativo', true).order('nome');
+                    if (!error && users) {
+                        let options = `<option value="" disabled selected>👉 Selecionar Colaboradora...</option>`;
+                        users.forEach(u => { if (u.id !== this.usuario.id) options += `<option value="${u.id}">${u.nome}</option>`; });
+                        select.innerHTML = options;
+                    }
+                } catch (e) { console.error(e); }
+            }
+        }
+    },
+
+    mudarUsuarioAlvo: function(novoId) {
+        if (!novoId) return;
+        this.usuarioAlvoId = parseInt(novoId);
+        this.atualizarTudo();
+    },
+
+    getUsuarioAlvo: function() { return this.usuarioAlvoId; },
+
     popularSeletoresIniciais: function() {
-        const seletorAno = document.getElementById('sel-ano');
+        const anoSelect = document.getElementById('sel-ano');
         const anoAtual = new Date().getFullYear();
+        let htmlAnos = '';
+        for (let i = anoAtual + 1; i >= anoAtual - 2; i--) {
+            htmlAnos += `<option value="${i}" ${i === anoAtual ? 'selected' : ''}>${i}</option>`;
+        }
+        if(anoSelect) anoSelect.innerHTML = htmlAnos;
         
-        if (seletorAno && !seletorAno.innerHTML) {
-            let htmlOpcoes = '';
-            for (let i = anoAtual; i >= anoAtual - 1; i--) {
-                htmlOpcoes += `<option value="${i}">${i}</option>`;
-            }
-            seletorAno.innerHTML = htmlOpcoes;
-        }
-
-        const seletorMes = document.getElementById('sel-mes');
-        if (seletorMes && (seletorMes.value === "" || seletorMes.value === null)) {
-            seletorMes.value = new Date().getMonth();
-        }
+        const mesSelect = document.getElementById('sel-mes');
+        const mesAtual = new Date().getMonth();
+        if(mesSelect) mesSelect.value = mesAtual;
     },
 
-    /**
-     * Obtém o ID do utilizador alvo (próprio ou selecionado por admin)
-     * CORREÇÃO: Garante o retorno do utilizador logado caso o seletor admin falhe.
-     */
-    getUsuarioAlvo: function() {
-        const seletorAdmin = document.getElementById('admin-user-selector');
-        if (seletorAdmin && seletorAdmin.value) {
-            return seletorAdmin.value;
-        }
-        
-        const usuarioLogado = localStorage.getItem('usuario_logado');
-        if (usuarioLogado) {
-            const user = JSON.parse(usuarioLogado);
-            return user.id;
-        }
-        return null;
-    },
+    // --- PERSISTÊNCIA E EVENTOS ---
 
-    /**
-     * Gera o intervalo de datas para o filtro, evitando erros de NaN-NaN-NaN
-     */
-    getDatasFiltro: function() {
-        const elementoAno = document.getElementById('sel-ano');
-        const elementoMes = document.getElementById('sel-mes');
-        
-        const ano = parseInt(elementoAno?.value) || new Date().getFullYear();
-        const mes = parseInt(elementoMes?.value) || new Date().getMonth();
-        
-        let dataInicio, dataFim;
-
-        if (this.filtroPeriodo === 'mes') {
-            dataInicio = new Date(ano, mes, 1);
-            dataFim = new Date(ano, mes + 1, 0);
-        } else if (this.filtroPeriodo === 'ano') {
-            const subperiodo = document.getElementById('sel-subperiodo-ano')?.value || 'full';
-            if (subperiodo === 'S1') {
-                dataInicio = new Date(ano, 0, 1);
-                dataFim = new Date(ano, 5, 30);
-            } else if (subperiodo === 'S2') {
-                dataInicio = new Date(ano, 6, 1);
-                dataFim = new Date(ano, 11, 31);
-            } else {
-                dataInicio = new Date(ano, 0, 1);
-                dataFim = new Date(ano, 11, 31);
-            }
-        }
-
-        const formatarData = (data) => {
-            const aaaa = data.getFullYear();
-            const mm = String(data.getMonth() + 1).padStart(2, '0');
-            const dd = String(data.getDate()).padStart(2, '0');
-            return `${aaaa}-${mm}-${dd}`;
+    salvarEAtualizar: function() {
+        // Salva estado no LocalStorage
+        const estado = {
+            tipo: this.filtroPeriodo,
+            ano: document.getElementById('sel-ano').value,
+            mes: document.getElementById('sel-mes').value,
+            semana: document.getElementById('sel-semana').value,
+            sub: document.getElementById('sel-subperiodo-ano').value
         };
-
-        return {
-            inicio: formatarData(dataInicio),
-            fim: formatarData(dataFim)
-        };
-    },
-
-    /**
-     * Gere a navegação entre as abas da área pessoal
-     */
-    mudarAba: function(idAba) {
-        document.querySelectorAll('.ma-view').forEach(view => view.classList.add('hidden'));
-        const abaAlvo = document.getElementById(`ma-tab-${idAba}`);
-        if (abaAlvo) abaAlvo.classList.remove('hidden');
-
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        const botaoAlvo = document.getElementById(`btn-ma-${idAba}`);
-        if (botaoAlvo) botaoAlvo.classList.add('active');
-
-        if (idAba === 'diario') MinhaArea.Geral.carregar();
+        localStorage.setItem('ma_filtro_state', JSON.stringify(estado));
+        
+        this.atualizarTudo();
     },
 
     carregarEstadoSalvo: function() {
-        const salvo = localStorage.getItem('minha_area_filtro_state');
+        const salvo = localStorage.getItem('ma_filtro_state');
         if (salvo) {
             try {
                 const s = JSON.parse(salvo);
-                this.filtroPeriodo = s.tipo || 'mes';
-                if (document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
-                if (document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
-            } catch (e) { console.error("Erro ao restaurar estado", e); }
+                
+                // Restaura valores dos inputs
+                if(document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
+                if(document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
+                if(document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
+                if(document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
+                
+                // Restaura o tipo e a UI
+                this.mudarPeriodo(s.tipo, false); // false = não salvar de novo agora
+                return;
+            } catch(e) { console.error("Erro ao ler estado salvo", e); }
         }
-    },
-
-    salvarEAtualizar: function() {
-        const estado = {
-            tipo: this.filtroPeriodo,
-            ano: document.getElementById('sel-ano')?.value,
-            mes: document.getElementById('sel-mes')?.value
-        };
-        localStorage.setItem('minha_area_filtro_state', JSON.stringify(estado));
-        this.mudarAba('diario');
+        
+        // Padrão se não houver salvo
+        this.mudarPeriodo('mes', false);
     },
 
     mudarPeriodo: function(tipo, salvar = true) {
         this.filtroPeriodo = tipo;
-        if (salvar) this.salvarEAtualizar();
+        
+        ['mes', 'semana', 'ano'].forEach(t => {
+            const btn = document.getElementById(`btn-periodo-${t}`);
+            if(btn) {
+                if(t === tipo) btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
+                else btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
+            }
+        });
+
+        const selMes = document.getElementById('sel-mes');
+        const selSemana = document.getElementById('sel-semana');
+        const selSubAno = document.getElementById('sel-subperiodo-ano');
+
+        if(selMes) selMes.classList.remove('hidden');
+        if(selSemana) selSemana.classList.add('hidden');
+        if(selSubAno) selSubAno.classList.add('hidden');
+
+        if (tipo === 'semana') {
+            if(selSemana) selSemana.classList.remove('hidden');
+        } else if (tipo === 'ano') {
+            if(selMes) selMes.classList.add('hidden');
+            if(selSubAno) selSubAno.classList.remove('hidden');
+        }
+
+        if(salvar) this.salvarEAtualizar();
+    },
+
+    getDatasFiltro: function() {
+        const ano = parseInt(document.getElementById('sel-ano').value);
+        const mes = parseInt(document.getElementById('sel-mes').value);
+        let inicio, fim;
+
+        if (this.filtroPeriodo === 'mes') {
+            inicio = new Date(ano, mes, 1);
+            fim = new Date(ano, mes + 1, 0);
+        } else if (this.filtroPeriodo === 'semana') {
+            const semanaIndex = parseInt(document.getElementById('sel-semana').value);
+            const diaInicio = (semanaIndex - 1) * 7 + 1;
+            let diaFim = diaInicio + 6;
+            const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
+            if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
+            
+            if (diaInicio > ultimoDiaMes) {
+                inicio = new Date(ano, mes, ultimoDiaMes);
+                fim = new Date(ano, mes, ultimoDiaMes);
+            } else {
+                inicio = new Date(ano, mes, diaInicio);
+                fim = new Date(ano, mes, diaFim);
+            }
+        } else if (this.filtroPeriodo === 'ano') {
+            const sub = document.getElementById('sel-subperiodo-ano').value;
+            if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
+            else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
+            else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
+            else if (sub.startsWith('T')) {
+                const tri = parseInt(sub.replace('T', ''));
+                const mesInicio = (tri - 1) * 3;
+                const mesFim = mesInicio + 3;
+                inicio = new Date(ano, mesInicio, 1);
+                fim = new Date(ano, mesFim, 0);
+            }
+        }
+
+        const fmt = (d) => {
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        return { inicio: fmt(inicio), fim: fmt(fim) };
+    },
+
+    atualizarTudo: function() {
+        const abaAtiva = document.querySelector('.tab-btn.active');
+        if (abaAtiva) {
+            const id = abaAtiva.id.replace('btn-ma-', '');
+            this.carregarDadosAba(id);
+        }
+    },
+
+    mudarAba: function(abaId) {
+        document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        const aba = document.getElementById(`ma-tab-${abaId}`);
+        const btn = document.getElementById(`btn-ma-${abaId}`);
+        if(aba) aba.classList.remove('hidden');
+        if(btn) btn.classList.add('active');
+        this.carregarDadosAba(abaId);
+    },
+
+    carregarDadosAba: function(abaId) {
+        if (this.isAdmin() && !this.usuarioAlvoId) return;
+        if (abaId === 'diario' && this.Geral) this.Geral.carregar();
+        if (abaId === 'metas' && this.Metas) this.Metas.carregar();
+        if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
+        if (abaId === 'comparativo' && this.Comparativo) this.Comparativo.carregar();
+        if (abaId === 'feedback' && this.Feedback) this.Feedback.carregar();
     }
-});
+};
 
 document.addEventListener('DOMContentLoaded', () => {
-    if (window.MinhaArea && window.MinhaArea.init) window.MinhaArea.init();
+    setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
 });

@@ -1,133 +1,149 @@
-// ARQUIVO: js/minha_area/geral.js
 MinhaArea.Geral = {
-    /**
-     * Carrega e renderiza os dados de produção e KPIs
-     */
     carregar: async function() {
-        const usuarioId = MinhaArea.getUsuarioAlvo();
-        const corpoTabela = document.getElementById('tabela-extrato');
-        const datas = MinhaArea.getDatasFiltro();
-        const dataInicio = datas.inicio;
-        const dataFim = datas.fim;
-
-        // Bloqueio de segurança para evitar requisições com datas inválidas
-        if (dataInicio.includes('NaN') || dataFim.includes('NaN')) {
-            return;
-        }
-
-        if (!usuarioId) {
-            corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400">Seleccione um utilizador para ver os dados.</td></tr>';
+        const uid = MinhaArea.getUsuarioAlvo();
+        const tbody = document.getElementById('tabela-extrato');
+        
+        if (!uid) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p><p class="text-xs">Utilize o seletor para visualizar os dados da equipe.</p></td></tr>';
             this.zerarKPIs();
             return;
         }
 
-        corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>A carregar extrato de produção...</td></tr>';
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Buscando dados...</span></div></td></tr>';
 
         try {
-            // 1. Consulta ao Supabase
-            const { data: registros, error: erroProducao } = await Sistema.supabase
+            // 1. Busca Produção (CORREÇÃO: Incluindo 'justificativa' no select)
+            const { data, error } = await Sistema.supabase
                 .from('producao')
-                .select('*')
-                .eq('usuario_id', usuarioId)
-                .gte('data_referencia', dataInicio)
-                .lte('data_referencia', dataFim)
+                .select('id, quantidade, fifo, gradual_total, gradual_parcial, fator, data_referencia, justificativa')
+                .eq('usuario_id', uid)
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
                 .order('data_referencia', { ascending: false });
 
-            if (erroProducao) throw erroProducao;
+            if (error) throw error;
 
-            // 2. Busca da Meta Diária
-            const partesData = dataInicio.split('-');
+            // 2. Busca Meta
+            const [anoStr, mesStr] = inicio.split('-');
+            const mesAtual = parseInt(mesStr);
+            const anoAtual = parseInt(anoStr);
+            
             const { data: metaData } = await Sistema.supabase
                 .from('metas')
-                .select('meta')
-                .eq('usuario_id', usuarioId)
-                .eq('mes', parseInt(partesData[1]))
-                .eq('ano', parseInt(partesData[0]))
+                .select('meta') 
+                .eq('usuario_id', uid)
+                .eq('mes', mesAtual)
+                .eq('ano', anoAtual)
                 .maybeSingle();
 
-            const metaDiariaBase = metaData ? metaData.meta : 650;
+            const metaDiariaPadrao = metaData ? metaData.meta : 650;
 
-            // 3. Processamento de Dados
-            let acumuladoProducao = 0;
-            let acumuladoMeta = 0;
-            let totalDiasTrabalhados = 0;
-            corpoTabela.innerHTML = '';
+            // 3. Processamento
+            let totalProd = 0; let totalFifo = 0; let totalGT = 0; let totalGP = 0;
+            let totalMeta = 0; let somaFator = 0; let diasUteis = 0;
 
-            registros.forEach(item => {
-                const quantidade = Number(item.quantidade || 0);
-                const fatorTrabalho = Number(item.fator || 0);
-                const metaCalculadaDia = Math.round(metaDiariaBase * fatorTrabalho);
+            tbody.innerHTML = '';
+            const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%';
+            const fmtZero = (val) => val === 0 ? '<span class="text-slate-300">0</span>' : val;
+
+            data.forEach(item => {
+                const qtd = Number(item.quantidade || 0);
+                const fifo = Number(item.fifo || 0);
+                const gt = Number(item.gradual_total || 0);
+                const gp = Number(item.gradual_parcial || 0);
+                const fator = Number(item.fator);
                 
-                acumuladoProducao += quantidade;
-                acumuladoMeta += metaCalculadaDia;
-                if (fatorTrabalho > 0) totalDiasTrabalhados++;
-
-                const percentualAtingimento = metaCalculadaDia > 0 ? (quantidade / metaCalculadaDia) * 100 : 0;
-                const corPercentual = percentualAtingimento >= 100 ? 'text-emerald-600' : (percentualAtingimento >= 80 ? 'text-amber-600' : 'text-rose-600');
+                const metaDia = Math.round(metaDiariaPadrao * fator);
                 
-                const dataFormatada = item.data_referencia.split('-').reverse().join('/');
+                totalProd += qtd; totalFifo += fifo; totalGT += gt; totalGP += gp;
+                somaFator += fator;
+                totalMeta += metaDia;
+                if (fator > 0) diasUteis++;
 
-                corpoTabela.innerHTML += `
-                    <tr class="hover:bg-slate-50 transition border-b border-slate-200 text-xs">
-                        <td class="px-3 py-2 font-bold text-slate-700">${dataFormatada}</td>
-                        <td class="px-2 py-2 text-center text-slate-500">${fatorTrabalho}</td>
-                        <td class="px-2 py-2 text-center text-slate-400">${item.fifo || 0}</td>
-                        <td class="px-2 py-2 text-center text-slate-400">${item.gradual_total || 0}</td>
-                        <td class="px-2 py-2 text-center text-slate-400">${item.gradual_parcial || 0}</td>
-                        <td class="px-2 py-2 text-center font-black text-blue-700 bg-blue-50/30">${quantidade}</td>
-                        <td class="px-2 py-2 text-center text-slate-500">${metaCalculadaDia}</td>
-                        <td class="px-2 py-2 text-center font-bold ${corPercentual}">${percentualAtingimento.toFixed(2)}%</td>
-                        <td class="px-3 py-2 text-slate-600 italic">
-                            ${item.justificativa || '<span class="text-slate-300">Sem observações</span>'}
+                const pct = metaDia > 0 ? (qtd / metaDia) * 100 : 0;
+                let corPct = pct >= 100 ? 'text-emerald-600' : (pct >= 80 ? 'text-amber-600' : 'text-rose-600');
+                
+                // Formata Data
+                const dateObj = new Date(item.data_referencia + 'T12:00:00');
+                const dia = String(dateObj.getDate()).padStart(2, '0');
+                const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const ano = dateObj.getFullYear();
+                const diaSemana = dateObj.toLocaleDateString('pt-BR', { weekday: 'short' }).toUpperCase().replace('.', '');
+                
+                // Renderização da Linha (CORREÇÃO: Mapeando justificativa para a coluna final)
+                tbody.innerHTML += `
+                    <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600">
+                        <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate font-bold text-slate-700 bg-slate-50/30"><span class="text-[9px] text-slate-400 font-normal mr-1 w-6 inline-block">${diaSemana}</span>${dia}/${mes}/${ano}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">${fator}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">${fmtZero(fifo)}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">${fmtZero(gt)}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">${fmtZero(gp)}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${qtd}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">${metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center font-bold ${corPct}">${fmtPct(pct)}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 last:border-0 truncate max-w-[200px]" title="${item.justificativa || ''}">
+                            ${item.justificativa || '<span class="text-slate-300">-</span>'}
                         </td>
                     </tr>`;
             });
 
-            // 4. Atualização dos Cards de KPI
-            const atingimentoFinalGeral = acumuladoMeta > 0 ? (acumuladoProducao / acumuladoMeta) * 100 : 0;
+            this.setTxt('total-registros-footer', data.length);
             
-            this.setTxt('kpi-total', acumuladoProducao.toLocaleString('pt-BR'));
-            this.setTxt('kpi-meta-acumulada', acumuladoMeta.toLocaleString('pt-BR'));
-            this.setTxt('kpi-pct', atingimentoFinalGeral.toFixed(2) + '%');
-            this.setTxt('kpi-dias', totalDiasTrabalhados);
-            this.setTxt('kpi-media', totalDiasTrabalhados > 0 ? Math.round(acumuladoProducao / totalDiasTrabalhados) : 0);
-            this.setTxt('kpi-meta-dia', metaDiariaBase);
-            this.setTxt('kpi-dias-uteis', this.calcularDiasUteis(dataInicio, dataFim));
+            // Cálculos de KPIs
+            const diasUteisCalculados = Math.ceil(somaFator);
+            const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
+            const mediaDiaria = diasUteis > 0 ? Math.round(totalProd / diasUteis) : 0;
 
-            const barra = document.getElementById('bar-progress');
-            if (barra) {
-                barra.style.width = `${Math.min(atingimentoFinalGeral, 100)}%`;
+            this.setTxt('kpi-total', totalProd.toLocaleString('pt-BR'));
+            this.setTxt('kpi-meta-acumulada', totalMeta.toLocaleString('pt-BR'));
+            this.setTxt('kpi-pct', fmtPct(atingimentoGeral));
+            this.setStatus(atingimentoGeral);
+            this.setTxt('kpi-dias', diasUteisCalculados);
+            this.setTxt('kpi-dias-uteis', this.calcularDiasUteisMes(inicio, fim));
+            this.setTxt('kpi-media', mediaDiaria);
+            this.setTxt('kpi-meta-dia', metaDiariaPadrao);
+
+            const bar = document.getElementById('bar-progress');
+            if(bar) {
+                bar.style.width = `${Math.min(atingimentoGeral, 100)}%`;
+                bar.className = atingimentoGeral >= 100 ? "h-full bg-emerald-500" : "h-full bg-blue-500";
             }
 
-            if (registros.length === 0) {
-                corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registo de produção encontrado.</td></tr>';
-            }
+            if (data.length === 0) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-        } catch (erro) {
-            console.error("Erro na Área Pessoal:", erro);
-            corpoTabela.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao aceder aos dados.</td></tr>';
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
 
-    setTxt: function(id, valor) { 
-        const el = document.getElementById(id); 
-        if (el) el.innerText = valor; 
+    setStatus: function(pct) {
+        const el = document.getElementById('kpi-status');
+        if(!el) return;
+        if (pct >= 100) { el.innerText = "Excelente"; el.className = "text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 uppercase"; }
+        else if (pct >= 90) { el.innerText = "Bom"; el.className = "text-xs font-black text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 uppercase"; }
+        else if (pct >= 80) { el.innerText = "Atenção"; el.className = "text-xs font-black text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-100 uppercase"; }
+        else { el.innerText = "Crítico"; el.className = "text-xs font-black text-rose-600 bg-rose-50 px-2 py-1 rounded border border-rose-100 uppercase"; }
     },
-    
-    calcularDiasUteis: function(inicioStr, fimStr) {
-        let uteis = 0;
-        const atual = new Date(inicioStr + 'T12:00:00');
-        const limite = new Date(fimStr + 'T12:00:00');
-        while (atual <= limite) {
-            if (atual.getDay() !== 0 && atual.getDay() !== 6) uteis++;
-            atual.setDate(atual.getDate() + 1);
+
+    calcularDiasUteisMes: function(inicio, fim) {
+        let count = 0;
+        const cur = new Date(inicio + 'T12:00:00');
+        const end = new Date(fim + 'T12:00:00');
+        while (cur <= end) {
+            const day = cur.getDay();
+            if (day !== 0 && day !== 6) count++;
+            cur.setDate(cur.getDate() + 1);
         }
-        return uteis;
+        return count;
     },
 
     zerarKPIs: function() {
         ['kpi-total','kpi-meta-acumulada','kpi-pct','kpi-dias','kpi-dias-uteis','kpi-media','kpi-meta-dia'].forEach(id => this.setTxt(id, '--'));
-        const barra = document.getElementById('bar-progress'); 
-        if (barra) barra.style.width = '0%';
-    }
+        this.setStatus(0);
+        const bar = document.getElementById('bar-progress'); if(bar) bar.style.width = '0%';
+    },
+
+    setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; }
 };
