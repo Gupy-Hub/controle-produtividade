@@ -10,33 +10,34 @@ Menu.Global = {
             document.body.prepend(container);
         }
 
-        // Recupera o usuário com segurança. Se falhar, usa objeto vazio.
         let user = {};
         try {
             const sessao = localStorage.getItem('usuario_logado');
             if (sessao) user = JSON.parse(sessao);
-        } catch (e) {
-            console.error("Erro ao ler sessão:", e);
-        }
+        } catch (e) { console.error("Erro ao ler sessão:", e); }
 
-        const isGestao = ['GESTORA', 'AUDITORA'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
+        // Lógica Centralizada de Permissão (Mesma do sistema.js)
+        const isGestao = ['GESTORA', 'AUDITORA', 'ADMIN'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
         const currentPath = window.location.pathname;
 
         // --- DEFINIÇÃO DA ORDEM DOS LINKS ---
         const links = [];
 
-        // 1. Gestão (Aparece primeiro se tiver permissão)
+        // 1. Gestão (Apenas Gestoras/Auditoras)
         if (isGestao) {
             links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
         }
 
-        // 2. Produtividade
-        links.push({ nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' });
+        // 2. Produtividade (Apenas Gestoras/Auditoras)
+        // Assistentes veem seus dados na aba "Minha Área" > "Dia a Dia"
+        if (isGestao) {
+            links.push({ nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' });
+        }
 
-        // 3. Minha Área
+        // 3. Minha Área (Todos)
         links.push({ nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' });
 
-        // 4. Biblioteca
+        // 4. Biblioteca (Todos)
         links.push({ nome: 'Biblioteca', url: 'ferramentas.html', icon: 'fas fa-book' });
 
         // --- RENDERIZAÇÃO ---
@@ -65,8 +66,6 @@ Menu.Global = {
         </nav>`;
 
         container.innerHTML = html;
-        
-        // CORREÇÃO: Adiciona margem no topo para o menu não cobrir o conteúdo
         document.body.style.paddingTop = '48px'; 
     }
 };

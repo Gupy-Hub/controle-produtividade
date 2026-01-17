@@ -17,13 +17,35 @@ const Sistema = {
         const sessao = localStorage.getItem('usuario_logado');
         if (sessao) {
             Sistema.usuarioLogado = JSON.parse(sessao);
+            // Verifica permissão assim que carrega o usuário
+            Sistema.verificarAcessoPagina(); 
         } else if (requerLogin && !window.location.pathname.includes('index.html')) {
             window.location.href = 'index.html';
         }
     },
 
-    // --- FUNÇÃO DE SEGURANÇA (NOVA) ---
-    // Transforma caracteres perigosos em texto inofensivo
+    // --- NOVO: CONTROLE DE ACESSO (ACL) ---
+    verificarAcessoPagina: function() {
+        const user = Sistema.usuarioLogado;
+        if (!user) return;
+
+        const path = window.location.pathname;
+        
+        // Definição de Perfis com Acesso Total
+        const isAdmin = ['GESTORA', 'AUDITORA', 'ADMIN'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
+
+        // Páginas Restritas (Apenas Gestão/Auditoria)
+        // Se a página atual for uma dessas e o usuário NÃO for admin -> Bloqueia
+        const paginasRestritas = ['gestao.html', 'produtividade.html'];
+        
+        const tentandoAcessarRestrita = paginasRestritas.some(p => path.includes(p));
+
+        if (tentandoAcessarRestrita && !isAdmin) {
+            console.warn("Acesso negado. Redirecionando...");
+            window.location.href = 'minha_area.html'; // Redireciona para área segura
+        }
+    },
+
     escapar: function(texto) {
         if (texto === null || texto === undefined) return '';
         return texto.toString()
@@ -43,5 +65,6 @@ const Sistema = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    Sistema.inicializar(false);
+    // Passa true para exigir login em todas as páginas exceto index
+    Sistema.inicializar(true); 
 });
