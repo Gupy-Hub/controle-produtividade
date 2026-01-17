@@ -3,6 +3,7 @@ MinhaArea.Geral = {
         const uid = MinhaArea.getUsuarioAlvo();
         const tbody = document.getElementById('tabela-extrato');
         
+        // Validação de Usuário Selecionado
         if (!uid) {
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p></td></tr>';
             this.zerarKPIs();
@@ -15,7 +16,7 @@ MinhaArea.Geral = {
         try {
             // 1. Buscas Otimizadas
             const [prodRes, assertRes, metaRes] = await Promise.all([
-                // Produção: Select * garante que justificativa_abono venha junto
+                // Produção: Select * garante trazer 'justificativa_abono', 'justificativa' e 'justificativas'
                 Sistema.supabase
                     .from('producao')
                     .select('*') 
@@ -24,7 +25,7 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim)
                     .limit(2000), 
                 
-                // Assertividade
+                // Assertividade: Apenas dados numéricos para cálculo
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -54,6 +55,7 @@ MinhaArea.Geral = {
             // 3. Unificação dos Dados
             const mapaDados = new Map();
 
+            // Helper para data (YYYY-MM-DD)
             const getDia = (dataFull) => {
                 if(!dataFull) return null;
                 const dataStr = dataFull.split('T')[0];
@@ -67,7 +69,7 @@ MinhaArea.Geral = {
                 return mapaDados.get(dataStr);
             };
 
-            // Processa Produção (CORREÇÃO DEFINITIVA)
+            // Processa Produção (COM A CORREÇÃO DE COLUNAS)
             (prodRes.data || []).forEach(p => {
                 const dia = getDia(p.data_referencia);
                 if(dia) {
@@ -83,23 +85,25 @@ MinhaArea.Geral = {
                         dia.prod.fator = fator;
                     }
 
-                    // --- CAÇA AO TESOURO RESOLVIDA ---
-                    // Prioridade 1: Coluna descoberta (justificativa_abono)
+                    // --- SOLUÇÃO FINAL DA JUSTIFICATIVA ---
+                    // Verifica na ordem de prioridade descoberta no diagnóstico:
+                    // 1. justificativa_abono (Onde o Natal estava escondido)
+                    // 2. justificativa (Padrão singular)
+                    // 3. justificativas (Legado/Plural)
+                    
                     let texto = (p.justificativa_abono || '').trim();
                     
-                    // Prioridade 2: Coluna singular padrão
                     if (texto === '') {
                         texto = (p.justificativa || '').trim();
                     }
-
-                    // Prioridade 3: Coluna plural (Legado/RPC)
                     if (texto === '') {
                         texto = (p.justificativas || '').trim();
                     }
 
-                    // Aplica se encontrou algo
+                    // Aplica ao dia se encontrou texto
                     if (texto !== '') {
-                        // Se for abono, sobrescreve. Senão, preenche se vazio.
+                        // Regra: Se é um abono, ele tem prioridade absoluta. 
+                        // Se não é abono, preenche apenas se estiver vazio.
                         if (dia.prod.justificativa === '' || ehAbono) {
                             dia.prod.justificativa = texto;
                         }
@@ -120,7 +124,7 @@ MinhaArea.Geral = {
                 }
             });
 
-            // Ordena
+            // Ordena Cronologicamente
             const lista = Array.from(mapaDados.values()).sort((a, b) => b.data.localeCompare(a.data));
 
             // 4. Renderização
@@ -174,6 +178,7 @@ MinhaArea.Geral = {
                 const temJustificativa = item.prod.justificativa && item.prod.justificativa.length > 0;
                 const textoJustificativa = item.prod.justificativa || '-';
                 
+                // Destaque visual (Fundo amarelo se tiver justificativa)
                 const classJustificativa = temJustificativa 
                     ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" 
                     : "text-slate-200 text-center block";
@@ -213,7 +218,7 @@ MinhaArea.Geral = {
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // 5. Atualiza KPIs
+            // 5. Atualiza KPIs Topo
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
 
