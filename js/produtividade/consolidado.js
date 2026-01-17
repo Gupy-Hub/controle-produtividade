@@ -5,7 +5,7 @@ Produtividade.Consolidado = {
     chartInstance: null,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Engine V1 (Filtros Inteligentes)...");
+        console.log("🚀 [NEXUS] Consolidado: Engine V2 (KPIs Detalhados)...");
         this.renderizarFiltros(); 
         this.carregarDados();
         this.initialized = true;
@@ -56,11 +56,9 @@ Produtividade.Consolidado = {
     },
 
     getDatasIntervalo: function() {
-        // [FIX] Verificação de segurança
         const elAno = document.getElementById('sel-consolidado-ano');
         const elPeriodo = document.getElementById('sel-consolidado-periodo');
         
-        // Se os elementos não existem, retorna intervalo padrão seguro (Ano Atual)
         if (!elAno || !elPeriodo) {
             const y = new Date().getFullYear();
             return { inicio: `${y}-01-01`, fim: `${y}-12-31` };
@@ -96,11 +94,32 @@ Produtividade.Consolidado = {
         return { inicio, fim };
     },
 
+    // Função Auxiliar para contar Dias Úteis (Seg-Sex)
+    countDiasUteis: function(inicioStr, fimStr) {
+        let count = 0;
+        let cur = new Date(inicioStr + 'T12:00:00'); 
+        const end = new Date(fimStr + 'T12:00:00');
+        
+        while (cur <= end) {
+            const day = cur.getDay();
+            if (day !== 0 && day !== 6) count++; // 0=Dom, 6=Sab
+            cur.setDate(cur.getDate() + 1);
+        }
+        return count > 0 ? count : 1;
+    },
+
+    carregar: function() {
+        if(!this.initialized) this.init();
+        else this.carregarDados();
+    },
+
     carregarDados: async function() {
         const container = document.getElementById('grafico-consolidado-container'); 
         
         const { inicio, fim } = this.getDatasIntervalo();
-        console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}`);
+        const diasUteisPeriodo = this.countDiasUteis(inicio, fim);
+
+        console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}. Dias úteis: ${diasUteisPeriodo}`);
 
         if (container) container.innerHTML = '<div class="flex h-64 items-center justify-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
 
@@ -112,7 +131,7 @@ Produtividade.Consolidado = {
                 });
 
             if (error) throw error;
-            this.processarDados(data);
+            this.processarDados(data, diasUteisPeriodo);
 
         } catch (error) {
             console.error(error);
@@ -120,40 +139,85 @@ Produtividade.Consolidado = {
         }
     },
 
-    processarDados: function(data) {
+    processarDados: function(data, diasUteisPeriodo) {
+        // Filtrar Auditoria/Gestão se necessário
         const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
 
-        let totalProducao = 0;
-        let totalDias = 0;
+        // --- Cálculos de KPIs ---
+        const totalAssistentes = assistentes.length;
+        
+        // Somas Totais
+        let totalValidados = 0;
+        let totalFifo = 0;
+        let totalGradualTotal = 0;
+        let totalGradualParcial = 0;
+        let totalPerfilFc = 0;
         
         const ranking = assistentes.map(u => {
-            totalProducao += Number(u.total_qty);
-            totalDias += Number(u.total_dias_uteis);
+            const prod = Number(u.total_qty || 0);
+            
+            // Tenta obter os detalhes por tipo. Se a RPC não retornar, assume 0.
+            const fifo = Number(u.total_fifo || u.fifo || 0);
+            const gradTotal = Number(u.total_gradual_total || u.gradual_total || 0);
+            const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
+            const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
+
+            totalValidados += prod;
+            totalFifo += fifo;
+            totalGradualTotal += gradTotal;
+            totalGradualParcial += gradParcial;
+            totalPerfilFc += perfilFc;
             
             return {
                 nome: u.nome.split(' ')[0], 
-                total: Number(u.total_qty),
-                meta: Number(u.meta_producao) * Number(u.total_dias_uteis), 
-                atingimento: (Number(u.meta_producao) * Number(u.total_dias_uteis)) > 0 
-                    ? (Number(u.total_qty) / (Number(u.meta_producao) * Number(u.total_dias_uteis)) * 100) 
+                total: prod,
+                meta: Number(u.meta_producao) * diasUteisPeriodo, // Meta ajustada aos dias úteis do período
+                atingimento: (Number(u.meta_producao) * diasUteisPeriodo) > 0 
+                    ? (prod / (Number(u.meta_producao) * diasUteisPeriodo) * 100) 
                     : 0
             };
         });
 
+        // Ordenar ranking para o gráfico
         ranking.sort((a,b) => b.total - a.total);
 
-        const elTotal = document.getElementById('kpi-consolidado-total');
-        const elMedia = document.getElementById('kpi-consolidado-media');
+        // --- Cálculos Médias ---
+        // 8. Total validação diária (Dias uteis) = Soma Total / dias uteis
+        const validacaoDiariaTime = diasUteisPeriodo > 0 ? (totalValidados / diasUteisPeriodo) : 0;
+
+        // 9. Média validação diária (Todas assistentes) = Soma Total / Total de Assistentes
+        // * Interpretação: Média total que cada assistente fez no PERÍODO
+        const mediaPeriodoPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
+
+        // 10. Média validação diária (Por Assistentes) = Soma Total / Total de dias Uteis / Total de Assistentes
+        const mediaDiariaPorAssistente = (totalAssistentes > 0 && diasUteisPeriodo > 0) 
+            ? (totalValidados / diasUteisPeriodo / totalAssistentes) 
+            : 0;
+
+        // --- Renderização no DOM ---
+        this.setVal('cons-total-assistentes', totalAssistentes);
+        this.setVal('cons-dias-uteis', diasUteisPeriodo);
+        this.setVal('cons-total-validados', totalValidados.toLocaleString('pt-BR'));
         
-        if(elTotal) elTotal.innerText = totalProducao.toLocaleString('pt-BR');
-        if(elMedia) elMedia.innerText = totalDias > 0 ? Math.round(totalProducao / totalDias).toLocaleString('pt-BR') : 0;
+        this.setVal('cons-media-dia-time', Math.round(validacaoDiariaTime).toLocaleString('pt-BR'));
+        this.setVal('cons-media-periodo-ind', Math.round(mediaPeriodoPorAssistente).toLocaleString('pt-BR'));
+        this.setVal('cons-media-dia-ind', mediaDiariaPorAssistente.toFixed(1).replace('.', ','));
+
+        this.setVal('cons-total-fifo', totalFifo.toLocaleString('pt-BR'));
+        this.setVal('cons-total-grad-parcial', totalGradualParcial.toLocaleString('pt-BR'));
+        this.setVal('cons-total-grad-total', totalGradualTotal.toLocaleString('pt-BR'));
+        this.setVal('cons-total-perfil-fc', totalPerfilFc.toLocaleString('pt-BR'));
 
         this.renderizarGrafico(ranking);
     },
 
+    setVal: function(id, val) {
+        const el = document.getElementById(id);
+        if(el) el.innerText = val;
+    },
+
     renderizarGrafico: function(dados) {
         const container = document.getElementById('grafico-consolidado-container');
-        // Recria o Canvas para evitar bugs de redimensionamento do Chart.js
         if(container) {
              container.innerHTML = '<canvas id="grafico-consolidado"></canvas>';
         }
