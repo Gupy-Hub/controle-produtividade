@@ -7,12 +7,29 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V21 (Abono em Massa + Justificativa)...");
+        console.log("🚀 [NEXUS] Produtividade: Engine V22 (Tooltip Justificativa + Botão Massa Injetado)...");
+        this.injectToolbar(); // Cria o botão se não existir
         this.carregarTela(); 
         this.initialized = true; 
     },
 
     setTxt: function(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; },
+
+    // CRIA A BARRA DE AÇÕES AUTOMATICAMENTE (Para garantir que o botão exista)
+    injectToolbar: function() {
+        const tableContainer = document.querySelector('table')?.parentNode;
+        if (tableContainer && !document.getElementById('toolbar-produtividade')) {
+            const toolbar = document.createElement('div');
+            toolbar.id = 'toolbar-produtividade';
+            toolbar.className = "flex justify-end mb-2 gap-2";
+            toolbar.innerHTML = `
+                <button onclick="Produtividade.Geral.abonarEmMassa()" class="bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-300 px-3 py-1 rounded text-xs font-bold flex items-center gap-2 shadow-sm transition">
+                    <i class="fas fa-edit"></i> Abonar Selecionados
+                </button>
+            `;
+            tableContainer.insertBefore(toolbar, tableContainer.firstChild);
+        }
+    },
 
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
@@ -27,6 +44,7 @@ Produtividade.Geral = {
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados...</td></tr>`;
 
         try {
+            // RPC V15 (Com Justificativa)
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: dataInicio, 
@@ -38,12 +56,12 @@ Produtividade.Geral = {
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: dataInicio,
-                    data_fim: dataFim
+                    data_fim: dataFim 
                 });
             
             this.diasAtivosGlobal = (diasReais && diasReais > 0) ? diasReais : 1;
 
-            console.log(`✅ [NEXUS] Dados recebidos: ${data.length} registros. Dias Calendário: ${this.diasAtivosGlobal}`);
+            console.log(`✅ [NEXUS] Dados recebidos: ${data.length} registros.`);
 
             this.dadosOriginais = data.map(row => ({
                 usuario: {
@@ -57,6 +75,8 @@ Produtividade.Geral = {
                 totais: {
                     qty: row.total_qty,
                     diasUteis: Number(row.total_dias_uteis), 
+                    // Captura a justificativa vinda do SQL
+                    justificativa: row.justificativas, 
                     fifo: row.total_fifo,
                     gt: row.total_gt,
                     gp: row.total_gp
@@ -117,9 +137,18 @@ Produtividade.Geral = {
                 ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
                 : '-';
 
-            // Verifica se o dia é "quebrado" (ex: 0.5) para destacar visualmente
+            // VISUALIZAÇÃO DA JUSTIFICATIVA (TOOLTIP)
+            const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
-            const styleAbono = isAbonado ? 'text-amber-600 font-black bg-amber-50 border border-amber-200 rounded' : 'font-mono';
+            
+            // Se tiver justificativa, coloca borda tracejada ou ícone
+            const styleAbono = (isAbonado || temJustificativa) 
+                ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
+                : 'font-mono';
+
+            const tooltipText = temJustificativa 
+                ? `Justificativa: ${d.totais.justificativa}` 
+                : 'Dia Normal';
 
             return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
@@ -127,7 +156,7 @@ Produtividade.Geral = {
                     <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
                 </td>
                 <td class="px-2 py-3 text-center">
-                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar Dia / Ajustar Fator">AB</button>
+                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar Dia Individualmente">AB</button>
                 </td>
                 <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                     <div class="flex flex-col">
@@ -135,11 +164,14 @@ Produtividade.Geral = {
                         <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.funcao || 'ND'}</span>
                     </div>
                 </td>
-                <td class="px-2 py-3 text-center">
+                
+                <td class="px-2 py-3 text-center" title="${tooltipText}">
                     <span class="${styleAbono} px-1.5 py-0.5 inline-block">
                         ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
+                        ${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
                     </span>
                 </td>
+
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
@@ -249,14 +281,14 @@ Produtividade.Geral = {
         document.querySelectorAll('.check-user').forEach(c => c.checked = checked);
     },
 
-    // --- NOVA FUNÇÃO EM MASSA ---
+    // --- FUNÇÃO ABONAR EM MASSA ---
     abonarEmMassa: async function() {
         // 1. Pega selecionados
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
 
         // 2. Data
-        let dataAlvo = document.getElementById('sel-data-dia').value; 
+        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo) {
             dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
@@ -274,7 +306,7 @@ Produtividade.Geral = {
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
 
-        // 4. Justificativa (Obrigatória se fator != 1)
+        // 4. Justificativa
         let justificativa = "";
         if (novoFator !== 1.0) {
             justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA (Ex: Atestado, Falta injustificada, Folga):");
@@ -285,7 +317,7 @@ Produtividade.Geral = {
 
         if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
 
-        // 5. Loop de Envio
+        // 5. Execução
         let sucessos = 0;
         for (const chk of checks) {
             const uid = chk.value;
@@ -307,14 +339,12 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, fatorAtual) {
-        // 1. Data
-        let dataAlvo = document.getElementById('sel-data-dia').value; 
+        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo) {
             dataAlvo = prompt("Digite a data para abonar (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
         }
 
-        // 2. Fator
         const opcao = prompt(
             `ABONAR DIA (${dataAlvo})\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, 
             "0"
@@ -325,7 +355,6 @@ Produtividade.Geral = {
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
 
-        // 3. Justificativa
         let justificativa = "";
         if (novoFator !== 1.0) {
             justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
