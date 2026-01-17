@@ -1,339 +1,237 @@
+window.Produtividade = window.Produtividade || {};
+
 Produtividade.Consolidado = {
     initialized: false,
-    ultimoCache: { key: null, data: null },
-    baseManualHC: 0, 
-    overridesHC: {}, 
-    dadosCalculados: null, 
+    chartInstance: null,
 
-    init: async function() { 
-        console.log("🔧 Consolidado: Iniciando...");
-        if(!this.initialized) { this.initialized = true; } 
-        this.carregar();
+    init: function() {
+        console.log("🚀 [NEXUS] Consolidado: Engine V1 (Filtros Inteligentes)...");
+        this.renderizarFiltros(); // Cria as opções do Select
+        this.carregarDados();
+        this.initialized = true;
     },
 
-    getSemanasDoMes: function(year, month) {
-        const weeks = [];
-        const firstDay = new Date(year, month - 1, 1);
-        const lastDay = new Date(year, month, 0);
-        let currentDay = firstDay;
+    // 1. INJEÇÃO DOS FILTROS (Garante que os valores batam com a lógica)
+    renderizarFiltros: function() {
+        const selAno = document.getElementById('sel-consolidado-ano');
+        const selPeriodo = document.getElementById('sel-consolidado-periodo');
         
-        while (currentDay <= lastDay) {
-            const startOfWeek = new Date(currentDay);
-            const dayOfWeek = currentDay.getDay(); 
-            const daysToSaturday = 6 - dayOfWeek;
-            let endOfWeek = new Date(currentDay);
-            endOfWeek.setDate(currentDay.getDate() + daysToSaturday);
-            
-            if (endOfWeek > lastDay) endOfWeek = lastDay;
-            
-            weeks.push({
-                inicio: startOfWeek.toISOString().split('T')[0],
-                fim: endOfWeek.toISOString().split('T')[0]
-            });
-            
-            currentDay = new Date(endOfWeek);
-            currentDay.setDate(currentDay.getDate() + 1);
-        }
-        return weeks;
+        if (!selAno || !selPeriodo) return;
+
+        // Popula Anos (Ano Atual e Anterior)
+        const anoAtual = new Date().getFullYear();
+        selAno.innerHTML = `
+            <option value="${anoAtual}" selected>${anoAtual}</option>
+            <option value="${anoAtual - 1}">${anoAtual - 1}</option>
+        `;
+
+        // Popula Períodos (Lógica Hierárquica)
+        selPeriodo.innerHTML = `
+            <option value="anual" class="font-bold">📅 Ano Completo</option>
+            <optgroup label="Semestres">
+                <option value="s1">1º Semestre (Jan-Jun)</option>
+                <option value="s2">2º Semestre (Jul-Dez)</option>
+            </optgroup>
+            <optgroup label="Trimestres">
+                <option value="t1">1º Trimestre (Jan-Mar)</option>
+                <option value="t2">2º Trimestre (Abr-Jun)</option>
+                <option value="t3">3º Trimestre (Jul-Set)</option>
+                <option value="t4">4º Trimestre (Out-Dez)</option>
+            </optgroup>
+            <optgroup label="Meses">
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
+            </optgroup>
+        `;
+
+        // Adiciona Listeners para recarregar ao mudar
+        selAno.onchange = () => this.carregarDados();
+        selPeriodo.onchange = () => this.carregarDados();
     },
 
-    atualizarHC: async function(colIndex, novoValor) {
-        const val = parseInt(novoValor);
-        if (isNaN(val) || val <= 0) { delete this.overridesHC[colIndex]; this.renderizar(this.dadosCalculados); return; }
-        const valorAtual = this.overridesHC[colIndex]?.valor;
-        if (valorAtual === val) return;
-        await new Promise(r => setTimeout(r, 50));
-        const motivo = prompt(`Motivo da alteração para ${val} (Obrigatório):`);
-        if (!motivo || motivo.trim() === "") { alert("Justificativa obrigatória."); this.renderizar(this.dadosCalculados); return; }
-        this.overridesHC[colIndex] = { valor: val, motivo: motivo.trim() };
-        if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
-    },
-    
-    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
-        const feriados = Produtividade.Geral && Produtividade.Geral.feriados ? Produtividade.Geral.feriados : [];
-        let count = 0; 
-        let cur = new Date(dataInicio + 'T12:00:00'); 
-        const end = new Date(dataFim + 'T12:00:00');
-        
-        while (cur <= end) { 
-            const day = cur.getDay(); 
-            if (day !== 0 && day !== 6) {
-                const mes = String(cur.getMonth() + 1).padStart(2, '0');
-                const dia = String(cur.getDate()).padStart(2, '0');
-                if (!feriados.includes(`${mes}-${dia}`)) {
-                    count++; 
+    // 2. CÉREBRO DAS DATAS: Converte "s1" em Datas Reais
+    getDatasIntervalo: function() {
+        const ano = document.getElementById('sel-consolidado-ano').value;
+        const periodo = document.getElementById('sel-consolidado-periodo').value;
+
+        let inicio = `${ano}-01-01`;
+        let fim = `${ano}-12-31`;
+
+        switch (periodo) {
+            case 'anual':
+                // Já definido no default
+                break;
+            
+            // SEMESTRES
+            case 's1': inicio = `${ano}-01-01`; fim = `${ano}-06-30`; break;
+            case 's2': inicio = `${ano}-07-01`; fim = `${ano}-12-31`; break;
+
+            // TRIMESTRES
+            case 't1': inicio = `${ano}-01-01`; fim = `${ano}-03-31`; break;
+            case 't2': inicio = `${ano}-04-01`; fim = `${ano}-06-30`; break;
+            case 't3': inicio = `${ano}-07-01`; fim = `${ano}-09-30`; break;
+            case 't4': inicio = `${ano}-10-01`; fim = `${ano}-12-31`; break;
+
+            // MESES (Default numérico)
+            default:
+                const mes = parseInt(periodo);
+                if (mes >= 1 && mes <= 12) {
+                    // Pega o último dia do mês automaticamente
+                    const lastDay = new Date(ano, mes, 0).getDate();
+                    inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+                    fim = `${ano}-${String(mes).padStart(2, '0')}-${lastDay}`;
                 }
-            }
-            cur.setDate(cur.getDate() + 1); 
+                break;
         }
-        return count;
+
+        return { inicio, fim };
     },
-    
-    carregar: async function(forcar = false) {
-        const tbody = document.getElementById('cons-table-body'); 
+
+    carregarDados: async function() {
+        const container = document.getElementById('grafico-consolidado-container'); // Container do gráfico
+        const kpiTotal = document.getElementById('kpi-consolidado-total');
+        const kpiMedia = document.getElementById('kpi-consolidado-media');
         
-        // --- INTEGRAÇÃO COM MAIN.JS (FONTE DA VERDADE) ---
-        const datas = Produtividade.getDatasFiltro();
-        const s = datas.inicio;
-        const e = datas.fim;
-        let t = Produtividade.filtroPeriodo || 'mes'; // dia, semana, mes, ano
+        // 1. Obtém as datas calculadas
+        const { inicio, fim } = this.getDatasIntervalo();
+        console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}`);
 
-        // Ajuste: Tratar 'semana' como 'dia' para visualização detalhada
-        if (t === 'semana') t = 'dia';
-
-        console.log(`📊 Consolidado: ${t} | ${s} até ${e}`);
-
-        const cacheKey = `${t}_${s}_${e}`;
-        if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) { 
-            this.processarEExibir(this.ultimoCache.data, t, s, e); 
-            return; 
-        }
-        
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados massivos...</td></tr>';
+        if (container) container.innerHTML = '<div class="flex h-64 items-center justify-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
 
         try {
-            const { data: rawData, error } = await Sistema.supabase
-                .from('producao')
-                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
-                .gte('data_referencia', s)
-                .lte('data_referencia', e)
-                .range(0, 50000); 
+            // Reutiliza a RPC poderosa que já criamos (Engine V15)
+            const { data, error } = await Sistema.supabase
+                .rpc('get_painel_produtividade', { 
+                    data_inicio: inicio, 
+                    data_fim: fim 
+                });
 
-            if(error) throw error;
-            
-            const usuariosUnicos = new Set(rawData.map(r => r.usuario_id)).size;
-            if (this.baseManualHC === 0) this.baseManualHC = usuariosUnicos || 17;
-            
-            this.ultimoCache = { key: cacheKey, data: rawData, tipo: t };
-            this.processarEExibir(rawData, t, s, e);
+            if (error) throw error;
 
-        } catch (e) { 
-            console.error(e); 
-            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`; 
+            console.log(`✅ Dados recebidos: ${data.length} linhas`);
+            this.processarDados(data);
+
+        } catch (error) {
+            console.error(error);
+            if (container) container.innerHTML = `<div class="text-center text-rose-500 py-10">Erro: ${error.message}</div>`;
         }
     },
 
-    processarDados: function(rawData, t, dataInicio, dataFim) {
-        const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-        let cols = []; 
-        let datesMap = {}; 
-        
-        // Extrai componentes da data inicial para lógica de mês/ano
-        const dIni = new Date(dataInicio + 'T12:00:00');
-        const currentYear = dIni.getFullYear();
-        const currentMonth = dIni.getMonth() + 1;
+    processarDados: function(data) {
+        // Filtra gestores fora da análise
+        const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
 
-        if (t === 'dia' || t === 'dia-detalhe') { 
-            // Se for dia ou semana, lista cada dia do intervalo
-            let curr = new Date(dataInicio + 'T12:00:00');
-            const end = new Date(dataFim + 'T12:00:00');
-            let idx = 1;
+        // KPIS GERAIS
+        let totalProducao = 0;
+        let totalDias = 0;
+        
+        // Agrupamento para o Gráfico (Por Usuário)
+        const ranking = assistentes.map(u => {
+            totalProducao += Number(u.total_qty);
+            totalDias += Number(u.total_dias_uteis); // Usando dias fatorados da V15
             
-            while(curr <= end) {
-                const diaStr = String(curr.getDate()).padStart(2,'0');
-                cols.push(diaStr);
-                const dataFull = curr.toISOString().split('T')[0];
-                datesMap[idx] = { ini: dataFull, fim: dataFull, refDia: parseInt(diaStr) }; 
-                
-                curr.setDate(curr.getDate() + 1);
-                idx++;
-            }
-        } 
-        else if (t === 'mes') { 
-            const semanas = this.getSemanasDoMes(currentYear, currentMonth); 
-            semanas.forEach((s, i) => { 
-                cols.push(`Sem ${i+1}`); 
-                datesMap[i+1] = { ini: s.inicio, fim: s.fim }; 
-            }); 
-        } 
-        else if (t === 'ano') { 
-            cols = mesesNomes; 
-            for(let i=0; i<12; i++) { 
-                const m = i + 1; 
-                datesMap[i+1] = { 
-                    ini: `${currentYear}-${String(m).padStart(2,'0')}-01`, 
-                    fim: `${currentYear}-${String(m).padStart(2,'0')}-${new Date(currentYear, m, 0).getDate()}` 
-                }; 
-            } 
+            return {
+                nome: u.nome.split(' ')[0], // Primeiro nome
+                total: Number(u.total_qty),
+                meta: Number(u.meta_producao) * Number(u.total_dias_uteis), // Meta proporcional aos dias trabalhados
+                atingimento: (Number(u.meta_producao) * Number(u.total_dias_uteis)) > 0 
+                    ? (Number(u.total_qty) / (Number(u.meta_producao) * Number(u.total_dias_uteis)) * 100) 
+                    : 0
+            };
+        });
+
+        // Ordena por maior produção
+        ranking.sort((a,b) => b.total - a.total);
+
+        // Atualiza KPIs da Tela
+        const elTotal = document.getElementById('kpi-consolidado-total');
+        const elMedia = document.getElementById('kpi-consolidado-media');
+        
+        if(elTotal) elTotal.innerText = totalProducao.toLocaleString('pt-BR');
+        // Média Global Diária = Produção Total / Soma de Dias Trabalhados
+        if(elMedia) elMedia.innerText = totalDias > 0 ? Math.round(totalProducao / totalDias).toLocaleString('pt-BR') : 0;
+
+        this.renderizarGrafico(ranking);
+    },
+
+    renderizarGrafico: function(dados) {
+        const ctx = document.getElementById('grafico-consolidado');
+        if (!ctx) return;
+
+        // Destroi gráfico anterior se existir para não sobrepor
+        if (this.chartInstance) {
+            this.chartInstance.destroy();
         }
 
-        const numCols = cols.length;
-        let st = {}; 
-        for(let i=1; i<=numCols; i++) st[i] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
-        st[99] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
+        // Prepara Arrays do ChartJS
+        const labels = dados.map(d => d.nome);
+        const valores = dados.map(d => d.total);
+        const metas = dados.map(d => d.meta);
+        const cores = dados.map(d => d.atingimento >= 100 ? '#10b981' : '#f43f5e'); // Verde ou Vermelho
 
-        if(rawData) {
-            rawData.forEach(r => {
-                const sys = Number(r.quantidade) || 0; 
-                let b = -1; 
-
-                if (t === 'dia' || t === 'dia-detalhe') { 
-                    // Busca qual coluna corresponde à data
-                    for(let k=1; k<=numCols; k++) {
-                        if (datesMap[k].ini === r.data_referencia) { b = k; break; }
+        this.chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Produção Real',
+                        data: valores,
+                        backgroundColor: cores,
+                        borderRadius: 4,
+                        order: 2
+                    },
+                    {
+                        label: 'Meta Esperada',
+                        data: metas,
+                        type: 'line',
+                        borderColor: '#94a3b8', // Cinza
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        order: 1,
+                        tension: 0.4
                     }
-                } 
-                else if (t === 'mes') { 
-                    for(let k=1; k<=numCols; k++) { 
-                        if(r.data_referencia >= datesMap[k].ini && r.data_referencia <= datesMap[k].fim) { b = k; break; } 
-                    } 
-                } 
-                else if (t === 'ano') { 
-                    b = parseInt(r.data_referencia.split('-')[1]); 
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toLocaleString('pt-BR');
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { display: false }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
                 }
-
-                if(b >= 1 && b <= numCols) {
-                    const populate = (k) => { 
-                        const x = st[k]; 
-                        x.users.add(r.usuario_id); 
-                        x.dates.add(r.data_referencia); 
-                        x.qty += sys; 
-                        x.fifo += (Number(r.fifo)||0); 
-                        x.gt += (Number(r.gradual_total)||0); 
-                        x.gp += (Number(r.gradual_parcial)||0); 
-                        x.fc += (Number(r.perfil_fc)||0); 
-                    };
-                    populate(b); 
-                    populate(99); 
-                }
-            });
-        }
-
-        for(let i=1; i<=numCols; i++) {
-            st[i].diasUteis = datesMap[i] ? this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim) : 0;
-        }
-        
-        st[99].diasUteis = 0; 
-        for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
-        
-        return { cols, st, numCols, datesMap };
-    },
-
-    processarEExibir: function(rawData, t, s, e) {
-        this.dadosCalculados = this.processarDados(rawData, t, s, e);
-        this.renderizar(this.dadosCalculados);
-    },
-
-    renderizar: function({ cols, st, numCols }) {
-        const tbody = document.getElementById('cons-table-body');
-        const hRow = document.getElementById('cons-table-header');
-        
-        if(hRow) {
-            let headerHTML = `<tr class="bg-slate-50 border-b border-slate-200"><th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
-            
-            cols.forEach((c, index) => {
-                const colIdx = index + 1;
-                const overrideObj = this.overridesHC[colIdx];
-                const valOverride = overrideObj ? overrideObj.valor : '';
-                const motivoOverride = overrideObj ? overrideObj.motivo : '';
-                const autoCount = st[colIdx].users.size || 17;
-                const inputClass = valOverride ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" : "bg-white border-slate-200 text-blue-600 font-bold focus:border-blue-400";
-                
-                headerHTML += `
-                    <th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px] group">
-                        <div class="flex flex-col items-center gap-1">
-                            <span class="text-xs font-bold text-slate-600 uppercase">${c}</span>
-                            <div class="relative w-full max-w-[50px]" title="${valOverride ? 'Motivo: ' + motivoOverride : 'Auto: ' + autoCount}">
-                                <input type="number" value="${valOverride}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 outline-none border transition placeholder-slate-300 ${inputClass}">
-                            </div>
-                        </div>
-                    </th>`;
-            });
-            
-            const overrideTotal = this.overridesHC[99];
-            const valTotal = overrideTotal ? overrideTotal.valor : '';
-            const autoTotal = st[99].users.size || 17; 
-            const inputClassTotal = valTotal ? "bg-amber-50 border-amber-300 text-amber-700 font-black shadow-sm" : "bg-white border-blue-200 text-blue-700 font-bold focus:border-blue-500";
-            
-            headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase tracking-widest">TOTAL</span><input type="number" value="${valTotal}" placeholder="(${autoTotal})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 outline-none border transition placeholder-blue-300 ${inputClassTotal}"></div></th></tr>`;
-            
-            hRow.innerHTML = headerHTML;
-        }
-
-        let h = ''; 
-        const idxs = [...Array(numCols).keys()].map(i => i + 1); 
-        idxs.push(99); 
-
-        const mkRow = (label, icon, colorInfo, getter, isCalc=false, isBold=false) => {
-            const rowBg = isBold ? 'bg-slate-50/50' : 'hover:bg-slate-50 transition-colors';
-            const iconColor = colorInfo || 'text-slate-400';
-            const textColor = isBold ? 'text-slate-800' : 'text-slate-600';
-            
-            let tr = `<tr class="${rowBg} border-b border-slate-100 last:border-0 group"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200 group-hover:bg-slate-50 transition-colors shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]"><div class="flex items-center gap-3"><div class="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-100"><i class="${icon} ${iconColor} text-sm"></i></div><span class="${textColor} ${isBold ? 'font-black' : 'font-medium'} text-xs uppercase tracking-wide">${label}</span></div></td>`;
-            
-            idxs.forEach(i => {
-                const s = st[i]; 
-                const overrideObj = this.overridesHC[i]; 
-                const countAuto = s.users.size > 0 ? s.users.size : 17; 
-                const HF = overrideObj ? overrideObj.valor : countAuto;
-                
-                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s); 
-                if (val instanceof Set) val = val.size;
-                
-                const txt = (val !== undefined && val !== null && !isNaN(val) && isFinite(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
-                
-                let cellClass = `px-4 py-3 text-center text-xs border-l border-slate-100 `; 
-                if (i === 99) cellClass += `bg-blue-50/30 font-bold ${colorInfo ? colorInfo : 'text-slate-700'}`; 
-                else cellClass += `text-slate-500 font-medium`; 
-                
-                if (overrideObj && label === 'Total Assistentes') cellClass += " bg-amber-50/50 font-bold text-amber-700";
-
-                tr += `<td class="${cellClass}">${txt}</td>`;
-            });
-            return tr + '</tr>';
-        };
-
-        h += mkRow('Total Assistentes', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
-        
-        h += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', (s) => s.diasUteis);
-        h += mkRow('Total FIFO', 'fas fa-clock', 'text-slate-400', s => s.fifo);
-        h += mkRow('Total G. Parcial', 'fas fa-adjust', 'text-slate-400', s => s.gp);
-        h += mkRow('Total G. Total', 'fas fa-check-double', 'text-slate-400', s => s.gt);
-        h += mkRow('Total Perfil FC', 'fas fa-id-badge', 'text-slate-400', s => s.fc);
-        h += mkRow('Total Doc. Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-        
-        h += mkRow('Total Val. Diária', 'fas fa-chart-line', 'text-emerald-600', (s, d) => d > 0 ? s.qty / d : 0, true);
-        h += mkRow('Média Val. (Equipe)', 'fas fa-user-friends', 'text-teal-600', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true);
-        h += mkRow('Média Val. Diária (Pessoa)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
-        
-        if(tbody) tbody.innerHTML = h;
-    },
-
-    exportarExcel: function() {
-        if (!this.dadosCalculados) return alert("Nenhum dado para exportar.");
-        const { cols, st, numCols } = this.dadosCalculados;
-        const wsData = [];
-        
-        const headers = ['Indicador', ...cols, 'TOTAL'];
-        wsData.push(headers);
-        
-        const addRow = (label, getter, isCalc=false) => {
-            const row = [label];
-            for(let i=1; i<=numCols; i++) {
-                const s = st[i]; const overrideObj = this.overridesHC[i]; const HF = overrideObj ? overrideObj.valor : (s.users.size || 17);
-                let val = isCalc ? getter(s, s.diasUteis, HF) : getter(s); if (val instanceof Set) val = val.size;
-                row.push((val !== undefined && !isNaN(val)) ? Math.round(val) : 0);
             }
-            const sTotal = st[99]; const overrideTotal = this.overridesHC[99]; const HFTotal = overrideTotal ? overrideTotal.valor : (sTotal.users.size || 17);
-            let valTotal = isCalc ? getter(sTotal, sTotal.diasUteis, HFTotal) : getter(sTotal); if (valTotal instanceof Set) valTotal = valTotal.size;
-            row.push((valTotal !== undefined && !isNaN(valTotal)) ? Math.round(valTotal) : 0);
-            wsData.push(row);
-        };
-
-        addRow('Total Assistentes', (s, d, HF) => HF, true); 
-        addRow('Dias Úteis', (s) => s.diasUteis); 
-        addRow('Total FIFO', s => s.fifo); 
-        addRow('Total G. Parcial', s => s.gp); 
-        addRow('Total G. Total', s => s.gt); 
-        addRow('Total Perfil FC', s => s.fc); 
-        addRow('Total Documentos Validados', s => s.qty); 
-        addRow('Total Validação Diária', (s, d) => d > 0 ? s.qty / d : 0, true); 
-        addRow('Média Validação (Todas Assistentes)', (s, d, HF) => HF > 0 ? s.qty / HF : 0, true); 
-        addRow('Média Validação Diária (Por Assist.)', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
-        
-        const wb = XLSX.utils.book_new(); 
-        const ws = XLSX.utils.aoa_to_sheet(wsData); 
-        XLSX.utils.book_append_sheet(wb, ws, "Consolidado"); 
-        XLSX.writeFile(wb, "Relatorio_Consolidado.xlsx");
+        });
     }
 };
