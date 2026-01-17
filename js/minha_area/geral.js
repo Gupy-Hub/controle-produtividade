@@ -11,7 +11,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando média exata...</span></div></td></tr>';
 
         try {
             // 1. Buscas em Paralelo
@@ -24,7 +24,7 @@ MinhaArea.Geral = {
                     .gte('data_referencia', inicio)
                     .lte('data_referencia', fim),
                 
-                // Assertividade (Trazendo a coluna porcentagem)
+                // Assertividade
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -32,7 +32,7 @@ MinhaArea.Geral = {
                     .gte('data_auditoria', inicio)
                     .lte('data_auditoria', fim),
 
-                // Metas do Mês
+                // Metas
                 Sistema.supabase
                     .from('metas')
                     .select('meta, meta_assertividade')
@@ -45,11 +45,11 @@ MinhaArea.Geral = {
             if (prodRes.error) throw prodRes.error;
             if (assertRes.error) throw assertRes.error;
             
-            // 2. Define Metas Padrão
+            // 2. Define Metas
             const metaProducaoPadrao = metaRes.data?.meta || 650;
             const metaAssertPadrao = metaRes.data?.meta_assertividade || 98.0;
 
-            // 3. Unificação dos Dados (Merge por Data)
+            // 3. Unificação dos Dados
             const mapaDados = new Map();
 
             const getDia = (dataStr) => {
@@ -57,7 +57,7 @@ MinhaArea.Geral = {
                     mapaDados.set(dataStr, {
                         data: dataStr,
                         prod: { qtd: 0, fifo: 0, gt: 0, gp: 0, fator: 0, justificativa: '' },
-                        assert: { somaPorcentagem: 0, count: 0 }
+                        assert: { somaNotas: 0, qtdAuditorias: 0 } 
                     });
                 }
                 return mapaDados.get(dataStr);
@@ -74,21 +74,27 @@ MinhaArea.Geral = {
                 dia.prod.justificativa = p.justificativa;
             });
 
-            // Processa Assertividade (Lógica da Média Aritmética)
+            // Processa Assertividade (CORREÇÃO AQUI)
             (assertRes.data || []).forEach(a => {
                 const dia = getDia(a.data_auditoria);
-                const valor = this.parseValorPorcentagem(a.porcentagem); // Converte "100%" para 100
-                dia.assert.somaPorcentagem += valor;
-                dia.assert.count++;
+                
+                // Validação Estrita: Só conta se tiver valor preenchido (não nulo, não vazio)
+                // Ignora linhas que são apenas registros sem auditoria
+                if (a.porcentagem !== null && a.porcentagem !== undefined && String(a.porcentagem).trim() !== '') {
+                    const nota = this.parseValorPorcentagem(a.porcentagem);
+                    dia.assert.somaNotas += nota;
+                    dia.assert.qtdAuditorias++; // Incrementa divisor apenas para auditados
+                }
             });
 
-            // Ordena por data decrescente
+            // Ordena
             const lista = Array.from(mapaDados.values()).sort((a, b) => b.data.localeCompare(a.data));
 
             // 4. Renderização
             if(tbody) tbody.innerHTML = '';
             
             let totalProd = 0, totalMeta = 0, somaFator = 0, diasComProducao = 0;
+            let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
 
             const fmtPct = (val) => val.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%';
             const fmtNum = (val) => val.toLocaleString('pt-BR');
@@ -104,22 +110,26 @@ MinhaArea.Geral = {
                     corProd = pctProd >= 100 ? 'text-emerald-600 font-bold' : (pctProd >= 80 ? 'text-amber-600 font-bold' : 'text-rose-600 font-bold');
                 }
 
-                // --- Assertividade (Soma / Qtd) ---
+                // --- Assertividade ---
                 let pctAssert = 0;
                 let displayAssert = '-';
                 let corAssert = 'text-slate-300';
+                let tooltipAssert = 'Nenhuma auditoria realizada';
 
-                if (item.assert.count > 0) {
-                    // Cálculo solicitado: Soma das % / Quantidade de Auditorias
-                    pctAssert = item.assert.somaPorcentagem / item.assert.count;
+                if (item.assert.qtdAuditorias > 0) {
+                    pctAssert = item.assert.somaNotas / item.assert.qtdAuditorias;
                     
                     displayAssert = pctAssert.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%';
+                    tooltipAssert = `Média: ${displayAssert} (${item.assert.qtdAuditorias} auditorias válidas)`;
                     
                     if (pctAssert >= metaAssertPadrao) {
                         corAssert = 'text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 rounded px-1';
                     } else {
                         corAssert = 'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
                     }
+
+                    somaNotasGlobal += item.assert.somaNotas;
+                    qtdAuditoriasGlobal += item.assert.qtdAuditorias;
                 }
 
                 // KPIs Globais
@@ -128,7 +138,7 @@ MinhaArea.Geral = {
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
 
-                // Data formatada
+                // Data
                 const dateObj = new Date(item.data + 'T12:00:00');
                 const diaStr = String(dateObj.getDate()).padStart(2, '0');
                 const mesStr = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -149,8 +159,8 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${fmtPct(pctProd)}</td>
                         
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${metaAssertPadrao}%</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center">
-                            <span class="${corAssert}" title="${item.assert.count} auditorias realizadas">${displayAssert}</span>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center" title="${tooltipAssert}">
+                            <span class="${corAssert}">${displayAssert}</span>
                         </td>
 
                         <td class="px-3 py-2 border-r border-slate-100 last:border-0 truncate max-w-[150px]" title="${item.prod.justificativa || ''}">
@@ -186,13 +196,12 @@ MinhaArea.Geral = {
         }
     },
 
-    // Função Auxiliar para Tratar Strings como "100%", "98,5", "100"
     parseValorPorcentagem: function(val) {
+        if (val === null || val === undefined) return 0;
         if (typeof val === 'number') return val;
-        if (!val) return 0;
-        // Remove % e converte vírgula para ponto
-        let str = String(val).replace('%', '').replace(',', '.').trim();
-        return parseFloat(str) || 0;
+        let str = String(val).replace('%', '').replace(/\s/g, '').replace(',', '.');
+        const num = parseFloat(str);
+        return isNaN(num) ? 0 : num;
     },
 
     setStatus: function(pct) {
