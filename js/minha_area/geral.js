@@ -1,4 +1,3 @@
-// ARQUIVO: js/minha_area/geral.js
 MinhaArea.Geral = {
     carregar: async function() {
         const uid = MinhaArea.getUsuarioAlvo();
@@ -11,7 +10,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando média exata...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Processando dados...</span></div></td></tr>';
 
         try {
             // 1. Buscas em Paralelo
@@ -24,7 +23,7 @@ MinhaArea.Geral = {
                     .gte('data_referencia', inicio)
                     .lte('data_referencia', fim),
                 
-                // Assertividade
+                // Assertividade (Auditorias)
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -52,7 +51,11 @@ MinhaArea.Geral = {
             // 3. Unificação dos Dados
             const mapaDados = new Map();
 
-            const getDia = (dataStr) => {
+            // Helper para garantir chave de data consistente (YYYY-MM-DD)
+            const getDia = (dataFull) => {
+                if(!dataFull) return null;
+                const dataStr = dataFull.split('T')[0]; // Garante ignorar hora
+                
                 if (!mapaDados.has(dataStr)) {
                     mapaDados.set(dataStr, {
                         data: dataStr,
@@ -66,24 +69,28 @@ MinhaArea.Geral = {
             // Processa Produção
             (prodRes.data || []).forEach(p => {
                 const dia = getDia(p.data_referencia);
-                dia.prod.qtd = Number(p.quantidade || 0);
-                dia.prod.fifo = Number(p.fifo || 0);
-                dia.prod.gt = Number(p.gradual_total || 0);
-                dia.prod.gp = Number(p.gradual_parcial || 0);
-                dia.prod.fator = Number(p.fator);
-                dia.prod.justificativa = p.justificativa;
+                if(dia) {
+                    dia.prod.qtd = Number(p.quantidade || 0);
+                    dia.prod.fifo = Number(p.fifo || 0);
+                    dia.prod.gt = Number(p.gradual_total || 0);
+                    dia.prod.gp = Number(p.gradual_parcial || 0);
+                    dia.prod.fator = Number(p.fator);
+                    dia.prod.justificativa = p.justificativa;
+                }
             });
 
-            // Processa Assertividade (CORREÇÃO AQUI)
+            // Processa Assertividade (Lógica IDÊNTICA ao Console)
             (assertRes.data || []).forEach(a => {
                 const dia = getDia(a.data_auditoria);
-                
-                // Validação Estrita: Só conta se tiver valor preenchido (não nulo, não vazio)
-                // Ignora linhas que são apenas registros sem auditoria
-                if (a.porcentagem !== null && a.porcentagem !== undefined && String(a.porcentagem).trim() !== '') {
-                    const nota = this.parseValorPorcentagem(a.porcentagem);
-                    dia.assert.somaNotas += nota;
-                    dia.assert.qtdAuditorias++; // Incrementa divisor apenas para auditados
+                if(dia) {
+                    const valRaw = a.porcentagem;
+                    
+                    // FILTRO RIGOROSO: Só passa se tiver conteúdo real
+                    if (valRaw !== null && valRaw !== undefined && String(valRaw).trim() !== '') {
+                        const nota = this.parseValorPorcentagem(valRaw);
+                        dia.assert.somaNotas += nota;
+                        dia.assert.qtdAuditorias++;
+                    }
                 }
             });
 
@@ -114,13 +121,13 @@ MinhaArea.Geral = {
                 let pctAssert = 0;
                 let displayAssert = '-';
                 let corAssert = 'text-slate-300';
-                let tooltipAssert = 'Nenhuma auditoria realizada';
+                let tooltipAssert = 'Nenhuma auditoria válida';
 
                 if (item.assert.qtdAuditorias > 0) {
                     pctAssert = item.assert.somaNotas / item.assert.qtdAuditorias;
                     
                     displayAssert = pctAssert.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + '%';
-                    tooltipAssert = `Média: ${displayAssert} (${item.assert.qtdAuditorias} auditorias válidas)`;
+                    tooltipAssert = `Média: ${displayAssert} (${item.assert.qtdAuditorias} auditorias)`;
                     
                     if (pctAssert >= metaAssertPadrao) {
                         corAssert = 'text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 rounded px-1';
@@ -132,13 +139,13 @@ MinhaArea.Geral = {
                     qtdAuditoriasGlobal += item.assert.qtdAuditorias;
                 }
 
-                // KPIs Globais
+                // Acumuladores Globais
                 totalProd += item.prod.qtd;
                 totalMeta += metaDia;
                 somaFator += fator;
                 if (fator > 0) diasComProducao++;
 
-                // Data
+                // Data Formatação
                 const dateObj = new Date(item.data + 'T12:00:00');
                 const diaStr = String(dateObj.getDate()).padStart(2, '0');
                 const mesStr = String(dateObj.getMonth() + 1).padStart(2, '0');
@@ -171,7 +178,7 @@ MinhaArea.Geral = {
 
             if (lista.length === 0) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // Atualiza KPIs Topo
+            // 5. Atualiza KPIs Topo
             const atingimentoGeral = totalMeta > 0 ? (totalProd / totalMeta) * 100 : 0;
             const mediaDiaria = diasComProducao > 0 ? Math.round(totalProd / diasComProducao) : 0;
 
@@ -199,6 +206,7 @@ MinhaArea.Geral = {
     parseValorPorcentagem: function(val) {
         if (val === null || val === undefined) return 0;
         if (typeof val === 'number') return val;
+        // Remove espaços, % e converte vírgula
         let str = String(val).replace('%', '').replace(/\s/g, '').replace(',', '.');
         const num = parseFloat(str);
         return isNaN(num) ? 0 : num;
