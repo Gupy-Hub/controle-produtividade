@@ -15,11 +15,11 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 1. Buscas
+            // 1. Buscas Otimizadas
             const [prodRes, assertRes, metasRes] = await Promise.all([
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
-                // Garante que trazemos a coluna 'quantidade' para saber o volume de amostra auditada
-                Sistema.supabase.from('assertividade').select('*').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim),
+                // LIMIT AUMENTADO PARA GARANTIR CONTAGEM TOTAL
+                Sistema.supabase.from('assertividade').select('*').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim).limit(10000),
                 Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim)
             ]);
 
@@ -134,11 +134,9 @@ MinhaArea.Metas = {
     },
 
     atualizarCardsKPI: function(prods, asserts, mapMetas, dtInicio, dtFim) {
-        // --- CÁLCULO CARD 1 & 2 (Assertividade e Produção) ---
-        let totalValidados = 0; // Total Produzido
+        let totalValidados = 0; 
         let totalMeta = 0;
         let somaAssert = 0, qtdAssert = 0;
-        let totalAuditados = 0; // Novo acumulador
         
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
@@ -159,33 +157,27 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // Assertividade e Total Auditados
+        // Assertividade
         (asserts || []).forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
             if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
-            
-            // SOMATÓRIA DE VOLUME AUDITADO
-            // Tenta pegar a coluna 'quantidade', 'amostra' ou 'qtd_auditada'.
-            // Se não existir, assume 0 (para não inflar dados falsos, mas corrigir o bug).
-            // Com base na correção solicitada, existe um campo de volume na tabela assertividade.
-            let qtd = Number(a.quantidade || a.amostra || 0);
-            totalAuditados += qtd;
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
         
-        // Card 1: Validação (Volume)
+        // 1. Validação
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
-        // Card 2: Assertividade
+        // 2. Assertividade
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 1})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Card 3: Auditoria
+        // 3. Auditoria (CÁLCULO CORRIGIDO: Contagem de Linhas)
+        const totalAuditados = (asserts || []).length;
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
