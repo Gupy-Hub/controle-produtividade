@@ -6,35 +6,27 @@ window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
 
     init: function() {
-        console.log("🚀 Performance Pro: Importação em Massa Ativada (V2.6)");
+        console.log("🚀 Performance Pro: Importação V2.7 (Mapeamento CSV Ajustado)");
     },
 
-    /**
-     * Extrai a data do nome do arquivo (padrão DDMMAAAA)
-     */
     extrairDataDoNome: function(nome) {
+        // Extrai DD, MM, AAAA do nome do arquivo (ex: 01122025.csv)
         const match = nome.match(/(\d{2})(\d{2})(\d{4})/);
         return match ? `${match[3]}-${match[2]}-${match[1]}` : null;
     },
 
-    /**
-     * Processa um ou mais arquivos CSV selecionados
-     */
     processar: async function(input) {
         const files = Array.from(input.files);
         if (files.length === 0) return;
 
         this.dadosProcessados = [];
         const statusEl = document.getElementById('status-importacao-prod');
-        if(statusEl) {
-            statusEl.classList.remove('hidden');
-            statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo arquivos...</span>`;
-        }
+        if(statusEl) statusEl.innerHTML = `<span class="text-blue-500"><i class="fas fa-spinner fa-spin"></i> Lendo arquivos...</span>`;
 
         for (const file of files) {
             const dataRef = this.extrairDataDoNome(file.name);
             if (!dataRef) {
-                alert(`Arquivo ignorado (nome inválido): ${file.name}. Use DDMMAAAA.csv`);
+                alert(`⚠️ Arquivo ignorado: "${file.name}". O nome deve conter a data (ex: 01122025.csv).`);
                 continue;
             }
 
@@ -42,25 +34,10 @@ window.Produtividade.Importacao.Validacao = {
                 Papa.parse(file, {
                     header: true,
                     skipEmptyLines: true,
-                    transformHeader: h => h.trim().toLowerCase(),
+                    encoding: "UTF-8",
+                    transformHeader: h => h.trim().toLowerCase(), // Normaliza cabeçalhos para minúsculo
                     complete: (res) => {
-                        res.data.forEach(row => {
-                            // Identifica o ID ignorando linhas de 'Total'
-                            let id = row['id_assistente'] || row['usuario_id'] || row['id'];
-                            if (!id || (row['assistente'] && row['assistente'].toLowerCase() === 'total')) return;
-                            
-                            this.dadosProcessados.push({
-                                usuario_id: parseInt(id.toString().replace(/\D/g, '')),
-                                data_referencia: dataRef,
-                                quantidade: parseInt(row['documentos_validados'] || 0),
-                                fifo: parseInt(row['documentos_validados_fifo'] || 0),
-                                gradual_total: parseInt(row['documentos_validados_gradual_total'] || 0),
-                                gradual_parcial: parseInt(row['documentos_validados_gradual_parcial'] || 0),
-                                perfil_fc: parseInt(row['documentos_validados_perfil_fc'] || 0),
-                                fator: 1,
-                                status: 'OK'
-                            });
-                        });
+                        this.prepararDados(res.data, dataRef);
                         resolve();
                     }
                 });
@@ -68,42 +45,69 @@ window.Produtividade.Importacao.Validacao = {
         }
 
         if (this.dadosProcessados.length > 0) {
-            if (confirm(`Localizados ${this.dadosProcessados.length} registros em ${files.length} arquivo(s). Gravar agora?`)) {
+            if (confirm(`Preparados ${this.dadosProcessados.length} registros para o dia ${this.dadosProcessados[0].data_referencia}. Gravar?`)) {
                 this.salvarNoBanco();
             }
         } else {
-            alert("Nenhum dado válido encontrado para importação.");
+            if(statusEl) statusEl.innerHTML = "";
+            alert("Nenhum dado válido encontrado.");
         }
         input.value = '';
     },
 
-    /**
-     * Envia os dados acumulados para o Supabase via UPSERT
-     */
+    prepararDados: function(linhas, dataFixa) {
+        linhas.forEach(row => {
+            // Ignora linha de Totais ou linhas sem ID
+            let id = row['id_assistente'] || row['usuario_id'] || row['id'];
+            if (!id || (row['assistente'] && row['assistente'].toLowerCase() === 'total')) return;
+            
+            // Remove caracteres não numéricos do ID
+            const usuarioId = parseInt(id.toString().replace(/\D/g, ''));
+            if (isNaN(usuarioId)) return;
+
+            this.dadosProcessados.push({
+                usuario_id: usuarioId,
+                data_referencia: dataFixa,
+                // Mapeamento Híbrido: Tenta o nome longo do seu CSV, se não achar, tenta o curto
+                quantidade: parseInt(row['documentos_validados'] || row['quantidade'] || 0),
+                fifo: parseInt(row['documentos_validados_fifo'] || row['fifo'] || 0),
+                gradual_total: parseInt(row['documentos_validados_gradual_total'] || row['gradual_total'] || 0),
+                gradual_parcial: parseInt(row['documentos_validados_gradual_parcial'] || row['gradual_parcial'] || 0),
+                perfil_fc: parseInt(row['documentos_validados_perfil_fc'] || row['perfil_fc'] || 0),
+                fator: 1,
+                status: 'OK'
+            });
+        });
+    },
+
     salvarNoBanco: async function() {
         const statusEl = document.getElementById('status-importacao-prod');
         try {
-            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Sincronizando com Supabase...</span>`;
+            if(statusEl) statusEl.innerHTML = `<span class="text-orange-500"><i class="fas fa-sync fa-spin"></i> Enviando...</span>`;
 
-            // O upsert lida com a atualização se (usuario_id, data_referencia) já existir
+            // Envia para o Supabase (requer constraint unique_user_date no banco)
             const { error } = await Sistema.supabase
                 .from('producao')
                 .upsert(this.dadosProcessados, { onConflict: 'usuario_id,data_referencia' });
 
             if (error) throw error;
 
-            alert("✅ Sucesso! Produção atualizada.");
-            if (window.Produtividade.Geral && typeof window.Produtividade.Geral.carregarTela === 'function') {
+            alert("✅ Importação realizada com sucesso!");
+            
+            // Atualiza a tela se o módulo Geral estiver carregado
+            if (window.Produtividade.Geral?.carregarTela) {
+                // Tenta forçar a atualização da tela para a data importada (opcional)
+                // window.Produtividade.Geral.dataAtual = this.dadosProcessados[0].data_referencia;
                 window.Produtividade.Geral.carregarTela();
             }
+
         } catch (e) {
-            console.error("Erro na gravação:", e);
-            alert("Erro na gravação: " + (e.message || "Acesso negado (RLS)"));
+            console.error(e);
+            alert("Erro ao gravar: " + (e.message || "Verifique o console."));
         } finally {
             if(statusEl) statusEl.innerHTML = "";
         }
     }
 };
 
-// Inicializa o módulo
 window.Produtividade.Importacao.Validacao.init();
