@@ -15,7 +15,7 @@ MinhaArea.Geral = {
         try {
             // 1. Buscas Otimizadas
             const [prodRes, assertRes, metaRes] = await Promise.all([
-                // Produção: Seleciona TUDO (*), trazendo tanto 'justificativa' quanto 'justificativas'
+                // Produção: Select * garante que justificativa_abono venha junto
                 Sistema.supabase
                     .from('producao')
                     .select('*') 
@@ -24,7 +24,7 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim)
                     .limit(2000), 
                 
-                // Assertividade: Apenas numérico
+                // Assertividade
                 Sistema.supabase
                     .from('assertividade')
                     .select('data_auditoria, porcentagem') 
@@ -67,7 +67,7 @@ MinhaArea.Geral = {
                 return mapaDados.get(dataStr);
             };
 
-            // Processa Produção (CORREÇÃO AQUI)
+            // Processa Produção (CORREÇÃO DEFINITIVA)
             (prodRes.data || []).forEach(p => {
                 const dia = getDia(p.data_referencia);
                 if(dia) {
@@ -77,26 +77,29 @@ MinhaArea.Geral = {
                     dia.prod.gp += Number(p.gradual_parcial || 0);
                     
                     const fator = Number(p.fator);
-                    // Detecta se é Abono
                     const ehAbono = (!isNaN(fator) && fator !== 1);
 
                     if (ehAbono) {
                         dia.prod.fator = fator;
                     }
 
-                    // --- LÓGICA DE JUSTIFICATIVA UNIFICADA ---
-                    // 1. Tenta singular (Padrão Novo)
-                    let texto = (p.justificativa || '').trim();
+                    // --- CAÇA AO TESOURO RESOLVIDA ---
+                    // Prioridade 1: Coluna descoberta (justificativa_abono)
+                    let texto = (p.justificativa_abono || '').trim();
                     
-                    // 2. Se vazio, tenta plural (Padrão RPC/Legado)
+                    // Prioridade 2: Coluna singular padrão
+                    if (texto === '') {
+                        texto = (p.justificativa || '').trim();
+                    }
+
+                    // Prioridade 3: Coluna plural (Legado/RPC)
                     if (texto === '') {
                         texto = (p.justificativas || '').trim();
                     }
 
-                    // 3. Aplica apenas se tiver conteúdo
+                    // Aplica se encontrou algo
                     if (texto !== '') {
-                        // Se for abono, sobrescreve qualquer coisa anterior. 
-                        // Se não for, só preenche se estiver vazio.
+                        // Se for abono, sobrescreve. Senão, preenche se vazio.
                         if (dia.prod.justificativa === '' || ehAbono) {
                             dia.prod.justificativa = texto;
                         }
@@ -171,7 +174,6 @@ MinhaArea.Geral = {
                 const temJustificativa = item.prod.justificativa && item.prod.justificativa.length > 0;
                 const textoJustificativa = item.prod.justificativa || '-';
                 
-                // Destaque visual
                 const classJustificativa = temJustificativa 
                     ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" 
                     : "text-slate-200 text-center block";
