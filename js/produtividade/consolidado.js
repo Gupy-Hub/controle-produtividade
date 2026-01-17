@@ -2,65 +2,91 @@ window.Produtividade = window.Produtividade || {};
 
 Produtividade.Consolidado = {
     initialized: false,
+    chartInstance: null,
 
     init: function() {
-        console.log("🚀 [NEXUS] Consolidado: Grid Footer Stats Init...");
-        this.renderizarFiltros(); 
-        setTimeout(() => this.carregarDados(), 100);
+        console.log("🚀 [NEXUS] Consolidado: Engine V1 (Filtros Inteligentes)...");
+        this.renderizarFiltros(); // Cria as opções do Select
+        this.carregarDados();
         this.initialized = true;
     },
 
+    // 1. INJEÇÃO DOS FILTROS (Garante que os valores batam com a lógica)
     renderizarFiltros: function() {
         const selAno = document.getElementById('sel-consolidado-ano');
         const selPeriodo = document.getElementById('sel-consolidado-periodo');
         
         if (!selAno || !selPeriodo) return;
 
-        const anoAtual = new Date().getFullYear(); 
+        // Popula Anos (Ano Atual e Anterior)
+        const anoAtual = new Date().getFullYear();
         selAno.innerHTML = `
-            <option value="${anoAtual}">${anoAtual}</option>
-            <option value="${anoAtual - 1}" selected>${anoAtual - 1}</option>
-            <option value="${anoAtual - 2}">${anoAtual - 2}</option>
+            <option value="${anoAtual}" selected>${anoAtual}</option>
+            <option value="${anoAtual - 1}">${anoAtual - 1}</option>
         `;
 
+        // Popula Períodos (Lógica Hierárquica)
         selPeriodo.innerHTML = `
             <option value="anual" class="font-bold">📅 Ano Completo</option>
-            <optgroup label="Semestres"><option value="s1">1º Semestre</option><option value="s2">2º Semestre</option></optgroup>
-            <optgroup label="Trimestres"><option value="t1">1º Trimestre</option><option value="t2">2º Trimestre</option><option value="t3">3º Trimestre</option><option value="t4">4º Trimestre</option></optgroup>
+            <optgroup label="Semestres">
+                <option value="s1">1º Semestre (Jan-Jun)</option>
+                <option value="s2">2º Semestre (Jul-Dez)</option>
+            </optgroup>
+            <optgroup label="Trimestres">
+                <option value="t1">1º Trimestre (Jan-Mar)</option>
+                <option value="t2">2º Trimestre (Abr-Jun)</option>
+                <option value="t3">3º Trimestre (Jul-Set)</option>
+                <option value="t4">4º Trimestre (Out-Dez)</option>
+            </optgroup>
             <optgroup label="Meses">
-                <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Março</option>
-                <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
-                <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
-                <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+                <option value="1">Janeiro</option>
+                <option value="2">Fevereiro</option>
+                <option value="3">Março</option>
+                <option value="4">Abril</option>
+                <option value="5">Maio</option>
+                <option value="6">Junho</option>
+                <option value="7">Julho</option>
+                <option value="8">Agosto</option>
+                <option value="9">Setembro</option>
+                <option value="10">Outubro</option>
+                <option value="11">Novembro</option>
+                <option value="12">Dezembro</option>
             </optgroup>
         `;
 
+        // Adiciona Listeners para recarregar ao mudar
         selAno.onchange = () => this.carregarDados();
         selPeriodo.onchange = () => this.carregarDados();
     },
 
+    // 2. CÉREBRO DAS DATAS: Converte "s1" em Datas Reais
     getDatasIntervalo: function() {
-        const elAno = document.getElementById('sel-consolidado-ano');
-        const elPeriodo = document.getElementById('sel-consolidado-periodo');
-        
-        if (!elAno || !elPeriodo) return { inicio: '2025-01-01', fim: '2025-12-31' };
+        const ano = document.getElementById('sel-consolidado-ano').value;
+        const periodo = document.getElementById('sel-consolidado-periodo').value;
 
-        const ano = elAno.value;
-        const periodo = elPeriodo.value;
         let inicio = `${ano}-01-01`;
         let fim = `${ano}-12-31`;
 
         switch (periodo) {
-            case 'anual': break;
+            case 'anual':
+                // Já definido no default
+                break;
+            
+            // SEMESTRES
             case 's1': inicio = `${ano}-01-01`; fim = `${ano}-06-30`; break;
             case 's2': inicio = `${ano}-07-01`; fim = `${ano}-12-31`; break;
+
+            // TRIMESTRES
             case 't1': inicio = `${ano}-01-01`; fim = `${ano}-03-31`; break;
             case 't2': inicio = `${ano}-04-01`; fim = `${ano}-06-30`; break;
             case 't3': inicio = `${ano}-07-01`; fim = `${ano}-09-30`; break;
             case 't4': inicio = `${ano}-10-01`; fim = `${ano}-12-31`; break;
+
+            // MESES (Default numérico)
             default:
                 const mes = parseInt(periodo);
                 if (mes >= 1 && mes <= 12) {
+                    // Pega o último dia do mês automaticamente
                     const lastDay = new Date(ano, mes, 0).getDate();
                     inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
                     fim = `${ano}-${String(mes).padStart(2, '0')}-${lastDay}`;
@@ -68,198 +94,144 @@ Produtividade.Consolidado = {
                 break;
         }
 
-        const debugInicio = document.getElementById('debug-data-inicio');
-        const debugFim = document.getElementById('debug-data-fim');
-        if(debugInicio) debugInicio.innerText = inicio;
-        if(debugFim) debugFim.innerText = fim;
-
         return { inicio, fim };
     },
 
-    countDiasUteis: function(inicioStr, fimStr) {
-        let count = 0;
-        let cur = new Date(inicioStr + 'T12:00:00'); 
-        const end = new Date(fimStr + 'T12:00:00');
-        while (cur <= end) {
-            const day = cur.getDay();
-            if (day !== 0 && day !== 6) count++; 
-            cur.setDate(cur.getDate() + 1);
-        }
-        return count > 0 ? count : 1;
-    },
-
     carregarDados: async function() {
-        const tbody = document.getElementById('cons-table-body');
-        const tfoot = document.getElementById('cons-table-footer');
+        const container = document.getElementById('grafico-consolidado-container'); // Container do gráfico
+        const kpiTotal = document.getElementById('kpi-consolidado-total');
+        const kpiMedia = document.getElementById('kpi-consolidado-media');
+        
+        // 1. Obtém as datas calculadas
         const { inicio, fim } = this.getDatasIntervalo();
-        const diasUteisPeriodo = this.countDiasUteis(inicio, fim);
+        console.log(`📡 [CONSOLIDADO] Buscando de ${inicio} até ${fim}`);
 
-        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2"></i><br>Carregando dados...</td></tr>';
-        if (tfoot) tfoot.innerHTML = '';
+        if (container) container.innerHTML = '<div class="flex h-64 items-center justify-center text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>';
 
         try {
-            if(!Sistema || !Sistema.supabase) throw new Error("Sistema não inicializado.");
-
+            // Reutiliza a RPC poderosa que já criamos (Engine V15)
             const { data, error } = await Sistema.supabase
-                .rpc('get_painel_produtividade', { data_inicio: inicio, data_fim: fim });
+                .rpc('get_painel_produtividade', { 
+                    data_inicio: inicio, 
+                    data_fim: fim 
+                });
 
             if (error) throw error;
-            this.processarDados(data, diasUteisPeriodo);
+
+            console.log(`✅ Dados recebidos: ${data.length} linhas`);
+            this.processarDados(data);
 
         } catch (error) {
-            console.error("Erro:", error);
-            if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-rose-500">Erro: ${error.message}</td></tr>`;
+            console.error(error);
+            if (container) container.innerHTML = `<div class="text-center text-rose-500 py-10">Erro: ${error.message}</div>`;
         }
     },
 
-    processarDados: function(data, diasUteisPeriodo) {
-        const assistentes = (data || []).filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
+    processarDados: function(data) {
+        // Filtra gestores fora da análise
+        const assistentes = data.filter(d => !['AUDITORA', 'GESTORA'].includes((d.funcao || '').toUpperCase()));
 
-        // --- CALCULO DOS 10 INDICADORES ---
-        let totalValidados = 0;
-        let totalFifo = 0;
-        let totalGradualTotal = 0;
-        let totalGradualParcial = 0;
-        let totalPerfilFc = 0;
-
-        const dadosMapeados = assistentes.map(u => {
-            const prod = Number(u.total_qty || u.producao || 0);
-            const fifo = Number(u.total_fifo || u.fifo || 0);
-            const gradTotal = Number(u.total_gradual_total || u.gradual_total || 0);
-            const gradParcial = Number(u.total_gradual_parcial || u.gradual_parcial || 0);
-            const perfilFc = Number(u.total_perfil_fc || u.perfil_fc || 0);
+        // KPIS GERAIS
+        let totalProducao = 0;
+        let totalDias = 0;
+        
+        // Agrupamento para o Gráfico (Por Usuário)
+        const ranking = assistentes.map(u => {
+            totalProducao += Number(u.total_qty);
+            totalDias += Number(u.total_dias_uteis); // Usando dias fatorados da V15
             
-            // 7. Total documentos validados
-            totalValidados += prod;
-            // 3. Total Fifo
-            totalFifo += fifo;
-            // 5. Total Gradual Total
-            totalGradualTotal += gradTotal;
-            // 4. Total Gradual Parcial
-            totalGradualParcial += gradParcial;
-            // 6. Total Perfil FC
-            totalPerfilFc += perfilFc;
-
-            const mediaDiaria = diasUteisPeriodo > 0 ? (prod / diasUteisPeriodo) : 0;
-            const metaPeriodo = Number(u.meta_producao || 0) * diasUteisPeriodo;
-            const atingimento = metaPeriodo > 0 ? (prod / metaPeriodo * 100) : 0;
-
             return {
-                nome: u.nome,
-                fifo, gradTotal, gradParcial, perfilFc,
-                total: prod,
-                mediaDiaria,
-                atingimento
+                nome: u.nome.split(' ')[0], // Primeiro nome
+                total: Number(u.total_qty),
+                meta: Number(u.meta_producao) * Number(u.total_dias_uteis), // Meta proporcional aos dias trabalhados
+                atingimento: (Number(u.meta_producao) * Number(u.total_dias_uteis)) > 0 
+                    ? (Number(u.total_qty) / (Number(u.meta_producao) * Number(u.total_dias_uteis)) * 100) 
+                    : 0
             };
         });
 
-        dadosMapeados.sort((a,b) => b.total - a.total);
+        // Ordena por maior produção
+        ranking.sort((a,b) => b.total - a.total);
 
-        // 1. Total assistentes
-        const totalAssistentes = assistentes.length;
+        // Atualiza KPIs da Tela
+        const elTotal = document.getElementById('kpi-consolidado-total');
+        const elMedia = document.getElementById('kpi-consolidado-media');
         
-        // 2. Total dias úteis
-        const totalDiasUteis = diasUteisPeriodo;
+        if(elTotal) elTotal.innerText = totalProducao.toLocaleString('pt-BR');
+        // Média Global Diária = Produção Total / Soma de Dias Trabalhados
+        if(elMedia) elMedia.innerText = totalDias > 0 ? Math.round(totalProducao / totalDias).toLocaleString('pt-BR') : 0;
 
-        // 8. Total validação diária (Dias uteis) = Soma Total / dias uteis
-        const validacaoDiariaTime = totalDiasUteis > 0 ? (totalValidados / totalDiasUteis) : 0;
-
-        // 9. Média validação diária (Todas assistentes) = Soma Total / Total de Assistentes 
-        // (Nota: Isso é Média por Pessoa no Período)
-        const mediaValPorAssistente = totalAssistentes > 0 ? (totalValidados / totalAssistentes) : 0;
-
-        // 10. Média validação diária (Por Assistentes) = Soma Total / Dias Uteis / Total de Assistentes
-        const mediaValDiariaPorAssistente = (totalAssistentes > 0 && totalDiasUteis > 0) 
-            ? (totalValidados / totalDiasUteis / totalAssistentes) 
-            : 0;
-
-        // Renderiza
-        this.renderizarTabela(dadosMapeados, {
-            totalAssistentes,
-            totalDiasUteis,
-            totalFifo,
-            totalGradualParcial,
-            totalGradualTotal,
-            totalPerfilFc,
-            totalValidados,
-            validacaoDiariaTime,
-            mediaValPorAssistente,
-            mediaValDiariaPorAssistente
-        });
+        this.renderizarGrafico(ranking);
     },
 
-    renderizarTabela: function(dados, totais) {
-        const tbody = document.getElementById('cons-table-body');
-        const tfoot = document.getElementById('cons-table-footer');
-        
-        if(!tbody) return;
-        tbody.innerHTML = '';
+    renderizarGrafico: function(dados) {
+        const ctx = document.getElementById('grafico-consolidado');
+        if (!ctx) return;
 
-        if(dados.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-slate-400">Nenhum registro. Tente ajustar o ano.</td></tr>';
-            if(tfoot) tfoot.innerHTML = '';
-            return;
+        // Destroi gráfico anterior se existir para não sobrepor
+        if (this.chartInstance) {
+            this.chartInstance.destroy();
         }
 
-        // --- Renderiza Linhas (Corpo) ---
-        dados.forEach(d => {
-            const tr = document.createElement('tr');
-            tr.className = "hover:bg-blue-50/50 transition-colors group border-b border-slate-100 last:border-0";
-            let corAting = d.atingimento >= 100 ? "text-emerald-600 font-bold" : (d.atingimento < 95 ? "text-rose-600 font-bold" : "text-slate-500");
+        // Prepara Arrays do ChartJS
+        const labels = dados.map(d => d.nome);
+        const valores = dados.map(d => d.total);
+        const metas = dados.map(d => d.meta);
+        const cores = dados.map(d => d.atingimento >= 100 ? '#10b981' : '#f43f5e'); // Verde ou Vermelho
 
-            tr.innerHTML = `
-                <td class="px-3 py-3 border-r border-slate-100 flex items-center gap-2">
-                    <div class="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">${d.nome.charAt(0)}</div>
-                    <span class="font-bold text-slate-700 text-xs">${d.nome.split(' ').slice(0,2).join(' ')}</span>
-                </td>
-                <td class="px-2 py-3 text-center text-slate-500 border-r border-slate-100 text-xs">-</td>
-                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.fifo.toLocaleString('pt-BR')}</td>
-                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.gradTotal.toLocaleString('pt-BR')}</td>
-                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.gradParcial.toLocaleString('pt-BR')}</td>
-                <td class="px-2 py-3 text-center text-slate-600 border-r border-slate-100 text-xs">${d.perfilFc.toLocaleString('pt-BR')}</td>
-                <td class="px-2 py-3 text-center font-bold text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">${d.total.toLocaleString('pt-BR')}</td>
-                <td class="px-2 py-3 text-center text-slate-700 font-bold border-r border-slate-100 text-xs">${Math.round(d.mediaDiaria)}</td>
-                <td class="px-2 py-3 text-center ${corAting} text-xs">${d.atingimento.toFixed(1)}%</td>
-            `;
-            tbody.appendChild(tr);
+        this.chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Produção Real',
+                        data: valores,
+                        backgroundColor: cores,
+                        borderRadius: 4,
+                        order: 2
+                    },
+                    {
+                        label: 'Meta Esperada',
+                        data: metas,
+                        type: 'line',
+                        borderColor: '#94a3b8', // Cinza
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        pointRadius: 0,
+                        order: 1,
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: true, position: 'bottom' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) { label += ': '; }
+                                if (context.parsed.y !== null) {
+                                    label += context.parsed.y.toLocaleString('pt-BR');
+                                }
+                                return label;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: { display: false }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
         });
-
-        // --- Renderiza Footer (Os 10 Dados Solicitados) ---
-        // Organizados em 2 linhas para caber perfeitamente no Grid
-        if(tfoot) {
-            tfoot.innerHTML = `
-                <tr class="bg-slate-50 border-t-2 border-slate-300">
-                    <td class="px-3 py-2 text-right text-slate-500 uppercase text-[10px]">TOTAIS:</td>
-                    <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
-                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total FIFO">${totais.totalFifo.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total Gradual Total">${totais.totalGradualTotal.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total Gradual Parcial">${totais.totalGradualParcial.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-800 font-bold text-xs" title="Total Perfil FC">${totais.totalPerfilFc.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-blue-800 font-black bg-blue-100/50 border-x border-blue-200 text-sm" title="Total Validados">${totais.totalValidados.toLocaleString('pt-BR')}</td>
-                    <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
-                    <td class="px-2 py-2 text-center text-slate-400 text-[10px]">-</td>
-                </tr>
-                
-                <tr class="bg-slate-100 border-t border-slate-200">
-                    <td class="px-3 py-2 text-left text-slate-600 text-[10px] uppercase font-bold pl-4">
-                        <span title="Total Assistentes"><i class="fas fa-users mr-1"></i> ${totais.totalAssistentes}</span> &nbsp;|&nbsp; 
-                        <span title="Dias Úteis"><i class="fas fa-calendar-day mr-1"></i> ${totais.totalDiasUteis}</span>
-                    </td>
-                    <td colspan="5" class="px-2 py-2 text-right text-slate-500 text-[10px] uppercase font-bold tracking-wide">MÉDIAS GLOBAIS:</td>
-                    
-                    <td class="px-2 py-2 text-center text-blue-600 font-bold text-[10px] border-l border-slate-200" title="Validação Diária (Time) = Total / Dias Úteis">
-                        ${Math.round(totais.validacaoDiariaTime).toLocaleString('pt-BR')} /dia
-                    </td>
-                    
-                    <td class="px-2 py-2 text-center text-indigo-700 font-bold text-[10px] bg-indigo-50/50" title="Média Diária (Por Assistente) = Total / Dias / Assistentes">
-                        ${totais.mediaValDiariaPorAssistente.toFixed(1).replace('.',',')} /user
-                    </td>
-                    
-                    <td class="px-2 py-2 text-center text-[10px] text-slate-600 font-bold" title="Média Total (Todas Assistentes) = Total / Assistentes">
-                        Avg: ${Math.round(totais.mediaValPorAssistente).toLocaleString('pt-BR')}
-                    </td>
-                </tr>
-            `;
-        }
     }
 };
