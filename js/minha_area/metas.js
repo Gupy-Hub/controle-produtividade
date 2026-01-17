@@ -3,6 +3,7 @@ MinhaArea.Metas = {
     chartAssert: null,
 
     carregar: async function() {
+        console.log("🚀 Metas: Iniciando carregamento...");
         const uid = MinhaArea.getUsuarioAlvo();
         if (!uid) return;
 
@@ -15,7 +16,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 1. Buscas Simples (Produção e Metas)
+            // 1. Buscas Básicas
             const [prodRes, metasRes] = await Promise.all([
                 Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
                 Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim)
@@ -23,10 +24,13 @@ MinhaArea.Metas = {
 
             if (prodRes.error) throw prodRes.error;
 
-            // 2. Busca Complexa (Auditoria com Paginação para driblar limite de 1000)
-            const assertData = await this.buscarTodosRegistros(uid, inicio, fim);
+            // 2. BUSCA ROBUSTA DE AUDITORIA (Paginação Automática)
+            // Aqui usamos a mesma lógica do console que funcionou
+            const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
+            
+            console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
 
-            // 3. Processamento dos Dados
+            // 3. Processamento dos Mapas
             const mapMetas = {};
             (metasRes.data || []).forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
@@ -36,14 +40,25 @@ MinhaArea.Metas = {
             const mapProd = new Map();
             (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
 
+            // Mapa de Assertividade para o Gráfico
             const mapAssert = new Map();
             assertData.forEach(a => {
-                if(!mapAssert.has(a.data_auditoria)) mapAssert.set(a.data_auditoria, []);
-                let val = String(a.porcentagem).replace('%','').replace(',','.');
-                mapAssert.get(a.data_auditoria).push(parseFloat(val));
+                // Garante formato de data YYYY-MM-DD
+                const dataKey = a.data_auditoria ? a.data_auditoria.split('T')[0] : null;
+                if (!dataKey) return;
+
+                if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
+                
+                // Tratamento robusto da porcentagem
+                let valStr = String(a.porcentagem || '0').replace('%','').replace(',','.');
+                let val = parseFloat(valStr);
+                
+                if (!isNaN(val)) {
+                    mapAssert.get(dataKey).push(val);
+                }
             });
 
-            // 4. Preparação dos Gráficos
+            // 4. Construção dos Arrays do Gráfico
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -56,27 +71,31 @@ MinhaArea.Metas = {
             const aggMensal = new Map(); 
             const mesesNomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+            // Loop Calendário
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 const diaSemana = d.getDay();
                 const isFDS = (diaSemana === 0 || diaSemana === 6);
 
                 if (!modoMensal && isFDS) continue; 
 
-                const dataStr = d.toISOString().split('T')[0];
+                const dataStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
                 const dia = d.getDate();
 
                 const metaConfig = mapMetas[ano]?.[mes] || { prod: 650, assert: 98.0 };
-                const prodDia = mapProd.get(dataStr);
                 
+                // Dados Produção
+                const prodDia = mapProd.get(dataStr);
                 const qtd = prodDia ? Number(prodDia.quantidade || 0) : 0;
                 const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1); 
                 const metaDia = Math.round(metaConfig.prod * (isNaN(fator) ? 1 : fator));
 
+                // Dados Assertividade
                 const assertsDia = mapAssert.get(dataStr) || [];
                 
                 if (modoMensal) {
+                    // Lógica Mensal
                     const chaveMes = `${ano}-${mes}`;
                     if (!aggMensal.has(chaveMes)) {
                         aggMensal.set(chaveMes, { 
@@ -94,20 +113,25 @@ MinhaArea.Metas = {
                     }
                     slot.assertMetaSoma = metaConfig.assert; 
                 } else {
+                    // Lógica Diária (AQUI É ONDE O GRÁFICO É MONTADO)
                     labels.push(`${String(dia).padStart(2,'0')}/${String(mes).padStart(2,'0')}`);
                     dataProdReal.push(qtd);
                     dataProdMeta.push(metaDia);
 
                     if (assertsDia.length > 0) {
-                        const mediaDia = assertsDia.reduce((a,b)=>a+b,0) / assertsDia.length;
-                        dataAssertReal.push(mediaDia);
+                        // Média do dia
+                        const soma = assertsDia.reduce((a,b)=>a+b,0);
+                        const media = soma / assertsDia.length;
+                        dataAssertReal.push(media);
                     } else {
+                        // Dia sem auditoria = null (cria gap no gráfico)
                         dataAssertReal.push(null);
                     }
                     dataAssertMeta.push(metaConfig.assert);
                 }
             }
 
+            // Processa arrays mensais se necessário
             if (modoMensal) {
                 for (const [key, val] of aggMensal.entries()) {
                     labels.push(val.label); 
@@ -119,46 +143,53 @@ MinhaArea.Metas = {
                 }
             }
 
+            console.log(`📊 Metas: Pontos no gráfico de assertividade: ${dataAssertReal.filter(x => x !== null).length}`);
+
+            // 5. Renderização
             this.atualizarCardsKPI(prodRes.data, assertData, mapMetas, dtInicio, dtFim);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
+
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
             this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade (%)', '#059669', true);
 
         } catch (err) {
-            console.error("Erro Metas:", err);
+            console.error("❌ Erro Metas:", err);
         }
     },
 
-    // --- FUNÇÃO AUXILIAR PARA PAGINAÇÃO AUTOMÁTICA ---
-    buscarTodosRegistros: async function(uid, inicio, fim) {
-        let allData = [];
+    // --- FUNÇÃO DE PAGINAÇÃO (FUNDAMENTAL PARA TRAZER OS DADOS CORRETOS) ---
+    buscarTodosAuditados: async function(uid, inicio, fim) {
+        let todos = [];
         let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
+        const size = 1000;
+        let continuar = true;
 
-        while(hasMore) {
+        while(continuar) {
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
-                .select('*')
+                .select('data_auditoria, porcentagem, auditora') // Trazemos só o necessário
                 .eq('usuario_id', uid)
                 .gte('data_auditoria', inicio)
                 .lte('data_auditoria', fim)
-                .neq('auditora', null) // Traz apenas auditados
+                .neq('auditora', null) // Filtra vazios no banco
                 .neq('auditora', '')
-                .range(page * pageSize, (page + 1) * pageSize - 1); // Paginação manual
+                .range(page * size, (page + 1) * size - 1);
 
-            if(error) throw error;
+            if(error) {
+                console.error("Erro paginação:", error);
+                throw error;
+            }
 
-            allData = allData.concat(data);
+            todos = todos.concat(data);
             
-            if(data.length < pageSize) {
-                hasMore = false; // Acabou os registros
+            if(data.length < size) {
+                continuar = false;
             } else {
-                page++; // Próxima página
+                page++;
             }
         }
-        return allData;
+        return todos;
     },
 
     atualizarCardsKPI: function(prods, asserts, mapMetas, dtInicio, dtFim) {
@@ -169,6 +200,7 @@ MinhaArea.Metas = {
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
 
+        // Loop Produção (Validados)
         for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
@@ -185,10 +217,13 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // Assertividade
-        (asserts || []).forEach(a => {
+        // Loop Auditoria (Já filtrada com 'auditora' preenchida)
+        asserts.forEach(a => {
             let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
-            if(!isNaN(val)) { somaAssert += val; qtdAssert++; }
+            if(!isNaN(val)) { 
+                somaAssert += val; 
+                qtdAssert++; 
+            }
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
@@ -205,7 +240,7 @@ MinhaArea.Metas = {
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
         // 3. Auditoria
-        const totalAuditados = (asserts || []).length;
+        const totalAuditados = asserts.length; // Aqui usamos o array paginado
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
