@@ -1,197 +1,82 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nexus | Acesso ao Sistema</title>
+    <title>Login - Performance Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
-
     <style>
-        /* CSS Original (Dark Mode Azulado) */
-        :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --primary: #3b82f6;
-            --primary-hover: #2563eb;
-            --text-color: #f8fafc;
-            --text-muted: #94a3b8;
-            --border: #334155;
+        body { font-family: 'Nunito', sans-serif; }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
         }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Inter', sans-serif;
-        }
-
-        body {
-            background-color: var(--bg-color);
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-color);
-        }
-
-        .login-container {
-            width: 100%;
-            max-width: 400px;
-            padding: 20px;
-        }
-
-        .login-card {
-            background-color: var(--card-bg);
-            padding: 40px;
-            border-radius: 16px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-            border: 1px solid var(--border);
-            text-align: center;
-        }
-
-        .logo-area {
-            margin-bottom: 30px;
-        }
-        
-        .logo-area i {
-            font-size: 3rem;
-            color: var(--primary);
-            margin-bottom: 10px;
-        }
-
-        .logo-area h1 {
-            font-size: 1.5rem;
-            font-weight: 600;
-        }
-
-        .logo-area p {
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-top: 5px;
-        }
-
-        .input-group {
-            text-align: left;
-            margin-bottom: 20px;
-        }
-
-        .input-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
-        .input-wrapper {
-            position: relative;
-        }
-
-        .input-wrapper i {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-muted);
-            font-size: 1rem;
-        }
-
-        .input-wrapper input {
-            width: 100%;
-            padding: 12px 12px 12px 40px; 
-            background-color: var(--bg-color);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            color: var(--text-color);
-            font-size: 1rem;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .input-wrapper input:focus {
-            border-color: var(--primary);
-        }
-
-        /* Remove as setinhas do input number */
-        input[type=number]::-webkit-inner-spin-button, 
-        input[type=number]::-webkit-outer-spin-button { 
-            -webkit-appearance: none; 
-            margin: 0; 
-        }
-
-        button {
-            width: 100%;
-            padding: 12px;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
-            margin-top: 10px;
-        }
-
-        button:hover {
-            background-color: var(--primary-hover);
-        }
-
-        button:active {
-            transform: scale(0.98);
-        }
-
-        button:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-        }
-
-        .footer {
-            margin-top: 25px;
-            font-size: 0.8rem;
-            color: var(--text-muted);
+        .bg-pattern {
+            background-color: #f8fafc;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e2e8f0' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
         }
     </style>
 </head>
-<body>
+<body class="bg-pattern h-screen flex items-center justify-center p-4">
 
-    <div class="login-container">
-        <div class="login-card">
-            <div class="logo-area">
-                <i class="fa-solid fa-chart-line"></i>
-                <h1>Nexus Control</h1>
-                <p>Gestão de Produtividade & Auditoria</p>
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
+        <div class="bg-gradient-to-r from-blue-600 to-indigo-700 p-8 text-center relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-full bg-white opacity-10" style="background-image: radial-gradient(#ffffff 1px, transparent 1px); background-size: 20px 20px;"></div>
+            
+            <div class="relative z-10">
+                <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg transform rotate-3">
+                    <i class="fas fa-chart-line text-3xl text-indigo-600"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-white tracking-tight">Performance Pro</h1>
+                <p class="text-blue-100 text-sm mt-1 font-medium">Gestão & Auditoria Inteligente</p>
             </div>
+        </div>
 
-            <div>
-                <div class="input-group">
-                    <label>ID do Usuário</label>
-                    <div class="input-wrapper">
-                        <i class="fa-solid fa-user"></i>
-                        <input type="number" id="email" placeholder="Digite seu ID (Ex: 1)" autofocus>
+        <div class="p-8">
+            <div class="space-y-5">
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">ID do Usuário</label>
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-slate-400 group-focus-within:text-indigo-500 transition"></i>
+                        </div>
+                        <input type="number" id="login-id" class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all sm:text-sm font-bold text-slate-700" placeholder="Ex: 1185327">
                     </div>
                 </div>
 
-                <div class="input-group">
-                    <label>Senha</label>
-                    <div class="input-wrapper">
-                        <i class="fa-solid fa-lock"></i>
-                        <input type="password" id="senha" placeholder="Sua senha">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Senha</label>
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-slate-400 group-focus-within:text-indigo-500 transition"></i>
+                        </div>
+                        <input type="password" id="login-senha" class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all sm:text-sm font-bold text-slate-700" placeholder="••••••••">
                     </div>
                 </div>
 
-                <button onclick="entrar()">Acessar Sistema</button>
+                <div id="msg-erro" class="hidden bg-red-50 text-red-600 text-xs font-bold p-3 rounded-lg flex items-center gap-2 animate-pulse">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Erro ao conectar.</span>
+                </div>
+
+                <button onclick="Login.entrar()" class="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform active:scale-[0.98]">
+                    Acessar Sistema
+                </button>
             </div>
 
-            <div class="footer">
-                &copy; 2025 Nexus System. Todos os direitos reservados.
+            <div class="mt-8 text-center">
+                <p class="text-xs text-slate-400">
+                    Problemas de acesso? <a href="#" class="font-bold text-indigo-600 hover:text-indigo-500">Contate a Gestão</a>
+                </p>
+                <p class="text-[10px] text-slate-300 mt-4">v2.0.4 • Gupy Hub Productivity</p>
             </div>
         </div>
     </div>
 
-    <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
     <script src="js/config.js"></script>
@@ -199,6 +84,15 @@
     <script src="js/sistema.js"></script>
 
     <script src="js/login.js"></script>
+
+    <script>
+        document.addEventListener('keypress', function(e) {
+            if(e.key === 'Enter') {
+                const btn = document.querySelector('button');
+                if(btn && !btn.disabled) Login.entrar();
+            }
+        });
+    </script>
 
 </body>
 </html>
