@@ -1,250 +1,172 @@
+window.Gestao = window.Gestao || {};
+
 Gestao.Assertividade = {
-    timerBusca: null,
-    
-    estado: {
-        pagina: 0,
-        limite: 50,
-        total: 0,
-        termo: '',
-        filtros: {
-            data: '',
-            empresa: '',
-            assistente: '',
-            auditora: '',
-            status: '',
-            doc: '',
-            obs: ''
-        }
+    filtros: {
+        busca: '',
+        data: new Date().toISOString().split('T')[0] // Hoje padrão
+    },
+
+    init: function() {
+        this.renderizarFiltros();
+        this.carregar();
+    },
+
+    renderizarFiltros: function() {
+        const container = document.getElementById('filtros-dinamicos');
+        if (!container) return;
+
+        container.innerHTML = `
+            <div class="flex gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Data Referência</label>
+                    <input type="date" id="filtro-data" value="${this.filtros.data}" 
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-gray-700">Buscar Assistente/Empresa</label>
+                    <input type="text" id="filtro-busca" placeholder="Digite para buscar..." 
+                        class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                </div>
+                <button id="btn-atualizar" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                    <i class="fas fa-sync-alt"></i> Atualizar
+                </button>
+            </div>
+        `;
+
+        document.getElementById('filtro-data').addEventListener('change', (e) => {
+            this.filtros.data = e.target.value;
+            this.carregar();
+        });
+
+        document.getElementById('filtro-busca').addEventListener('input', (e) => {
+            this.filtros.busca = e.target.value;
+            // Debounce simples para não chamar o banco a cada letra
+            clearTimeout(this._timerBusca);
+            this._timerBusca = setTimeout(() => this.carregar(), 500);
+        });
+
+        document.getElementById('btn-atualizar').addEventListener('click', () => this.carregar());
     },
 
     carregar: async function() {
-        this.estado.pagina = 0;
-        this.buscarDados(); 
-    },
+        const tabelaDiv = document.getElementById('tabela-dados');
+        if (!tabelaDiv) return;
 
-    limparCamposUI: function() {
-        const ids = ['search-assert', 'filtro-data', 'filtro-empresa', 'filtro-assistente', 'filtro-auditora', 'filtro-status', 'filtro-doc', 'filtro-obs'];
-        ids.forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.value = '';
-        });
-        this.atualizarFiltrosEBuscar();
-    },
+        tabelaDiv.innerHTML = '<div class="text-center p-10"><i class="fas fa-spinner fa-spin fa-2x text-indigo-600"></i><p class="mt-2">Carregando dados...</p></div>';
 
-    atualizarFiltrosEBuscar: function() {
-        this.estado.termo = document.getElementById('search-assert')?.value.trim() || '';
-        this.estado.filtros.data = document.getElementById('filtro-data')?.value || '';
-        this.estado.filtros.empresa = document.getElementById('filtro-empresa')?.value.trim() || '';
-        this.estado.filtros.assistente = document.getElementById('filtro-assistente')?.value.trim() || '';
-        this.estado.filtros.auditora = document.getElementById('filtro-auditora')?.value.trim() || '';
-        this.estado.filtros.status = document.getElementById('filtro-status')?.value || '';
-        this.estado.filtros.doc = document.getElementById('filtro-doc')?.value.trim() || '';
-        this.estado.filtros.obs = document.getElementById('filtro-obs')?.value.trim() || '';
-
-        this.estado.pagina = 0;
-        
-        const tbody = document.getElementById('lista-assertividade');
-        if(tbody) tbody.style.opacity = '0.5';
-
-        clearTimeout(this.timerBusca);
-        this.timerBusca = setTimeout(() => {
-            this.buscarDados();
-        }, 600);
-    },
-
-    mudarPagina: function(delta) {
-        const novaPagina = this.estado.pagina + delta;
-        if (novaPagina >= 0) {
-            this.estado.pagina = novaPagina;
-            this.buscarDados(); 
+        try {
+            const dados = await this.buscarDados();
+            this.renderizarTabela(dados);
+        } catch (error) {
+            console.error("Erro ao carregar:", error);
+            tabelaDiv.innerHTML = `<div class="text-red-600 p-4">Erro ao carregar dados: ${error.message}</div>`;
         }
     },
 
     buscarDados: async function() {
-        const tbody = document.getElementById('lista-assertividade');
-        const infoPag = document.getElementById('info-paginacao');
-        const btnAnt = document.getElementById('btn-ant');
-        const btnProx = document.getElementById('btn-prox');
-        const contador = document.getElementById('contador-assert');
+        // --- QUERY OTIMIZADA PARA O NOVO BANCO ---
+        let query = Sistema.supabase
+            .from('vw_assertividade_completa') // Lê da View
+            .select('*')
+            .order('data_referencia', { ascending: false })
+            .order('id', { ascending: false })
+            .limit(100); // Limite de segurança para performance
 
-        if(tbody) tbody.style.opacity = '1';
-        if(infoPag) infoPag.innerHTML = `<span class="text-blue-500"><i class="fas fa-circle-notch fa-spin"></i> Filtrando...</span>`;
-
-        try {
-            // 1. QUERY PRINCIPAL (VIEW): Traz nomes e estrutura
-            // Utiliza a View para performance e filtragem
-            let query = Sistema.supabase
-                .from('vw_assertividade_completa')
-                .select('*', { count: 'exact' });
-
-            // Aplicação dos Filtros
-            if (this.estado.termo) query = query.ilike('search_vector', `%${this.estado.termo}%`);
-            if (this.estado.filtros.data) query = query.eq('data_referencia', this.estado.filtros.data);
-            if (this.estado.filtros.empresa) query = query.ilike('empresa_nome', `%${this.estado.filtros.empresa}%`);
-            if (this.estado.filtros.assistente) query = query.ilike('nome_assistente', `%${this.estado.filtros.assistente}%`);
-            if (this.estado.filtros.auditora) query = query.ilike('nome_auditora_raw', `%${this.estado.filtros.auditora}%`);
-            if (this.estado.filtros.status) query = query.ilike('status', this.estado.filtros.status); 
-            if (this.estado.filtros.doc) query = query.ilike('nome_documento', `%${this.estado.filtros.doc}%`);
-            if (this.estado.filtros.obs) query = query.ilike('observacao', `%${this.estado.filtros.obs}%`);
-
-            // Paginação
-            const inicio = this.estado.pagina * this.estado.limite;
-            const fim = inicio + this.estado.limite - 1;
-            
-            query = query.order('data_referencia', { ascending: false })
-                         .order('id', { ascending: false })
-                         .range(inicio, fim);
-
-            const { data: dadosView, error, count } = await query;
-
-            if (error) throw new Error(`Erro na View: ${error.message}`);
-
-            this.estado.total = count || 0;
-
-            // 2. QUERY SECUNDÁRIA (TABELA REAL): Traz a porcentagem bruta (Search & Merge)
-            // IMPORTANTE: Tenta buscar o dado fiel da planilha (string "100%", etc)
-            let listaFinal = dadosView || [];
-            
-            if (dadosView && dadosView.length > 0) {
-                const ids = dadosView.map(d => d.id);
-                
-                try {
-                    // Busca na tabela original usando os IDs recuperados
-                    const { data: dadosRaw, error: errorRaw } = await Sistema.supabase
-                        .from('assertividade')
-                        .select('id, porcentagem')
-                        .in('id', ids);
-
-                    if (!errorRaw && dadosRaw) {
-                        // Cria mapa para acesso rápido: { 101: "100%", 102: null }
-                        const mapaPorcentagem = {};
-                        dadosRaw.forEach(r => mapaPorcentagem[r.id] = r.porcentagem);
-
-                        // Funde os dados
-                        listaFinal = dadosView.map(item => {
-                            return { 
-                                ...item, 
-                                porcentagem_real: mapaPorcentagem[item.id] // Aqui vem o dado fiel à planilha
-                            };
-                        });
-                    } else {
-                        // Log silencioso para não assustar o usuário, mas avisar o dev
-                        console.warn("Aviso: Falha ao buscar porcentagem bruta (Tabela). Usando dados da View.", errorRaw);
-                    }
-                } catch (errSecundario) {
-                    console.warn("Aviso: Exceção ao buscar dados secundários (401 possível). Usando fallback.", errSecundario);
-                    // Não lança erro, apenas segue com os dados da View
-                }
-            }
-
-            this.renderizarTabela(listaFinal);
-            this.atualizarControlesPaginacao();
-
-        } catch (e) {
-            console.error("Erro crítico na busca:", e);
-            if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-red-500 font-bold"><i class="fas fa-exclamation-circle mr-2"></i> Erro ao filtrar: ${e.message}</td></tr>`;
+        // Filtro de Data
+        if (this.filtros.data) {
+            query = query.eq('data_referencia', this.filtros.data);
         }
+
+        // Filtro de Busca (Nome ou Empresa)
+        if (this.filtros.busca) {
+            const termo = `%${this.filtros.busca}%`;
+            // Sintaxe do Supabase para OR: busca no assistente OU empresa
+            query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+        return data || [];
     },
 
-    atualizarControlesPaginacao: function() {
-        const infoPag = document.getElementById('info-paginacao');
-        const btnAnt = document.getElementById('btn-ant');
-        const btnProx = document.getElementById('btn-prox');
-        const contador = document.getElementById('contador-assert');
-
-        const total = this.estado.total;
-        const inicio = (this.estado.pagina * this.estado.limite) + 1;
-        let fim = (this.estado.pagina + 1) * this.estado.limite;
-        if (fim > total) fim = total;
-
-        if(contador) contador.innerText = `${total.toLocaleString('pt-BR')} registros`;
-
-        if (total === 0) {
-            if(infoPag) infoPag.innerHTML = "Nenhum registro encontrado.";
-            if(btnAnt) btnAnt.disabled = true;
-            if(btnProx) btnProx.disabled = true;
-        } else {
-            if(infoPag) infoPag.innerHTML = `Exibindo <b>${inicio}</b> a <b>${fim}</b> de <b>${total.toLocaleString('pt-BR')}</b>`;
-            if(btnAnt) btnAnt.disabled = this.estado.pagina === 0;
-            if(btnProx) btnProx.disabled = fim >= total;
-        }
-    },
-
-    renderizarTabela: function(lista) {
-        const tbody = document.getElementById('lista-assertividade');
+    renderizarTabela: function(dados) {
+        const tabelaDiv = document.getElementById('tabela-dados');
         
-        if (!lista || lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-search text-3xl opacity-20"></i><span>Sua busca não retornou resultados.</span></div></td></tr>';
+        if (dados.length === 0) {
+            tabelaDiv.innerHTML = `
+                <div class="text-center py-10 bg-gray-50 rounded-lg">
+                    <p class="text-gray-500">Nenhum registro encontrado para esta data/filtro.</p>
+                </div>`;
             return;
         }
 
-        let html = '';
-        lista.forEach(item => {
-            const empresaSafe = Sistema.escapar(item.empresa_nome || '-');
-            const assistenteSafe = Sistema.escapar(item.nome_assistente || '-');
-            const auditoraSafe = Sistema.escapar(item.nome_auditora_raw || '-');
-            const docSafe = Sistema.escapar(item.nome_documento || '-');
-            const obsSafe = Sistema.escapar(item.observacao || '-');
-            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().slice(0,2).join('/') : '-';
-            const empIdDisplay = item.empresa_id ? `<span class="text-slate-400 font-mono text-[10px]">#${item.empresa_id}</span>` : '';
+        // Cabeçalho da Tabela
+        let html = `
+            <div class="overflow-x-auto shadow ring-1 ring-black ring-opacity-5 md:rounded-lg">
+                <table class="min-w-full divide-y divide-gray-300">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Data</th>
+                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Assistente</th>
+                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Empresa</th>
+                            <th scope="col" class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Documento</th>
+                            <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">Status</th>
+                            <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">Assertividade</th>
+                            <th scope="col" class="px-3 py-3.5 text-center text-sm font-semibold text-gray-900">OK / NOK</th>
+                            <th scope="col" class="relative py-3.5 pl-3 pr-4 sm:pr-6">
+                                <span class="sr-only">Ações</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200 bg-white">
+        `;
 
-            // Status Badge
-            const stRaw = Sistema.escapar(item.status || '-');     
-            const stUp = stRaw.toUpperCase();     
-            let badgeClass = "bg-slate-100 text-slate-500 border-slate-200"; 
-            if (stUp === 'OK' || stUp === 'VALIDO') badgeClass = "bg-emerald-100 text-emerald-700 border-emerald-200";
-            else if (stUp === 'NOK' || stUp.includes('NOK')) badgeClass = "bg-rose-100 text-rose-700 border-rose-200";
-            else if (stUp.includes('REV')) badgeClass = "bg-amber-100 text-amber-700 border-amber-200";
-            else if (stUp === 'PROCESSADO') badgeClass = "bg-indigo-50 text-indigo-600 border-indigo-100"; 
-            else if (stUp.includes('PEND')) badgeClass = "bg-blue-50 text-blue-600 border-blue-100";
+        // Linhas da Tabela
+        dados.forEach(item => {
+            // Tratamento de cores para o Status
+            let statusClass = 'bg-gray-100 text-gray-800';
+            if (item.status === 'OK') statusClass = 'bg-green-100 text-green-800';
+            else if (item.status === 'NOK') statusClass = 'bg-red-100 text-red-800';
+            else if (item.status === 'REV') statusClass = 'bg-yellow-100 text-yellow-800';
 
-            const statusBadge = `<span class="${badgeClass} px-2 py-0.5 rounded text-[10px] font-bold uppercase border whitespace-nowrap">${stRaw}</span>`;
+            // Tratamento da data para exibição (DD/MM/AAAA)
+            const dataFormatada = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
 
-            // === LÓGICA DE EXIBIÇÃO DA PORCENTAGEM ===
-            // Prioriza o dado real da tabela. Se falhou ou não existe, usa o da View.
+            // Tratamento da porcentagem (já vem como texto "100,00%" do banco)
+            const porcentagem = item.porcentagem_assertividade || '0,00%';
             
-            let valorParaExibir = item.porcentagem_real;
-
-            if (valorParaExibir === undefined || valorParaExibir === null) {
-                // Fallback para o valor calculado/vindo da view se o merge falhou
-                valorParaExibir = item.indice_assertividade || item.porcentagem; // Tenta também 'porcentagem' se vier da View
-            }
-
-            let assertDisplay = '-';
-            let assertColor = 'text-slate-400 font-light'; 
-
-            if (valorParaExibir !== null && valorParaExibir !== '' && valorParaExibir !== undefined) {
-                // Remove símbolo % se vier duplicado e converte para float para checar cor
-                const valorLimpo = String(valorParaExibir).replace('%', '').replace(',', '.');
-                const assertVal = parseFloat(valorLimpo);
-                
-                // Exibição mantém o formato original (com % se for string ou adiciona)
-                assertDisplay = String(valorParaExibir).includes('%') ? valorParaExibir : valorParaExibir + '%';
-                
-                if (!isNaN(assertVal)) {
-                    assertColor = 'text-slate-600';
-                    if (assertVal >= 99) assertColor = 'text-emerald-600 font-bold';
-                    else if (assertVal < 90 && assertVal >= 0) assertColor = 'text-rose-600 font-bold';
-                }
-            }
-
             html += `
-            <tr class="hover:bg-slate-50 border-b border-slate-50 transition text-xs whitespace-nowrap">
-                <td class="px-3 py-2 text-slate-600 font-mono">${dataFmt}</td>
-                <td class="px-3 py-2 text-center">${empIdDisplay}</td>
-                <td class="px-3 py-2 font-bold text-slate-700 max-w-[150px] truncate" title="${empresaSafe}">${empresaSafe}</td>
-                <td class="px-3 py-2 text-slate-600 max-w-[120px] truncate font-medium" title="${assistenteSafe}">${assistenteSafe}</td>
-                <td class="px-3 py-2 text-slate-500 max-w-[150px] truncate" title="${docSafe}">${docSafe}</td>
-                <td class="px-3 py-2 text-center">${statusBadge}</td>
-                <td class="px-3 py-2 text-slate-400 max-w-[180px] truncate cursor-help border-l border-slate-100 pl-4 italic" title="${obsSafe}">${obsSafe}</td>
-                <td class="px-3 py-2 text-center font-mono bg-slate-50/50 text-slate-500">${item.num_campos || '-'}</td>
-                <td class="px-3 py-2 text-center text-emerald-600 font-bold bg-emerald-50/30">${item.qtd_ok || '-'}</td>
-                <td class="px-3 py-2 text-center text-rose-600 font-bold bg-rose-50/30">${item.qtd_nok || '-'}</td>
-                <td class="px-3 py-2 text-center ${assertColor} text-sm bg-slate-50/50">${assertDisplay}</td>
-                <td class="px-3 py-2 text-slate-500 text-[10px] uppercase">${auditoraSafe}</td>
-            </tr>`;
+                <tr>
+                    <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">${dataFormatada}</td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">${Sistema.escapar(item.assistente_nome)}</td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">${Sistema.escapar(item.empresa_nome)}</td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500" title="${Sistema.escapar(item.doc_name)}">
+                        ${Sistema.escapar(item.doc_name).substring(0, 25)}${item.doc_name.length > 25 ? '...' : ''}
+                    </td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-center">
+                        <span class="inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${statusClass}">
+                            ${item.status}
+                        </span>
+                    </td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-center font-bold text-gray-700">${porcentagem}</td>
+                    <td class="whitespace-nowrap px-3 py-4 text-sm text-center text-gray-500">
+                        <span class="text-green-600 font-bold">${item.qtd_ok || 0}</span> / 
+                        <span class="text-red-600 font-bold">${item.qtd_nok || 0}</span>
+                    </td>
+                    <td class="relative whitespace-nowrap py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                        <button onclick="Gestao.Assertividade.verDetalhes(${item.id})" class="text-indigo-600 hover:text-indigo-900">Ver</button>
+                    </td>
+                </tr>
+            `;
         });
 
-        tbody.innerHTML = html;
+        html += `</tbody></table></div>`;
+        tabelaDiv.innerHTML = html;
+    },
+
+    verDetalhes: function(id) {
+        alert("Funcionalidade de detalhes em construção para o ID: " + id);
+        // Aqui futuramente podemos abrir um modal
     }
 };
