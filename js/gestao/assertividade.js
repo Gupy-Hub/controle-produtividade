@@ -18,7 +18,8 @@ Gestao.Assertividade = {
 
     // Ponto de entrada chamado pelo Menu
     carregar: async function() {
-        // 1. Converte os inputs de texto em Selects (só na primeira vez)
+        // 1. Converte APENAS Auditora e Status em Selects Inteligentes
+        // Empresa, Assistente e Doc continuam como INPUT de texto (Digitar)
         if (!this.inicializado) {
             await this.transformarFiltrosEmSelects();
             this.inicializado = true;
@@ -58,7 +59,7 @@ Gestao.Assertividade = {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
         
-        if (!tbody) return; // Proteção contra HTML incorreto
+        if (!tbody) return; 
 
         tbody.style.opacity = '1';
         tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Carregando dados...</p></td></tr>';
@@ -74,23 +75,28 @@ Gestao.Assertividade = {
                 .order('id', { ascending: false })
                 .limit(100);
 
-            // Aplicação dos Filtros
+            // --- APLICAÇÃO DOS FILTROS ---
+
+            // Busca Geral (Barra do topo)
             if (this.filtros.busca) {
                 const termo = `%${this.filtros.busca}%`;
                 query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
             }
 
+            // Data (Exata)
             if (this.filtros.data) query = query.eq('data_referencia', this.filtros.data);
             
-            // Filtros exatos (vêm dos Selects) ou parciais (se ainda for input)
-            if (this.filtros.empresa) query = query.eq('empresa_nome', this.filtros.empresa);
-            if (this.filtros.assistente) query = query.eq('assistente_nome', this.filtros.assistente);
+            // --- FILTROS DE DIGITAÇÃO (ILIKE - CONTÉM) ---
+            // Agora busca qualquer parte do texto digitado
+            if (this.filtros.empresa) query = query.ilike('empresa_nome', `%${this.filtros.empresa}%`);
+            if (this.filtros.assistente) query = query.ilike('assistente_nome', `%${this.filtros.assistente}%`);
+            if (this.filtros.doc) query = query.ilike('doc_name', `%${this.filtros.doc}%`);
+            if (this.filtros.obs) query = query.ilike('observacao', `%${this.filtros.obs}%`);
+
+            // --- FILTROS DE SELEÇÃO (EQ - EXATO) ---
+            // Auditora e Status continuam como Select, então a busca é exata
             if (this.filtros.auditora) query = query.eq('auditora_nome', this.filtros.auditora);
             if (this.filtros.status) query = query.eq('status', this.filtros.status);
-            if (this.filtros.doc) query = query.eq('doc_name', this.filtros.doc);
-            
-            // Filtro de OBS continua sendo texto livre (ilike)
-            if (this.filtros.obs) query = query.ilike('observacao', `%${this.filtros.obs}%`);
 
             const { data, error } = await query;
 
@@ -122,11 +128,10 @@ Gestao.Assertividade = {
             else if (st.includes('NOK')) statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
             else if (st.includes('REV')) statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
 
-            // Formatação de Data
+            // Formatações
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
-            
-            // Formatação Porcentagem
             const porc = item.porcentagem_assertividade || '0,00%';
+            
             let corPorc = "text-slate-500";
             const valP = parseFloat(porc.replace('%','').replace(',','.'));
             if(valP >= 99) corPorc = "text-emerald-600 font-bold";
@@ -155,14 +160,12 @@ Gestao.Assertividade = {
         tbody.innerHTML = html;
     },
 
-    // --- MÁGICA: Converte Inputs em Selects e Preenche ---
+    // --- MÁGICA: Converte APENAS Auditora e Status em Selects ---
     transformarFiltrosEmSelects: async function() {
+        // Removi Empresa, Assistente e Doc daqui. Eles continuam como Input Text.
         const campos = [
-            { id: 'filtro-empresa', key: 'empresas', placeholder: 'Todas' },
-            { id: 'filtro-assistente', key: 'assistentes', placeholder: 'Todos' },
             { id: 'filtro-auditora', key: 'auditoras', placeholder: 'Todas' },
-            { id: 'filtro-status', key: 'status', placeholder: 'Todos' },
-            { id: 'filtro-doc', key: 'docs', placeholder: 'Todos' }
+            { id: 'filtro-status', key: 'status', placeholder: 'Todos' }
         ];
 
         try {
@@ -174,24 +177,18 @@ Gestao.Assertividade = {
                 const inputOriginal = document.getElementById(campo.id);
                 if (!inputOriginal) return;
 
-                // Se já for select (ex: status no seu html original), apenas atualiza opções
-                // Se for input, troca por select
                 let select;
                 
+                // Transforma Input em Select (caso da Auditora)
                 if (inputOriginal.tagName === 'INPUT') {
                     select = document.createElement('select');
                     select.id = campo.id;
-                    // Copia as classes do input original para manter o design
                     select.className = inputOriginal.className + " font-bold text-slate-700 cursor-pointer";
                     select.style.width = "100%";
-                    
-                    // Adiciona evento de mudança
                     select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
-                    
-                    // Substitui no DOM
                     inputOriginal.parentNode.replaceChild(select, inputOriginal);
                 } else {
-                    select = inputOriginal; // Já é select
+                    select = inputOriginal; // Caso do Status, que já é select
                 }
 
                 // Preenche as opções
@@ -211,7 +208,6 @@ Gestao.Assertividade = {
     },
 
     mudarPagina: function(delta) {
-        // Implementação simplificada de paginação futura
         alert("Paginação simplificada para esta visualização.");
     }
 };
