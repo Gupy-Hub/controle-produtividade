@@ -32,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura total.");
+            console.log("📂 [Importacao] Iniciando leitura estrita (Null é Null).");
             
             Papa.parse(file, {
                 header: true, 
@@ -57,23 +57,28 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
+        // --- TRATAMENTO ESTRITO DE NULOS ---
+        // Se estiver vazio, undefined ou for só espaço em branco -> Retorna NULL
+        // Não converte para 0.
+        
         const tratarInt = (val) => {
-            if (val === "" || val === null || val === undefined) return null;
+            if (val === "" || val === null || val === undefined || val.trim() === "") return null;
             const parsed = parseInt(val);
             return isNaN(parsed) ? null : parsed;
         };
 
         const tratarString = (val) => {
-             if (val === "" || val === null || val === undefined) return null;
+             if (val === "" || val === null || val === undefined || val.trim() === "") return null;
              return val.trim();
         };
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
-            // Validação básica
+            // Validação mínima para ignorar linhas totalmente vazias
             if (!linha['ID PPC'] && !linha['end_time']) continue;
 
+            // Extração de data
             const endTimeRaw = linha['end_time'];
             let dataLiteral = null;
 
@@ -83,9 +88,7 @@ Importacao.Assertividade = {
                 dataLiteral = endTimeRaw.substring(0, 10);
             }
 
-            // Não fazemos mais filtro de duplicatas aqui. 
-            // Confiamos que o CSV tem dados valiosos mesmo se o ID repetir.
-            
+            // Mapeamento mantendo a fidelidade aos vazios
             const objeto = {
                 id_ppc: tratarInt(linha['ID PPC']),
                 data_referencia: dataLiteral,
@@ -104,10 +107,14 @@ Importacao.Assertividade = {
                 tipo_documento: tratarString(linha['DOCUMENTO']),
                 fila: tratarString(linha['Fila']),
                 revalidacao: tratarString(linha['Revalidação']),
+                
+                // Métricas: Se vier vazio no CSV, salva null no banco
                 qtd_campos: tratarInt(linha['nº Campos']),
                 qtd_ok: tratarInt(linha['Ok']),
                 qtd_nok: tratarInt(linha['Nok']),
                 qtd_docs_validados: tratarInt(linha['Quantidade_documentos_validados']),
+                
+                // Porcentagem: Texto exato (ex: "100,00%" ou null)
                 porcentagem_assertividade: tratarString(linha['% Assert'])
             };
 
@@ -133,9 +140,7 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // ATENÇÃO: Aqui usamos as 4 colunas que definimos no índice SQL
-                // Se vier uma linha com ID, Data, Schema e Doc IDÊNTICOS a uma já salva, ele atualiza.
-                // Se mudar 1 milissegundo ou o nome do doc, ele cria uma nova linha (O que queremos!)
+                // Usamos a chave composta criada anteriormente
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
