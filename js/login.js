@@ -1,6 +1,11 @@
 const Login = {
     init: function() {
         // Verifica se já tem sessão
+        if (typeof Sistema === 'undefined') {
+            console.error("Sistema não carregado.");
+            return;
+        }
+        
         const sessao = Sistema.lerSessao();
         if (sessao) {
             window.location.href = 'minha_area.html';
@@ -28,21 +33,25 @@ const Login = {
         msgErro.classList.add('hidden');
 
         try {
-            // --- CRIPTOGRAFIA ATIVADA 🔒 ---
-            // O frontend gera o Hash e envia apenas o Hash para a API.
-            // A senha real nunca viaja "pura" pela rede, exceto na criação do hash local.
-            const senhaHash = await Sistema.gerarHash(senha);
-
+            // --- MUDANÇA AQUI: ENVIA SENHA LIMPA ---
+            // A criptografia agora é feita dentro do SQL para garantir compatibilidade total.
+            
             const { data, error } = await Sistema.supabase.rpc('api_login', { 
                 p_id: parseInt(id), 
-                p_senha: senhaHash 
+                p_senha: senha 
             });
 
             if (error) throw error;
 
             // Sucesso
             Sistema.salvarSessao(data);
-            window.location.href = 'minha_area.html';
+            
+            // Redirecionamento baseado no perfil (Opcional, mas recomendado)
+            if (data.perfil === 'admin' || data.perfil === 'gestor') {
+                window.location.href = 'gestao.html';
+            } else {
+                window.location.href = 'minha_area.html';
+            }
 
         } catch (error) {
             console.error("Erro Login:", error);
@@ -52,9 +61,9 @@ const Login = {
             } else if (error.code === 'P0002') {
                 this.mostrarErro('Usuário não encontrado.');
             } else if (error.code === 'P0003') {
-                this.mostrarErro('Usuário inativo. Contate a gestão.');
+                this.mostrarErro('Usuário inativo.');
             } else {
-                this.mostrarErro('Erro ao conectar. Tente novamente.');
+                this.mostrarErro('Erro ao conectar: ' + (error.message || 'Erro desconhecido'));
             }
         } finally {
             btn.innerHTML = textoOriginal;
@@ -64,10 +73,16 @@ const Login = {
 
     mostrarErro: function(msg) {
         const el = document.getElementById('msg-erro');
-        el.innerText = msg;
-        el.classList.remove('hidden');
+        if(el) {
+            el.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${msg}`;
+            el.classList.remove('hidden');
+        } else {
+            alert(msg);
+        }
     }
 };
 
-// Inicializa
-Login.init();
+// Inicializa (Proteção para garantir que carregou)
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => Login.init(), 100);
+});
