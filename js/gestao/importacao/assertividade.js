@@ -1,199 +1,164 @@
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
-    // Aumentei o lote para agilizar as 220k linhas (Postgres aguenta bem)
-    BATCH_SIZE: 1000, 
-
-    higienizar: function(valor, tipo) {
-        if (valor === undefined || valor === null) return null;
-        
-        // Remove caracteres fantasmas (BOM) e espaços
-        let limpo = String(valor).trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
-        
-        if (limpo === "" || 
-            limpo.toLowerCase() === "nan" || 
-            limpo.toLowerCase() === "null" || 
-            limpo.toLowerCase() === "undefined") {
-            return null;
-        }
-
-        if (tipo === 'numero') {
-            let num = parseFloat(limpo.replace('%', '').replace(',', '.'));
-            return isNaN(num) ? null : num;
-        }
-
-        if (tipo === 'data') {
-            try {
-                // Tenta extrair Data ISO (2025-12-02T...) -> 2025-12-02
-                if (limpo.includes('T')) return limpo.split('T')[0];
-                
-                // Formato BR (02/12/2025)
-                if (limpo.includes('/')) {
-                    const p = limpo.split('/');
-                    if (p.length === 3) return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
-                }
-                
-                // Formato simples (2025-12-02)
-                if (limpo.match(/^\d{4}-\d{2}-\d{2}$/)) return limpo;
-
-            } catch (e) {
-                return null;
-            }
-        }
-
-        return limpo;
-    },
-
+    
     processarArquivo: function(input) {
         if (input.files && input.files[0]) {
             const file = input.files[0];
-            const btn = input.closest('div').querySelector('button');
-            const originalText = btn.innerHTML; // Guarda o texto original do botão
-
-            // Feedback inicial
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo Arquivo...';
-            btn.disabled = true;
-
-            Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
-                encoding: "ISO-8859-1",
-                // Corrige o bug do cabeçalho "end_time" invisível
-                transformHeader: function(h) {
-                    return h.trim().replace(/[\uFEFF\u200B]/g, '');
-                },
-                complete: async (results) => {
-                    try {
-                        // Passa o botão para a função poder atualizar a porcentagem
-                        await this.tratarEEnviar(results.data, btn, originalText);
-                    } catch (err) {
-                        console.error(err);
-                        alert("Erro no processamento: " + err.message);
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                    }
-                }
-            });
-        }
-    },
-
-    tratarEEnviar: async function(linhas, btn, textoOriginal) {
-        const payload = [];
-        const totalLinhas = linhas.length;
-        
-        console.log(`🚀 Iniciando preparação de ${totalLinhas} registros...`);
-        btn.innerHTML = `<i class="fas fa-cog fa-spin"></i> Preparando dados...`;
-
-        // Loop sem verificação de duplicidade de ID (idsUnicos removido)
-        for (const linha of linhas) {
+            const parentDiv = input.closest('div');
+            const btn = parentDiv ? parentDiv.querySelector('button') : null;
+            let originalText = '';
             
-            // Validações básicas para ignorar linhas vazias do Excel
-            const idPpc = this.higienizar(linha['ID PPC']);
-            const dataRef = this.higienizar(linha['end_time'], 'data');
-            
-            // Se não tem ID ou Data, pula (linha inválida)
-            if (!idPpc || !dataRef) continue;
-
-            // Limpeza do Timestamp para coluna TIMESTAMP do banco
-            let endTimeRaw = this.higienizar(linha['end_time']);
-            if (endTimeRaw && endTimeRaw.endsWith('Z')) endTimeRaw = endTimeRaw.slice(0, -1);
-
-            const registro = {
-                id_ppc: idPpc,
-                data_referencia: dataRef,
-                end_time: endTimeRaw,
-                
-                empresa_id: this.higienizar(linha['Company_id']),
-                empresa: this.higienizar(linha['Empresa']),
-                schema_id: this.higienizar(linha['Schema_id']),
-                
-                assistente: this.higienizar(linha['Assistente']),
-                nome_assistente: this.higienizar(linha['Assistente']),
-                
-                auditora: this.higienizar(linha['Auditora']),
-                nome_auditora_raw: this.higienizar(linha['Auditora']),
-                
-                doc_name: this.higienizar(linha['doc_name']),
-                nome_documento: this.higienizar(linha['doc_name']),
-                
-                status: this.higienizar(linha['STATUS']),
-                observacao: this.higienizar(linha['Apontamentos/obs']),
-                obs: this.higienizar(linha['Apontamentos/obs']),
-                
-                num_campos: this.higienizar(linha['nº Campos'], 'numero'),
-                campos: this.higienizar(linha['nº Campos'], 'numero'),
-                
-                qtd_ok: this.higienizar(linha['Ok'], 'numero'),
-                ok: this.higienizar(linha['Ok'], 'numero'),
-                
-                qtd_nok: this.higienizar(linha['Nok'], 'numero'),
-                nok: this.higienizar(linha['Nok'], 'numero'),
-                
-                porcentagem: this.higienizar(linha['% Assert']),
-                
-                data_auditoria: this.higienizar(linha['Data da Auditoria '], 'data'),
-                qtd_validados: this.higienizar(linha['Quantidade_documentos_validados'], 'numero'),
-                
-                revalidacao: this.higienizar(linha['Revalidação']),
-                fila: this.higienizar(linha['Fila'])
-            };
-
-            payload.push(registro);
-        }
-
-        if (payload.length === 0) {
-            alert("Nenhum registro válido encontrado.");
-            btn.innerHTML = textoOriginal;
-            btn.disabled = false;
-            return;
-        }
-
-        // Envia para o banco com barra de progresso
-        await this.enviarLotes(payload, btn, textoOriginal);
-    },
-
-    enviarLotes: async function(dados, btn, textoOriginal) {
-        const total = dados.length;
-        let processados = 0;
-        let erros = 0;
-
-        // IMPORTANTE: Use INSERT em vez de UPSERT para garantir que o histórico (220k linhas) seja salvo
-        // Se usar Upsert com id_ppc, ele vai sobrescrever e sobrar só 18k de novo.
-        const TABELA = 'assertividade';
-
-        for (let i = 0; i < total; i += this.BATCH_SIZE) {
-            const lote = dados.slice(i, i + this.BATCH_SIZE);
-            
-            // INSERT puro para gravar histórico
-            const { error } = await Sistema.supabase
-                .from(TABELA)
-                .insert(lote); 
-
-            if (error) {
-                console.error(`Erro lote ${i}:`, error.message);
-                erros += lote.length;
-            } else {
-                processados += lote.length;
+            if (btn) {
+                originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo DATA EXATA...';
+                btn.disabled = true;
+                btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
-            // Cálculo de Porcentagem
-            const percent = Math.round(((i + lote.length) / total) * 100);
-            btn.innerHTML = `<i class="fas fa-sync fa-spin"></i> Enviando... ${percent}%`;
+            setTimeout(() => {
+                this.lerCSV(file).finally(() => {
+                    input.value = ''; 
+                    if (btn) {
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('cursor-not-allowed', 'opacity-75');
+                    }
+                });
+            }, 100);
+        }
+    },
+
+    lerCSV: function(file) {
+        return new Promise((resolve) => {
+            console.time("TempoLeitura");
+            console.log("📂 [Importacao] MODO LITERAL ATIVADO: Ignorando Fuso Horário completamente.");
+            
+            Papa.parse(file, {
+                header: true, 
+                skipEmptyLines: true,
+                encoding: "UTF-8", 
+                complete: async (results) => {
+                    console.timeEnd("TempoLeitura");
+                    console.log(`📊 Linhas no arquivo: ${results.data.length}`);
+                    await this.tratarEEnviar(results.data);
+                    resolve();
+                },
+                error: (error) => {
+                    console.error("Erro CSV:", error);
+                    alert("Erro crítico ao ler o arquivo CSV.");
+                    resolve();
+                }
+            });
+        });
+    },
+
+    tratarEEnviar: async function(linhas) {
+        console.time("TempoTratamento");
+        const listaParaSalvar = [];
+
+        for (let i = 0; i < linhas.length; i++) {
+            const linha = linhas[i];
+            
+            if (!linha['Assistente']) continue;
+
+            const endTimeRaw = linha['end_time']; 
+            let dataLiteral = null;
+
+            // --- LÓGICA LITERAL ---
+            // Se o arquivo diz "2025-12-02T02:00...", nós gravamos "2025-12-02".
+            // Ignoramos se no Brasil era dia 01. O que vale é o texto do arquivo.
+            if (endTimeRaw && endTimeRaw.includes('T')) {
+                dataLiteral = endTimeRaw.split('T')[0];
+            } else if (endTimeRaw && endTimeRaw.length >= 10) {
+                dataLiteral = endTimeRaw.substring(0, 10);
+            } else {
+                dataLiteral = new Date().toISOString().split('T')[0];
+            }
+
+            const idAssistente = parseInt(linha['id_assistente']) || null;
+            const companyId = parseInt(linha['Company_id']) || null;
+            const nCampos = parseInt(linha['nº Campos']) || 0;
+            const nOk = parseInt(linha['Ok']) || 0;
+            const nNok = parseInt(linha['Nok']) || 0;
+
+            const objeto = {
+                usuario_id: idAssistente,
+                data_auditoria: dataLiteral, // <--- O SEGREDO ESTÁ AQUI
+                data_referencia: endTimeRaw || new Date().toISOString(), 
+                created_at: new Date().toISOString(),
+                company_id: linha['Company_id'], 
+                empresa_id: companyId,           
+                empresa: linha['Empresa'],
+                empresa_nome: linha['Empresa'],
+                assistente: linha['Assistente'],
+                nome_assistente: linha['Assistente'],
+                auditora: linha['Auditora'],
+                nome_auditora_raw: linha['Auditora'],
+                doc_name: linha['doc_name'],
+                nome_documento: linha['doc_name'],
+                status: linha['STATUS'], 
+                obs: linha['Apontamentos/obs'],
+                observacao: linha['Apontamentos/obs'],
+                porcentagem: linha['% Assert'], 
+                campos: nCampos,
+                num_campos: nCampos,
+                ok: nOk,
+                qtd_ok: nOk,
+                nok: nNok,
+                qtd_nok: nNok
+            };
+
+            listaParaSalvar.push(objeto);
         }
 
-        // Restaura botão e avisa
-        btn.innerHTML = textoOriginal;
-        btn.disabled = false;
-
-        let msg = `Importação Concluída!\n\nTotal Processado: ${total}\nSucessos: ${processados}\nFalhas: ${erros}`;
+        console.timeEnd("TempoTratamento");
         
-        if (erros > 0) {
-            msg += "\n\nAlguns registros falharam (verifique duplicidade de chave primária 'id' se houver, ou erros de tipo).";
+        if (listaParaSalvar.length > 0) {
+            await this.enviarParaSupabase(listaParaSalvar);
+        } else {
+            alert("Nenhum dado válido encontrado.");
         }
+    },
 
-        alert(msg);
-        
-        // Recarrega a tela de gestão
-        if (window.Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
+    enviarParaSupabase: async function(dados) {
+        try {
+            const BATCH_SIZE = 1000; 
+            let totalInserido = 0;
+            const total = dados.length;
+            
+            const statusDiv = document.getElementById('status-importacao');
+            
+            for (let i = 0; i < total; i += BATCH_SIZE) {
+                const lote = dados.slice(i, i + BATCH_SIZE);
+                
+                const { error } = await Sistema.supabase
+                    .from('assertividade') 
+                    .upsert(lote, { 
+                        onConflict: 'assistente,data_referencia,doc_name,status',
+                        ignoreDuplicates: false 
+                    });
+
+                if (error) throw error;
+                
+                totalInserido += lote.length;
+                
+                if (totalInserido % 5000 === 0 || totalInserido === total) {
+                    const pct = Math.round((totalInserido / total) * 100);
+                    console.log(`🚀 Importando: ${pct}%`);
+                    if(statusDiv) statusDiv.innerText = `${pct}%`;
+                }
+            }
+
+            alert(`Importação Concluída!`);
+            
+            if (window.Gestao && Gestao.Assertividade) {
+                Gestao.Assertividade.carregar();
+            }
+
+        } catch (error) {
+            console.error("Erro Supabase:", error);
+            alert(`Erro: ${error.message}`);
+        }
     }
 };
