@@ -4,20 +4,23 @@ Importacao.Assertividade = {
     BATCH_SIZE: 1000,
     CONCURRENCY: 5,
 
-    // Função helper para garantir o NULL absoluto
-    soTextoOuNull: function(val) {
+    // Função mestre para tratar nulos de texto (Auditora, Status, etc)
+    limparTextoRigoroso: function(val) {
         if (val === undefined || val === null) return null;
-        const str = String(val).trim();
-        // Se a string estiver vazia, retorna null literal para o banco
-        return str === '' ? null : str;
+        
+        // Converte para string e remove espaços, quebras de linha e lixo invisível
+        const str = String(val).trim().replace(/^\s+|\s+$/g, '');
+        
+        // Se após a limpeza a string estiver vazia, retorna NULL absoluto
+        return str === "" ? null : str;
     },
 
-    // Função helper para números (Percentagem, Campos, etc)
-    soNumeroOuNull: function(val) {
-        if (val === undefined || val === null) return null;
-        const str = String(val).replace('%', '').replace(',', '.').trim();
-        if (str === '') return null;
-        const num = parseFloat(str);
+    // Função mestre para números (Porcentagem, Campos, etc)
+    limparNumeroRigoroso: function(val) {
+        const str = this.limparTextoRigoroso(val);
+        if (str === null) return null; // Vazio vira NULL, não 0
+        
+        const num = parseFloat(str.replace('%', '').replace(',', '.'));
         return isNaN(num) ? null : num;
     },
 
@@ -26,51 +29,47 @@ Importacao.Assertividade = {
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
-            if (!linha['Assistente'] && !linha['doc_name']) continue;
+            // Pula se não houver assistente ou documento
+            if (!this.limparTextoRigoroso(linha['Assistente']) && !this.limparTextoRigoroso(linha['doc_name'])) continue;
 
-            // Tratamento de Data
+            // Tratamento de Data de Auditoria
             let dataLiteral = null;
-            const dataAuditRaw = linha['Data da Auditoria ']; 
-            if (dataAuditRaw && dataAuditRaw.trim() !== '') {
+            const dataAuditRaw = this.limparTextoRigoroso(linha['Data da Auditoria ']); 
+            if (dataAuditRaw) {
                 const partes = dataAuditRaw.split('/');
                 if (partes.length === 3) dataLiteral = `${partes[2]}-${partes[1]}-${partes[0]}`;
             } 
 
             listaParaSalvar.push({
-                // IDs
                 usuario_id: parseInt(linha['id_assistente']) || null,
-                
-                // Datas
-                data_auditoria: dataLiteral, 
-                data_referencia: this.soTextoOuNull(linha['end_time']), 
+                data_referencia: this.limparTextoRigoroso(linha['end_time']), 
                 end_time: linha['end_time'] ? new Date(linha['end_time']) : null,
 
-                // TEXTO: Agora usando soTextoOuNull para evitar strings vazias ""
-                empresa: this.soTextoOuNull(linha['Empresa']),
-                assistente: this.soTextoOuNull(linha['Assistente']),
-                nome_assistente: this.soTextoOuNull(linha['Assistente']),
+                // TEXTO COM LIMPEZA RIGOROSA
+                empresa: this.limparTextoRigoroso(linha['Empresa']),
+                assistente: this.limparTextoRigoroso(linha['Assistente']),
+                nome_assistente: this.limparTextoRigoroso(linha['Assistente']),
                 
-                // CRÍTICO: Se não foi auditado, auditora fica NULL
-                auditora: this.soTextoOuNull(linha['Auditora']),
-                nome_auditora_raw: this.soTextoOuNull(linha['Auditora']),
+                // --- AQUI ESTAVA O ERRO: AUDITORA ---
+                // Agora, se estiver em branco ou só com espaços, vai NULL
+                auditora: this.limparTextoRigoroso(linha['Auditora']),
+                nome_auditora_raw: this.limparTextoRigoroso(linha['Auditora']),
                 
-                doc_name: this.soTextoOuNull(linha['doc_name']),
-                status: this.soTextoOuNull(linha['STATUS']), 
-                obs: this.soTextoOuNull(linha['Apontamentos/obs']),
+                doc_name: this.limparTextoRigoroso(linha['doc_name']),
+                status: this.limparTextoRigoroso(linha['STATUS']), 
+                obs: this.limparTextoRigoroso(linha['Apontamentos/obs']),
+                documento_categoria: this.limparTextoRigoroso(linha['DOCUMENTO']),
+                fila: this.limparTextoRigoroso(linha['Fila']),
+                revalidacao: this.limparTextoRigoroso(linha['Revalidação']),
+                id_ppc: this.limparTextoRigoroso(linha['ID PPC']),
+                nome_ppc: this.limparTextoRigoroso(linha[' Nome da PPC']), 
 
-                // NDF e Processos
-                documento_categoria: this.soTextoOuNull(linha['DOCUMENTO']),
-                fila: this.soTextoOuNull(linha['Fila']),
-                revalidacao: this.soTextoOuNull(linha['Revalidação']),
-                id_ppc: this.soTextoOuNull(linha['ID PPC']),
-                nome_ppc: this.soTextoOuNull(linha[' Nome da PPC']), 
-
-                // NÚMEROS: Usando soNumeroOuNull para garantir que vácuo vira NULL
-                qtd_validados: this.soNumeroOuNull(linha['Quantidade_documentos_validados']),
-                porcentagem: this.soNumeroOuNull(linha['% Assert']),
-                num_campos: this.soNumeroOuNull(linha['nº Campos']),
-                qtd_ok: this.soNumeroOuNull(linha['Ok']),
-                qtd_nok: this.soNumeroOuNull(linha['Nok'])
+                // NÚMEROS COM LIMPEZA RIGOROSA (Vazio = NULL)
+                qtd_validados: this.limparNumeroRigoroso(linha['Quantidade_documentos_validados']),
+                porcentagem: this.limparNumeroRigoroso(linha['% Assert']),
+                num_campos: this.limparNumeroRigoroso(linha['nº Campos']),
+                qtd_ok: this.limparNumeroRigoroso(linha['Ok']),
+                qtd_nok: this.limparNumeroRigoroso(linha['Nok'])
             });
         }
 
@@ -103,6 +102,6 @@ Importacao.Assertividade = {
             const grupoAtual = lotes.slice(i, i + this.CONCURRENCY);
             await Promise.all(grupoAtual.map(lote => processarLote(lote)));
         }
-        alert("Importação Concluída com Sucesso!");
+        alert("Importação Concluída: Onde não havia dados, agora está NULL!");
     }
 };
