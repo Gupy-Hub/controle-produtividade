@@ -1,24 +1,36 @@
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
-    BATCH_SIZE: 500,
+    BATCH_SIZE: 800,
     CONCURRENCY: 1,
 
-    // Limpeza Profunda: Garante NULL absoluto para o banco de dados
-    tratarNulo: function(val, isNumeric = false) {
-        if (val === undefined || val === null) return null;
+    // HIGIENIZAÇÃO DE CHOQUE: Remove lixo invisível e força NULL real
+    higienizar: function(valor, tipo) {
+        if (valor === undefined || valor === null) return null;
         
-        // Remove espaços, quebras de linha e caracteres invisíveis
-        const str = String(val).trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
+        // Remove espaços em branco, quebras de linha e caracteres de controle do Excel
+        let limpo = String(valor).trim().replace(/[\u200B-\u200D\uFEFF]/g, '');
         
-        // Se estiver vazio, forçar NULL (isso limpa a Auditora fantasma)
-        if (str === "" || str.toLowerCase() === "nan" || str.toLowerCase() === "null") return null;
+        if (limpo === "" || limpo.toLowerCase() === "nan" || limpo.toLowerCase() === "null" || limpo.toLowerCase() === "undefined") {
+            return null;
+        }
 
-        if (isNumeric) {
-            const num = parseFloat(str.replace('%', '').replace(',', '.'));
+        if (tipo === 'numero') {
+            let num = parseFloat(limpo.replace('%', '').replace(',', '.'));
             return isNaN(num) ? null : num;
         }
-        return str;
+
+        if (tipo === 'data') {
+            // Se for end_time (2025-12-01T...), extrai os primeiros 10 caracteres
+            if (limpo.includes('-')) return limpo.substring(0, 10);
+            // Se for Data Auditoria (16/12/2025), inverte para ISO
+            if (limpo.includes('/')) {
+                const p = limpo.split('/');
+                return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+            }
+        }
+
+        return limpo;
     },
 
     processarArquivo: function(input) {
@@ -26,16 +38,16 @@ Importacao.Assertividade = {
             const file = input.files[0];
             const btn = input.closest('div').querySelector('button');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> HIGIENIZANDO...';
             btn.disabled = true;
 
             Papa.parse(file, {
-                header: true, 
+                header: true,
                 skipEmptyLines: true,
-                encoding: "ISO-8859-1", 
+                encoding: "ISO-8859-1",
                 complete: async (results) => {
                     await this.tratarEEnviar(results.data);
-                    input.value = ''; 
+                    input.value = '';
                     btn.innerHTML = originalText;
                     btn.disabled = false;
                 }
@@ -44,79 +56,66 @@ Importacao.Assertividade = {
     },
 
     tratarEEnviar: async function(linhas) {
-        const listaParaSalvar = [];
-        const cacheIds = new Set();
+        const payload = [];
+        const idsUnicos = new Set();
 
-        for (let i = 0; i < linhas.length; i++) {
-            const linha = linhas[i];
-            const idPpc = this.tratarNulo(linha['ID PPC']);
-            if (!idPpc) continue;
+        console.log("🛠️ Iniciando Higienização Estrutural...");
 
-            if (cacheIds.has(idPpc)) continue;
-            cacheIds.add(idPpc);
+        for (const linha of linhas) {
+            const idPpc = this.higienizar(linha['ID PPC']);
+            if (!idPpc || idsUnicos.has(idPpc)) continue;
+            idsUnicos.add(idPpc);
 
-            // CORREÇÃO DAS DATAS (01 ao 08): Força o formato ISO puro YYYY-MM-DD
-            let dataRef = null;
-            const rawEnd = this.tratarNulo(linha['end_time']);
-            if (rawEnd) {
-                // Pega os primeiros 10 caracteres (YYYY-MM-DD) ignorando horas/fuso
-                if (rawEnd.includes('-')) {
-                    dataRef = rawEnd.substring(0, 10);
-                } else if (rawEnd.includes('/')) { // Caso venha formatada
-                    const p = rawEnd.split(' ')[0].split('/');
-                    if (p.length === 3) dataRef = `${p[2]}-${p[1]}-${p[0]}`;
-                }
-            }
-
-            // Data Auditoria
-            let dataAuditoria = null;
-            const rawAudit = this.tratarNulo(linha['Data da Auditoria ']);
-            if (rawAudit && rawAudit.includes('/')) {
-                const p = rawAudit.split('/');
-                dataAuditoria = `${p[2]}-${p[1]}-${p[0]}`;
-            }
-
-            listaParaSalvar.push({
+            const registro = {
                 id_ppc: idPpc,
-                data_referencia: dataRef,
-                data_auditoria: dataAuditoria,
-                end_time: rawEnd,
+                // FORÇA DATA DO DIA 01 AO 08 SEM FUSO HORÁRIO
+                data_referencia: this.higienizar(linha['end_time'], 'data'),
+                end_time: this.higienizar(linha['end_time']),
                 
-                // Texto (Se vazio no CSV, será NULL no banco)
-                auditora: this.tratarNulo(linha['Auditora']),
-                nome_auditora_raw: this.tratarNulo(linha['Auditora']),
-                assistente: this.tratarNulo(linha['Assistente']),
-                nome_assistente: this.tratarNulo(linha['Assistente']),
-                doc_name: this.tratarNulo(linha['doc_name']),
-                status: this.tratarNulo(linha['STATUS']),
-                empresa: this.tratarNulo(linha['Empresa']),
-                empresa_id: this.tratarNulo(linha['Company_id']),
-                obs: this.tratarNulo(linha['Apontamentos/obs']),
-                observacao: this.tratarNulo(linha['Apontamentos/obs']),
+                // AUDITORA: Se no CSV estiver vazio, aqui vira NULL absoluto
+                auditora: this.higienizar(linha['Auditora']),
+                nome_auditora_raw: this.higienizar(linha['Auditora']),
+                
+                assistente: this.higienizar(linha['Assistente']),
+                nome_assistente: this.higienizar(linha['Assistente']),
+                doc_name: this.higienizar(linha['doc_name']),
+                status: this.higienizar(linha['STATUS']),
+                
+                // MAPEAMENTO DE DADOS SOLICITADOS
+                empresa_id: this.higienizar(linha['Company_id']),
+                empresa: this.higienizar(linha['Empresa']),
+                obs: this.higienizar(linha['Apontamentos/obs']),
+                observacao: this.higienizar(linha['Apontamentos/obs']),
+                
+                // NÚMEROS (Vazio = NULL, não 0)
+                num_campos: this.higienizar(linha['nº Campos'], 'numero'),
+                campos: this.higienizar(linha['nº Campos'], 'numero'),
+                ok: this.higienizar(linha['Ok'], 'numero'),
+                qtd_ok: this.higienizar(linha['Ok'], 'numero'),
+                nok: this.higienizar(linha['Nok'], 'numero'),
+                qtd_nok: this.higienizar(linha['Nok'], 'numero'),
+                porcentagem: this.higienizar(linha['% Assert'], 'numero'),
+                
+                data_auditoria: this.higienizar(linha['Data da Auditoria '], 'data'),
+                qtd_validados: this.higienizar(linha['Quantidade_documentos_validados'], 'numero')
+            };
 
-                // Números (Se vazio no CSV, será NULL no banco)
-                num_campos: this.tratarNulo(linha['nº Campos'], true),
-                campos: this.tratarNulo(linha['nº Campos'], true),
-                ok: this.tratarNulo(linha['Ok'], true),
-                qtd_ok: this.tratarNulo(linha['Ok'], true),
-                nok: this.tratarNulo(linha['Nok'], true),
-                qtd_nok: this.tratarNulo(linha['Nok'], true),
-                porcentagem: this.tratarNulo(linha['% Assert'], true),
-                qtd_validados: this.tratarNulo(linha['Quantidade_documentos_validados'], true)
-            });
+            payload.push(registro);
         }
-        await this.enviarLotes(listaParaSalvar);
+
+        await this.enviarLotes(payload);
     },
 
     enviarLotes: async function(dados) {
         for (let i = 0; i < dados.length; i += this.BATCH_SIZE) {
             const lote = dados.slice(i, i + this.BATCH_SIZE);
             const { error } = await Sistema.supabase
-                .from('assertividade') 
+                .from('assertividade')
                 .upsert(lote, { onConflict: 'id_ppc' });
 
-            if (error) console.error("Erro:", error.message);
+            if (error) console.error("❌ Falha no Lote:", error.message);
+            else console.log(`✅ Lote ${i/this.BATCH_SIZE + 1} Sincronizado.`);
         }
-        alert("Importação Concluída!");
+        alert("Sincronização Concluída: Dados higienizados e nulos preservados!");
     }
 };
