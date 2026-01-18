@@ -2,9 +2,9 @@ window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
     
-    // Configurações de Performance
-    BATCH_SIZE: 1000,      // Tamanho do lote (registros por envio)
-    CONCURRENCY: 5,        // Quantos lotes enviar ao mesmo tempo (Paralelismo)
+    // Configurações
+    BATCH_SIZE: 1000,
+    CONCURRENCY: 5,
 
     processarArquivo: function(input) {
         if (input.files && input.files[0]) {
@@ -20,7 +20,6 @@ Importacao.Assertividade = {
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
-            // Timeout para garantir que a UI atualize antes de travar o processamento
             setTimeout(() => {
                 this.lerCSV(file).finally(() => {
                     input.value = ''; 
@@ -37,23 +36,14 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura rápida...");
+            console.log("📂 [Importacao] Iniciando leitura...");
             
             Papa.parse(file, {
                 header: true, 
                 skipEmptyLines: true,
-                encoding: "ISO-8859-1", // Mantendo padrão Excel Brasil
+                encoding: "ISO-8859-1", 
                 complete: async (results) => {
                     console.timeEnd("TempoLeitura");
-                    console.log(`📊 Linhas lidas: ${results.data.length}`);
-                    
-                    // Validação rápida se tem dados
-                    if(results.data.length === 0) {
-                        alert("Arquivo vazio.");
-                        resolve();
-                        return;
-                    }
-
                     await this.tratarEEnviar(results.data);
                     resolve();
                 },
@@ -70,45 +60,46 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
         
-        // Funções auxiliares otimizadas (fora do loop)
+        // --- FUNÇÕES AUXILIARES CORRIGIDAS ---
+        
         const limpar = (val) => (val && val !== '') ? String(val).trim() : null;
-        const numero = (val) => {
-            if (!val) return 0;
-            if (typeof val === 'number') return val;
-            // Otimização: replace simples
-            const v = val.replace('%', '').replace(',', '.');
-            return v ? parseFloat(v) : 0;
+        
+        // CORREÇÃO CRÍTICA: Se for vazio, retorna null (não 0)
+        const numeroOuNull = (val) => {
+            if (val === null || val === undefined || String(val).trim() === '') return null;
+            
+            const strVal = String(val).replace('%', '').replace(',', '.');
+            const parsed = parseFloat(strVal);
+            
+            return isNaN(parsed) ? null : parsed;
         };
 
-        // Loop principal de transformação
+        // Para contagens (Ok, Nok), mantemos 0 se vazio, pois não existe "null acertos"
+        const numeroContagem = (val) => {
+            if (!val) return 0;
+            const strVal = String(val).replace(',', '.');
+            return isNaN(parseFloat(strVal)) ? 0 : parseFloat(strVal);
+        };
+
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
-            // Validação mínima
             if (!linha['Assistente'] && !linha['doc_name']) continue;
 
-            // Tratamento de Data Otimizado
+            // Tratamento Data
             let dataLiteral = null;
-            const dataAuditRaw = linha['Data da Auditoria ']; // Com espaço
-            
+            const dataAuditRaw = linha['Data da Auditoria ']; 
             if (dataAuditRaw) {
-                // Formato esperado: DD/MM/AAAA
                 const partes = dataAuditRaw.split('/');
-                if (partes.length === 3) {
-                    dataLiteral = `${partes[2]}-${partes[1]}-${partes[0]}`;
-                }
+                if (partes.length === 3) dataLiteral = `${partes[2]}-${partes[1]}-${partes[0]}`;
             } 
-            
-            if (!dataLiteral) {
+            if (!dataLiteral && linha['end_time']) {
                 const endTimeRaw = linha['end_time'];
-                if (endTimeRaw) {
-                    dataLiteral = endTimeRaw.length >= 10 ? endTimeRaw.substring(0, 10) : null;
-                }
+                dataLiteral = endTimeRaw.length >= 10 ? endTimeRaw.substring(0, 10) : null;
             }
 
-            // Montagem do Objeto (Mapeamento Completo)
             listaParaSalvar.push({
-                // Chaves
+                // IDs
                 usuario_id: parseInt(linha['id_assistente']) || null, 
                 company_id: limpar(linha['Company_id']), 
                 empresa_id: parseInt(linha['Company_id']) || null,
@@ -119,21 +110,20 @@ Importacao.Assertividade = {
                 end_time: linha['end_time'] ? new Date(linha['end_time']) : null,
                 created_at: new Date().toISOString(),
 
-                // Descritivos
+                // Textos
                 empresa: limpar(linha['Empresa']),
                 empresa_nome: limpar(linha['Empresa']),
                 assistente: limpar(linha['Assistente']),
                 nome_assistente: limpar(linha['Assistente']),
                 auditora: limpar(linha['Auditora']),
                 nome_auditora_raw: limpar(linha['Auditora']),
-                
                 doc_name: limpar(linha['doc_name']),
                 status: limpar(linha['STATUS']), 
                 obs: limpar(linha['Apontamentos/obs']),
                 observacao: limpar(linha['Apontamentos/obs']),
 
-                // Novas Colunas (NDF e Análises)
-                documento_categoria: limpar(linha['DOCUMENTO']), // *** NDF ***
+                // Metadados
+                documento_categoria: limpar(linha['DOCUMENTO']),
                 nome_documento: limpar(linha['DOCUMENTO']),      
                 fila: limpar(linha['Fila']),
                 revalidacao: limpar(linha['Revalidação']),
@@ -141,21 +131,27 @@ Importacao.Assertividade = {
                 nome_ppc: limpar(linha[' Nome da PPC']), 
                 schema_id: limpar(linha['Schema_id']),
 
-                // Métricas
-                porcentagem: numero(linha['% Assert']),
-                num_campos: numero(linha['nº Campos']),
-                campos: numero(linha['nº Campos']),
-                qtd_ok: numero(linha['Ok']),
-                ok: numero(linha['Ok']),
-                qtd_nok: numero(linha['Nok']),
-                nok: numero(linha['Nok'])
+                // --- CORREÇÃO AQUI: MÉTRICAS ---
+                qtd_validados: numeroContagem(linha['Quantidade_documentos_validados']),
+                
+                // Porcentagem agora pode ser NULL
+                porcentagem: numeroOuNull(linha['% Assert']), 
+                
+                num_campos: numeroContagem(linha['nº Campos']),
+                campos: numeroContagem(linha['nº Campos']),
+                
+                qtd_ok: numeroContagem(linha['Ok']),
+                ok: numeroContagem(linha['Ok']),
+                
+                qtd_nok: numeroContagem(linha['Nok']),
+                nok: numeroContagem(linha['Nok'])
             });
         }
 
         console.timeEnd("TempoTratamento");
         
         if (listaParaSalvar.length > 0) {
-            console.log(`📦 Enviando ${listaParaSalvar.length} registros com concorrência de ${this.CONCURRENCY}...`);
+            console.log(`📦 Enviando ${listaParaSalvar.length} registros...`);
             await this.enviarLotesConcorrentes(listaParaSalvar);
         } else {
             alert("Nenhum dado válido processado.");
@@ -166,23 +162,19 @@ Importacao.Assertividade = {
         const total = dados.length;
         let processados = 0;
         let erros = 0;
-        
         const statusDiv = document.getElementById('status-importacao');
-        
-        // Dividir em lotes
         const lotes = [];
+        
         for (let i = 0; i < total; i += this.BATCH_SIZE) {
             lotes.push(dados.slice(i, i + this.BATCH_SIZE));
         }
 
-        console.time("TempoEnvioTotal");
-
-        // Função para processar um lote único
         const processarLote = async (lote) => {
             const { error } = await Sistema.supabase
                 .from('assertividade') 
                 .upsert(lote, { 
-                    onConflict: 'assistente,data_referencia,doc_name,status', // Ajuste se tiver chave única melhor (ex: id_ppc)
+                    // Chave de conflito para atualizar dados existentes
+                    onConflict: 'assistente,data_referencia,doc_name,status',
                     ignoreDuplicates: false 
                 });
 
@@ -192,37 +184,20 @@ Importacao.Assertividade = {
             } else {
                 processados += lote.length;
             }
-
-            // Atualiza UI
-            if (statusDiv) {
-                const pct = Math.round((processados / total) * 100);
-                statusDiv.innerText = `${pct}%`;
-            }
+            if (statusDiv) statusDiv.innerText = `${Math.round((processados / total) * 100)}%`;
         };
 
-        // Gerenciador de Concorrência (Promise Pool simples)
         for (let i = 0; i < lotes.length; i += this.CONCURRENCY) {
-            // Pega um grupo de lotes (ex: 5 lotes)
             const grupoAtual = lotes.slice(i, i + this.CONCURRENCY);
-            
-            // Dispara todos ao mesmo tempo e espera todos terminarem
             await Promise.all(grupoAtual.map(lote => processarLote(lote)));
-            
             console.log(`🚀 Progresso: ${processados}/${total}`);
         }
 
-        console.timeEnd("TempoEnvioTotal");
-
         let msg = `Importação Finalizada!\n\n✅ Salvos: ${processados}\n❌ Falhas: ${erros}`;
-        if(erros > 0) msg += "\n(Verifique o console para erros)";
-        
+        if(erros > 0) msg += "\n(Verifique o console)";
         alert(msg);
         
-        // Recarrega a tela ativa
-        if (typeof MinhaArea !== 'undefined' && MinhaArea.carregar) {
-            MinhaArea.carregar();
-        } else if (window.Gestao && Gestao.Assertividade) {
-            Gestao.Assertividade.carregar();
-        }
+        if (typeof MinhaArea !== 'undefined' && MinhaArea.carregar) MinhaArea.carregar();
+        else if (window.Gestao && Gestao.Assertividade) Gestao.Assertividade.carregar();
     }
 };
