@@ -1,3 +1,4 @@
+// ARQUIVO: js/produtividade/geral.js
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -7,8 +8,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V23 (Botão Massa no Header)...");
-        // Removemos o injectToolbar antigo e usamos o updateHeader
+        console.log("🚀 [GupyMesa] Produtividade: Engine V23 (Botão Massa + Assertividade)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -16,14 +16,10 @@ Produtividade.Geral = {
 
     setTxt: function(id, val) { const el = document.getElementById(id); if (el) el.innerText = val; },
 
-    // --- NOVO: INJETA O BOTÃO MASSA DIRETO NO CABEÇALHO DA COLUNA ---
+    // Injeta o botão de Abono em Massa no cabeçalho
     updateHeader: function() {
-        // Tenta localizar o cabeçalho da segunda coluna (onde ficam os botões de ação)
-        // Assumindo que a estrutura é <thead><tr><th>...
         const thAction = document.querySelector('thead tr th:nth-child(2)');
-        
         if (thAction) {
-            // Limpa o "seletor antigo" ou texto que estava lá e coloca o botão compacto
             thAction.innerHTML = `
                 <button onclick="Produtividade.Geral.abonarEmMassa()" 
                     class="bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-300 rounded px-2 py-1 text-[10px] font-bold shadow-sm transition w-full flex justify-center items-center gap-1" 
@@ -32,7 +28,6 @@ Produtividade.Geral = {
                 </button>
             `;
         } else {
-            // Fallback: Se não achar o header agora, tenta de novo em 1s (caso o HTML demore a renderizar)
             setTimeout(() => this.updateHeader(), 1000);
         }
     },
@@ -41,36 +36,33 @@ Produtividade.Geral = {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
-        // Garante que o header esteja atualizado sempre que carregar
         this.updateHeader();
-
         const datas = Produtividade.getDatasFiltro();
-        const dataInicio = datas.inicio;
-        const dataFim = datas.fim;
-
-        console.log(`📡 [NEXUS] RPC Request: ${dataInicio} -> ${dataFim}`);
         
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados...</td></tr>`;
 
         try {
+            // 1. Busca Painel Principal
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
-                    data_inicio: dataInicio, 
-                    data_fim: dataFim 
+                    data_inicio: datas.inicio, 
+                    data_fim: datas.fim 
                 });
 
             if (error) throw error;
 
+            // 2. Busca Dias Reais (para cálculo de média)
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
-                    data_inicio: dataInicio,
-                    data_fim: dataFim 
+                    data_inicio: datas.inicio,
+                    data_fim: datas.fim 
                 });
             
             this.diasAtivosGlobal = (diasReais && diasReais > 0) ? diasReais : 1;
 
-            console.log(`✅ [NEXUS] Dados recebidos: ${data.length} registros.`);
+            console.log(`✅ [GupyMesa] Dados recebidos: ${data.length} registros.`);
 
+            // Mapeamento dos Dados
             this.dadosOriginais = data.map(row => ({
                 usuario: {
                     id: row.usuario_id,
@@ -94,6 +86,7 @@ Produtividade.Geral = {
                 }
             }));
             
+            // Mantém filtro se houver
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
                 this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
@@ -103,7 +96,7 @@ Produtividade.Geral = {
             }
 
         } catch (error) { 
-            console.error("[NEXUS] RPC Error:", error); 
+            console.error("[GupyMesa] Erro:", error); 
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
         }
     },
@@ -124,7 +117,7 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         if(lista.length === 0) { 
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro de atividade neste período.</td></tr>'; 
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>'; 
             this.setTxt('total-registros-footer', 0);
             return; 
         }
@@ -140,20 +133,17 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
+            // --- INTEGRAÇÃO DA ASSERTIVIDADE AQUI ---
             const htmlAssertividade = window.Produtividade.Assertividade 
                 ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
-                : '-';
+                : '<span class="text-xs">-</span>';
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
             
             const styleAbono = (isAbonado || temJustificativa) 
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
-                : 'font-mono';
-
-            const tooltipText = temJustificativa 
-                ? `Justificativa: ${d.totais.justificativa}` 
-                : 'Dia Normal';
+                : 'font-mono text-slate-500';
 
             return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
@@ -161,7 +151,7 @@ Produtividade.Geral = {
                     <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
                 </td>
                 <td class="px-2 py-3 text-center">
-                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar Individualmente">AB</button>
+                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar">AB</button>
                 </td>
                 <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                     <div class="flex flex-col">
@@ -170,7 +160,7 @@ Produtividade.Geral = {
                     </div>
                 </td>
                 
-                <td class="px-2 py-3 text-center" title="${tooltipText}">
+                <td class="px-2 py-3 text-center" title="${temJustificativa ? d.totais.justificativa : ''}">
                     <span class="${styleAbono} px-1.5 py-0.5 inline-block">
                         ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
                         ${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
@@ -182,13 +172,14 @@ Produtividade.Geral = {
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
                 <td class="px-2 py-3 text-center bg-slate-50/50 text-slate-400 font-mono">${metaDia}</td>
                 <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">${Math.round(metaDia * d.totais.diasUteis).toLocaleString('pt-BR')}</td>
-                <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm shadow-sm">
+                <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">
                     ${d.totais.qty.toLocaleString('pt-BR')}
                 </td>
                 <td class="px-2 py-3 text-center ${corProducao} ${corProducaoBg}">
                     ${atingimento.toFixed(1)}%
                 </td>
-                <td class="px-2 py-3 text-center border-l border-slate-100">
+                
+                <td class="px-2 py-2 text-center border-l border-slate-100 align-middle">
                     ${htmlAssertividade}
                 </td>
             </tr>`;
@@ -258,8 +249,8 @@ Produtividade.Geral = {
 
         const divisor = manDays > 0 ? manDays : 1;
         const velReal = Math.round(totalProd / divisor);
-        const velMeta = Math.round(totalMeta / divisor);
-        this.setTxt('kpi-media-real', `${velReal} / ${velMeta}`);
+        this.setTxt('kpi-media-real', `${velReal}`);
+        this.setTxt('kpi-media-esperada', `${Math.round(totalMeta / divisor)}`);
         
         const diasDisplay = isFiltrado && dados.length > 0 ? dados[0].totais.diasUteis.toLocaleString('pt-BR') : this.diasAtivosGlobal;
         this.setTxt('kpi-dias-uteis', diasDisplay); 
@@ -286,74 +277,17 @@ Produtividade.Geral = {
         document.querySelectorAll('.check-user').forEach(c => c.checked = checked);
     },
 
-    // --- FUNÇÃO ABONAR EM MASSA ---
     abonarEmMassa: async function() {
-        // 1. Pega selecionados
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
 
-        // 2. Data
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo) {
             dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
         }
 
-        // 3. Fator
-        const opcao = prompt(
-            `ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\n` +
-            `Escolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, 
-            "0"
-        );
-        if (opcao === null) return;
-
-        let novoFator = 1.0;
-        if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
-        if (opcao === '0') novoFator = 0.0;
-
-        // 4. Justificativa
-        let justificativa = "";
-        if (novoFator !== 1.0) {
-            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA (Ex: Atestado, Falta injustificada, Folga):");
-            if (!justificativa || justificativa.trim() === "") {
-                return alert("❌ Cancelado: Justificativa é obrigatória para abonos.");
-            }
-        }
-
-        if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
-
-        // 5. Execução
-        let sucessos = 0;
-        for (const chk of checks) {
-            const uid = chk.value;
-            try {
-                await Sistema.supabase.rpc('abonar_producao', {
-                    p_usuario_id: uid,
-                    p_data: dataAlvo,
-                    p_fator: novoFator,
-                    p_justificativa: justificativa
-                });
-                sucessos++;
-            } catch (err) {
-                console.error(`Erro no user ${uid}:`, err);
-            }
-        }
-
-        alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
-        this.carregarTela();
-    },
-
-    mudarFator: async function(uid, fatorAtual) {
-        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
-        if (!dataAlvo) {
-            dataAlvo = prompt("Digite a data para abonar (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-            if (!dataAlvo) return;
-        }
-
-        const opcao = prompt(
-            `ABONAR DIA (${dataAlvo})\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, 
-            "0"
-        );
+        const opcao = prompt(`ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\nEscolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, "0");
         if (opcao === null) return;
 
         let novoFator = 1.0;
@@ -363,35 +297,60 @@ Produtividade.Geral = {
         let justificativa = "";
         if (novoFator !== 1.0) {
             justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
-            if (!justificativa || justificativa.trim() === "") {
-                return alert("❌ Cancelado: Justificativa é obrigatória.");
-            }
+            if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
         }
 
-        try {
-            const { error } = await Sistema.supabase
-                .rpc('abonar_producao', {
-                    p_usuario_id: uid,
+        if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
+
+        let sucessos = 0;
+        for (const chk of checks) {
+            try {
+                await Sistema.supabase.rpc('abonar_producao', {
+                    p_usuario_id: chk.value,
                     p_data: dataAlvo,
                     p_fator: novoFator,
                     p_justificativa: justificativa
                 });
+                sucessos++;
+            } catch (err) { console.error(err); }
+        }
+        alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
+        this.carregarTela();
+    },
 
+    mudarFator: async function(uid, fatorAtual) {
+        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
+        if (!dataAlvo) {
+            dataAlvo = prompt("Data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            if (!dataAlvo) return;
+        }
+        const opcao = prompt(`ABONAR DIA (${dataAlvo})\n1 - Normal\n2 - Meio\n0 - Abono\nCódigo:`, "0");
+        if (opcao === null) return;
+
+        let novoFator = 1.0;
+        if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
+        if (opcao === '0') novoFator = 0.0;
+
+        let justificativa = "";
+        if (novoFator !== 1.0) {
+            justificativa = prompt("Justificativa:");
+            if (!justificativa) return alert("Justificativa obrigatória.");
+        }
+
+        try {
+            const { error } = await Sistema.supabase.rpc('abonar_producao', {
+                p_usuario_id: uid, p_data: dataAlvo, p_fator: novoFator, p_justificativa: justificativa
+            });
             if (error) throw error;
             alert(`✅ Sucesso!`);
             this.carregarTela();
-
-        } catch (error) {
-            console.error(error);
-            alert("Erro: " + error.message);
-        }
+        } catch (error) { alert("Erro: " + error.message); }
     },
 
     excluirDadosDia: async function() {
         const dt = document.getElementById('sel-data-dia').value;
         if (!dt) return alert("Selecione um dia.");
         if (!confirm(`TEM CERTEZA? Isso apagará TODA a produção de ${dt}.`)) return;
-
         const { error } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dt);
         if(error) alert("Erro: " + error.message);
         else { alert("Dados excluídos."); this.carregarTela(); }

@@ -28,7 +28,6 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Estilos dos Cards KPI - Design Heurístico */
         .kpi-card { 
             background: white; border-radius: 16px; 
             box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
@@ -210,6 +209,7 @@
                                 <th class="px-2 py-3 text-center w-[8%] bg-slate-100">Meta (Real)</th>
                                 <th class="px-2 py-3 text-center w-[10%] text-blue-700 bg-blue-50/50">Produção</th>
                                 <th class="px-2 py-3 text-center w-[8%]">% Ating.</th>
+                                
                                 <th class="px-2 py-3 text-center w-[8%] text-emerald-700 bg-emerald-50/50">% Assert</th>
                             </tr>
                         </thead>
@@ -233,7 +233,6 @@
         </div>
 
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            
             <div id="container-analise-extremos" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
                     <div id="analise-extremos-content" class="space-y-3 flex-1">
@@ -256,7 +255,6 @@
                     </p>
                 </div>
             </div>
-
             <div class="grid grid-cols-12 gap-6 h-[calc(100vh-340px)]">
                 <div class="col-span-8 flex flex-col gap-4">
                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
@@ -265,7 +263,6 @@
                     </div>
                     <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[300px]"><canvas id="evolutionChart"></canvas></div>
                 </div>
-                
                 <div class="col-span-4 flex flex-col gap-4">
                     <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
                         <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center"><span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Ranking Operacional</span><i class="fas fa-filter text-slate-300"></i></div>
