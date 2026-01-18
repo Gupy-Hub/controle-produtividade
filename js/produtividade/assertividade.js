@@ -1,4 +1,3 @@
-// Namespace global
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Assertividade = {
@@ -10,17 +9,14 @@ Produtividade.Assertividade = {
         this.carregar();
     },
 
-    // --- FUNÇÃO QUE FALTAVA (Correção do Erro) ---
-    // Chamada pelo geral.js para formatar a célula na tabela principal
+    // Função visual para colorir notas
     renderizarCelula: function(valor) {
-        // Trata input
         let valNum = 0;
         if (typeof valor === 'number') valNum = valor;
         else if (typeof valor === 'string') valNum = parseFloat(valor.replace('%','').replace(',','.'));
         
         if (isNaN(valNum)) valNum = 0;
 
-        // Lógica de Cores (Meta padrão 98%)
         let classeCor = 'bg-rose-100 text-rose-700 border-rose-200';
         let icone = '<i class="fas fa-times-circle"></i>';
 
@@ -32,30 +28,23 @@ Produtividade.Assertividade = {
             icone = '<i class="fas fa-exclamation-circle"></i>';
         }
 
-        return `
-            <div class="flex items-center justify-center">
-                <span class="${classeCor} border px-2 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
-                    ${icone} ${valNum.toFixed(2)}%
-                </span>
-            </div>
-        `;
+        return `<div class="flex items-center justify-center"><span class="${classeCor} border px-2 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">${icone} ${valNum.toFixed(2)}%</span></div>`;
     },
 
     carregar: async function() {
-        // 1. Pega datas do filtro global
         const datas = Sistema.getPeriodo();
-        
         const containerKPI = document.getElementById('kpi-assertividade-container');
         
-        if(containerKPI) containerKPI.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-blue-500"></i> Carregando dados...</div>';
+        if(containerKPI) containerKPI.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-blue-500"></i> Analisando produção...</div>';
 
         try {
-            // 2. Busca no Supabase
+            // CORREÇÃO 1: Filtrar pela DATA DE PRODUÇÃO (data_referencia/end_time)
+            // Isso garante que peguemos o dia que a pessoa trabalhou (01/12), não quando foi auditado.
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
-                .gte('data_auditoria', datas.inicio)
-                .lte('data_auditoria', datas.fim);
+                .gte('data_referencia', `${datas.inicio}T00:00:00`)
+                .lte('data_referencia', `${datas.fim}T23:59:59`);
 
             if (error) throw error;
 
@@ -64,24 +53,23 @@ Produtividade.Assertividade = {
                 return;
             }
 
-            // 3. Processamento
             const stats = this.processarDados(data);
 
-            // 4. Renderiza Componentes Internos (Aba Detalhada)
             this.renderizarKPIs(stats);
             this.renderizarGraficoEvolucao(stats.porDia);
             this.renderizarGraficoRanking(stats.porAssistente);
             this.renderizarTabelaDetalhada(stats.listaCompleta);
 
         } catch (erro) {
-            console.error("Erro ao carregar assertividade:", erro);
+            console.error("Erro assertividade:", erro);
             if(containerKPI) containerKPI.innerHTML = '<div class="text-red-500 p-4">Erro ao carregar dados.</div>';
         }
     },
 
     processarDados: function(dados) {
-        let totalDocs = 0;
-        let totalCampos = 0;
+        // Totais Gerais
+        let totalDocsProduzidos = dados.length; // Total de linhas (Ex: 546)
+        let totalDocsAuditados = 0;             // Apenas os que têm nota (Ex: 37)
         let totalErros = 0;
         let somaPorcentagem = 0;
         
@@ -89,57 +77,71 @@ Produtividade.Assertividade = {
         const porAssistente = {};
 
         dados.forEach(item => {
-            // Tratamento de nulos e strings
+            // Normaliza métricas
             const nNok = Number(item.qtd_nok || item.nok || 0);
             const nOk = Number(item.qtd_ok || item.ok || 0);
             const nCampos = Number(item.num_campos || item.campos || (nOk + nNok));
             
-            let pct = 0;
+            // Tratamento da Porcentagem
+            let pct = null; // Começa nulo
             if (item.porcentagem !== undefined && item.porcentagem !== null) {
                 if (typeof item.porcentagem === 'string') {
-                    pct = parseFloat(item.porcentagem.replace('%','').replace(',','.'));
+                    // Só converte se não for vazio
+                    if(item.porcentagem.trim() !== '') {
+                        pct = parseFloat(item.porcentagem.replace('%','').replace(',','.'));
+                    }
                 } else {
                     pct = Number(item.porcentagem);
                 }
+            }
+
+            // CORREÇÃO 2: Só conta na média se tiver nota válida (exclui REV, EMPR, vazios)
+            if (pct !== null && !isNaN(pct)) {
+                totalDocsAuditados++;
+                somaPorcentagem += pct;
+                totalErros += nNok; // Soma erros apenas dos auditados
             } else {
-                pct = nCampos > 0 ? ((nCampos - nNok) / nCampos) * 100 : 100;
+                // Se não tem nota, assume 0 para cálculos seguros ou ignora?
+                // Para a média justa (91.89%), devemos IGNORAR quem não tem nota.
+                pct = 0; // Valor seguro apenas para gráficos de soma, não para média
             }
 
-            totalDocs++;
-            totalCampos += nCampos;
-            totalErros += nNok;
-            somaPorcentagem += pct;
-
-            // Data
+            // Data (Baseada na produção)
             let dia = 'N/A';
-            if (item.data_auditoria) {
-                const dataIso = item.data_auditoria.split('T')[0]; 
-                const partes = dataIso.split('-'); 
-                if (partes.length === 3) {
-                    dia = `${partes[2]}/${partes[1]}`;
-                }
+            if (item.data_referencia) {
+                const dataIso = item.data_referencia.split('T')[0];
+                const partes = dataIso.split('-');
+                if (partes.length === 3) dia = `${partes[2]}/${partes[1]}`;
             }
 
-            // Agrupamento Dia
-            if (!porDia[dia]) porDia[dia] = { total: 0, erros: 0, somaPct: 0, docs: 0 };
-            porDia[dia].total += nCampos;
-            porDia[dia].erros += nNok;
-            porDia[dia].somaPct += pct;
-            porDia[dia].docs++;
+            // Agrupamentos
+            if (!porDia[dia]) porDia[dia] = { total: 0, erros: 0, somaPct: 0, docsAuditados: 0, docsProduzidos: 0 };
+            porDia[dia].docsProduzidos++;
+            
+            // Só soma estatísticas de qualidade se foi auditado
+            if (pct !== null && !isNaN(Number(item.porcentagem))) {
+                porDia[dia].total += nCampos;
+                porDia[dia].erros += nNok;
+                porDia[dia].somaPct += pct;
+                porDia[dia].docsAuditados++;
+            }
 
-            // Agrupamento Assistente
             const nomeAssistente = item.nome_assistente || item.assistente || 'Desconhecido';
-            if (!porAssistente[nomeAssistente]) porAssistente[nomeAssistente] = { docs: 0, erros: 0, somaPct: 0 };
-            porAssistente[nomeAssistente].docs++;
-            porAssistente[nomeAssistente].erros += nNok;
-            porAssistente[nomeAssistente].somaPct += pct;
+            if (!porAssistente[nomeAssistente]) porAssistente[nomeAssistente] = { docsAuditados: 0, erros: 0, somaPct: 0 };
+            
+            if (pct !== null && !isNaN(Number(item.porcentagem))) {
+                porAssistente[nomeAssistente].docsAuditados++;
+                porAssistente[nomeAssistente].erros += nNok;
+                porAssistente[nomeAssistente].somaPct += pct;
+            }
         });
 
-        const mediaGeral = totalDocs > 0 ? (somaPorcentagem / totalDocs).toFixed(2) : 0;
+        // Cálculo Final da Média (Ex: 3400 / 37 = 91.89%)
+        const mediaGeral = totalDocsAuditados > 0 ? (somaPorcentagem / totalDocsAuditados).toFixed(2) : 0;
 
         return {
-            totalDocs,
-            totalCampos,
+            totalDocsProduzidos,
+            totalDocsAuditados,
             totalErros,
             mediaGeral,
             porDia,
@@ -154,10 +156,13 @@ Produtividade.Assertividade = {
             if(el) el.innerText = val;
         };
 
-        setTxt('kpi-assert-docs', stats.totalDocs);
-        setTxt('kpi-assert-erros', stats.totalErros);
-        setTxt('kpi-assert-media', stats.mediaGeral + '%');
+        // Cards Superiores
+        setTxt('kpi-assert-docs', stats.totalDocsAuditados); // Mostra 37 (Auditados)
+        setTxt('kpi-assert-erros', stats.totalErros);        // Erros encontrados
+        setTxt('kpi-assert-media', stats.mediaGeral + '%');  // 91.89%
         
+        // Dica: Se quiser mostrar o total produzido (546) em algum lugar, use stats.totalDocsProduzidos
+
         const elMedia = document.getElementById('kpi-assert-media');
         if(elMedia) {
             elMedia.className = parseFloat(stats.mediaGeral) >= 98 
@@ -169,7 +174,6 @@ Produtividade.Assertividade = {
     renderizarGraficoEvolucao: function(dadosPorDia) {
         const ctx = document.getElementById('chart-evolucao-assertividade');
         if (!ctx) return;
-
         if (this.chartEvolucao) this.chartEvolucao.destroy();
 
         const labels = Object.keys(dadosPorDia).sort((a,b) => {
@@ -180,7 +184,7 @@ Produtividade.Assertividade = {
 
         const data = labels.map(dia => {
             const d = dadosPorDia[dia];
-            return (d.somaPct / d.docs).toFixed(2);
+            return d.docsAuditados > 0 ? (d.somaPct / d.docsAuditados).toFixed(2) : 0;
         });
 
         this.chartEvolucao = new Chart(ctx, {
@@ -197,25 +201,22 @@ Produtividade.Assertividade = {
                     tension: 0.3
                 }]
             },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { y: { min: 80, max: 100 } }
-            }
+            options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 80, max: 100 } } }
         });
     },
 
     renderizarGraficoRanking: function(dadosPorAssistente) {
         const ctx = document.getElementById('chart-ranking-assertividade');
         if (!ctx) return;
-
         if (this.chartRanking) this.chartRanking.destroy();
 
         const ranking = Object.entries(dadosPorAssistente)
             .map(([nome, d]) => ({
                 nome,
-                media: (d.somaPct / d.docs).toFixed(2)
+                media: d.docsAuditados > 0 ? (d.somaPct / d.docsAuditados).toFixed(2) : 0,
+                vol: d.docsAuditados
             }))
+            .filter(r => r.vol > 0) // Só mostra quem foi auditado
             .sort((a, b) => b.media - a.media)
             .slice(0, 10);
 
@@ -230,12 +231,7 @@ Produtividade.Assertividade = {
                     borderRadius: 4
                 }]
             },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: { x: { min: 90, max: 100 } }
-            }
+            options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, scales: { x: { min: 90, max: 100 } } }
         });
     },
 
@@ -251,13 +247,12 @@ Produtividade.Assertividade = {
     renderizarTabelaDetalhada: function(lista) {
         const tbody = document.getElementById('tabela-assertividade-body');
         if(!tbody) return;
-        
         tbody.innerHTML = '';
         
-        // Filtra erros
+        // Mostra apenas os erros na tabela de detalhes
         const erros = lista
             .filter(d => (Number(d.qtd_nok) > 0 || String(d.status) === 'NOK'))
-            .sort((a,b) => new Date(b.data_auditoria) - new Date(a.data_auditoria))
+            .sort((a,b) => new Date(b.data_referencia || b.data_auditoria) - new Date(a.data_referencia || a.data_auditoria))
             .slice(0, 20);
 
         if(erros.length === 0) {
@@ -267,7 +262,11 @@ Produtividade.Assertividade = {
 
         let html = '';
         erros.forEach(row => {
-            const dataFmt = row.data_auditoria ? row.data_auditoria.split('-').reverse().join('/') : '-';
+            // Usa data de produção (referencia) ou auditoria
+            let dataFmt = '-';
+            const dataBase = row.data_referencia || row.data_auditoria;
+            if(dataBase) dataFmt = dataBase.split('T')[0].split('-').reverse().join('/');
+
             html += `
                 <tr class="border-b border-slate-100 hover:bg-slate-50">
                     <td class="py-2 px-3 text-xs font-bold text-slate-700">${dataFmt}</td>
