@@ -6,7 +6,7 @@ window.Produtividade.Importacao.Validacao = {
     dadosProcessados: [],
 
     init: function() {
-        console.log("🚀 Performance Pro: Engine V2.8 (Mapeamento CSV + Regex Flexível)");
+        console.log("🚀 GupyMesa: Engine V2.8 (Mapeamento CSV + Regex Flexível)");
     },
 
     /**

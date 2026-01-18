@@ -7,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [NEXUS] Produtividade: Engine V23 (Botão Massa no Header)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V23 (Botão Massa no Header)...");
         // Removemos o injectToolbar antigo e usamos o updateHeader
         this.updateHeader(); 
         this.carregarTela(); 
