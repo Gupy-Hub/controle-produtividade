@@ -1,14 +1,15 @@
 const Login = {
     init: function() {
-        // Verifica se já tem sessão
+        // Verifica se o Sistema foi carregado corretamente
         if (typeof Sistema === 'undefined') {
-            console.error("Sistema não carregado.");
+            console.error("Sistema não carregado. Verifique a ordem dos scripts no index.html.");
             return;
         }
         
+        // Se já estiver logado, redireciona
         const sessao = Sistema.lerSessao();
         if (sessao) {
-            window.location.href = 'minha_area.html';
+            this.redirecionar(sessao);
         }
     },
 
@@ -26,15 +27,16 @@ const Login = {
             return;
         }
 
-        // Feedback Visual
+        // Feedback Visual (Loading)
         const textoOriginal = btn.innerHTML;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
         btn.disabled = true;
-        msgErro.classList.add('hidden');
+        if(msgErro) msgErro.classList.add('hidden');
 
         try {
-            // --- MUDANÇA AQUI: ENVIA SENHA LIMPA ---
-            // A criptografia agora é feita dentro do SQL para garantir compatibilidade total.
+            // --- CHAMADA SEGURA AO BANCO ---
+            // O frontend envia a senha "limpa" via HTTPS.
+            // O Banco (SQL) faz o Hash e compara, garantindo segurança total.
             
             const { data, error } = await Sistema.supabase.rpc('api_login', { 
                 p_id: parseInt(id), 
@@ -43,31 +45,45 @@ const Login = {
 
             if (error) throw error;
 
-            // Sucesso
+            // --- SUCESSO ---
             Sistema.salvarSessao(data);
-            
-            // Redirecionamento baseado no perfil (Opcional, mas recomendado)
-            if (data.perfil === 'admin' || data.perfil === 'gestor') {
-                window.location.href = 'gestao.html';
-            } else {
-                window.location.href = 'minha_area.html';
+
+            // 1. Verificação de Troca de Senha Obrigatória
+            if (data.trocar_senha === true) {
+                alert("⚠️ AVISO DE SEGURANÇA:\n\nSua senha foi resetada pelo administrador.\nPor favor, defina uma nova senha assim que acessar o sistema.");
+                // Futuramente, aqui redirecionaremos para uma tela de 'trocar_senha.html'
             }
+            
+            // 2. Redirecionamento baseado no Perfil
+            this.redirecionar(data);
 
         } catch (error) {
             console.error("Erro Login:", error);
             
+            // Tratamento de Erros Específicos do SQL (RPC)
             if (error.code === 'P0001') {
                 this.mostrarErro('Senha incorreta.');
             } else if (error.code === 'P0002') {
                 this.mostrarErro('Usuário não encontrado.');
             } else if (error.code === 'P0003') {
-                this.mostrarErro('Usuário inativo.');
+                this.mostrarErro('Acesso negado. Usuário inativo.');
             } else {
                 this.mostrarErro('Erro ao conectar: ' + (error.message || 'Erro desconhecido'));
             }
         } finally {
-            btn.innerHTML = textoOriginal;
-            btn.disabled = false;
+            // Restaura o botão se algo der errado (se der certo, a página muda antes)
+            if (btn) {
+                btn.innerHTML = textoOriginal;
+                btn.disabled = false;
+            }
+        }
+    },
+
+    redirecionar: function(usuario) {
+        if (usuario.perfil === 'admin' || usuario.perfil === 'gestor') {
+            window.location.href = 'gestao.html';
+        } else {
+            window.location.href = 'minha_area.html';
         }
     },
 
@@ -82,7 +98,8 @@ const Login = {
     }
 };
 
-// Inicializa (Proteção para garantir que carregou)
+// Inicializa o módulo quando a página carregar
 document.addEventListener('DOMContentLoaded', () => {
+    // Pequeno delay para garantir que config.js e sistema.js carregaram
     setTimeout(() => Login.init(), 100);
 });

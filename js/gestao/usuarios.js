@@ -175,32 +175,31 @@ Gestao.Usuarios = {
 
     // --- NOVA FUNÇÃO: RESET DE SENHA ---
     resetarSenhaManual: async function(id, nome) {
-        const novaSenha = prompt(`Digite a NOVA SENHA para o usuário ${nome}:`);
+        // 1. Confirmação Simples
+        const confirmacao = confirm(`⚠️ ATENÇÃO:\n\nDeseja resetar a senha de ${nome} para "gupy123"?\n\nO usuário será obrigado a trocar a senha no próximo login.`);
         
-        if (!novaSenha) return; // Cancelou
-        if (novaSenha.length < 6) return alert("A senha deve ter no mínimo 6 caracteres.");
+        if (!confirmacao) return;
 
-        const btn = document.getElementById(`btn-reset-${id}`);
-        const iconeOriginal = btn ? btn.innerHTML : '';
+        // Feedback Visual (opcional, mas bom)
+        const btn = document.activeElement; // Pega o botão clicado
+        const textoOriginal = btn ? btn.innerHTML : '';
         if(btn) btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
         try {
-            // Chama a função SQL criada no banco (RPC)
-            // Certifique-se que o script SQL 'admin_resetar_senha' foi rodado no Supabase
-            const { error } = await Sistema.supabase.rpc('admin_resetar_senha', {
-                p_usuario_id: id,
-                p_nova_senha: novaSenha
+            // 2. Chama a nova função SQL (sem passar senha, o banco já sabe que é gupy123)
+            const { error } = await Sistema.supabase.rpc('admin_resetar_senha', { 
+                p_usuario_id: parseInt(id)
             });
 
             if (error) throw error;
 
-            alert(`✅ Sucesso!\n\nA senha de ${nome} foi alterada.\nInforme ao usuário para logar com a nova senha.`);
+            alert(`✅ Sucesso!\n\nA senha de ${nome} foi redefinida para: gupy123\nEle(a) será solicitado a trocar no próximo acesso.`);
 
-        } catch (erro) {
-            console.error(erro);
-            alert("Erro ao resetar senha: " + erro.message);
+        } catch (error) {
+            console.error("Erro Reset:", error);
+            alert("Erro ao resetar senha: " + (error.message || error.details));
         } finally {
-            if(btn) btn.innerHTML = iconeOriginal;
+            if(btn) btn.innerHTML = textoOriginal;
         }
     }
 };
