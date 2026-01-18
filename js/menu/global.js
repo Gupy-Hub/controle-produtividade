@@ -45,9 +45,10 @@ Menu.Global = {
         <nav class="bg-slate-900 text-slate-300 shadow-md fixed top-0 left-0 w-full z-[60] h-12">
             <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
                 <div class="flex items-center gap-6">
-                    <div class="font-black text-white tracking-wider text-sm flex items-center gap-2">
-                        <i class="fas fa-layer-group text-blue-500"></i> HUB
-                    </div>
+                    <div class="flex items-center gap-2">
+    <img src="img/logo.png" alt="Logo Gupy" class="h-8 w-auto"> 
+    <span class="font-black text-white tracking-wider text-sm">HUB</span>
+</div>
                     <div class="flex items-center gap-1">`;
 
         links.forEach(link => {
