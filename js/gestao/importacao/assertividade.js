@@ -1,10 +1,9 @@
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
-    BATCH_SIZE: 800, 
+    BATCH_SIZE: 500, // Lote menor para evitar timeout
     CONCURRENCY: 1, 
 
-    // Limpeza profunda sugerida pelo QA: Nulo é Nulo.
     limparProfundo: function(val, isNumeric = false) {
         if (val === undefined || val === null) return null;
         const str = String(val).trim().replace(/^\s+|\s+$/g, '');
@@ -22,7 +21,7 @@ Importacao.Assertividade = {
             const file = input.files[0];
             const btn = input.closest('div').querySelector('button');
             const originalText = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importando...';
             btn.disabled = true;
 
             Papa.parse(file, {
@@ -49,10 +48,9 @@ Importacao.Assertividade = {
             const assistente = this.limparProfundo(linha['Assistente']);
 
             if (!idPpc || !assistente) continue;
-            if (cacheIds.has(idPpc)) continue; // Evita erro 500 por duplicidade no mesmo lote
+            if (cacheIds.has(idPpc)) continue; 
             cacheIds.add(idPpc);
 
-            // Tratamento de Data (Garante que apareça no dashboard)
             let dataRef = null;
             if (linha['end_time']) {
                 const d = new Date(linha['end_time']);
@@ -67,7 +65,6 @@ Importacao.Assertividade = {
                 nome_assistente: assistente,
                 doc_name: this.limparProfundo(linha['doc_name']),
                 status: this.limparProfundo(linha['STATUS']),
-                // Campos que devem ser NULOS se vazios
                 auditora: this.limparProfundo(linha['Auditora']),
                 porcentagem: this.limparProfundo(linha['% Assert'], true),
                 qtd_nok: this.limparProfundo(linha['Nok'], true),
@@ -85,11 +82,19 @@ Importacao.Assertividade = {
             const lote = dados.slice(i, i + this.BATCH_SIZE);
             const { error } = await Sistema.supabase
                 .from('assertividade') 
-                .upsert(lote, { onConflict: 'id_ppc' });
+                .upsert(lote, { onConflict: 'id_ppc' }); // FOCO TOTAL NO ID_PPC
 
-            if (error) console.error("❌ Falha crítica no lote:", error.message);
-            else console.log(`✅ Lote ${i/this.BATCH_SIZE + 1} enviado.`);
+            if (error) {
+                console.error("❌ Erro no envio:", error.message);
+                // Se o erro de constraint persistir, avisamos o usuário
+                if (error.message.includes('unique_historico_fiel')) {
+                    alert("Ainda existe uma trava antiga no banco. Rode o SQL de DROP CONSTRAINT novamente.");
+                    return;
+                }
+            } else {
+                console.log(`✅ Enviados: ${Math.min(i + this.BATCH_SIZE, dados.length)} / ${dados.length}`);
+            }
         }
-        alert("Importação Concluída. Média da Samaria agora deve bater!");
+        alert("Importação Concluída com Sucesso!");
     }
 };
