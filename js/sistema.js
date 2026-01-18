@@ -1,70 +1,74 @@
 const Sistema = {
+    // URL da API do Supabase (lida do config.js)
+    supabaseUrl: CONFIG.SUPABASE_URL,
+    supabaseKey: CONFIG.SUPABASE_ANON_KEY,
     supabase: null,
-    usuarioLogado: null,
 
-    inicializar: async function(requerLogin = true) {
-        if (!Sistema.supabase) {
-            if (window.supabase && window.supabase.createClient && window.SUPABASE_URL && window.SUPABASE_KEY) {
-                Sistema.supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_KEY);
-                console.log("Sistema: Conectado ao Supabase.");
-            } else {
-                console.error("Sistema: Biblioteca Supabase ou chaves não encontradas.");
-                alert("Erro crítico: Sistema não conectado ao banco de dados.");
-                return;
-            }
+    init: function() {
+        if (!this.supabaseUrl || !this.supabaseKey) {
+            console.error("Configurações do Supabase não encontradas!");
+            return;
         }
-
-        const sessao = localStorage.getItem('usuario_logado');
-        if (sessao) {
-            Sistema.usuarioLogado = JSON.parse(sessao);
-            // Verifica permissão assim que carrega o usuário
-            Sistema.verificarAcessoPagina(); 
-        } else if (requerLogin && !window.location.pathname.includes('index.html')) {
-            window.location.href = 'index.html';
-        }
+        this.supabase = supabase.createClient(this.supabaseUrl, this.supabaseKey);
+        console.log("Sistema: Conectado ao Supabase.");
+        
+        this.verificarSessaoGlobal();
     },
 
-    // --- NOVO: CONTROLE DE ACESSO (ACL) ---
-    verificarAcessoPagina: function() {
-        const user = Sistema.usuarioLogado;
-        if (!user) return;
+    // --- NOVA FUNÇÃO DE CRIPTOGRAFIA (SHA-256) ---
+    gerarHash: async function(texto) {
+        const msgBuffer = new TextEncoder().encode(texto);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    },
+    // ---------------------------------------------
 
+    salvarSessao: function(dadosUsuario) {
+        localStorage.setItem('usuario_logado', JSON.stringify(dadosUsuario));
+        localStorage.setItem('sessao_timestamp', new Date().getTime());
+    },
+
+    lerSessao: function() {
+        const dados = localStorage.getItem('usuario_logado');
+        if (!dados) return null;
+        return JSON.parse(dados);
+    },
+
+    limparSessao: function() {
+        localStorage.removeItem('usuario_logado');
+        localStorage.removeItem('sessao_timestamp');
+        window.location.href = 'index.html';
+    },
+
+    verificarSessaoGlobal: function() {
+        const paginasPublicas = ['index.html', 'login.html', 'ferramentas.html'];
         const path = window.location.pathname;
-        
-        // Definição de Perfis com Acesso Total
-        const isAdmin = ['GESTORA', 'AUDITORA', 'ADMIN'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
+        const paginaAtual = path.substring(path.lastIndexOf('/') + 1) || 'index.html';
 
-        // Páginas Restritas (Apenas Gestão/Auditoria)
-        // Se a página atual for uma dessas e o usuário NÃO for admin -> Bloqueia
-        const paginasRestritas = ['gestao.html', 'produtividade.html'];
-        
-        const tentandoAcessarRestrita = paginasRestritas.some(p => path.includes(p));
+        if (paginasPublicas.includes(paginaAtual)) return;
 
-        if (tentandoAcessarRestrita && !isAdmin) {
-            console.warn("Acesso negado. Redirecionando...");
-            window.location.href = 'minha_area.html'; // Redireciona para área segura
+        const usuario = this.lerSessao();
+        if (!usuario) {
+            window.location.href = 'index.html';
+        } else {
+            // Exibe nome do usuário se houver elemento para isso
+            const elNome = document.getElementById('usuario-nome-top');
+            if (elNome) elNome.innerText = usuario.nome.split(' ')[0];
         }
     },
 
-    escapar: function(texto) {
-        if (texto === null || texto === undefined) return '';
-        return texto.toString()
+    escapar: function(str) {
+        if (!str) return '';
+        return str.toString()
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/"/g, "&quot;")
             .replace(/'/g, "&#039;");
-    },
-
-    sair: function() {
-        if(confirm("Deseja realmente sair?")) {
-            localStorage.removeItem('usuario_logado');
-            window.location.href = 'index.html';
-        }
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    // Passa true para exigir login em todas as páginas exceto index
-    Sistema.inicializar(true); 
-});
+// Inicializa o sistema automaticamente
+Sistema.init();
