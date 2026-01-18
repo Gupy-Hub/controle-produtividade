@@ -16,40 +16,29 @@ Menu.Global = {
             if (sessao) user = JSON.parse(sessao);
         } catch (e) { console.error("Erro ao ler sessão:", e); }
 
-        // Lógica Centralizada de Permissão (Mesma do sistema.js)
+        // Permissões
         const isGestao = ['GESTORA', 'AUDITORA', 'ADMIN'].includes((user.funcao || '').toUpperCase()) || user.perfil === 'admin' || user.id == 1;
         const currentPath = window.location.pathname;
 
-        // --- DEFINIÇÃO DA ORDEM DOS LINKS ---
+        // Links do Menu
         const links = [];
-
-        // 1. Gestão (Apenas Gestoras/Auditoras)
         if (isGestao) {
             links.push({ nome: 'Gestão', url: 'gestao.html', icon: 'fas fa-cogs' });
-        }
-
-        // 2. Produtividade (Apenas Gestoras/Auditoras)
-        // Assistentes veem seus dados na aba "Minha Área" > "Dia a Dia"
-        if (isGestao) {
             links.push({ nome: 'Produtividade', url: 'produtividade.html', icon: 'fas fa-chart-line' });
         }
-
-        // 3. Minha Área (Todos)
         links.push({ nome: 'Minha Área', url: 'minha_area.html', icon: 'fas fa-home' });
-
-        // 4. Biblioteca (Todos)
         links.push({ nome: 'Biblioteca', url: 'ferramentas.html', icon: 'fas fa-book' });
 
-        // --- RENDERIZAÇÃO ---
+        // --- HTML DO MENU ---
         let html = `
         <nav class="bg-slate-900 text-slate-300 shadow-md fixed top-0 left-0 w-full z-[60] h-12">
             <div class="max-w-[1600px] mx-auto px-4 h-full flex items-center justify-between">
                 <div class="flex items-center gap-6">
-                <div class="flex items-center gap-3">
-                    <img src="img/Logo.png" alt="Logo Gupy" class="h-9 w-auto object-contain"> 
-    
-                    <span class="font-black text-white tracking-wider text-sm">HUB</span>
+                    
+                    <div class="flex items-center">
+                        <img src="img/logo.png" alt="Gupy" class="h-9 w-auto object-contain">
                     </div>
+
                     <div class="flex items-center gap-1">`;
 
         links.forEach(link => {
@@ -60,6 +49,7 @@ Menu.Global = {
 
         html += `   </div>
                 </div>
+                
                 <div class="flex items-center gap-4 text-xs">
                     <span class="hidden md:inline">Olá, <strong class="text-white">${user.nome || 'Visitante'}</strong></span>
                     <button onclick="Sistema.limparSessao()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition"><i class="fas fa-sign-out-alt"></i> Sair</button>
