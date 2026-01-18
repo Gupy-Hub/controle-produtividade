@@ -16,7 +16,6 @@ Importacao.Assertividade = {
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
-            // Pequeno delay para a UI atualizar antes de travar processando
             setTimeout(() => {
                 this.lerCSV(file).finally(() => {
                     input.value = ''; 
@@ -33,7 +32,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura. Foco: end_time literal.");
+            console.log("📂 [Importacao] Iniciando leitura total.");
             
             Papa.parse(file, {
                 header: true, 
@@ -58,7 +57,6 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
-        // Função auxiliar para tratar números: Se vazio ou inválido, retorna null (ou 0 se preferir, mas null respeita a regra "vazio é vazio")
         const tratarInt = (val) => {
             if (val === "" || val === null || val === undefined) return null;
             const parsed = parseInt(val);
@@ -73,38 +71,29 @@ Importacao.Assertividade = {
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
-            // Validação mínima: Se não tem ID PPC ou end_time, provavelmente é linha inválida
+            // Validação básica
             if (!linha['ID PPC'] && !linha['end_time']) continue;
 
-            // --- LÓGICA DA DATA LITERAL (REGRA DE OURO) ---
-            // Formato esperado: "2025-12-01T19:14:42.016Z"
             const endTimeRaw = linha['end_time'];
             let dataLiteral = null;
 
             if (endTimeRaw && endTimeRaw.includes('T')) {
-                // Pega tudo antes do T: "2025-12-01"
                 dataLiteral = endTimeRaw.split('T')[0];
             } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                // Fallback caso não tenha T mas seja string longa
                 dataLiteral = endTimeRaw.substring(0, 10);
             }
 
-            // Montagem do Objeto (Espelho do Banco)
+            // Não fazemos mais filtro de duplicatas aqui. 
+            // Confiamos que o CSV tem dados valiosos mesmo se o ID repetir.
+            
             const objeto = {
-                // Chave Única
                 id_ppc: tratarInt(linha['ID PPC']),
-
-                // Datas
                 data_referencia: dataLiteral,
                 end_time_raw: tratarString(linha['end_time']),
-                data_auditoria: tratarString(linha['Data da Auditoria ']), // Atenção ao espaço no CSV se houver
-
-                // IDs
+                data_auditoria: tratarString(linha['Data da Auditoria ']),
                 usuario_id: tratarInt(linha['id_assistente']),
                 company_id: tratarInt(linha['Company_id']),
                 schema_id: tratarInt(linha['Schema_id']),
-
-                // Textos
                 empresa_nome: tratarString(linha['Empresa']),
                 assistente_nome: tratarString(linha['Assistente']),
                 auditora_nome: tratarString(linha['Auditora']),
@@ -115,8 +104,6 @@ Importacao.Assertividade = {
                 tipo_documento: tratarString(linha['DOCUMENTO']),
                 fila: tratarString(linha['Fila']),
                 revalidacao: tratarString(linha['Revalidação']),
-
-                // Métricas
                 qtd_campos: tratarInt(linha['nº Campos']),
                 qtd_ok: tratarInt(linha['Ok']),
                 qtd_nok: tratarInt(linha['Nok']),
@@ -146,11 +133,13 @@ Importacao.Assertividade = {
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // UPSERT baseado no id_ppc (definido no SQL como Unique Index)
+                // ATENÇÃO: Aqui usamos as 4 colunas que definimos no índice SQL
+                // Se vier uma linha com ID, Data, Schema e Doc IDÊNTICOS a uma já salva, ele atualiza.
+                // Se mudar 1 milissegundo ou o nome do doc, ele cria uma nova linha (O que queremos!)
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
-                        onConflict: 'id_ppc', // Se o ID PPC já existir, atualiza os dados
+                        onConflict: 'id_ppc,end_time_raw,schema_id,doc_name',
                         ignoreDuplicates: false 
                     });
 
@@ -158,7 +147,6 @@ Importacao.Assertividade = {
                 
                 totalInserido += lote.length;
                 
-                // Feedback Visual
                 if (totalInserido % 5000 === 0 || totalInserido === total) {
                     const pct = Math.round((totalInserido / total) * 100);
                     console.log(`🚀 Importando: ${pct}%`);
@@ -168,7 +156,6 @@ Importacao.Assertividade = {
 
             alert(`Sucesso! ${totalInserido} registros processados.`);
             
-            // Recarrega Dashboard se estiver na tela
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
             }
