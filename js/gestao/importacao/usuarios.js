@@ -6,14 +6,13 @@ Gestao.Importacao.Usuarios = {
         if (!input.files || !input.files[0]) return;
         const file = input.files[0];
 
-        // Feedback Visual no Botão
         const parentDiv = input.closest('div'); 
         const btnImportar = parentDiv ? parentDiv.querySelector('button') : null;
         let originalText = '';
         
         if (btnImportar) {
             originalText = btnImportar.innerHTML;
-            btnImportar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo...';
+            btnImportar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Criptografando...';
             btnImportar.disabled = true;
             btnImportar.classList.add('opacity-75', 'cursor-not-allowed');
         }
@@ -25,8 +24,6 @@ Gestao.Importacao.Usuarios = {
                 encoding: "UTF-8",
                 complete: async (results) => {
                     await this.processarDados(results.data);
-                    
-                    // Reset UI
                     input.value = ""; 
                     if (btnImportar) {
                         btnImportar.innerHTML = originalText;
@@ -47,16 +44,15 @@ Gestao.Importacao.Usuarios = {
     },
 
     processarDados: async function(linhas) {
-        console.log(`📊 Linhas brutas encontradas: ${linhas.length}`);
+        console.log(`📊 Linhas brutas: ${linhas.length}`);
         
-        // --- DEDUPLICAÇÃO (A Mágica acontece aqui) ---
-        // Usamos um Map onde a Chave é o ID. 
-        // Se o ID aparecer de novo, o Map sobrescreve, garantindo unicidade.
         const mapUsuarios = new Map();
-        const senhaPadraoHash = "gupy123"; 
+        
+        // --- CRIPTOGRAFIA NA IMPORTAÇÃO 🔒 ---
+        // Geramos o hash da senha padrão UMA vez para usar em todos
+        const senhaPadraoHash = await Sistema.gerarHash("gupy123"); 
 
         for (const row of linhas) {
-            // Tratamento de chaves (flexibilidade para cabeçalhos)
             const getVal = (key) => {
                 const val = row[key] || row[key.toUpperCase()] || '';
                 return val.toString().trim();
@@ -67,7 +63,7 @@ Gestao.Importacao.Usuarios = {
             const contratoRaw = getVal('CONTRATO').toUpperCase();
             const situacaoRaw = getVal('SITUAÇÃO').toUpperCase();
 
-            if (!idRaw || !nomeRaw) continue; // Pula linhas inválidas
+            if (!idRaw || !nomeRaw) continue;
 
             const id = parseInt(idRaw);
             const ativo = situacaoRaw === 'ATIVO';
@@ -76,21 +72,19 @@ Gestao.Importacao.Usuarios = {
             if (contratoRaw.includes('AUDITORA')) funcao = 'AUDITORA';
             if (contratoRaw.includes('GESTORA')) funcao = 'GESTORA';
 
-            // Adiciona ao Map (Se o ID já existir, ele atualiza com os dados desta linha)
             mapUsuarios.set(id, {
                 id: id,
                 nome: nomeRaw,
                 contrato: contratoRaw,
                 funcao: funcao,
                 ativo: ativo,
-                senha: senhaPadraoHash
+                senha: senhaPadraoHash // Enviamos o Hash, não o texto
             });
         }
 
-        // Converte o Map de volta para lista (agora sem duplicatas)
         const listaUpsert = Array.from(mapUsuarios.values());
 
-        console.log(`📉 Reduzido para ${listaUpsert.length} usuários únicos.`);
+        console.log(`📉 Usuários únicos: ${listaUpsert.length}`);
 
         if (listaUpsert.length > 0) {
             const { error } = await Sistema.supabase
@@ -99,9 +93,9 @@ Gestao.Importacao.Usuarios = {
 
             if (error) {
                 console.error("Erro Supabase:", error);
-                alert("Erro ao salvar no banco: " + error.message);
+                alert("Erro ao salvar: " + error.message);
             } else {
-                alert(`✅ Sucesso! ${listaUpsert.length} usuários importados (sem duplicatas).`);
+                alert(`✅ Sucesso! ${listaUpsert.length} usuários importados com criptografia.`);
                 if (Gestao.Usuarios) Gestao.Usuarios.carregar(); 
             }
         } else {

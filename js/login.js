@@ -1,81 +1,73 @@
-// js/login.js
+const Login = {
+    init: function() {
+        // Verifica se já tem sessão
+        const sessao = Sistema.lerSessao();
+        if (sessao) {
+            window.location.href = 'minha_area.html';
+        }
+    },
 
-async function entrar() {
-    // Referências do HTML
-    const idInput = document.getElementById('email'); 
-    const senhaInput = document.getElementById('senha');
-    const btn = document.querySelector('button');
-    const originalBtnText = btn.innerHTML;
-    
-    // 1. Validação Básica
-    if (!idInput.value || !senhaInput.value) {
-        alert("Por favor, preencha seu ID e Senha.");
-        return;
-    }
+    entrar: async function() {
+        const idInput = document.getElementById('login-id');
+        const senhaInput = document.getElementById('login-senha');
+        const btn = document.querySelector('button');
+        const msgErro = document.getElementById('msg-erro');
 
-    // 2. Prepara os dados
-    const idUsuario = parseInt(idInput.value.trim());
-    const senhaUsuario = senhaInput.value;
+        const id = idInput.value.trim();
+        const senha = senhaInput.value.trim();
 
-    if (isNaN(idUsuario)) {
-        alert("O ID deve ser apenas números.");
-        return;
-    }
-
-    try {
-        // Estado de Carregamento
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Validando...';
-        btn.disabled = true;
-
-        console.log("Tentando logar com ID:", idUsuario);
-
-        // 3. Chama o Supabase (Função RPC)
-        const { data, error } = await Sistema.supabase
-            .rpc('api_login', { 
-                p_id: idUsuario, 
-                p_senha: senhaUsuario 
-            });
-
-        if (error) throw error;
-
-        // 4. Sucesso
-        if (data && data.length > 0) {
-            const usuario = data[0];
-            console.log("Login Sucesso:", usuario.nome);
-            
-            // [CORREÇÃO 1] Salva com o nome que o sistema.js espera ('usuario_logado')
-            localStorage.setItem('usuario_logado', JSON.stringify(usuario));
-            
-            // [CORREÇÃO 2] Redirecionamento Inteligente
-            // Se for sistema.html (que não existe), manda para a dashboard correta
-            if (usuario.nivel_acesso === 'admin') {
-                window.location.href = 'gestao.html'; // Página de Gestão para Admins
-            } else {
-                window.location.href = 'minha_area.html'; // Página Padrão para Usuários
-            }
-        } else {
-            throw new Error("Usuário não retornado pelo banco.");
+        if (!id || !senha) {
+            this.mostrarErro('Preencha todos os campos.');
+            return;
         }
 
-    } catch (erro) {
-        console.error("Erro Login:", erro);
-        
-        let msg = erro.message || "Erro desconhecido";
-        if (msg.includes("ID incorreto")) msg = "ID não encontrado.";
-        if (msg.includes("Senha incorreta")) msg = "Senha incorreta.";
-        if (msg.includes("crypt")) msg = "Erro de criptografia no banco.";
+        // Feedback Visual
+        const textoOriginal = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
+        btn.disabled = true;
+        msgErro.classList.add('hidden');
 
-        alert("Falha ao entrar: " + msg);
-        
-        // Reseta o botão
-        btn.innerHTML = originalBtnText;
-        btn.disabled = false;
-    }
-}
+        try {
+            // --- CRIPTOGRAFIA ATIVADA 🔒 ---
+            // O frontend gera o Hash e envia apenas o Hash para a API.
+            // A senha real nunca viaja "pura" pela rede, exceto na criação do hash local.
+            const senhaHash = await Sistema.gerarHash(senha);
 
-// Garante que o enter funcione
-document.addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-        entrar();
+            const { data, error } = await Sistema.supabase.rpc('api_login', { 
+                p_id: parseInt(id), 
+                p_senha: senhaHash 
+            });
+
+            if (error) throw error;
+
+            // Sucesso
+            Sistema.salvarSessao(data);
+            window.location.href = 'minha_area.html';
+
+        } catch (error) {
+            console.error("Erro Login:", error);
+            
+            if (error.code === 'P0001') {
+                this.mostrarErro('Senha incorreta.');
+            } else if (error.code === 'P0002') {
+                this.mostrarErro('Usuário não encontrado.');
+            } else if (error.code === 'P0003') {
+                this.mostrarErro('Usuário inativo. Contate a gestão.');
+            } else {
+                this.mostrarErro('Erro ao conectar. Tente novamente.');
+            }
+        } finally {
+            btn.innerHTML = textoOriginal;
+            btn.disabled = false;
+        }
+    },
+
+    mostrarErro: function(msg) {
+        const el = document.getElementById('msg-erro');
+        el.innerText = msg;
+        el.classList.remove('hidden');
     }
-});
+};
+
+// Inicializa
+Login.init();
