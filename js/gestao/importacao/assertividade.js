@@ -4,30 +4,16 @@ Importacao.Assertividade = {
     BATCH_SIZE: 500,
     CONCURRENCY: 1,
 
-    // Converte DD/MM/YYYY para YYYY-MM-DD (Obrigatório para PostgreSQL)
-    formatarDataISO: function(dataStr) {
-        if (!dataStr || dataStr.trim() === "") return null;
-        const partes = dataStr.trim().split('/');
-        if (partes.length === 3) {
-            // Garante que o ano tenha 4 dígitos e mês/dia tenham 2
-            const dia = partes[0].padStart(2, '0');
-            const mes = partes[1].padStart(2, '0');
-            const ano = partes[2];
-            return `${ano}-${mes}-${dia}`;
-        }
-        return null;
-    },
-
-    limparDado: function(val, isNumeric = false) {
+    // Limpeza profunda: Garante que Nulo seja Nulo e remove espaços
+    limpar: function(val, numeric = false) {
         if (val === undefined || val === null) return null;
-        const str = String(val).trim();
-        if (str === "" || str.toLowerCase() === "nan") return null;
-
-        if (isNumeric) {
-            const num = parseFloat(str.replace('%', '').replace(',', '.'));
-            return isNaN(num) ? null : num;
+        const s = String(val).trim();
+        if (s === "" || s.toLowerCase() === "nan" || s.toLowerCase() === "null") return null;
+        if (numeric) {
+            const n = parseFloat(s.replace('%', '').replace(',', '.'));
+            return isNaN(n) ? null : n;
         }
-        return str;
+        return s;
     },
 
     processarArquivo: function(input) {
@@ -56,75 +42,80 @@ Importacao.Assertividade = {
         const listaParaSalvar = [];
         const cacheIds = new Set();
 
+        console.log("⚙️ Extraindo datas e mapeando colunas...");
+
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
-            const idPpc = this.limparDado(linha['ID PPC']);
+            const idPpc = this.limpar(linha['ID PPC']);
             if (!idPpc) continue;
 
             if (cacheIds.has(idPpc)) continue;
             cacheIds.add(idPpc);
 
-            // Tratamento de Data via end_time (Dashboard)
+            // --- CORREÇÃO DA DATA (data_referencia) ---
+            // Pegamos o end_time (2025-12-01T...) e cortamos apenas os 10 primeiros caracteres (2025-12-01)
             let dataRef = null;
-            if (linha['end_time']) {
-                const d = new Date(linha['end_time']);
-                if (!isNaN(d.getTime())) dataRef = d.toISOString().split('T')[0];
+            const rawEndTime = this.limpar(linha['end_time']);
+            if (rawEndTime && rawEndTime.length >= 10) {
+                dataRef = rawEndTime.substring(0, 10); 
             }
 
-            // CORREÇÃO DO ERRO OUT OF RANGE: Formata Data da Auditoria
-            const dataAuditoriaISO = this.formatarDataISO(linha['Data da Auditoria ']);
+            // Formatação da Data da Auditoria (DD/MM/YYYY -> YYYY-MM-DD)
+            let dataAudit = null;
+            const rawAudit = this.limpar(linha['Data da Auditoria ']);
+            if (rawAudit && rawAudit.includes('/')) {
+                const p = rawAudit.split('/');
+                if (p.length === 3) dataAudit = `${p[2]}-${p[1]}-${p[0]}`;
+            }
 
             listaParaSalvar.push({
                 id_ppc: idPpc,
-                data_referencia: dataRef,
-                end_time: linha['end_time'],
+                data_referencia: dataRef, // Agora salva apenas '2025-12-01'
+                end_time: rawEndTime,
+                data_auditoria: dataAudit,
                 
-                // Mapeamento das colunas numéricas corrigido
-                empresa_id: this.limparDado(linha['Company_id']),
-                empresa: this.limparDado(linha['Empresa']),
-                obs: this.limparDado(linha['Apontamentos/obs']),
-                observacao: this.limparDado(linha['Apontamentos/obs']),
-                num_campos: this.limparDado(linha['nº Campos'], true),
-                campos: this.limparDado(linha['nº Campos'], true),
-                qtd_ok: this.limparDado(linha['Ok'], true),
-                ok: this.limparDado(linha['Ok'], true),
-                qtd_nok: this.limparDado(linha['Nok'], true),
-                nok: this.limparDado(linha['Nok'], true),
-                
-                assistente: this.limparDado(linha['Assistente']),
-                nome_assistente: this.limparDado(linha['Assistente']),
-                doc_name: this.limparDado(linha['doc_name']),
-                status: this.limparDado(linha['STATUS']),
-                
-                // Auditora RIGOROSA: Nulo se vazio
-                auditora: this.limparDado(linha['Auditora']), 
-                nome_auditora_raw: this.limparDado(linha['Auditora']),
-                
-                porcentagem: this.limparDado(linha['% Assert'], true),
-                
-                // Data formatada para YYYY-MM-DD
-                data_auditoria: dataAuditoriaISO,
-                
-                qtd_validados: this.limparDado(linha['Quantidade_documentos_validados'], true)
+                // Id da empresa e Empresa
+                empresa_id: this.limpar(linha['Company_id']),
+                empresa: this.limpar(linha['Empresa']),
+
+                // Observação (Mapeia para os dois nomes possíveis no banco)
+                obs: this.limpar(linha['Apontamentos/obs']),
+                observacao: this.limpar(linha['Apontamentos/obs']),
+
+                // Campos, Ok, Nok (Garante que vazios sejam NULL)
+                num_campos: this.limpar(linha['nº Campos'], true),
+                campos: this.limpar(linha['nº Campos'], true),
+                qtd_ok: this.limpar(linha['Ok'], true),
+                ok: this.limpar(linha['Ok'], true),
+                qtd_nok: this.limpar(linha['Nok'], true),
+                nok: this.limpar(linha['Nok'], true),
+
+                // Assistente e Auditora (Rigoroso contra vazios)
+                assistente: this.limpar(linha['Assistente']),
+                nome_assistente: this.limpar(linha['Assistente']),
+                auditora: this.limpar(linha['Auditora']),
+                nome_auditora_raw: this.limpar(linha['Auditora']),
+
+                doc_name: this.limpar(linha['doc_name']),
+                status: this.limpar(linha['STATUS']),
+                porcentagem: this.limpar(linha['% Assert'], true),
+                qtd_validados: this.limpar(linha['Quantidade_documentos_validados'], true)
             });
         }
         await this.enviarLotes(listaParaSalvar);
     },
 
     enviarLotes: async function(dados) {
-        for (let i = 0; i < dados.length; i += this.BATCH_SIZE) {
+        const total = dados.length;
+        for (let i = 0; i < total; i += this.BATCH_SIZE) {
             const lote = dados.slice(i, i + this.BATCH_SIZE);
             const { error } = await Sistema.supabase
                 .from('assertividade') 
                 .upsert(lote, { onConflict: 'id_ppc' });
 
-            if (error) {
-                console.error("❌ Falha no envio:", error.message);
-                // O erro "out of range" aparecerá aqui se a data ainda estiver errada
-            } else {
-                console.log(`✅ Lote enviado: ${Math.min(i + this.BATCH_SIZE, dados.length)} / ${dados.length}`);
-            }
+            if (error) console.error("❌ Erro no lote:", error.message);
+            else console.log(`✅ Sucesso: ${Math.min(i + this.BATCH_SIZE, total)} / ${total}`);
         }
-        alert("Importação Finalizada! Verifique as datas agora.");
+        alert("Importação Concluída! Datas e Auditoras corrigidas.");
     }
 };
