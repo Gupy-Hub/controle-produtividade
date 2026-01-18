@@ -8,7 +8,7 @@ Gestao.Importacao.Usuarios = {
 
         // Feedback Visual no Botão
         const parentDiv = input.closest('div'); 
-        const btnImportar = parentDiv ? parentDiv.querySelector('button') : null; // Pega o botão "Importar"
+        const btnImportar = parentDiv ? parentDiv.querySelector('button') : null;
         let originalText = '';
         
         if (btnImportar) {
@@ -19,7 +19,6 @@ Gestao.Importacao.Usuarios = {
         }
 
         try {
-            // Usa o PapaParse diretamente para ler o CSV
             Papa.parse(file, {
                 header: true,
                 skipEmptyLines: true,
@@ -48,18 +47,16 @@ Gestao.Importacao.Usuarios = {
     },
 
     processarDados: async function(linhas) {
-        console.log(`📊 Processando ${linhas.length} usuários...`);
-        const listaUpsert = [];
+        console.log(`📊 Linhas brutas encontradas: ${linhas.length}`);
         
-        // Hash padrão para senha inicial (ex: gupy123)
-        // Como o login é por ID, definimos uma senha padrão para todos inicialmente
+        // --- DEDUPLICAÇÃO (A Mágica acontece aqui) ---
+        // Usamos um Map onde a Chave é o ID. 
+        // Se o ID aparecer de novo, o Map sobrescreve, garantindo unicidade.
+        const mapUsuarios = new Map();
         const senhaPadraoHash = "gupy123"; 
 
         for (const row of linhas) {
-            // Mapeamento das colunas do CSV
-            // CSV Header: ID ASSISTENTE, NOME ASSIST, CONTRATO, SITUAÇÃO
-            
-            // Tratamento de chaves (remove espaços e poe minusculo para garantir)
+            // Tratamento de chaves (flexibilidade para cabeçalhos)
             const getVal = (key) => {
                 const val = row[key] || row[key.toUpperCase()] || '';
                 return val.toString().trim();
@@ -70,17 +67,17 @@ Gestao.Importacao.Usuarios = {
             const contratoRaw = getVal('CONTRATO').toUpperCase();
             const situacaoRaw = getVal('SITUAÇÃO').toUpperCase();
 
-            if (!idRaw || !nomeRaw) continue; // Pula vazios
+            if (!idRaw || !nomeRaw) continue; // Pula linhas inválidas
 
-            const id = parseInt(idRaw); // ID do CSV vira o ID do Banco
+            const id = parseInt(idRaw);
             const ativo = situacaoRaw === 'ATIVO';
             
-            // Definição de Função baseada no Contrato/Nome
             let funcao = 'ASSISTENTE';
             if (contratoRaw.includes('AUDITORA')) funcao = 'AUDITORA';
             if (contratoRaw.includes('GESTORA')) funcao = 'GESTORA';
 
-            listaUpsert.push({
+            // Adiciona ao Map (Se o ID já existir, ele atualiza com os dados desta linha)
+            mapUsuarios.set(id, {
                 id: id,
                 nome: nomeRaw,
                 contrato: contratoRaw,
@@ -90,21 +87,25 @@ Gestao.Importacao.Usuarios = {
             });
         }
 
+        // Converte o Map de volta para lista (agora sem duplicatas)
+        const listaUpsert = Array.from(mapUsuarios.values());
+
+        console.log(`📉 Reduzido para ${listaUpsert.length} usuários únicos.`);
+
         if (listaUpsert.length > 0) {
-            // Envio em lotes para não travar
             const { error } = await Sistema.supabase
                 .from('usuarios')
-                .upsert(listaUpsert, { onConflict: 'id' }); // Atualiza se ID já existir
+                .upsert(listaUpsert, { onConflict: 'id' }); 
 
             if (error) {
                 console.error("Erro Supabase:", error);
                 alert("Erro ao salvar no banco: " + error.message);
             } else {
-                alert(`✅ Sucesso! ${listaUpsert.length} usuários importados/atualizados.`);
-                if (Gestao.Usuarios) Gestao.Usuarios.carregar(); // Atualiza a tela
+                alert(`✅ Sucesso! ${listaUpsert.length} usuários importados (sem duplicatas).`);
+                if (Gestao.Usuarios) Gestao.Usuarios.carregar(); 
             }
         } else {
-            alert("Nenhum dado válido encontrado nas colunas esperadas (ID ASSISTENTE, NOME ASSIST).");
+            alert("Nenhum dado válido encontrado.");
         }
     }
 };
