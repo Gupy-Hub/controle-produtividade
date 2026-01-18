@@ -10,19 +10,47 @@ Produtividade.Assertividade = {
         this.carregar();
     },
 
-    carregar: async function() {
-        // 1. Pega datas do filtro global (sistema.js)
-        const datas = Sistema.getPeriodo(); // { inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' }
+    // --- FUNÇÃO QUE FALTAVA (Correção do Erro) ---
+    // Chamada pelo geral.js para formatar a célula na tabela principal
+    renderizarCelula: function(valor) {
+        // Trata input
+        let valNum = 0;
+        if (typeof valor === 'number') valNum = valor;
+        else if (typeof valor === 'string') valNum = parseFloat(valor.replace('%','').replace(',','.'));
         
-        // Elementos de UI
+        if (isNaN(valNum)) valNum = 0;
+
+        // Lógica de Cores (Meta padrão 98%)
+        let classeCor = 'bg-rose-100 text-rose-700 border-rose-200';
+        let icone = '<i class="fas fa-times-circle"></i>';
+
+        if (valNum >= 98) {
+            classeCor = 'bg-emerald-100 text-emerald-700 border-emerald-200';
+            icone = '<i class="fas fa-check-circle"></i>';
+        } else if (valNum >= 95) {
+            classeCor = 'bg-amber-100 text-amber-700 border-amber-200';
+            icone = '<i class="fas fa-exclamation-circle"></i>';
+        }
+
+        return `
+            <div class="flex items-center justify-center">
+                <span class="${classeCor} border px-2 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                    ${icone} ${valNum.toFixed(2)}%
+                </span>
+            </div>
+        `;
+    },
+
+    carregar: async function() {
+        // 1. Pega datas do filtro global
+        const datas = Sistema.getPeriodo();
+        
         const containerKPI = document.getElementById('kpi-assertividade-container');
-        const containerGraficos = document.getElementById('graficos-assertividade-container');
         
         if(containerKPI) containerKPI.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin text-blue-500"></i> Carregando dados...</div>';
 
         try {
-            // 2. Busca no Supabase (assertividade)
-            // Trazemos tudo do período para processar no JS
+            // 2. Busca no Supabase
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
@@ -36,10 +64,10 @@ Produtividade.Assertividade = {
                 return;
             }
 
-            // 3. Processamento dos Dados (Correção dos problemas do diagnóstico)
+            // 3. Processamento
             const stats = this.processarDados(data);
 
-            // 4. Renderiza KPI e Gráficos
+            // 4. Renderiza Componentes Internos (Aba Detalhada)
             this.renderizarKPIs(stats);
             this.renderizarGraficoEvolucao(stats.porDia);
             this.renderizarGraficoRanking(stats.porAssistente);
@@ -47,7 +75,7 @@ Produtividade.Assertividade = {
 
         } catch (erro) {
             console.error("Erro ao carregar assertividade:", erro);
-            if(containerKPI) containerKPI.innerHTML = '<div class="text-red-500 p-4">Erro ao carregar dados. Verifique o console.</div>';
+            if(containerKPI) containerKPI.innerHTML = '<div class="text-red-500 p-4">Erro ao carregar dados.</div>';
         }
     },
 
@@ -60,15 +88,12 @@ Produtividade.Assertividade = {
         const porDia = {};
         const porAssistente = {};
 
-        // Loop seguro tratando os tipos de dados
         dados.forEach(item => {
-            // --- CORREÇÃO 1: STATUS NULL ---
-            // Se status for nulo, deduzimos pelos contadores de erro
+            // Tratamento de nulos e strings
             const nNok = Number(item.qtd_nok || item.nok || 0);
             const nOk = Number(item.qtd_ok || item.ok || 0);
             const nCampos = Number(item.num_campos || item.campos || (nOk + nNok));
             
-            // --- CORREÇÃO 2: PORCENTAGEM STRING ---
             let pct = 0;
             if (item.porcentagem !== undefined && item.porcentagem !== null) {
                 if (typeof item.porcentagem === 'string') {
@@ -77,36 +102,32 @@ Produtividade.Assertividade = {
                     pct = Number(item.porcentagem);
                 }
             } else {
-                // Se não tem porcentagem, calcula na hora
                 pct = nCampos > 0 ? ((nCampos - nNok) / nCampos) * 100 : 100;
             }
 
-            // Acumuladores Globais
             totalDocs++;
             totalCampos += nCampos;
             totalErros += nNok;
             somaPorcentagem += pct;
 
-            // --- CORREÇÃO 3: DATA ISO ---
-            // O banco manda YYYY-MM-DD. O gráfico quer DD/MM.
+            // Data
             let dia = 'N/A';
             if (item.data_auditoria) {
-                // Pega só a parte da data, ignorando hora se houver
                 const dataIso = item.data_auditoria.split('T')[0]; 
-                const partes = dataIso.split('-'); // [2025, 12, 31]
+                const partes = dataIso.split('-'); 
                 if (partes.length === 3) {
-                    dia = `${partes[2]}/${partes[1]}`; // 31/12
+                    dia = `${partes[2]}/${partes[1]}`;
                 }
             }
 
-            // Agrupamento por Dia
+            // Agrupamento Dia
             if (!porDia[dia]) porDia[dia] = { total: 0, erros: 0, somaPct: 0, docs: 0 };
             porDia[dia].total += nCampos;
             porDia[dia].erros += nNok;
             porDia[dia].somaPct += pct;
             porDia[dia].docs++;
 
-            // Agrupamento por Assistente
+            // Agrupamento Assistente
             const nomeAssistente = item.nome_assistente || item.assistente || 'Desconhecido';
             if (!porAssistente[nomeAssistente]) porAssistente[nomeAssistente] = { docs: 0, erros: 0, somaPct: 0 };
             porAssistente[nomeAssistente].docs++;
@@ -114,7 +135,6 @@ Produtividade.Assertividade = {
             porAssistente[nomeAssistente].somaPct += pct;
         });
 
-        // Cálculo das Médias Finais
         const mediaGeral = totalDocs > 0 ? (somaPorcentagem / totalDocs).toFixed(2) : 0;
 
         return {
@@ -124,12 +144,11 @@ Produtividade.Assertividade = {
             mediaGeral,
             porDia,
             porAssistente,
-            listaCompleta: dados // Passa os dados brutos se precisar de tabela
+            listaCompleta: dados
         };
     },
 
     renderizarKPIs: function(stats) {
-        // Atualiza os cards da tela (se existirem os IDs)
         const setTxt = (id, val) => {
             const el = document.getElementById(id);
             if(el) el.innerText = val;
@@ -139,7 +158,6 @@ Produtividade.Assertividade = {
         setTxt('kpi-assert-erros', stats.totalErros);
         setTxt('kpi-assert-media', stats.mediaGeral + '%');
         
-        // Cor dinâmica para a média
         const elMedia = document.getElementById('kpi-assert-media');
         if(elMedia) {
             elMedia.className = parseFloat(stats.mediaGeral) >= 98 
@@ -154,7 +172,6 @@ Produtividade.Assertividade = {
 
         if (this.chartEvolucao) this.chartEvolucao.destroy();
 
-        // Ordena dias (DD/MM)
         const labels = Object.keys(dadosPorDia).sort((a,b) => {
             const [d1, m1] = a.split('/');
             const [d2, m2] = b.split('/');
@@ -173,7 +190,7 @@ Produtividade.Assertividade = {
                 datasets: [{
                     label: 'Assertividade Média (%)',
                     data: data,
-                    borderColor: '#10b981', // Emerald
+                    borderColor: '#10b981',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     borderWidth: 2,
                     fill: true,
@@ -183,9 +200,7 @@ Produtividade.Assertividade = {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: {
-                    y: { min: 80, max: 100 } // Foca na parte superior da escala
-                }
+                scales: { y: { min: 80, max: 100 } }
             }
         });
     },
@@ -196,14 +211,13 @@ Produtividade.Assertividade = {
 
         if (this.chartRanking) this.chartRanking.destroy();
 
-        // Converte para array e ordena por assertividade (melhor -> pior)
         const ranking = Object.entries(dadosPorAssistente)
             .map(([nome, d]) => ({
                 nome,
                 media: (d.somaPct / d.docs).toFixed(2)
             }))
             .sort((a, b) => b.media - a.media)
-            .slice(0, 10); // Top 10
+            .slice(0, 10);
 
         this.chartRanking = new Chart(ctx, {
             type: 'bar',
@@ -220,21 +234,16 @@ Produtividade.Assertividade = {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                scales: {
-                    x: { min: 90, max: 100 }
-                }
+                scales: { x: { min: 90, max: 100 } }
             }
         });
     },
 
     renderizarVazio: function() {
-        // Limpa KPIs e mostra msg
         ['kpi-assert-docs', 'kpi-assert-erros', 'kpi-assert-media'].forEach(id => {
             const el = document.getElementById(id);
             if(el) el.innerText = '-';
         });
-        
-        // Se quiser limpar os gráficos visualmente
         if (this.chartEvolucao) this.chartEvolucao.destroy();
         if (this.chartRanking) this.chartRanking.destroy();
     },
@@ -245,7 +254,7 @@ Produtividade.Assertividade = {
         
         tbody.innerHTML = '';
         
-        // Pega os últimos 20 erros para mostrar na tabela (foco em problemas)
+        // Filtra erros
         const erros = lista
             .filter(d => (Number(d.qtd_nok) > 0 || String(d.status) === 'NOK'))
             .sort((a,b) => new Date(b.data_auditoria) - new Date(a.data_auditoria))
