@@ -14,7 +14,7 @@ Produtividade.Consolidado = {
     PADRAO_HC: 17,
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando V6 (Padrão HC 17 Fixo)...");
+        console.log("🔧 Consolidado: Iniciando V7 (Tooltip Detalhado)...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
@@ -79,7 +79,6 @@ Produtividade.Consolidado = {
         }
 
         // 2. SMART RESET: Se for igual ao PADRÃO (17), remove override
-        // O sistema agora considera 17 como o "automático/original"
         if (val === this.PADRAO_HC) {
             delete this.overridesHC[colIndex];
             this.salvarEstado();
@@ -252,7 +251,6 @@ Produtividade.Consolidado = {
         // Loop das Colunas (Semana/Mes/Dia)
         cols.forEach((c, index) => {
             const colIdx = index + 1;
-            // PADRÃO 17 SEMPRE
             const autoCount = this.PADRAO_HC; 
             headerHTML += `<th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span><input type="number" value="${this.overridesHC[colIdx]?.valor || ''}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 border"></div></th>`;
         });
@@ -268,22 +266,34 @@ Produtividade.Consolidado = {
             [...Array(numCols).keys()].map(i => i + 1).concat(99).forEach(i => {
                 const s = st[i];
                 
-                // --- LÓGICA DE OURO: PADRÃO 17 ---
-                const autoCount = this.PADRAO_HC;
+                // === LÓGICA DE DETALHAMENTO DO TOOLTIP ===
+                
+                // 1. O que o sistema encontrou nos dados?
+                const foundBySystem = s.users.size || 0;
+                
+                // 2. Qual é a regra fixa?
+                const standardHC = this.PADRAO_HC;
+                
+                // 3. Existe alteração manual?
                 const override = this.overridesHC[i];
-                const HF = override ? override.valor : autoCount; // Usa 17 se não tiver override
+                
+                // 4. Valor final para cálculo (Manual ou Padrão)
+                const HF = override ? override.valor : standardHC;
                 
                 const val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
-                
                 let cellHTML = (val !== undefined && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
                 
                 if (label === 'Total de assistentes') {
                     if (override) {
-                        const tooltip = `Padrão: ${autoCount} | Motivo: ${override.motivo}`;
+                        // CENÁRIO: Teve alteração
+                        // Tooltip: Mostra Padrão, Encontrado e Motivo
+                        const tooltip = `Padrão: ${standardHC} | Sistema encontrou: ${foundBySystem} | Motivo: ${override.motivo}`;
                         cellHTML = `<span title="${tooltip}" class="cursor-help text-amber-600 font-bold decoration-dotted underline decoration-amber-400 bg-amber-50 px-1 rounded transition hover:bg-amber-100 hover:text-amber-800">${cellHTML}</span>`;
                     } else {
-                        // Mostra o 17 limpo
-                        cellHTML = `<span title="Padrão do Sistema" class="cursor-default text-slate-500">${cellHTML}</span>`;
+                        // CENÁRIO: Padrão (17)
+                        // Tooltip: Mostra Padrão e o que o Sistema Encontrou (só a título de informação)
+                        const tooltip = `Padrão: ${standardHC} | Sistema encontrou: ${foundBySystem}`;
+                        cellHTML = `<span title="${tooltip}" class="cursor-help text-slate-500 border-b border-transparent hover:border-slate-300">${cellHTML}</span>`;
                     }
                 }
                 
@@ -304,7 +314,6 @@ Produtividade.Consolidado = {
         rows += mkRow('Média validação diária Por Assistentes', 'fas fa-user-tag', 'text-pink-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / d / HF : 0, true);
         
         tbody.innerHTML = rows;
-        // Totalizador no rodapé também mostra o que foi usado (soma ou 17? Geralmente o consolidado é 17)
         document.getElementById('total-consolidado-footer').innerText = this.overridesHC[99]?.valor || this.PADRAO_HC;
     }
 };
