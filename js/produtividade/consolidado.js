@@ -9,17 +9,17 @@ Produtividade.Consolidado = {
     overridesHC: {}, 
     dadosCalculados: null, 
     monthToColMap: null,
+    
+    // CONFIGURAÇÃO: Headcount Padrão definido pela regra de negócio
+    PADRAO_HC: 17,
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando V5 (Persistência Local)...");
+        console.log("🔧 Consolidado: Iniciando V6 (Padrão HC 17 Fixo)...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
 
-    // --- NOVO: GERENCIAMENTO DE ESTADO (MEMÓRIA) ---
-    
     getStorageKey: function(t, s, e) {
-        // Cria uma chave única para o período selecionado (ex: mes_2025-12-01_2025-12-31)
         return `gupy_consolidado_hc_${t}_${s}_${e}`;
     },
 
@@ -29,25 +29,20 @@ Produtividade.Consolidado = {
         if (salvo) {
             try {
                 this.overridesHC = JSON.parse(salvo);
-                console.log(`📥 Configurações de HC carregadas para ${t}`);
             } catch(e) { console.error("Erro ao ler estado", e); }
         } else {
-            this.overridesHC = {}; // Limpa se não tiver nada salvo para este período
+            this.overridesHC = {}; 
         }
     },
 
     salvarEstado: function() {
-        // Pega o contexto atual para salvar
         const datas = Produtividade.getDatasFiltro();
         let t = Produtividade.filtroPeriodo || 'mes';
         if (t === 'semana') t = 'dia';
         
         const key = this.getStorageKey(t, datas.inicio, datas.fim);
         localStorage.setItem(key, JSON.stringify(this.overridesHC));
-        console.log("💾 Alterações de HC salvas.");
     },
-
-    // ------------------------------------------------
 
     getSemanasDoMes: function(year, month) {
         const weeks = [];
@@ -74,43 +69,41 @@ Produtividade.Consolidado = {
 
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
-
-        // 1. Validação: Se vazio/inválido, remove e salva
+        
+        // 1. Se inválido, volta para o padrão (deleta override)
         if (isNaN(val) || val <= 0) { 
             delete this.overridesHC[colIndex]; 
-            this.salvarEstado(); // <--- SALVAR
+            this.salvarEstado(); 
             this.renderizar(this.dadosCalculados); 
             return; 
         }
 
-        // 2. Smart Reset: Se igual ao sistema, remove e salva
-        const autoData = this.dadosCalculados?.st?.[colIndex];
-        const autoCount = autoData?.users?.size || 17; 
-        
-        if (val === autoCount) {
+        // 2. SMART RESET: Se for igual ao PADRÃO (17), remove override
+        // O sistema agora considera 17 como o "automático/original"
+        if (val === this.PADRAO_HC) {
             delete this.overridesHC[colIndex];
-            this.salvarEstado(); // <--- SALVAR
+            this.salvarEstado();
             this.renderizar(this.dadosCalculados);
             return;
         }
 
-        // 3. Se não mudou nada em relação ao manual anterior, sai
+        // 3. Verifica se houve mudança real no valor manual
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
         
-        // 4. Nova alteração: Pede Justificativa
+        // 4. Pede justificativa para sair do padrão 17
         await new Promise(r => setTimeout(r, 50));
         
-        const motivo = prompt(`O sistema calculou ${autoCount}. \nVocê está alterando para ${val}. \n\nQual o motivo? (Obrigatório):`);
+        const motivo = prompt(`O padrão é ${this.PADRAO_HC} assistentes. \nVocê está alterando para ${val}. \n\nQual o motivo? (Obrigatório):`);
         
         if (!motivo || motivo.trim() === "") { 
             alert("❌ Alteração cancelada: Justificativa obrigatória."); 
-            this.renderizar(this.dadosCalculados); // Reseta visualmente
+            this.renderizar(this.dadosCalculados); 
             return; 
         }
         
         this.overridesHC[colIndex] = { valor: val, motivo: motivo.trim() };
-        this.salvarEstado(); // <--- SALVAR
+        this.salvarEstado();
         
         if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
     },
@@ -142,18 +135,12 @@ Produtividade.Consolidado = {
         if (t === 'semana') t = 'dia';
 
         const cacheKey = `${t}_${s}_${e}`;
-        
-        // --- RECUPERA O ESTADO SALVO ANTES DE TUDO ---
         this.carregarEstado(t, s, e);
-        // ---------------------------------------------
 
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) { 
             this.processarEExibir(this.ultimoCache.data, t, s, e); 
             return; 
         }
-        
-        // Se mudou o período, o override já foi atualizado pelo carregarEstado acima
-        // Mas se for o primeiro load, garante que override está sincronizado
         
         if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
@@ -261,13 +248,18 @@ Produtividade.Consolidado = {
         if(!tbody || !hRow) return;
 
         let headerHTML = `<tr class="bg-slate-50 border-b border-slate-200"><th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
+        
+        // Loop das Colunas (Semana/Mes/Dia)
         cols.forEach((c, index) => {
             const colIdx = index + 1;
-            const autoCount = st[colIdx].users.size || 17;
-            // Usa o valor salvo se existir
+            // PADRÃO 17 SEMPRE
+            const autoCount = this.PADRAO_HC; 
             headerHTML += `<th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span><input type="number" value="${this.overridesHC[colIdx]?.valor || ''}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 border"></div></th>`;
         });
-        headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${this.overridesHC[99]?.valor || ''}" placeholder="(${st[99].users.size || 17})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border"></div></th></tr>`;
+        
+        // Coluna Total
+        const totalAuto = this.PADRAO_HC;
+        headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${this.overridesHC[99]?.valor || ''}" placeholder="(${totalAuto})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border"></div></th></tr>`;
         hRow.innerHTML = headerHTML;
 
         const mkRow = (label, icon, color, getter, isCalc=false, isBold=false) => {
@@ -275,9 +267,11 @@ Produtividade.Consolidado = {
             
             [...Array(numCols).keys()].map(i => i + 1).concat(99).forEach(i => {
                 const s = st[i];
-                const autoCount = s.users.size || 17;
+                
+                // --- LÓGICA DE OURO: PADRÃO 17 ---
+                const autoCount = this.PADRAO_HC;
                 const override = this.overridesHC[i];
-                const HF = override ? override.valor : autoCount;
+                const HF = override ? override.valor : autoCount; // Usa 17 se não tiver override
                 
                 const val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 
@@ -285,10 +279,11 @@ Produtividade.Consolidado = {
                 
                 if (label === 'Total de assistentes') {
                     if (override) {
-                        const tooltip = `Sistema encontrou: ${autoCount} | Motivo: ${override.motivo}`;
+                        const tooltip = `Padrão: ${autoCount} | Motivo: ${override.motivo}`;
                         cellHTML = `<span title="${tooltip}" class="cursor-help text-amber-600 font-bold decoration-dotted underline decoration-amber-400 bg-amber-50 px-1 rounded transition hover:bg-amber-100 hover:text-amber-800">${cellHTML}</span>`;
                     } else {
-                        cellHTML = `<span title="Calculado automaticamente" class="cursor-default text-slate-500">${cellHTML}</span>`;
+                        // Mostra o 17 limpo
+                        cellHTML = `<span title="Padrão do Sistema" class="cursor-default text-slate-500">${cellHTML}</span>`;
                     }
                 }
                 
@@ -309,6 +304,7 @@ Produtividade.Consolidado = {
         rows += mkRow('Média validação diária Por Assistentes', 'fas fa-user-tag', 'text-pink-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / d / HF : 0, true);
         
         tbody.innerHTML = rows;
-        document.getElementById('total-consolidado-footer').innerText = st[99].users.size;
+        // Totalizador no rodapé também mostra o que foi usado (soma ou 17? Geralmente o consolidado é 17)
+        document.getElementById('total-consolidado-footer').innerText = this.overridesHC[99]?.valor || this.PADRAO_HC;
     }
 };
