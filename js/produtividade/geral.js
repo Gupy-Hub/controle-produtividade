@@ -8,7 +8,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V24 (Correção Cards KPI)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V25 (KPIs Híbridos)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -31,7 +31,6 @@ Produtividade.Geral = {
         }
     },
 
-    // --- NOVO: Reseta os cards visualmente para dar feedback de carregamento ---
     resetarKPIs: function() {
         this.setTxt('kpi-validacao-real', '...');
         this.setTxt('kpi-validacao-esperado', '...');
@@ -42,33 +41,23 @@ Produtividade.Geral = {
         this.setTxt('kpi-media-real', '...');
         this.setTxt('kpi-media-esperada', '...');
         this.setTxt('kpi-dias-uteis', '...');
-        
-        // Zera as barras
-        const barVol = document.getElementById('bar-volume');
-        if(barVol) barVol.style.width = '0%';
-        const barCap = document.getElementById('bar-capacidade');
-        if(barCap) barCap.style.width = '0%';
-
-        // Limpa listas de destaque
-        const listProd = document.getElementById('top-prod-list');
-        if(listProd) listProd.innerHTML = '<span class="text-[10px] text-slate-300 italic">Carregando...</span>';
-        const listAssert = document.getElementById('top-assert-list');
-        if(listAssert) listAssert.innerHTML = '<span class="text-[10px] text-slate-300 italic">Carregando...</span>';
+        const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = '0%';
+        const barCap = document.getElementById('bar-capacidade'); if(barCap) barCap.style.width = '0%';
+        const listProd = document.getElementById('top-prod-list'); if(listProd) listProd.innerHTML = '<span class="text-[10px] text-slate-300 italic">Carregando...</span>';
+        const listAssert = document.getElementById('top-assert-list'); if(listAssert) listAssert.innerHTML = '<span class="text-[10px] text-slate-300 italic">Carregando...</span>';
     },
 
     carregarTela: async function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
 
-        // 1. Feedback visual imediato
         this.resetarKPIs();
         this.updateHeader();
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Buscando dados...</td></tr>`;
 
-        const datas = Produtividade.getDatasFiltro(); // Pega do main.js
+        const datas = Produtividade.getDatasFiltro(); 
         
         try {
-            // 2. Busca Dados
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: datas.inicio, 
@@ -77,19 +66,16 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
-            // 3. Busca Dias Ativos (para o KPI de Velocidade)
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: datas.inicio,
                     data_fim: datas.fim 
                 });
             
-            // Se não tiver dias (ex: futuro), assume 1 pra não quebrar divisão, mas o visual tratará
             this.diasAtivosGlobal = (diasReais && diasReais > 0) ? diasReais : 0; 
 
-            console.log(`✅ [GupyMesa] Dados recebidos: ${data.length} registros. Dias Ativos: ${this.diasAtivosGlobal}`);
+            console.log(`✅ [GupyMesa] Dados recebidos: ${data.length} registros.`);
 
-            // 4. Mapeia dados
             this.dadosOriginais = data.map(row => ({
                 usuario: {
                     id: row.usuario_id,
@@ -113,7 +99,6 @@ Produtividade.Geral = {
                 }
             }));
             
-            // 5. Aplica filtro existente (se houver) ou renderiza tudo
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
                 this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
@@ -125,7 +110,7 @@ Produtividade.Geral = {
         } catch (error) { 
             console.error("[GupyMesa] Erro:", error); 
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
-            this.setTxt('kpi-validacao-real', 'Erro'); // Atualiza card para mostrar erro
+            this.setTxt('kpi-validacao-real', 'Erro');
         }
     },
 
@@ -226,6 +211,7 @@ Produtividade.Geral = {
         }
         this.renderizarTabela();
         const dadosUser = this.dadosOriginais.filter(d => d.usuario.id == id);
+        // Quando filtra um user, passamos true, então ele entra nas contas de média
         this.atualizarKPIsGlobal(dadosUser, true); 
     },
 
@@ -237,74 +223,83 @@ Produtividade.Geral = {
         this.atualizarKPIsGlobal(this.dadosOriginais, false);
     },
 
+    // --- CORAÇÃO DO AJUSTE: KPIs HÍBRIDOS ---
     atualizarKPIsGlobal: function(dados, isFiltrado) {
-        let totalProd = 0, totalMeta = 0;
-        let somaNotasGlobal = 0, qtdAuditoriasGlobal = 0;
-        let manDays = 0; 
-        let ativosCount = 0;
+        // Acumuladores GERAIS (Volume Total = Todo mundo)
+        let totalProdGeral = 0;
+        let totalMetaGeral = 0;
 
-        // Se não tiver dados, reseta tudo para 0 e sai
+        // Acumuladores RESTRITOS (Média/Capacidade = Só Assistentes)
+        let totalProdAssistentes = 0;
+        let totalMetaAssistentes = 0;
+        let manDaysAssistentes = 0;
+        let ativosCountAssistentes = 0;
+        
+        // Qualidade (Também vou restringir a média de qualidade às assistentes para ser justo)
+        let somaNotasAssistentes = 0;
+        let qtdAuditoriasAssistentes = 0;
+
         if (!dados || dados.length === 0) {
-            this.setTxt('kpi-validacao-real', '0');
-            this.setTxt('kpi-validacao-esperado', '0');
-            this.setTxt('kpi-meta-assertividade-val', '0%');
-            this.setTxt('kpi-meta-producao-val', '0%');
-            this.setTxt('kpi-capacidade-pct', '0%');
-            this.setTxt('kpi-capacidade-info', '0/17');
-            this.setTxt('kpi-media-real', '0');
-            this.setTxt('kpi-media-esperada', '0');
-            this.setTxt('kpi-dias-uteis', '0');
-            const barVol = document.getElementById('bar-volume'); if(barVol) barVol.style.width = '0%';
-            const barCap = document.getElementById('bar-capacidade'); if(barCap) barCap.style.width = '0%';
-            const listProd = document.getElementById('top-prod-list'); if(listProd) listProd.innerHTML = '';
-            const listAssert = document.getElementById('top-assert-list'); if(listAssert) listAssert.innerHTML = '';
+            this.resetarKPIs();
             return;
         }
 
         dados.forEach(d => {
-            const isAssistente = !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase());
+            const funcao = (d.usuario.funcao || '').toUpperCase();
+            const isAssistente = !['AUDITORA', 'GESTORA'].includes(funcao);
+            
+            const diasUser = Number(d.totais.diasUteis);
+            const prodUser = Number(d.totais.qty);
+            const metaUser = Number(d.meta_real) * diasUser;
+
+            // 1. VOLUME: Soma SEMPRE (Assistentes + Auditoras + Gestoras)
+            totalProdGeral += prodUser;
+            totalMetaGeral += metaUser;
+
+            // 2. MÉDIA/CAPACIDADE: Soma SÓ se for Assistente (ou se estiver filtrado especificamente)
             if (isAssistente || isFiltrado) {
-                ativosCount++;
-                const diasUser = Number(d.totais.diasUteis);
-                manDays += diasUser;
-                totalProd += Number(d.totais.qty);
-                totalMeta += (Number(d.meta_real) * diasUser);
-                somaNotasGlobal += Number(d.auditoria.soma || 0);
-                qtdAuditoriasGlobal += Number(d.auditoria.qtd || 0);
+                ativosCountAssistentes++;
+                manDaysAssistentes += diasUser;
+                totalProdAssistentes += prodUser;
+                totalMetaAssistentes += metaUser;
+                
+                somaNotasAssistentes += Number(d.auditoria.soma || 0);
+                qtdAuditoriasAssistentes += Number(d.auditoria.qtd || 0);
             }
         });
 
-        // 1. VOLUME
-        this.setTxt('kpi-validacao-real', totalProd.toLocaleString('pt-BR'));
-        this.setTxt('kpi-validacao-esperado', totalMeta.toLocaleString('pt-BR'));
+        // --- RENDERIZAÇÃO ---
+
+        // 1. CARD VOLUME (Usa os totais GERAIS)
+        this.setTxt('kpi-validacao-real', totalProdGeral.toLocaleString('pt-BR'));
+        this.setTxt('kpi-validacao-esperado', totalMetaGeral.toLocaleString('pt-BR'));
         
         const barVol = document.getElementById('bar-volume');
-        if(barVol) barVol.style.width = totalMeta > 0 ? Math.min((totalProd/totalMeta)*100, 100) + '%' : '0%';
+        if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
-        // 2. QUALIDADE
-        const mediaGlobalAssert = qtdAuditoriasGlobal > 0 ? (somaNotasGlobal / qtdAuditoriasGlobal) : 0;
+        // 2. CARD QUALIDADE (Usa os dados de ASSISTENTES)
+        const mediaGlobalAssert = qtdAuditoriasAssistentes > 0 ? (somaNotasAssistentes / qtdAuditoriasAssistentes) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
         
-        // Atingimento da Meta de Volume
-        this.setTxt('kpi-meta-producao-val', totalMeta > 0 ? ((totalProd/totalMeta)*100).toFixed(1) + '%' : '0%');
+        // % Atingimento da Meta (Baseado no Volume Geral vs Meta Geral)
+        this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
-        // 3. CAPACIDADE
-        const capacidadeTotalPadrao = 17; // Pode parametrizar depois
-        this.setTxt('kpi-capacidade-info', `${ativosCount}/${capacidadeTotalPadrao}`);
-        const capPct = (ativosCount / capacidadeTotalPadrao) * 100;
+        // 3. CARD CAPACIDADE (Usa contagem de ASSISTENTES)
+        const capacidadeTotalPadrao = 17; 
+        this.setTxt('kpi-capacidade-info', `${ativosCountAssistentes}/${capacidadeTotalPadrao}`);
+        const capPct = (ativosCountAssistentes / capacidadeTotalPadrao) * 100;
         this.setTxt('kpi-capacidade-pct', Math.round(capPct) + '%');
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        // 4. VELOCIDADE E DIAS
-        const divisor = manDays > 0 ? manDays : 1;
-        const velReal = Math.round(totalProd / divisor);
-        const velMeta = Math.round(totalMeta / divisor);
+        // 4. CARD VELOCIDADE (Usa produção/dias de ASSISTENTES)
+        const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
+        const velReal = Math.round(totalProdAssistentes / divisor);
+        const velMeta = Math.round(totalMetaAssistentes / divisor);
         this.setTxt('kpi-media-real', `${velReal}`);
         this.setTxt('kpi-media-esperada', `${velMeta}`);
         
-        // Ajuste inteligente do display de dias
-        // Se for filtro de dia específico, mostra "1". Se for mês, mostra quantos dias tiveram produção (ex: 20).
+        // Display de Dias Úteis
         let diasDisplay = this.diasAtivosGlobal;
         if (isFiltrado && dados.length > 0) {
             diasDisplay = dados[0].totais.diasUteis.toLocaleString('pt-BR');
@@ -317,14 +312,13 @@ Produtividade.Geral = {
     },
 
     renderTopLists: function(dados) {
+        // Top list remove gestão visualmente
         const op = dados.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         
-        // Top Produção
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
         if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
 
-        // Top Assertividade
         const topAssert = [...op]
             .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
             .filter(u => u.auditoria.qtd > 0)
