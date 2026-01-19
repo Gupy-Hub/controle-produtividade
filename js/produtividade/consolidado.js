@@ -11,7 +11,7 @@ Produtividade.Consolidado = {
     monthToColMap: null,
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando V3 (Tooltips de HC)...");
+        console.log("🔧 Consolidado: Iniciando V4 (Smart Reset de HC)...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
@@ -41,22 +41,37 @@ Produtividade.Consolidado = {
 
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
+
+        // 1. Validação básica: Se vazio ou inválido, remove alteração
         if (isNaN(val) || val <= 0) { 
             delete this.overridesHC[colIndex]; 
             this.renderizar(this.dadosCalculados); 
             return; 
         }
+
+        // 2. SMART RESET: Se o valor digitado for IGUAL ao do sistema, remove a alteração
+        // Assim volta a ficar "Original" (sem cor, sem justificativa)
+        const autoData = this.dadosCalculados?.st?.[colIndex];
+        const autoCount = autoData?.users?.size || 17; // Padrão 17 se falhar
+        
+        if (val === autoCount) {
+            delete this.overridesHC[colIndex];
+            this.renderizar(this.dadosCalculados);
+            return;
+        }
+
+        // 3. Se o valor for igual ao que já estava salvo manualmente, não faz nada
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
         
-        // Pequeno delay para UI não travar antes do prompt
+        // 4. Se for realmente uma alteração nova e diferente do sistema: Pede Justificativa
         await new Promise(r => setTimeout(r, 50));
         
-        const motivo = prompt(`Motivo da alteração para ${val} (Obrigatório):`);
+        const motivo = prompt(`O sistema calculou ${autoCount}. \nVocê está alterando para ${val}. \n\nQual o motivo? (Obrigatório):`);
+        
         if (!motivo || motivo.trim() === "") { 
-            alert("Justificativa obrigatória."); 
-            // Reseta o input visualmente renderizando de novo
-            this.renderizar(this.dadosCalculados); 
+            alert("❌ Alteração cancelada: Justificativa obrigatória."); 
+            this.renderizar(this.dadosCalculados); // Reseta visualmente
             return; 
         }
         
@@ -211,31 +226,24 @@ Produtividade.Consolidado = {
         headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${this.overridesHC[99]?.valor || ''}" placeholder="(${st[99].users.size || 17})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border"></div></th></tr>`;
         hRow.innerHTML = headerHTML;
 
-        // FUNÇÃO DE GERAÇÃO DE LINHA OTIMIZADA COM TOOLTIP
         const mkRow = (label, icon, color, getter, isCalc=false, isBold=false) => {
             let tr = `<tr class="${isBold ? 'bg-slate-50/50' : ''} border-b border-slate-100"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200"><div class="flex items-center gap-3"><i class="${icon} ${color} text-sm"></i><span class="text-xs uppercase ${isBold ? 'font-black' : 'font-medium'}">${label}</span></div></td>`;
             
             [...Array(numCols).keys()].map(i => i + 1).concat(99).forEach(i => {
                 const s = st[i];
-                
-                // Dados para cálculo de Headcount (HC)
-                const autoCount = s.users.size || 17; // Valor do sistema
-                const override = this.overridesHC[i]; // Objeto { valor, motivo } se existir
-                const HF = override ? override.valor : autoCount; // Valor final usado no cálculo
+                const autoCount = s.users.size || 17;
+                const override = this.overridesHC[i];
+                const HF = override ? override.valor : autoCount;
                 
                 const val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 
-                // --- LÓGICA DO TOOLTIP E VISUAL ---
                 let cellHTML = (val !== undefined && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
                 
-                // Só aplica a lógica especial se for a linha de "Total de assistentes"
                 if (label === 'Total de assistentes') {
                     if (override) {
-                        // Se foi alterado: Mostra tooltip com original + motivo e muda estilo
                         const tooltip = `Sistema encontrou: ${autoCount} | Motivo: ${override.motivo}`;
                         cellHTML = `<span title="${tooltip}" class="cursor-help text-amber-600 font-bold decoration-dotted underline decoration-amber-400 bg-amber-50 px-1 rounded transition hover:bg-amber-100 hover:text-amber-800">${cellHTML}</span>`;
                     } else {
-                        // Padrão
                         cellHTML = `<span title="Calculado automaticamente" class="cursor-default text-slate-500">${cellHTML}</span>`;
                     }
                 }
