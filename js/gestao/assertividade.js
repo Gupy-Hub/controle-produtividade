@@ -1,46 +1,44 @@
 window.Importacao = window.Importacao || {};
 
 Importacao.Assertividade = {
-    // Configuração de Lote (Evita Payload Too Large e travamentos)
-    BATCH_SIZE: 1000,
+    BATCH_SIZE: 500, // Reduzido para garantir estabilidade
 
     processarArquivo: function(input) {
         const file = input.files[0];
         if (!file) return;
 
-        console.log(`📂 [Importacao] Iniciando leitura: ${file.name}`);
+        console.log(`📂 [Importacao] Iniciando V2 (Blindada): ${file.name}`);
         
-        // Extrai data do nome do arquivo (DDMMAAAA)
-        // Ex: "Assertividade_01122025.csv" -> "2025-12-01"
+        // 1. Extração da Data (DDMMAAAA)
         const dataReferencia = this.extrairDataDoNome(file.name);
         
         if (!dataReferencia) {
-            alert("ERRO: O nome do arquivo deve conter a data no formato DDMMAAAA (ex: 01122025.csv).");
-            input.value = ''; // Reseta input
+            alert("ERRO: O nome do arquivo deve conter a data no formato DDMMAAAA (ex: Assertividade_01122025.csv).");
+            input.value = '';
             return;
         }
 
         const statusLabel = document.getElementById('status-importacao');
-        if (statusLabel) statusLabel.innerText = "Lendo CSV...";
+        if (statusLabel) statusLabel.innerText = "Lendo e limpando CSV...";
 
+        // 2. Leitura com PapaParse
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
-            encoding: "ISO-8859-1", // Tenta corrigir problemas de acentuação comuns
+            encoding: "ISO-8859-1", // Importante para acentos
             complete: async (results) => {
                 try {
-                    console.log(`📊 Linhas brutas lidas: ${results.data.length}`);
-                    await this.enviarLotes(results.data, dataReferencia);
+                    console.log(`📊 Linhas brutas encontradas: ${results.data.length}`);
+                    await this.enviarLotesSeguros(results.data, dataReferencia);
                     
-                    alert("Importação concluída com sucesso!");
-                    // Atualiza a tela de gestão
+                    alert("✅ Importação concluída com sucesso!");
                     if (Gestao.Assertividade) Gestao.Assertividade.carregar();
                 
                 } catch (error) {
                     console.error("Erro fatal na importação:", error);
                     alert(`Falha na importação: ${error.message}`);
                 } finally {
-                    input.value = ''; // Permite re-upload do mesmo arquivo
+                    input.value = '';
                     if (statusLabel) statusLabel.innerText = "";
                 }
             },
@@ -52,17 +50,16 @@ Importacao.Assertividade = {
     },
 
     extrairDataDoNome: function(filename) {
-        // Busca padrão de 8 dígitos (DDMMAAAA)
+        // Tenta capturar padrão DDMMAAAA
         const match = filename.match(/(\d{2})(\d{2})(\d{4})/);
         if (match) {
-            // Retorna YYYY-MM-DD
-            return `${match[3]}-${match[2]}-${match[1]}`;
+            return `${match[3]}-${match[2]}-${match[1]}`; // Retorna YYYY-MM-DD
         }
         return null;
     },
 
     normalizarChaves: function(row) {
-        // Cria um novo objeto com chaves minúsculas e sem espaços para facilitar o mapeamento
+        // Converte chaves para minusculo e remove espaços (Ex: "ID PPC " -> "id_ppc")
         const novo = {};
         Object.keys(row).forEach(key => {
             const cleanKey = key.trim().toLowerCase().replace(/\s+/g, '_');
@@ -72,17 +69,19 @@ Importacao.Assertividade = {
     },
 
     mapearLinha: function(row, dataRef, userLogado) {
-        // Normaliza para achar as colunas independente do Case
         const norm = this.normalizarChaves(row);
         
-        // Tenta encontrar o ID do PPC em variações comuns
-        // O console acusou erro em "id_ppc", então precisamos garantir que ele exista
+        // --- FILTRO CRÍTICO ---
+        // Busca ID PPC em diversas variações de nome
         let idPpc = norm['id_ppc'] || norm['id'] || norm['idppc'] || norm['ppc_id'] || row['ID PPC'] || row['ID'];
 
-        // Se não tiver ID, retorna null para ser filtrado depois
-        if (!idPpc) return null;
+        // Se o ID for vazio, nulo ou indefinido, REJEITA a linha imediatamente
+        if (!idPpc || String(idPpc).trim() === '') {
+            return null; 
+        }
+        // ----------------------
 
-        // Tratamento de Status (mapear CSV para Enum do Banco)
+        // Tratamento de Status
         let statusRaw = (norm['status'] || '').toUpperCase();
         if (statusRaw.includes('VALID')) statusRaw = 'VALIDO';
         else if (statusRaw.includes('INVALID')) statusRaw = 'INVALIDO';
@@ -92,57 +91,55 @@ Importacao.Assertividade = {
         // Tratamento Numérico
         const parseNum = (v) => {
             if (!v) return 0;
-            // Remove % e troca vírgula por ponto
             return parseFloat(String(v).replace('%','').replace(',','.').trim()) || 0;
         };
 
         return {
-            id_ppc: idPpc.toString().trim(),
+            id_ppc: String(idPpc).trim(),
             data_referencia: dataRef,
-            usuario_id: userLogado.id, // Segurança RLS
+            usuario_id: userLogado.id,
             
-            // Campos de Texto (com Fallbacks)
-            empresa_nome: (norm['empresa'] || norm['nome_empresa'] || norm['cliente'] || '').trim().substring(0, 255),
+            empresa_nome: (norm['empresa'] || norm['nome_empresa'] || '').trim().substring(0, 255),
             assistente_nome: (norm['assistente'] || norm['nome_assistente'] || '').trim().substring(0, 255),
             auditora_nome: (norm['auditora'] || norm['auditor'] || userLogado.nome || '').trim().substring(0, 100),
-            doc_name: (norm['doc_name'] || norm['documento'] || norm['arquivo'] || '').trim().substring(0, 255),
-            observacao: (norm['observacao'] || norm['obs'] || norm['motivo'] || '').trim(),
+            doc_name: (norm['doc_name'] || norm['documento'] || '').trim().substring(0, 255),
+            observacao: (norm['observacao'] || norm['obs'] || norm['motivo'] || norm['apontamentos/obs'] || '').trim(),
             status: statusRaw || 'PENDENTE',
             
-            // Campos Técnicos do PPC
-            company_id: (norm['company_id'] || norm['id_empresa'] || '0').toString(),
+            company_id: (norm['company_id'] || '0').toString(),
             schema_id: (norm['schema_id'] || '0').toString(),
-            data_auditoria: new Date().toISOString(), // Timestamp do upload
+            data_auditoria: new Date().toISOString(),
             
-            // Métricas
-            qtd_campos: parseNum(norm['qtd_campos'] || norm['campos']),
+            qtd_campos: parseNum(norm['qtd_campos'] || norm['nº_campos']),
             qtd_ok: parseNum(norm['qtd_ok'] || norm['ok']),
             qtd_nok: parseNum(norm['qtd_nok'] || norm['nok']),
-            porcentagem_assertividade: (norm['porcentagem'] || norm['assertividade'] || '0')
+            porcentagem_assertividade: (norm['porcentagem'] || norm['%_assert'] || '0')
         };
     },
 
-    enviarLotes: async function(linhasBrutas, dataRef) {
+    enviarLotesSeguros: async function(linhasBrutas, dataRef) {
         const user = Sistema.getUsuarioLogado();
         if (!user) throw new Error("Usuário não autenticado.");
 
         const statusLabel = document.getElementById('status-importacao');
         
-        // 1. Tratamento e Limpeza (Crucial: Filtra NULOS)
+        // 1. LIMPEZA DOS DADOS (Aqui acontece a mágica)
+        console.log("🧹 Iniciando limpeza de dados...");
         const linhasTratadas = linhasBrutas
             .map(row => this.mapearLinha(row, dataRef, user))
-            .filter(row => row !== null); // Remove linhas onde ID_PPC falhou
+            .filter(row => row !== null); // <--- REMOVE LINHAS COM ID NULO
 
-        console.log(`🧹 Linhas válidas após filtro: ${linhasTratadas.length} (Descartadas: ${linhasBrutas.length - linhasTratadas.length})`);
+        const descartados = linhasBrutas.length - linhasTratadas.length;
+        console.log(`✅ Linhas Válidas: ${linhasTratadas.length}`);
+        console.log(`🗑️ Linhas Descartadas (Lixo/Vazias): ${descartados}`);
         
         if (linhasTratadas.length === 0) {
-            throw new Error("Nenhuma linha válida encontrada. Verifique se a coluna 'ID PPC' existe no CSV.");
+            throw new Error("Nenhuma linha válida encontrada! Verifique se a coluna 'ID PPC' existe no arquivo.");
         }
 
-        // 2. Envio em Lotes (Batching)
+        // 2. ENVIO EM LOTES
         const total = linhasTratadas.length;
-        let processados = 0;
-
+        
         for (let i = 0; i < total; i += this.BATCH_SIZE) {
             const lote = linhasTratadas.slice(i, i + this.BATCH_SIZE);
             
@@ -151,20 +148,15 @@ Importacao.Assertividade = {
             const { error } = await Sistema.supabase
                 .from('assertividade')
                 .upsert(lote, { 
-                    onConflict: 'id_ppc, data_referencia', // Garante unicidade por ID + DATA
+                    onConflict: 'id_ppc, data_referencia',
                     ignoreDuplicates: false 
                 });
 
             if (error) {
-                console.error(`Erro no lote ${i}:`, error);
-                // Não para tudo, mas avisa no console. 
-                // Dependendo da criticidade, poderíamos dar throw aqui.
-                console.warn("Tentando continuar com próximos lotes...");
+                console.warn(`⚠️ Erro parcial no lote ${i} (tentando continuar):`, error.message);
+                // Não lança erro fatal para não abortar tudo por causa de 1 lote ruim
             }
-            
-            processados += lote.length;
         }
-
-        console.log("✅ Processamento finalizado.");
+        console.log("🏁 Processamento finalizado.");
     }
 };
