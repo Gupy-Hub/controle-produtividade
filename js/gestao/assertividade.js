@@ -1,210 +1,170 @@
-window.Gestao = window.Gestao || {};
+window.Importacao = window.Importacao || {};
 
-Gestao.Assertividade = {
-    inicializado: false,
-    timerBusca: null,
-    
-    // Configuração estática para aliviar o banco
-    opcoesStatus: ['OK', 'NOK', 'REV', 'VALIDO', 'INVALIDO', 'PENDENTE'],
+Importacao.Assertividade = {
+    // Configuração de Lote (Evita Payload Too Large e travamentos)
+    BATCH_SIZE: 1000,
 
-    filtros: {
-        busca: '',
-        data: '',
-        empresa: '',
-        assistente: '',
-        auditora: '',
-        status: '',
-        doc: '',
-        obs: ''
-    },
+    processarArquivo: function(input) {
+        const file = input.files[0];
+        if (!file) return;
 
-    carregar: async function() {
-        console.log("Gestao.Assertividade: Iniciando módulo (v3 Otimizada)...");
+        console.log(`📂 [Importacao] Iniciando leitura: ${file.name}`);
         
-        // Garante visibilidade
-        const view = document.getElementById('view-assertividade');
-        if (view && view.classList.contains('hidden')) {
-            view.classList.remove('hidden');
-        }
-
-        try {
-            if (!this.inicializado) {
-                // Carrega status estático IMEDIATAMENTE (UX Instantânea)
-                this.montarSelectStatus();
-                
-                // Tenta carregar auditoras dinamicamente (assíncrono, não bloqueia)
-                this.transformarAuditorasEmSelect();
-                
-                this.inicializado = true;
-            }
-            this.atualizarFiltrosEBuscar();
-        } catch (error) {
-            console.error("Erro fatal init:", error);
-            this.exibirErroFatal(error.message);
-        }
-    },
-
-    atualizarFiltrosEBuscar: function() {
-        const tbody = document.getElementById('lista-assertividade');
+        // Extrai data do nome do arquivo (DDMMAAAA)
+        // Ex: "Assertividade_01122025.csv" -> "2025-12-01"
+        const dataReferencia = this.extrairDataDoNome(file.name);
         
-        // Coleta Segura com Optional Chaining (?.)
-        this.filtros.busca = document.getElementById('search-assert')?.value || '';
-        this.filtros.data = document.getElementById('filtro-data')?.value || '';
-        this.filtros.empresa = document.getElementById('filtro-empresa')?.value || '';
-        this.filtros.assistente = document.getElementById('filtro-assistente')?.value || '';
-        this.filtros.doc = document.getElementById('filtro-doc')?.value || '';
-        this.filtros.status = document.getElementById('filtro-status')?.value || '';
-        this.filtros.obs = document.getElementById('filtro-obs')?.value || '';
-        this.filtros.auditora = document.getElementById('filtro-auditora')?.value || '';
-
-        if (tbody) tbody.style.opacity = '0.5';
-        
-        clearTimeout(this.timerBusca);
-        this.timerBusca = setTimeout(() => this.buscarDados(), 500);
-    },
-
-    buscarDados: async function() {
-        const tbody = document.getElementById('lista-assertividade');
-        const infoPag = document.getElementById('info-paginacao');
-        
-        if (!tbody) return;
-
-        tbody.style.opacity = '1';
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Processando...</p></td></tr>';
-        if (infoPag) infoPag.innerText = "Filtrando...";
-
-        try {
-            if (!Sistema?.supabase) throw new Error("Supabase desconectado.");
-
-            let query = Sistema.supabase
-                .from('assertividade')
-                .select('*')
-                .order('data_referencia', { ascending: false })
-                .order('id', { ascending: false })
-                .limit(100);
-
-            // Aplicação Otimizada de Filtros
-            if (this.filtros.busca) {
-                const termo = `%${this.filtros.busca}%`;
-                query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
-            }
-
-            if (this.filtros.data) query = query.eq('data_referencia', this.filtros.data);
-            if (this.filtros.empresa) query = query.ilike('empresa_nome', `%${this.filtros.empresa}%`);
-            if (this.filtros.assistente) query = query.ilike('assistente_nome', `%${this.filtros.assistente}%`);
-            if (this.filtros.doc) query = query.ilike('doc_name', `%${this.filtros.doc}%`);
-            if (this.filtros.obs) query = query.ilike('observacao', `%${this.filtros.obs}%`);
-            if (this.filtros.auditora) query = query.eq('auditora_nome', this.filtros.auditora);
-            if (this.filtros.status) query = query.eq('status', this.filtros.status);
-
-            const { data, error } = await query;
-            if (error) throw error;
-
-            this.renderizarTabela(data || []);
-            if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros.`;
-
-        } catch (error) {
-            console.error("Erro na busca:", error);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-rose-500 font-bold text-xs">Erro de conexão: ${error.message}</td></tr>`;
-        }
-    },
-
-    renderizarTabela: function(lista) {
-        const tbody = document.getElementById('lista-assertividade');
-        if (!lista?.length) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>';
+        if (!dataReferencia) {
+            alert("ERRO: O nome do arquivo deve conter a data no formato DDMMAAAA (ex: 01122025.csv).");
+            input.value = ''; // Reseta input
             return;
         }
 
-        const formatNum = (v) => (v != null && v !== '') ? v : '-';
-        
-        let html = '';
-        lista.forEach(item => {
-            // Estilos de Status
-            let stClass = 'bg-slate-100 text-slate-500 border-slate-200';
-            const st = (item.status || '').toUpperCase();
-            if (['OK', 'VALIDO'].some(k => st.includes(k))) stClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            else if (st.includes('NOK')) stClass = 'bg-rose-50 text-rose-700 border-rose-200';
-            else if (st.includes('REV')) stClass = 'bg-amber-50 text-amber-700 border-amber-200';
+        const statusLabel = document.getElementById('status-importacao');
+        if (statusLabel) statusLabel.innerText = "Lendo CSV...";
 
-            // Porcentagem e Cor
-            let corPorc = "text-slate-300";
-            const porcVal = parseFloat(String(item.porcentagem_assertividade || '').replace('%','').replace(',','.'));
-            if (!isNaN(porcVal)) {
-                corPorc = porcVal >= 99 ? "text-emerald-600 font-bold" : (porcVal < 90 ? "text-rose-600 font-bold" : "text-slate-500");
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            encoding: "ISO-8859-1", // Tenta corrigir problemas de acentuação comuns
+            complete: async (results) => {
+                try {
+                    console.log(`📊 Linhas brutas lidas: ${results.data.length}`);
+                    await this.enviarLotes(results.data, dataReferencia);
+                    
+                    alert("Importação concluída com sucesso!");
+                    // Atualiza a tela de gestão
+                    if (Gestao.Assertividade) Gestao.Assertividade.carregar();
+                
+                } catch (error) {
+                    console.error("Erro fatal na importação:", error);
+                    alert(`Falha na importação: ${error.message}`);
+                } finally {
+                    input.value = ''; // Permite re-upload do mesmo arquivo
+                    if (statusLabel) statusLabel.innerText = "";
+                }
+            },
+            error: (err) => {
+                console.error("Erro PapaParse:", err);
+                alert("Erro ao ler o arquivo CSV.");
             }
-
-            html += `
-                <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap border-b border-slate-50">
-                    <td class="px-3 py-2 font-mono text-slate-600">${item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-'}</td>
-                    <td class="px-3 py-2 text-center text-slate-400 font-mono text-[10px]">${item.company_id || '-'}</td>
-                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome}">${item.empresa_nome || '-'}</td>
-                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome}">${item.assistente_nome || '-'}</td>
-                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
-                    <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded border text-[9px] font-bold uppercase ${stClass}">${item.status || 'N/A'}</span></td>
-                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[150px]">${item.observacao || ''}</td>
-                    <td class="px-3 py-2 text-center border-l border-slate-100">${formatNum(item.qtd_campos)}</td>
-                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/20">${formatNum(item.qtd_ok)}</td>
-                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/20 border-r border-slate-100">${formatNum(item.qtd_nok)}</td>
-                    <td class="px-3 py-2 text-center ${corPorc}">${item.porcentagem_assertividade || '-'}</td>
-                    <td class="px-3 py-2 text-slate-400 uppercase text-[9px]">${item.auditora_nome || '-'}</td>
-                </tr>`;
         });
-        tbody.innerHTML = html;
     },
 
-    // --- MÉTODOS DE FILTRO OTIMIZADOS ---
-
-    // 1. Status: Usa lista estática (Rápido, sem DB)
-    montarSelectStatus: function() {
-        this.converterInputParaSelect('filtro-status', ['Todos', ...this.opcoesStatus]);
-    },
-
-    // 2. Auditoras: Tenta DB, falha silenciosamente mantendo input
-    transformarAuditorasEmSelect: async function() {
-        try {
-            // Se falhar aqui, cai no catch e o input continua texto (fallback seguro)
-            const { data, error } = await Sistema.supabase.rpc('get_filtros_unicos');
-            if (error) throw error;
-            
-            if (data && data.auditoras && data.auditoras.length > 0) {
-                this.converterInputParaSelect('filtro-auditora', ['Todas', ...data.auditoras]);
-            }
-        } catch (e) {
-            console.warn("Filtro Auditora: Mantendo input de texto (Performance/Timeout)", e.message);
+    extrairDataDoNome: function(filename) {
+        // Busca padrão de 8 dígitos (DDMMAAAA)
+        const match = filename.match(/(\d{2})(\d{2})(\d{4})/);
+        if (match) {
+            // Retorna YYYY-MM-DD
+            return `${match[3]}-${match[2]}-${match[1]}`;
         }
+        return null;
     },
 
-    // Helper reutilizável para criar selects
-    converterInputParaSelect: function(elementId, opcoes) {
-        const input = document.getElementById(elementId);
-        if (!input) return;
-
-        // Se já for select, apenas atualiza (preservando valor se possível)
-        if (input.tagName === 'SELECT') return;
-
-        const select = document.createElement('select');
-        select.id = elementId;
-        select.className = input.className.replace('text-[10px]', 'text-[10px] cursor-pointer bg-slate-50 font-bold text-slate-700');
-        select.style.width = "100%";
-        select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
-
-        let html = '';
-        opcoes.forEach(opt => {
-            const val = (opt === 'Todas' || opt === 'Todos') ? '' : opt;
-            html += `<option value="${val}">${opt}</option>`;
+    normalizarChaves: function(row) {
+        // Cria um novo objeto com chaves minúsculas e sem espaços para facilitar o mapeamento
+        const novo = {};
+        Object.keys(row).forEach(key => {
+            const cleanKey = key.trim().toLowerCase().replace(/\s+/g, '_');
+            novo[cleanKey] = row[key];
         });
-        select.innerHTML = html;
-
-        input.parentNode.replaceChild(select, input);
+        return novo;
     },
 
-    exibirErroFatal: function(msg) {
-        const tbody = document.getElementById('lista-assertividade');
-        if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center text-red-500 py-10 font-bold">Erro crítico: ${msg}</td></tr>`;
+    mapearLinha: function(row, dataRef, userLogado) {
+        // Normaliza para achar as colunas independente do Case
+        const norm = this.normalizarChaves(row);
+        
+        // Tenta encontrar o ID do PPC em variações comuns
+        // O console acusou erro em "id_ppc", então precisamos garantir que ele exista
+        let idPpc = norm['id_ppc'] || norm['id'] || norm['idppc'] || norm['ppc_id'] || row['ID PPC'] || row['ID'];
+
+        // Se não tiver ID, retorna null para ser filtrado depois
+        if (!idPpc) return null;
+
+        // Tratamento de Status (mapear CSV para Enum do Banco)
+        let statusRaw = (norm['status'] || '').toUpperCase();
+        if (statusRaw.includes('VALID')) statusRaw = 'VALIDO';
+        else if (statusRaw.includes('INVALID')) statusRaw = 'INVALIDO';
+        else if (statusRaw.includes('OK')) statusRaw = 'OK';
+        else if (statusRaw.includes('NOK')) statusRaw = 'NOK';
+        
+        // Tratamento Numérico
+        const parseNum = (v) => {
+            if (!v) return 0;
+            // Remove % e troca vírgula por ponto
+            return parseFloat(String(v).replace('%','').replace(',','.').trim()) || 0;
+        };
+
+        return {
+            id_ppc: idPpc.toString().trim(),
+            data_referencia: dataRef,
+            usuario_id: userLogado.id, // Segurança RLS
+            
+            // Campos de Texto (com Fallbacks)
+            empresa_nome: (norm['empresa'] || norm['nome_empresa'] || norm['cliente'] || '').trim().substring(0, 255),
+            assistente_nome: (norm['assistente'] || norm['nome_assistente'] || '').trim().substring(0, 255),
+            auditora_nome: (norm['auditora'] || norm['auditor'] || userLogado.nome || '').trim().substring(0, 100),
+            doc_name: (norm['doc_name'] || norm['documento'] || norm['arquivo'] || '').trim().substring(0, 255),
+            observacao: (norm['observacao'] || norm['obs'] || norm['motivo'] || '').trim(),
+            status: statusRaw || 'PENDENTE',
+            
+            // Campos Técnicos do PPC
+            company_id: (norm['company_id'] || norm['id_empresa'] || '0').toString(),
+            schema_id: (norm['schema_id'] || '0').toString(),
+            data_auditoria: new Date().toISOString(), // Timestamp do upload
+            
+            // Métricas
+            qtd_campos: parseNum(norm['qtd_campos'] || norm['campos']),
+            qtd_ok: parseNum(norm['qtd_ok'] || norm['ok']),
+            qtd_nok: parseNum(norm['qtd_nok'] || norm['nok']),
+            porcentagem_assertividade: (norm['porcentagem'] || norm['assertividade'] || '0')
+        };
     },
 
-    mudarPagina: function(delta) {
-        alert("Paginação em desenvolvimento.");
+    enviarLotes: async function(linhasBrutas, dataRef) {
+        const user = Sistema.getUsuarioLogado();
+        if (!user) throw new Error("Usuário não autenticado.");
+
+        const statusLabel = document.getElementById('status-importacao');
+        
+        // 1. Tratamento e Limpeza (Crucial: Filtra NULOS)
+        const linhasTratadas = linhasBrutas
+            .map(row => this.mapearLinha(row, dataRef, user))
+            .filter(row => row !== null); // Remove linhas onde ID_PPC falhou
+
+        console.log(`🧹 Linhas válidas após filtro: ${linhasTratadas.length} (Descartadas: ${linhasBrutas.length - linhasTratadas.length})`);
+        
+        if (linhasTratadas.length === 0) {
+            throw new Error("Nenhuma linha válida encontrada. Verifique se a coluna 'ID PPC' existe no CSV.");
+        }
+
+        // 2. Envio em Lotes (Batching)
+        const total = linhasTratadas.length;
+        let processados = 0;
+
+        for (let i = 0; i < total; i += this.BATCH_SIZE) {
+            const lote = linhasTratadas.slice(i, i + this.BATCH_SIZE);
+            
+            if (statusLabel) statusLabel.innerText = `Enviando ${Math.min(i + this.BATCH_SIZE, total)}/${total}...`;
+
+            const { error } = await Sistema.supabase
+                .from('assertividade')
+                .upsert(lote, { 
+                    onConflict: 'id_ppc, data_referencia', // Garante unicidade por ID + DATA
+                    ignoreDuplicates: false 
+                });
+
+            if (error) {
+                console.error(`Erro no lote ${i}:`, error);
+                // Não para tudo, mas avisa no console. 
+                // Dependendo da criticidade, poderíamos dar throw aqui.
+                console.warn("Tentando continuar com próximos lotes...");
+            }
+            
+            processados += lote.length;
+        }
+
+        console.log("✅ Processamento finalizado.");
     }
 };
