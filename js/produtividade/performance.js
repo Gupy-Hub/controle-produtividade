@@ -1,263 +1,179 @@
-// ARQUIVO: js/produtividade/performance.js
-window.Produtividade = window.Produtividade || {};
-
 Produtividade.Performance = {
     initialized: false,
-    chartProd: null,
-    chartQual: null,
-    dadosCache: [],
-
+    chartInstance: null,
+    miniChartInstance: null,
+    dadosCache: [], 
+    
     init: function() {
-        console.log("📊 Performance: Dashboard Simplificado (Vol vs Qual)");
+        if (typeof Chart === 'undefined') { console.error("Chart.js não carregou."); return; }
         this.initialized = true;
+        this.carregar();
     },
 
     carregar: async function() {
-        if(document.getElementById('tab-performance').classList.contains('hidden')) return;
-
+        const listContainer = document.getElementById('ranking-list-container');
+        if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
+        
         const datas = Produtividade.getDatasFiltro();
-        const usuarioId = Produtividade.Geral.usuarioSelecionado;
-        const nomeUsuario = document.getElementById('selected-name')?.textContent;
-
-        this.atualizarHeaderUI(usuarioId, nomeUsuario);
+        const s = datas.inicio;
+        const e = datas.fim;
 
         try {
-            // 1. Busca Dados Gerais (Para Tabela e KPIs)
-            const { data, error } = await Sistema.supabase.rpc('get_painel_produtividade', {
-                data_inicio: datas.inicio, data_fim: datas.fim
-            });
-
+            const { data, error } = await Sistema.supabase
+                .from('producao')
+                .select(`id, quantidade, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`)
+                .gte('data_referencia', s)
+                .lte('data_referencia', e)
+                .order('data_referencia', { ascending: true });
+                
             if (error) throw error;
-
-            // Filtra e prepara
-            this.dadosCache = data.map(u => ({
-                id: u.usuario_id,
-                nome: u.nome,
-                funcao: (u.funcao || '').toUpperCase(),
-                vol: Number(u.total_qty),
-                notas: Number(u.soma_auditorias),
-                aud: Number(u.qtd_auditorias),
-                qual: Number(u.qtd_auditorias) > 0 ? (Number(u.soma_auditorias) / Number(u.qtd_auditorias)) : 0
-            })).filter(u => u.vol > 0 || u.aud > 0); // Remove vazios
-
-            // 2. Define o Foco (Geral ou Individual)
-            const dadosFoco = usuarioId 
-                ? this.dadosCache.filter(u => u.id == usuarioId)
-                : this.dadosCache.filter(u => !['AUDITORA', 'GESTORA'].includes(u.funcao));
-
-            // 3. Renderiza Tabela e KPIs
-            this.renderizarTabela(this.dadosCache, usuarioId);
-
-            // 4. Renderiza Gráficos (Busca dados diários para tendências)
-            await this.buscarDadosGraficos(datas, usuarioId, dadosFoco);
-
-        } catch (error) { console.error("Erro Perf:", error); }
+            this.dadosCache = data;
+            this.renderizarVisaoGeral();
+        } catch (err) {
+            console.error(err);
+            if(listContainer) listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro: ${err.message}</div>`;
+        }
     },
 
-    atualizarHeaderUI: function(uid, nome) {
-        const chip = document.getElementById('perf-filter-chip');
-        const txt = document.getElementById('perf-filter-name');
+    renderizarVisaoGeral: function() {
+        const btnReset = document.getElementById('btn-reset-chart');
+        if(btnReset) btnReset.classList.add('hidden');
         
-        if(uid) {
-            chip.classList.remove('hidden');
-            chip.classList.add('flex');
-            txt.innerText = nome;
+        const elTitle = document.getElementById('chart-title');
+        if(elTitle) elTitle.innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
+
+        const data = this.dadosCache;
+        if (!data || data.length === 0) {
+            this.destroyChart();
+            return;
+        }
+
+        const producaoPorDia = {}; const diasSet = new Set(); const producaoPorUser = {};
+        
+        data.forEach(r => {
+            if(!r.usuario) return;
+            const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
+            if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
             
-            document.getElementById('title-chart-qual').innerText = "Evolução da Qualidade";
-            document.getElementById('subtitle-chart-qual').innerText = "Histórico diário de assertividade";
-        } else {
-            chip.classList.add('hidden');
-            chip.classList.remove('flex');
-
-            document.getElementById('title-chart-qual').innerText = "Top 5 - Menor Assertividade";
-            document.getElementById('subtitle-chart-qual').innerText = "Quem precisa de monitoria/atenção";
-        }
-    },
-
-    buscarDadosGraficos: async function(datas, usuarioId, dadosFoco) {
-        // --- GRÁFICO 1: TENDÊNCIA DE VOLUME (DIÁRIO) ---
-        // Busca Produção Diária
-        let queryProd = Sistema.supabase.from('producao')
-            .select('data_referencia, quantidade, usuario_id')
-            .gte('data_referencia', datas.inicio)
-            .lte('data_referencia', datas.fim);
-        
-        if (usuarioId) queryProd = queryProd.eq('usuario_id', usuarioId);
-        
-        const { data: prodData } = await queryProd;
-
-        // Agrupa por dia
-        const diasVol = {};
-        if (prodData) {
-            prodData.forEach(p => {
-                const dia = p.data_referencia;
-                diasVol[dia] = (diasVol[dia] || 0) + p.quantidade;
-            });
-        }
-        
-        this.renderizarGraficoVolume(diasVol);
-
-        // --- GRÁFICO 2: QUALIDADE (RANKING ou EVOLUÇÃO) ---
-        if (usuarioId) {
-            // Modo Individual: Evolução Diária de Qualidade
-            await this.renderizarEvolucaoQualidade(datas, usuarioId);
-        } else {
-            // Modo Geral: Ranking de Ofensores
-            this.renderizarRankingQualidade(dadosFoco);
-        }
-    },
-
-    renderizarGraficoVolume: function(diasMap) {
-        const labels = Object.keys(diasMap).sort();
-        const data = labels.map(d => diasMap[d]);
-        const labelsFmt = labels.map(d => d.split('-').reverse().slice(0,2).join('/'));
-        
-        const total = data.reduce((a,b) => a+b, 0);
-        document.getElementById('kpi-total-vol').innerText = total.toLocaleString('pt-BR');
-
-        const ctx = document.getElementById('chartProdTrend');
-        if(!ctx) return;
-        if(this.chartProd) this.chartProd.destroy();
-
-        this.chartProd = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labelsFmt,
-                datasets: [{
-                    label: 'Volume Diário',
-                    data: data,
-                    backgroundColor: '#60a5fa', // Blue
-                    borderRadius: 4,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false } },
-                    y: { grid: { borderDash: [5, 5] } }
-                }
+            const date = r.data_referencia; const qtd = Number(r.quantidade) || 0; const uid = r.usuario.id;
+            diasSet.add(date);
+            if (!producaoPorDia[date]) producaoPorDia[date] = 0; producaoPorDia[date] += qtd;
+            
+            if (!producaoPorUser[uid]) {
+                producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid, somaAssert: 0, qtdAssert: 0, diasAtivos: new Set() };
             }
+            producaoPorUser[uid].total += qtd;
+            producaoPorUser[uid].diasAtivos.add(date);
+
+            if (r.assertividade) {
+                let pClean = String(r.assertividade).replace('%', '').replace(',', '.').trim();
+                let pVal = parseFloat(pClean);
+                if (!isNaN(pVal)) { producaoPorUser[uid].somaAssert += pVal; producaoPorUser[uid].qtdAssert++; }
+            }
+        });
+
+        const labels = Array.from(diasSet).sort();
+        const values = labels.map(d => producaoPorDia[d] || 0);
+        
+        this.renderChart(labels, [{ 
+            label: 'Produção Total do Time', data: values, borderColor: '#3b82f6', 
+            backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, tension: 0.3, fill: true 
+        }]);
+        
+        const usersArray = Object.values(producaoPorUser);
+        this.renderRankingList(usersArray);
+        this.analisarExtremos(usersArray);
+    },
+
+    analisarExtremos: function(usersArray) {
+        if (usersArray.length < 2) return;
+        const ordenados = [...usersArray].sort((a, b) => b.total - a.total);
+        const top = ordenados[0];
+        const bottom = ordenados[ordenados.length - 1];
+
+        const container = document.getElementById('analise-extremos-content');
+        const gapPercentual = ((top.total / bottom.total - 1) * 100).toFixed(1);
+
+        container.innerHTML = `
+            <div class="flex items-center justify-between text-xs bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                <span class="font-bold text-emerald-700">🏆 Top: ${top.nome.split(' ')[0]}</span>
+                <span class="font-black text-emerald-800">${top.total.toLocaleString()} docs</span>
+            </div>
+            <div class="flex items-center justify-between text-xs bg-rose-50 p-2 rounded-lg border border-rose-100">
+                <span class="font-bold text-rose-700">📉 Base: ${bottom.nome.split(' ')[0]}</span>
+                <span class="font-black text-rose-800">${bottom.total.toLocaleString()} docs</span>
+            </div>
+            <div class="text-[10px] font-bold text-slate-500 uppercase pt-1 px-1">
+                GAP de Performance: <span class="text-slate-800">${gapPercentual}%</span>
+            </div>
+        `;
+
+        this.renderMiniChart(top, bottom);
+        this.gerarDiagnostico(top, bottom, gapPercentual);
+    },
+
+    gerarDiagnostico: function(top, bottom, gap) {
+        const badge = document.getElementById('badge-tendencia');
+        const insight = document.getElementById('insight-performance');
+        const mTop = top.total / (top.diasAtivos.size || 1);
+        const mBottom = bottom.total / (bottom.diasAtivos.size || 1);
+
+        let texto = "";
+        if (gap > 40) {
+            badge.innerText = "TENDÊNCIA: DISPARIDADE";
+            badge.className = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-rose-500 text-white";
+            texto = `Análise detectou um gap crítico. Enquanto **${top.nome.split(' ')[0]}** opera com média de ${mTop.toFixed(1)}/dia, **${bottom.nome.split(' ')[0]}** entrega ${mBottom.toFixed(1)}/dia. Esta variação sugere necessidade de nivelamento técnico ou revisão de carga horária.`;
+        } else {
+            badge.innerText = "TENDÊNCIA: EQUILÍBRIO";
+            badge.className = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-500 text-white";
+            texto = `O time apresenta alta coesão produtiva. A variação de ${gap}% entre os extremos é considerada orgânica. O fluxo de trabalho está distribuído de forma equitativa entre a equipe.`;
+        }
+        insight.innerHTML = texto;
+    },
+
+    renderMiniChart: function(top, bottom) {
+        const ctx = document.getElementById('chartMiniComparativo').getContext('2d');
+        if (this.miniChartInstance) this.miniChartInstance.destroy();
+        this.miniChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: [top.nome, bottom.nome],
+                datasets: [{ data: [top.total, bottom.total], backgroundColor: ['#10b981', '#f43f5e'], borderWidth: 0, cutout: '75%' }]
+            },
+            options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
         });
     },
 
-    renderizarRankingQualidade: function(dados) {
-        // Filtra quem tem auditoria e ordena pelos PIORES
-        const ranking = dados
-            .filter(d => d.aud > 0)
-            .sort((a,b) => a.qual - b.qual) // Menor para maior
-            .slice(0, 5);
-
-        // Média Geral KPI
-        const somaTotal = dados.reduce((a,b) => a + b.notas, 0);
-        const qtdTotal = dados.reduce((a,b) => a + b.aud, 0);
-        const mediaGeral = qtdTotal > 0 ? (somaTotal/qtdTotal) : 0;
-        document.getElementById('kpi-total-qual').innerText = mediaGeral.toFixed(2) + '%';
-
-        const ctx = document.getElementById('chartQualRanking');
-        if(!ctx) return;
-        if(this.chartQual) this.chartQual.destroy();
-
-        const labels = ranking.map(d => d.nome.split(' ')[0]);
-        const values = ranking.map(d => d.qual);
-        const colors = values.map(v => v >= 98 ? '#10b981' : (v >= 95 ? '#f59e0b' : '#f43f5e'));
-
-        this.chartQual = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Assertividade (%)',
-                    data: values,
-                    backgroundColor: colors,
-                    borderRadius: 4,
-                    barThickness: 20
-                }]
-            },
-            options: {
-                indexAxis: 'y', 
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { min: 80, max: 100, grid: { display: false } },
-                    y: { grid: { display: false } }
-                }
-            }
+    renderRankingList: function(usersArray) {
+        const container = document.getElementById('ranking-list-container');
+        usersArray.sort((a, b) => b.total - a.total);
+        let html = '';
+        usersArray.forEach((u, index) => {
+            let icon = `<div class="w-6 text-[10px] font-bold text-slate-400">#${index + 1}</div>`;
+            if (index === 0) icon = `<i class="fas fa-crown text-yellow-500 w-6 text-center"></i>`;
+            html += `<div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${u.nome}')" class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer transition group border-b border-slate-50">
+                <div class="flex items-center gap-2">${icon}<span class="text-xs font-bold text-slate-700 truncate w-32">${u.nome}</span></div>
+                <span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span>
+            </div>`;
         });
+        container.innerHTML = html;
     },
 
-    renderizarEvolucaoQualidade: async function(datas, uid) {
-        const { data } = await Sistema.supabase
-            .from('assertividade')
-            .select('data_referencia, porcentagem_assertividade')
-            .eq('usuario_id', uid)
-            .gte('data_referencia', datas.inicio)
-            .lte('data_referencia', datas.fim)
-            .order('data_referencia');
-
-        const dias = {};
-        if (data) {
-            data.forEach(d => {
-                if(!d.porcentagem_assertividade) return;
-                const val = parseFloat(d.porcentagem_assertividade.replace('%','').replace(',','.'));
-                dias[d.data_referencia] = val; 
-            });
-        }
-
-        const values = Object.values(dias);
-        const avg = values.length > 0 ? values.reduce((a,b)=>a+b,0)/values.length : 0;
-        document.getElementById('kpi-total-qual').innerText = avg.toFixed(2) + '%';
-
-        const ctx = document.getElementById('chartQualRanking');
-        if(this.chartQual) this.chartQual.destroy();
-
-        this.chartQual = new Chart(ctx, {
+    renderChart: function(labels, datasets) {
+        this.destroyChart();
+        const ctx = document.getElementById('evolutionChart').getContext('2d');
+        const fmtLabels = labels.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
+        this.chartInstance = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: Object.keys(dias).map(d => d.split('-').reverse().slice(0,2).join('/')),
-                datasets: [{
-                    label: 'Assertividade',
-                    data: values,
-                    borderColor: '#10b981',
-                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                    fill: true,
-                    tension: 0.3
-                }]
-            },
+            data: { labels: fmtLabels, datasets: datasets },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { y: { min: 80, max: 105 } }
+                responsive: true, maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } },
+                plugins: { legend: { position: 'bottom' } }
             }
         });
     },
 
-    renderizarTabela: function(dados, filtroId) {
-        const tbody = document.getElementById('perf-table-body');
-        if(!tbody) return;
-        tbody.innerHTML = '';
-
-        const lista = dados.sort((a,b) => b.vol - a.vol);
-
-        lista.forEach(u => {
-            const isSelected = u.id == filtroId;
-            const bgClass = isSelected ? 'bg-indigo-50 font-bold' : 'hover:bg-slate-50 cursor-pointer';
-            const statusColor = u.qual >= 98 ? 'bg-emerald-100 text-emerald-700' : (u.qual >= 95 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700');
-            const statusText = u.qual >= 98 ? 'Excelente' : (u.qual >= 95 ? 'Atenção' : 'Crítico');
-
-            tbody.innerHTML += `
-                <tr onclick="Produtividade.Geral.filtrarUsuario('${u.id}', '${u.nome}')" class="${bgClass} transition border-b border-slate-100 group">
-                    <td class="px-6 py-3 text-slate-700 group-hover:text-indigo-600 transition">${u.nome}</td>
-                    <td class="px-6 py-3 text-center font-mono text-slate-500">${u.vol.toLocaleString()}</td>
-                    <td class="px-6 py-3 text-center font-bold ${u.qual >= 98 ? 'text-emerald-600' : 'text-rose-500'}">${u.qual.toFixed(2)}%</td>
-                    <td class="px-6 py-3 text-center">
-                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${statusColor}">${statusText}</span>
-                    </td>
-                </tr>
-            `;
-        });
-    }
+    destroyChart: function() { if (this.chartInstance) this.chartInstance.destroy(); },
+    resetChart: function() { this.renderizarVisaoGeral(); }
 };

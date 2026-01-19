@@ -1,162 +1,212 @@
-window.Importacao = window.Importacao || {};
+window.Gestao = window.Gestao || {};
 
-Importacao.Assertividade = {
-    BATCH_SIZE: 500, // Reduzido para garantir estabilidade
+Gestao.Assertividade = {
+    inicializado: false,
+    timerBusca: null,
+    
+    // Estado dos filtros
+    filtros: {
+        busca: '',
+        data: '',
+        empresa: '',
+        assistente: '',
+        auditora: '',
+        status: '',
+        doc: '',
+        obs: ''
+    },
 
-    processarArquivo: function(input) {
-        const file = input.files[0];
-        if (!file) return;
+    // Ponto de entrada chamado pelo Menu
+    carregar: async function() {
+        if (!this.inicializado) {
+            await this.transformarFiltrosEmSelects();
+            this.inicializado = true;
+        }
+        this.atualizarFiltrosEBuscar();
+    },
 
-        console.log(`📂 [Importacao] Iniciando V2 (Blindada): ${file.name}`);
+    // Função que o HTML chama no onkeyup/onchange
+    atualizarFiltrosEBuscar: function() {
+        const tbody = document.getElementById('lista-assertividade');
         
-        // 1. Extração da Data (DDMMAAAA)
-        const dataReferencia = this.extrairDataDoNome(file.name);
+        this.filtros.busca = document.getElementById('search-assert')?.value || '';
+        this.filtros.data = document.getElementById('filtro-data')?.value || '';
+        this.filtros.empresa = document.getElementById('filtro-empresa')?.value || '';
+        this.filtros.assistente = document.getElementById('filtro-assistente')?.value || '';
+        this.filtros.doc = document.getElementById('filtro-doc')?.value || '';
+        this.filtros.status = document.getElementById('filtro-status')?.value || '';
+        this.filtros.obs = document.getElementById('filtro-obs')?.value || '';
+        this.filtros.auditora = document.getElementById('filtro-auditora')?.value || '';
+
+        if (tbody) {
+            tbody.style.opacity = '0.5';
+        }
         
-        if (!dataReferencia) {
-            alert("ERRO: O nome do arquivo deve conter a data no formato DDMMAAAA (ex: Assertividade_01122025.csv).");
-            input.value = '';
+        clearTimeout(this.timerBusca);
+        this.timerBusca = setTimeout(() => {
+            this.buscarDados();
+        }, 500);
+    },
+
+    buscarDados: async function() {
+        const tbody = document.getElementById('lista-assertividade');
+        const infoPag = document.getElementById('info-paginacao');
+        
+        if (!tbody) return; 
+
+        tbody.style.opacity = '1';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Carregando dados...</p></td></tr>';
+        
+        if (infoPag) infoPag.innerText = "Filtrando...";
+
+        try {
+            let query = Sistema.supabase
+                .from('assertividade')
+                .select('*')
+                .order('data_referencia', { ascending: false })
+                .order('id', { ascending: false })
+                .limit(100);
+
+            // Filtros
+            if (this.filtros.busca) {
+                const termo = `%${this.filtros.busca}%`;
+                query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
+            }
+
+            if (this.filtros.data) query = query.eq('data_referencia', this.filtros.data);
+            if (this.filtros.empresa) query = query.ilike('empresa_nome', `%${this.filtros.empresa}%`);
+            if (this.filtros.assistente) query = query.ilike('assistente_nome', `%${this.filtros.assistente}%`);
+            if (this.filtros.doc) query = query.ilike('doc_name', `%${this.filtros.doc}%`);
+            if (this.filtros.obs) query = query.ilike('observacao', `%${this.filtros.obs}%`);
+            if (this.filtros.auditora) query = query.eq('auditora_nome', this.filtros.auditora);
+            if (this.filtros.status) query = query.eq('status', this.filtros.status);
+
+            const { data, error } = await query;
+
+            if (error) throw error;
+
+            this.renderizarTabela(data || []);
+            if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros recentes.`;
+
+        } catch (error) {
+            console.error("Erro busca:", error);
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500 font-bold text-xs">Erro: ${error.message}</td></tr>`;
+        }
+    },
+
+    renderizarTabela: function(lista) {
+        const tbody = document.getElementById('lista-assertividade');
+        
+        if (!lista || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400 text-xs">Nenhum registro encontrado com esses filtros.</td></tr>';
             return;
         }
 
-        const statusLabel = document.getElementById('status-importacao');
-        if (statusLabel) statusLabel.innerText = "Lendo e limpando CSV...";
+        let html = '';
+        lista.forEach(item => {
+            // Status Styles
+            let statusClass = 'bg-slate-100 text-slate-500 border-slate-200';
+            const st = (item.status || '').toUpperCase();
+            if (['OK', 'VALIDO'].includes(st)) statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            else if (st.includes('NOK')) statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
+            else if (st.includes('REV')) statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
 
-        // 2. Leitura com PapaParse
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            encoding: "ISO-8859-1", // Importante para acentos
-            complete: async (results) => {
-                try {
-                    console.log(`📊 Linhas brutas encontradas: ${results.data.length}`);
-                    await this.enviarLotesSeguros(results.data, dataReferencia);
-                    
-                    alert("✅ Importação concluída com sucesso!");
-                    if (Gestao.Assertividade) Gestao.Assertividade.carregar();
+            // Datas
+            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
+            
+            // --- CORREÇÃO CRÍTICA DE VAZIOS/NULOS ---
+            // Se for null/undefined/vazio, exibe traço '-' e cor cinza.
+            // NÃO converte para 0.
+            
+            const rawPorc = item.porcentagem_assertividade;
+            let displayPorc = '-';
+            let corPorc = "text-slate-300 font-light"; // Cor neutra para vazio
+
+            // Verifica se tem valor REAL (não nulo, não vazio)
+            if (rawPorc !== null && rawPorc !== undefined && rawPorc !== '') {
+                displayPorc = rawPorc; // Exibe exatamente o que veio do banco (ex: "100,00%")
                 
-                } catch (error) {
-                    console.error("Erro fatal na importação:", error);
-                    alert(`Falha na importação: ${error.message}`);
-                } finally {
-                    input.value = '';
-                    if (statusLabel) statusLabel.innerText = "";
+                // Cálculo apenas para cor
+                const valP = parseFloat(String(rawPorc).replace('%','').replace(',','.'));
+                
+                if (!isNaN(valP)) {
+                    corPorc = "text-slate-500"; // Cor padrão se for número
+                    if(valP >= 99) corPorc = "text-emerald-600 font-bold";
+                    else if(valP < 90) corPorc = "text-rose-600 font-bold";
                 }
-            },
-            error: (err) => {
-                console.error("Erro PapaParse:", err);
-                alert("Erro ao ler o arquivo CSV.");
             }
+            
+            // Lógica similar para campos numéricos (Qtd Campos, OK, NOK)
+            // Se for null, mostra '-'
+            const qtdCampos = item.qtd_campos !== null ? item.qtd_campos : '-';
+            const qtdOk = item.qtd_ok !== null ? item.qtd_ok : '-';
+            const qtdNok = item.qtd_nok !== null ? item.qtd_nok : '-';
+
+            html += `
+                <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap">
+                    <td class="px-3 py-2 font-mono text-slate-600">${dataFmt}</td>
+                    <td class="px-3 py-2 text-center text-slate-400">${item.company_id || '-'}</td>
+                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome}">${item.empresa_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome}">${item.assistente_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
+                    <td class="px-3 py-2 text-center">
+                        <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusClass}">${item.status || '-'}</span>
+                    </td>
+                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[200px]" title="${item.observacao}">${item.observacao || ''}</td>
+                    
+                    <td class="px-3 py-2 text-center font-mono text-slate-500">${qtdCampos}</td>
+                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/30">${qtdOk}</td>
+                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/30">${qtdNok}</td>
+                    
+                    <td class="px-3 py-2 text-center ${corPorc}">${displayPorc}</td>
+                    <td class="px-3 py-2 text-slate-500 uppercase text-[10px]">${item.auditora_nome || '-'}</td>
+                </tr>
+            `;
         });
+
+        tbody.innerHTML = html;
     },
 
-    extrairDataDoNome: function(filename) {
-        // Tenta capturar padrão DDMMAAAA
-        const match = filename.match(/(\d{2})(\d{2})(\d{4})/);
-        if (match) {
-            return `${match[3]}-${match[2]}-${match[1]}`; // Retorna YYYY-MM-DD
-        }
-        return null;
-    },
+    transformarFiltrosEmSelects: async function() {
+        const campos = [
+            { id: 'filtro-auditora', key: 'auditoras', placeholder: 'Todas' },
+            { id: 'filtro-status', key: 'status', placeholder: 'Todos' }
+        ];
 
-    normalizarChaves: function(row) {
-        // Converte chaves para minusculo e remove espaços (Ex: "ID PPC " -> "id_ppc")
-        const novo = {};
-        Object.keys(row).forEach(key => {
-            const cleanKey = key.trim().toLowerCase().replace(/\s+/g, '_');
-            novo[cleanKey] = row[key];
-        });
-        return novo;
-    },
+        try {
+            const { data, error } = await Sistema.supabase.rpc('get_filtros_unicos');
+            if (error || !data) return;
 
-    mapearLinha: function(row, dataRef, userLogado) {
-        const norm = this.normalizarChaves(row);
-        
-        // --- FILTRO CRÍTICO ---
-        // Busca ID PPC em diversas variações de nome
-        let idPpc = norm['id_ppc'] || norm['id'] || norm['idppc'] || norm['ppc_id'] || row['ID PPC'] || row['ID'];
+            campos.forEach(campo => {
+                const inputOriginal = document.getElementById(campo.id);
+                if (!inputOriginal) return;
 
-        // Se o ID for vazio, nulo ou indefinido, REJEITA a linha imediatamente
-        if (!idPpc || String(idPpc).trim() === '') {
-            return null; 
-        }
-        // ----------------------
+                let select;
+                if (inputOriginal.tagName === 'INPUT') {
+                    select = document.createElement('select');
+                    select.id = campo.id;
+                    select.className = inputOriginal.className + " font-bold text-slate-700 cursor-pointer";
+                    select.style.width = "100%";
+                    select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
+                    inputOriginal.parentNode.replaceChild(select, inputOriginal);
+                } else {
+                    select = inputOriginal;
+                }
 
-        // Tratamento de Status
-        let statusRaw = (norm['status'] || '').toUpperCase();
-        if (statusRaw.includes('VALID')) statusRaw = 'VALIDO';
-        else if (statusRaw.includes('INVALID')) statusRaw = 'INVALIDO';
-        else if (statusRaw.includes('OK')) statusRaw = 'OK';
-        else if (statusRaw.includes('NOK')) statusRaw = 'NOK';
-        
-        // Tratamento Numérico
-        const parseNum = (v) => {
-            if (!v) return 0;
-            return parseFloat(String(v).replace('%','').replace(',','.').trim()) || 0;
-        };
-
-        return {
-            id_ppc: String(idPpc).trim(),
-            data_referencia: dataRef,
-            usuario_id: userLogado.id,
-            
-            empresa_nome: (norm['empresa'] || norm['nome_empresa'] || '').trim().substring(0, 255),
-            assistente_nome: (norm['assistente'] || norm['nome_assistente'] || '').trim().substring(0, 255),
-            auditora_nome: (norm['auditora'] || norm['auditor'] || userLogado.nome || '').trim().substring(0, 100),
-            doc_name: (norm['doc_name'] || norm['documento'] || '').trim().substring(0, 255),
-            observacao: (norm['observacao'] || norm['obs'] || norm['motivo'] || norm['apontamentos/obs'] || '').trim(),
-            status: statusRaw || 'PENDENTE',
-            
-            company_id: (norm['company_id'] || '0').toString(),
-            schema_id: (norm['schema_id'] || '0').toString(),
-            data_auditoria: new Date().toISOString(),
-            
-            qtd_campos: parseNum(norm['qtd_campos'] || norm['nº_campos']),
-            qtd_ok: parseNum(norm['qtd_ok'] || norm['ok']),
-            qtd_nok: parseNum(norm['qtd_nok'] || norm['nok']),
-            porcentagem_assertividade: (norm['porcentagem'] || norm['%_assert'] || '0')
-        };
-    },
-
-    enviarLotesSeguros: async function(linhasBrutas, dataRef) {
-        const user = Sistema.getUsuarioLogado();
-        if (!user) throw new Error("Usuário não autenticado.");
-
-        const statusLabel = document.getElementById('status-importacao');
-        
-        // 1. LIMPEZA DOS DADOS (Aqui acontece a mágica)
-        console.log("🧹 Iniciando limpeza de dados...");
-        const linhasTratadas = linhasBrutas
-            .map(row => this.mapearLinha(row, dataRef, user))
-            .filter(row => row !== null); // <--- REMOVE LINHAS COM ID NULO
-
-        const descartados = linhasBrutas.length - linhasTratadas.length;
-        console.log(`✅ Linhas Válidas: ${linhasTratadas.length}`);
-        console.log(`🗑️ Linhas Descartadas (Lixo/Vazias): ${descartados}`);
-        
-        if (linhasTratadas.length === 0) {
-            throw new Error("Nenhuma linha válida encontrada! Verifique se a coluna 'ID PPC' existe no arquivo.");
-        }
-
-        // 2. ENVIO EM LOTES
-        const total = linhasTratadas.length;
-        
-        for (let i = 0; i < total; i += this.BATCH_SIZE) {
-            const lote = linhasTratadas.slice(i, i + this.BATCH_SIZE);
-            
-            if (statusLabel) statusLabel.innerText = `Enviando ${Math.min(i + this.BATCH_SIZE, total)}/${total}...`;
-
-            const { error } = await Sistema.supabase
-                .from('assertividade')
-                .upsert(lote, { 
-                    onConflict: 'id_ppc, data_referencia',
-                    ignoreDuplicates: false 
+                let htmlOpts = `<option value="">${campo.placeholder}</option>`;
+                const lista = data[campo.key] || [];
+                lista.forEach(item => {
+                    if(item) htmlOpts += `<option value="${item}">${item}</option>`;
                 });
+                select.innerHTML = htmlOpts;
+            });
 
-            if (error) {
-                console.warn(`⚠️ Erro parcial no lote ${i} (tentando continuar):`, error.message);
-                // Não lança erro fatal para não abortar tudo por causa de 1 lote ruim
-            }
+        } catch (e) {
+            console.warn("Não foi possível carregar filtros dinâmicos:", e);
         }
-        console.log("🏁 Processamento finalizado.");
+    },
+
+    mudarPagina: function(delta) {
+        alert("Paginação simplificada para esta visualização.");
     }
 };
