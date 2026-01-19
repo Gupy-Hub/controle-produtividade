@@ -11,10 +11,43 @@ Produtividade.Consolidado = {
     monthToColMap: null,
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando V4 (Smart Reset de HC)...");
+        console.log("🔧 Consolidado: Iniciando V5 (Persistência Local)...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
+
+    // --- NOVO: GERENCIAMENTO DE ESTADO (MEMÓRIA) ---
+    
+    getStorageKey: function(t, s, e) {
+        // Cria uma chave única para o período selecionado (ex: mes_2025-12-01_2025-12-31)
+        return `gupy_consolidado_hc_${t}_${s}_${e}`;
+    },
+
+    carregarEstado: function(t, s, e) {
+        const key = this.getStorageKey(t, s, e);
+        const salvo = localStorage.getItem(key);
+        if (salvo) {
+            try {
+                this.overridesHC = JSON.parse(salvo);
+                console.log(`📥 Configurações de HC carregadas para ${t}`);
+            } catch(e) { console.error("Erro ao ler estado", e); }
+        } else {
+            this.overridesHC = {}; // Limpa se não tiver nada salvo para este período
+        }
+    },
+
+    salvarEstado: function() {
+        // Pega o contexto atual para salvar
+        const datas = Produtividade.getDatasFiltro();
+        let t = Produtividade.filtroPeriodo || 'mes';
+        if (t === 'semana') t = 'dia';
+        
+        const key = this.getStorageKey(t, datas.inicio, datas.fim);
+        localStorage.setItem(key, JSON.stringify(this.overridesHC));
+        console.log("💾 Alterações de HC salvas.");
+    },
+
+    // ------------------------------------------------
 
     getSemanasDoMes: function(year, month) {
         const weeks = [];
@@ -42,29 +75,30 @@ Produtividade.Consolidado = {
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
 
-        // 1. Validação básica: Se vazio ou inválido, remove alteração
+        // 1. Validação: Se vazio/inválido, remove e salva
         if (isNaN(val) || val <= 0) { 
             delete this.overridesHC[colIndex]; 
+            this.salvarEstado(); // <--- SALVAR
             this.renderizar(this.dadosCalculados); 
             return; 
         }
 
-        // 2. SMART RESET: Se o valor digitado for IGUAL ao do sistema, remove a alteração
-        // Assim volta a ficar "Original" (sem cor, sem justificativa)
+        // 2. Smart Reset: Se igual ao sistema, remove e salva
         const autoData = this.dadosCalculados?.st?.[colIndex];
-        const autoCount = autoData?.users?.size || 17; // Padrão 17 se falhar
+        const autoCount = autoData?.users?.size || 17; 
         
         if (val === autoCount) {
             delete this.overridesHC[colIndex];
+            this.salvarEstado(); // <--- SALVAR
             this.renderizar(this.dadosCalculados);
             return;
         }
 
-        // 3. Se o valor for igual ao que já estava salvo manualmente, não faz nada
+        // 3. Se não mudou nada em relação ao manual anterior, sai
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
         
-        // 4. Se for realmente uma alteração nova e diferente do sistema: Pede Justificativa
+        // 4. Nova alteração: Pede Justificativa
         await new Promise(r => setTimeout(r, 50));
         
         const motivo = prompt(`O sistema calculou ${autoCount}. \nVocê está alterando para ${val}. \n\nQual o motivo? (Obrigatório):`);
@@ -76,6 +110,8 @@ Produtividade.Consolidado = {
         }
         
         this.overridesHC[colIndex] = { valor: val, motivo: motivo.trim() };
+        this.salvarEstado(); // <--- SALVAR
+        
         if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
     },
     
@@ -106,12 +142,19 @@ Produtividade.Consolidado = {
         if (t === 'semana') t = 'dia';
 
         const cacheKey = `${t}_${s}_${e}`;
+        
+        // --- RECUPERA O ESTADO SALVO ANTES DE TUDO ---
+        this.carregarEstado(t, s, e);
+        // ---------------------------------------------
+
         if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) { 
             this.processarEExibir(this.ultimoCache.data, t, s, e); 
             return; 
         }
         
-        this.overridesHC = {}; 
+        // Se mudou o período, o override já foi atualizado pelo carregarEstado acima
+        // Mas se for o primeiro load, garante que override está sincronizado
+        
         if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
 
         try {
@@ -221,6 +264,7 @@ Produtividade.Consolidado = {
         cols.forEach((c, index) => {
             const colIdx = index + 1;
             const autoCount = st[colIdx].users.size || 17;
+            // Usa o valor salvo se existir
             headerHTML += `<th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span><input type="number" value="${this.overridesHC[colIdx]?.valor || ''}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 border"></div></th>`;
         });
         headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${this.overridesHC[99]?.valor || ''}" placeholder="(${st[99].users.size || 17})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border"></div></th></tr>`;
