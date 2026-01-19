@@ -62,7 +62,7 @@
             <div class="flex gap-1 overflow-x-auto no-scrollbar">
                 <button onclick="Produtividade.mudarAba('geral')" id="btn-geral" class="tab-btn active px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-check-circle"></i> Validação</button>
                 <button onclick="Produtividade.mudarAba('consolidado')" id="btn-consolidado" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-table"></i> Consolidado</button>
-                <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-chart-network"></i> Intelligence</button>
+                <button onclick="Produtividade.mudarAba('performance')" id="btn-performance" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-chart-line"></i> Performance</button>
                 <button onclick="Produtividade.mudarAba('matriz')" id="btn-matriz" class="tab-btn px-4 py-2 rounded-lg font-bold text-sm flex items-center gap-2 whitespace-nowrap"><i class="fas fa-th"></i> Matriz</button>
             </div>
 
@@ -242,106 +242,73 @@
 
         <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
             
-            <div class="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-slate-200 pb-4 gap-4">
+            <div class="flex justify-between items-end border-b border-slate-200 pb-4">
                 <div>
-                    <h2 class="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-                        <i class="fas fa-chart-network text-indigo-600"></i> Intelligence Hub
+                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fas fa-chart-line text-indigo-600"></i> Painel de Performance
                     </h2>
-                    <p class="text-sm text-slate-500 font-medium">Análise comportamental de produtividade e qualidade (Atlas Vision 2026).</p>
+                    <p class="text-sm text-slate-500">Visão consolidada de Entregas (Produtividade) e Erros (Qualidade).</p>
                 </div>
-                
-                <div class="flex bg-slate-100 p-1 rounded-lg">
-                    <button onclick="Produtividade.Performance.mudarVisao('time')" id="btn-view-time" class="px-4 py-1.5 text-xs font-bold rounded shadow-sm bg-white text-indigo-600 transition flex items-center gap-2"><i class="fas fa-users"></i> Visão Time (Quadrante)</button>
-                    <button onclick="Produtividade.Performance.mudarVisao('individual')" id="btn-view-ind" class="px-4 py-1.5 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition flex items-center gap-2"><i class="fas fa-user-friends"></i> Comparativo (Radar)</button>
-                </div>
-            </div>
-
-            <div id="view-time" class="animate-fade-in space-y-6">
-                
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div class="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                        <p class="text-[10px] font-bold text-indigo-400 uppercase">Velocidade Média</p>
-                        <div class="text-2xl font-black text-indigo-700 mt-1" id="kpi-team-speed">--</div>
-                        <p class="text-xs text-indigo-500">docs/dia por pessoa</p>
-                    </div>
-                    <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
-                        <p class="text-[10px] font-bold text-emerald-500 uppercase">Qualidade Média</p>
-                        <div class="text-2xl font-black text-emerald-700 mt-1" id="kpi-team-qual">--%</div>
-                        <p class="text-xs text-emerald-500">assertividade global</p>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2 relative overflow-hidden">
-                        <div class="flex items-start gap-3">
-                            <div class="bg-blue-100 p-2 rounded-full text-blue-600"><i class="fas fa-lightbulb"></i></div>
-                            <div>
-                                <p class="text-xs font-bold text-slate-600 uppercase">Análise do Atlas</p>
-                                <p class="text-sm text-slate-500 mt-1 italic leading-relaxed" id="atlas-insight">"Analisando dados..."</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="font-bold text-slate-700">Matriz de Eficiência (Volume x Qualidade)</h3>
-                        <div class="flex gap-4 text-[10px] font-bold text-slate-400">
-                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Alta Performance</span>
-                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-amber-400"></span> Precisa de Foco</span>
-                            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-400"></span> Crítico</span>
-                        </div>
-                    </div>
-                    <div class="relative w-full h-[400px]">
-                        <canvas id="chartQuadrant"></canvas>
-                    </div>
-                    <p class="text-center text-xs text-slate-400 mt-2">Eixo Y: Assertividade (%) | Eixo X: Volume Total | Tamanho da Bolha: Score Geral</p>
+                <div id="perf-filter-chip" class="hidden bg-indigo-600 text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-2 animate-pulse transition">
+                    <i class="fas fa-user"></i> <span id="perf-filter-name">--</span>
+                    <button onclick="Produtividade.Geral.limparSelecao()" class="ml-2 hover:text-indigo-200"><i class="fas fa-times"></i></button>
                 </div>
             </div>
 
-            <div id="view-ind" class="hidden animate-fade-in space-y-6">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    
-                    <div class="lg:col-span-1 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col h-[500px]">
-                        <div class="p-4 border-b border-slate-100 bg-slate-50">
-                            <h3 class="font-bold text-slate-700 text-sm">Selecione para Comparar (Máx 3)</h3>
-                            <p class="text-xs text-slate-400 mt-1">Clique nos nomes abaixo:</p>
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-sm uppercase">Evolução de Volume</h3>
+                            <p class="text-xs text-slate-400">Produtividade diária</p>
                         </div>
-                        <div class="overflow-y-auto custom-scrollbar flex-1 p-2 space-y-2" id="perf-selection-list">
-                            </div>
+                        <div class="text-right">
+                            <p class="text-2xl font-black text-blue-600 leading-none" id="kpi-total-vol">--</p>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">Volume Total</p>
+                        </div>
                     </div>
-
-                    <div class="lg:col-span-2 space-y-6">
-                        
-                        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col items-center">
-                            <h3 class="font-bold text-slate-700 text-sm w-full mb-4">Raio-X de Competências</h3>
-                            <div class="relative w-full h-[300px] flex justify-center">
-                                <canvas id="chartRadar"></canvas>
-                            </div>
-                        </div>
-
-                        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div class="bg-slate-50 px-6 py-3 border-b border-slate-200">
-                                <h3 class="font-bold text-slate-700 text-xs uppercase">Breakdown de Produtividade</h3>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-xs text-left">
-                                    <thead class="bg-white text-slate-500 font-bold border-b border-slate-100">
-                                        <tr>
-                                            <th class="px-4 py-3">Assistente</th>
-                                            <th class="px-4 py-3 text-center">Volume Total</th>
-                                            <th class="px-4 py-3 text-center text-emerald-600">Assertividade</th>
-                                            <th class="px-4 py-3 text-center text-slate-400 border-l">FIFO</th>
-                                            <th class="px-4 py-3 text-center text-slate-400">G. Total</th>
-                                            <th class="px-4 py-3 text-center text-slate-400">G. Parcial</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="perf-compare-table" class="divide-y divide-slate-50">
-                                        <tr><td colspan="6" class="text-center py-4 text-slate-400">Selecione assistentes ao lado.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
+                    <div class="relative w-full h-[250px] flex justify-center">
+                        <canvas id="chartProdTrend"></canvas>
                     </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                    <div class="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
+                        <div>
+                            <h3 class="font-bold text-slate-700 text-sm uppercase" id="title-chart-qual">Top Ofensores</h3>
+                            <p class="text-xs text-slate-400" id="subtitle-chart-qual">Quem requer mais atenção (Menor Assertividade)</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-2xl font-black text-emerald-600 leading-none" id="kpi-total-qual">--%</p>
+                            <p class="text-[10px] text-slate-400 font-bold uppercase">Média Geral</p>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-[250px]">
+                        <canvas id="chartQualRanking"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[400px]">
+                <div class="bg-slate-50 px-6 py-3 border-b border-slate-200 flex justify-between items-center">
+                    <h3 class="font-bold text-slate-700 text-xs uppercase flex items-center gap-2">
+                        <i class="fas fa-list"></i> Detalhamento da Equipe
+                    </h3>
+                    <span class="text-[10px] text-slate-400 italic">Clique na linha para filtrar</span>
+                </div>
+                <div class="overflow-auto custom-scrollbar flex-1">
+                    <table class="w-full text-sm text-left border-collapse">
+                        <thead class="bg-white text-slate-500 font-bold text-xs uppercase sticky top-0 z-10 shadow-sm">
+                            <tr>
+                                <th class="px-6 py-3 border-b border-slate-100">Assistente</th>
+                                <th class="px-6 py-3 text-center border-b border-slate-100">Volume</th>
+                                <th class="px-6 py-3 text-center border-b border-slate-100 text-emerald-600">Assertividade</th>
+                                <th class="px-6 py-3 text-center border-b border-slate-100">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perf-table-body" class="divide-y divide-slate-50 text-xs"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
