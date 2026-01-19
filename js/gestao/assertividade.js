@@ -16,19 +16,29 @@ Gestao.Assertividade = {
         obs: ''
     },
 
-    // Ponto de entrada chamado pelo Menu
+    // Ponto de entrada chamado pelo Menu/Main
     carregar: async function() {
-        if (!this.inicializado) {
-            await this.transformarFiltrosEmSelects();
-            this.inicializado = true;
+        console.log("Gestao.Assertividade: Iniciando carregamento...");
+        try {
+            if (!this.inicializado) {
+                // Tenta carregar selects dinâmicos, mas não bloqueia se falhar
+                await this.transformarFiltrosEmSelects().catch(err => console.warn("Falha ao montar selects:", err));
+                this.inicializado = true;
+            }
+            this.atualizarFiltrosEBuscar();
+        } catch (error) {
+            console.error("Gestao.Assertividade: Erro fatal no init", error);
+            const tbody = document.getElementById('lista-assertividade');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center text-red-500 py-4">Erro ao inicializar módulo: ${error.message}</td></tr>`;
         }
-        this.atualizarFiltrosEBuscar();
     },
 
-    // Função que o HTML chama no onkeyup/onchange
+    // Função unificada para leitura do DOM e trigger de busca
     atualizarFiltrosEBuscar: function() {
         const tbody = document.getElementById('lista-assertividade');
         
+        // COLETA SEGURA DE DADOS (Blindagem contra TypeError)
+        // O uso de ?. previne o erro "Cannot read properties of null"
         this.filtros.busca = document.getElementById('search-assert')?.value || '';
         this.filtros.data = document.getElementById('filtro-data')?.value || '';
         this.filtros.empresa = document.getElementById('filtro-empresa')?.value || '';
@@ -38,10 +48,12 @@ Gestao.Assertividade = {
         this.filtros.obs = document.getElementById('filtro-obs')?.value || '';
         this.filtros.auditora = document.getElementById('filtro-auditora')?.value || '';
 
+        // Feedback visual imediato de "dados desatualizados"
         if (tbody) {
             tbody.style.opacity = '0.5';
         }
         
+        // Debounce para evitar múltiplas requisições enquanto digita
         clearTimeout(this.timerBusca);
         this.timerBusca = setTimeout(() => {
             this.buscarDados();
@@ -52,14 +64,18 @@ Gestao.Assertividade = {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
         
-        if (!tbody) return; 
+        if (!tbody) {
+            console.warn("Gestao.Assertividade: Tabela não encontrada no DOM.");
+            return;
+        }
 
         tbody.style.opacity = '1';
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Carregando dados...</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Processando dados...</p></td></tr>';
         
         if (infoPag) infoPag.innerText = "Filtrando...";
 
         try {
+            // Query base otimizada
             let query = Sistema.supabase
                 .from('assertividade')
                 .select('*')
@@ -67,9 +83,10 @@ Gestao.Assertividade = {
                 .order('id', { ascending: false })
                 .limit(100);
 
-            // Filtros
+            // Aplicação dos Filtros
             if (this.filtros.busca) {
                 const termo = `%${this.filtros.busca}%`;
+                // Busca textual em colunas chave
                 query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
             }
 
@@ -89,8 +106,8 @@ Gestao.Assertividade = {
             if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros recentes.`;
 
         } catch (error) {
-            console.error("Erro busca:", error);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500 font-bold text-xs">Erro: ${error.message}</td></tr>`;
+            console.error("Gestao.Assertividade: Erro na busca:", error);
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500 font-bold text-xs">Erro ao buscar dados: ${error.message}</td></tr>`;
         }
     },
 
@@ -104,62 +121,52 @@ Gestao.Assertividade = {
 
         let html = '';
         lista.forEach(item => {
-            // Status Styles
+            // Tratamento de Status (Cores e Badges)
             let statusClass = 'bg-slate-100 text-slate-500 border-slate-200';
             const st = (item.status || '').toUpperCase();
             if (['OK', 'VALIDO'].includes(st)) statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
             else if (st.includes('NOK')) statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
             else if (st.includes('REV')) statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
 
-            // Datas
+            // Formatação de Data (YYYY-MM-DD -> DD/MM/YYYY)
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
             
-            // --- CORREÇÃO CRÍTICA DE VAZIOS/NULOS ---
-            // Se for null/undefined/vazio, exibe traço '-' e cor cinza.
-            // NÃO converte para 0.
+            // Tratamento Numérico Seguro
+            const formatNumber = (val) => (val !== null && val !== undefined && val !== '') ? val : '-';
             
+            // Lógica de Cor para Porcentagem
             const rawPorc = item.porcentagem_assertividade;
             let displayPorc = '-';
-            let corPorc = "text-slate-300 font-light"; // Cor neutra para vazio
+            let corPorc = "text-slate-300 font-light";
 
-            // Verifica se tem valor REAL (não nulo, não vazio)
             if (rawPorc !== null && rawPorc !== undefined && rawPorc !== '') {
-                displayPorc = rawPorc; // Exibe exatamente o que veio do banco (ex: "100,00%")
-                
-                // Cálculo apenas para cor
+                displayPorc = rawPorc;
                 const valP = parseFloat(String(rawPorc).replace('%','').replace(',','.'));
-                
                 if (!isNaN(valP)) {
-                    corPorc = "text-slate-500"; // Cor padrão se for número
+                    corPorc = "text-slate-500";
                     if(valP >= 99) corPorc = "text-emerald-600 font-bold";
                     else if(valP < 90) corPorc = "text-rose-600 font-bold";
                 }
             }
-            
-            // Lógica similar para campos numéricos (Qtd Campos, OK, NOK)
-            // Se for null, mostra '-'
-            const qtdCampos = item.qtd_campos !== null ? item.qtd_campos : '-';
-            const qtdOk = item.qtd_ok !== null ? item.qtd_ok : '-';
-            const qtdNok = item.qtd_nok !== null ? item.qtd_nok : '-';
 
             html += `
-                <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap">
+                <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap border-b border-slate-50">
                     <td class="px-3 py-2 font-mono text-slate-600">${dataFmt}</td>
-                    <td class="px-3 py-2 text-center text-slate-400">${item.company_id || '-'}</td>
-                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome}">${item.empresa_nome || '-'}</td>
-                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome}">${item.assistente_nome || '-'}</td>
-                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
+                    <td class="px-3 py-2 text-center text-slate-400 font-mono text-[10px]">${item.company_id || '-'}</td>
+                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome || ''}">${item.empresa_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome || ''}">${item.assistente_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name || ''}">${item.doc_name || '-'}</td>
                     <td class="px-3 py-2 text-center">
-                        <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusClass}">${item.status || '-'}</span>
+                        <span class="px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide ${statusClass}">${item.status || 'N/A'}</span>
                     </td>
-                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[200px]" title="${item.observacao}">${item.observacao || ''}</td>
+                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[200px]" title="${item.observacao || ''}">${item.observacao || ''}</td>
                     
-                    <td class="px-3 py-2 text-center font-mono text-slate-500">${qtdCampos}</td>
-                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/30">${qtdOk}</td>
-                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/30">${qtdNok}</td>
+                    <td class="px-3 py-2 text-center font-mono text-slate-500 border-l border-slate-100">${formatNumber(item.qtd_campos)}</td>
+                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/20">${formatNumber(item.qtd_ok)}</td>
+                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/20 border-r border-slate-100">${formatNumber(item.qtd_nok)}</td>
                     
                     <td class="px-3 py-2 text-center ${corPorc}">${displayPorc}</td>
-                    <td class="px-3 py-2 text-slate-500 uppercase text-[10px]">${item.auditora_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-400 uppercase text-[9px]">${item.auditora_nome || '-'}</td>
                 </tr>
             `;
         });
@@ -168,25 +175,37 @@ Gestao.Assertividade = {
     },
 
     transformarFiltrosEmSelects: async function() {
+        // Elementos que serão convertidos de Input para Select
         const campos = [
             { id: 'filtro-auditora', key: 'auditoras', placeholder: 'Todas' },
             { id: 'filtro-status', key: 'status', placeholder: 'Todos' }
         ];
 
+        // Verifica existência da RPC no Supabase antes de chamar
+        if (!Sistema.supabase) return;
+
         try {
             const { data, error } = await Sistema.supabase.rpc('get_filtros_unicos');
-            if (error || !data) return;
+            if (error) {
+                console.warn("RPC get_filtros_unicos falhou ou não existe:", error);
+                return; 
+            }
+            if (!data) return;
 
             campos.forEach(campo => {
                 const inputOriginal = document.getElementById(campo.id);
+                // Segurança: Se o elemento não existir no HTML, pula silenciosamente
                 if (!inputOriginal) return;
 
+                // Evita recriar se já for select (em caso de reload de aba)
                 let select;
                 if (inputOriginal.tagName === 'INPUT') {
                     select = document.createElement('select');
                     select.id = campo.id;
-                    select.className = inputOriginal.className + " font-bold text-slate-700 cursor-pointer";
+                    // Mantém classes para consistência visual
+                    select.className = inputOriginal.className.replace('text-[10px]', 'text-[10px] cursor-pointer bg-slate-50'); 
                     select.style.width = "100%";
+                    // Adiciona evento de change para disparar busca
                     select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
                     inputOriginal.parentNode.replaceChild(select, inputOriginal);
                 } else {
@@ -202,11 +221,13 @@ Gestao.Assertividade = {
             });
 
         } catch (e) {
-            console.warn("Não foi possível carregar filtros dinâmicos:", e);
+            console.warn("Erro ao processar filtros dinâmicos:", e);
         }
     },
 
     mudarPagina: function(delta) {
-        alert("Paginação simplificada para esta visualização.");
+        // Implementação futura de paginação real via Supabase range()
+        console.log("Paginação solicitada:", delta);
+        alert("Paginação via scroll infinito (implementação futura).");
     }
 };
