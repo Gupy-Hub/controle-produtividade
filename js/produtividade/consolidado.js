@@ -220,6 +220,13 @@ Produtividade.Consolidado = {
         let rows = mkRow('Total Assistentes', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
         rows += mkRow('Dias Úteis', 'fas fa-calendar-day', 'text-cyan-500', s => s.diasUteis);
         rows += mkRow('Total Doc. Validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
+        
+        // --- BREAKDOWN DE PRODUÇÃO (ADICIONADO) ---
+        rows += mkRow('FIFO', 'fas fa-sort-amount-down', 'text-slate-400', s => s.fifo);
+        rows += mkRow('Gradual Total', 'fas fa-chart-line', 'text-emerald-500', s => s.gt);
+        rows += mkRow('Gradual Parcial', 'fas fa-chart-area', 'text-teal-500', s => s.gp);
+        rows += mkRow('Perfil FC', 'fas fa-id-card', 'text-purple-500', s => s.fc);
+
         rows += mkRow('Média Val. Diária (Pessoa)', 'fas fa-user-tag', 'text-amber-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / HF / d : 0, true);
         tbody.innerHTML = rows;
         
