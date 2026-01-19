@@ -1,179 +1,265 @@
+// ARQUIVO: js/produtividade/performance.js
+window.Produtividade = window.Produtividade || {};
+
 Produtividade.Performance = {
     initialized: false,
-    chartInstance: null,
-    miniChartInstance: null,
-    dadosCache: [], 
-    
+    chart: null,
+
     init: function() {
-        if (typeof Chart === 'undefined') { console.error("Chart.js não carregou."); return; }
+        console.log("🏎️ Performance: Módulo Iniciado (Estilo Minha Área)");
         this.initialized = true;
-        this.carregar();
+        // Não carrega automaticamente aqui, espera o Produtividade.atualizarTodasAbas()
     },
 
     carregar: async function() {
-        const listContainer = document.getElementById('ranking-list-container');
-        if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
-        
+        // Se a aba não estiver visível, não carrega para economizar recurso
+        if(document.getElementById('tab-performance').classList.contains('hidden')) return;
+
+        console.log("🏎️ Performance: Carregando dados...");
         const datas = Produtividade.getDatasFiltro();
-        const s = datas.inicio;
-        const e = datas.fim;
+        
+        // Verifica filtro de usuário
+        const usuarioId = Produtividade.Geral.usuarioSelecionado;
+        const nomeUsuario = document.getElementById('selected-name')?.textContent;
+
+        this.atualizarHeader(usuarioId, nomeUsuario);
 
         try {
-            const { data, error } = await Sistema.supabase
-                .from('producao')
-                .select(`id, quantidade, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`)
-                .gte('data_referencia', s)
-                .lte('data_referencia', e)
-                .order('data_referencia', { ascending: true });
-                
+            // BUSCA DADOS BRUTOS DA ASSERTIVIDADE
+            // Precisamos dos dados dia a dia para montar o gráfico
+            let query = Sistema.supabase
+                .from('assertividade')
+                .select('data_referencia, usuario_id, porcentagem_assertividade')
+                .gte('data_referencia', datas.inicio)
+                .lte('data_referencia', datas.fim);
+            
+            // Se tiver usuário filtrado, adiciona WHERE
+            if (usuarioId) {
+                query = query.eq('usuario_id', usuarioId);
+            }
+
+            const { data, error } = await query;
+
             if (error) throw error;
-            this.dadosCache = data;
-            this.renderizarVisaoGeral();
-        } catch (err) {
-            console.error(err);
-            if(listContainer) listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro: ${err.message}</div>`;
+
+            this.processarDados(data, datas.inicio, datas.fim);
+
+        } catch (error) {
+            console.error("Erro Performance:", error);
+            alert("Erro ao carregar performance: " + error.message);
         }
     },
 
-    renderizarVisaoGeral: function() {
-        const btnReset = document.getElementById('btn-reset-chart');
-        if(btnReset) btnReset.classList.add('hidden');
+    atualizarHeader: function(uid, nome) {
+        const badge = document.getElementById('perf-badge-filtro');
+        const span = document.getElementById('perf-nome-filtro');
         
-        const elTitle = document.getElementById('chart-title');
-        if(elTitle) elTitle.innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
-
-        const data = this.dadosCache;
-        if (!data || data.length === 0) {
-            this.destroyChart();
-            return;
-        }
-
-        const producaoPorDia = {}; const diasSet = new Set(); const producaoPorUser = {};
-        
-        data.forEach(r => {
-            if(!r.usuario) return;
-            const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
-            if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
-            
-            const date = r.data_referencia; const qtd = Number(r.quantidade) || 0; const uid = r.usuario.id;
-            diasSet.add(date);
-            if (!producaoPorDia[date]) producaoPorDia[date] = 0; producaoPorDia[date] += qtd;
-            
-            if (!producaoPorUser[uid]) {
-                producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid, somaAssert: 0, qtdAssert: 0, diasAtivos: new Set() };
-            }
-            producaoPorUser[uid].total += qtd;
-            producaoPorUser[uid].diasAtivos.add(date);
-
-            if (r.assertividade) {
-                let pClean = String(r.assertividade).replace('%', '').replace(',', '.').trim();
-                let pVal = parseFloat(pClean);
-                if (!isNaN(pVal)) { producaoPorUser[uid].somaAssert += pVal; producaoPorUser[uid].qtdAssert++; }
-            }
-        });
-
-        const labels = Array.from(diasSet).sort();
-        const values = labels.map(d => producaoPorDia[d] || 0);
-        
-        this.renderChart(labels, [{ 
-            label: 'Produção Total do Time', data: values, borderColor: '#3b82f6', 
-            backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, tension: 0.3, fill: true 
-        }]);
-        
-        const usersArray = Object.values(producaoPorUser);
-        this.renderRankingList(usersArray);
-        this.analisarExtremos(usersArray);
-    },
-
-    analisarExtremos: function(usersArray) {
-        if (usersArray.length < 2) return;
-        const ordenados = [...usersArray].sort((a, b) => b.total - a.total);
-        const top = ordenados[0];
-        const bottom = ordenados[ordenados.length - 1];
-
-        const container = document.getElementById('analise-extremos-content');
-        const gapPercentual = ((top.total / bottom.total - 1) * 100).toFixed(1);
-
-        container.innerHTML = `
-            <div class="flex items-center justify-between text-xs bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                <span class="font-bold text-emerald-700">🏆 Top: ${top.nome.split(' ')[0]}</span>
-                <span class="font-black text-emerald-800">${top.total.toLocaleString()} docs</span>
-            </div>
-            <div class="flex items-center justify-between text-xs bg-rose-50 p-2 rounded-lg border border-rose-100">
-                <span class="font-bold text-rose-700">📉 Base: ${bottom.nome.split(' ')[0]}</span>
-                <span class="font-black text-rose-800">${bottom.total.toLocaleString()} docs</span>
-            </div>
-            <div class="text-[10px] font-bold text-slate-500 uppercase pt-1 px-1">
-                GAP de Performance: <span class="text-slate-800">${gapPercentual}%</span>
-            </div>
-        `;
-
-        this.renderMiniChart(top, bottom);
-        this.gerarDiagnostico(top, bottom, gapPercentual);
-    },
-
-    gerarDiagnostico: function(top, bottom, gap) {
-        const badge = document.getElementById('badge-tendencia');
-        const insight = document.getElementById('insight-performance');
-        const mTop = top.total / (top.diasAtivos.size || 1);
-        const mBottom = bottom.total / (bottom.diasAtivos.size || 1);
-
-        let texto = "";
-        if (gap > 40) {
-            badge.innerText = "TENDÊNCIA: DISPARIDADE";
-            badge.className = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-rose-500 text-white";
-            texto = `Análise detectou um gap crítico. Enquanto **${top.nome.split(' ')[0]}** opera com média de ${mTop.toFixed(1)}/dia, **${bottom.nome.split(' ')[0]}** entrega ${mBottom.toFixed(1)}/dia. Esta variação sugere necessidade de nivelamento técnico ou revisão de carga horária.`;
+        if (uid && nome) {
+            badge.classList.remove('hidden');
+            span.innerText = nome;
         } else {
-            badge.innerText = "TENDÊNCIA: EQUILÍBRIO";
-            badge.className = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-500 text-white";
-            texto = `O time apresenta alta coesão produtiva. A variação de ${gap}% entre os extremos é considerada orgânica. O fluxo de trabalho está distribuído de forma equitativa entre a equipe.`;
+            badge.classList.add('hidden');
         }
-        insight.innerHTML = texto;
     },
 
-    renderMiniChart: function(top, bottom) {
-        const ctx = document.getElementById('chartMiniComparativo').getContext('2d');
-        if (this.miniChartInstance) this.miniChartInstance.destroy();
-        this.miniChartInstance = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: [top.nome, bottom.nome],
-                datasets: [{ data: [top.total, bottom.total], backgroundColor: ['#10b981', '#f43f5e'], borderWidth: 0, cutout: '75%' }]
-            },
-            options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
-        });
-    },
+    processarDados: function(registros, dataInicio, dataFim) {
+        // Mapa para agrupar por data: { '2025-12-01': { soma: 3400, qtd: 37 }, ... }
+        const mapaDias = {};
 
-    renderRankingList: function(usersArray) {
-        const container = document.getElementById('ranking-list-container');
-        usersArray.sort((a, b) => b.total - a.total);
-        let html = '';
-        usersArray.forEach((u, index) => {
-            let icon = `<div class="w-6 text-[10px] font-bold text-slate-400">#${index + 1}</div>`;
-            if (index === 0) icon = `<i class="fas fa-crown text-yellow-500 w-6 text-center"></i>`;
-            html += `<div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${u.nome}')" class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer transition group border-b border-slate-50">
-                <div class="flex items-center gap-2">${icon}<span class="text-xs font-bold text-slate-700 truncate w-32">${u.nome}</span></div>
-                <span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span>
-            </div>`;
-        });
-        container.innerHTML = html;
-    },
+        // Inicializa o mapa com todas as datas do período (para o gráfico não ficar buraco)
+        let curr = new Date(dataInicio + 'T12:00:00');
+        const end = new Date(dataFim + 'T12:00:00');
+        
+        while (curr <= end) {
+            const isoDate = curr.toISOString().split('T')[0];
+            mapaDias[isoDate] = { soma: 0, qtd: 0 };
+            curr.setDate(curr.getDate() + 1);
+        }
 
-    renderChart: function(labels, datasets) {
-        this.destroyChart();
-        const ctx = document.getElementById('evolutionChart').getContext('2d');
-        const fmtLabels = labels.map(d => { const p = d.split('-'); return `${p[2]}/${p[1]}`; });
-        this.chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: { labels: fmtLabels, datasets: datasets },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } },
-                plugins: { legend: { position: 'bottom' } }
+        // Acumuladores Gerais
+        let totalSoma = 0;
+        let totalQtd = 0;
+
+        // Processa os registros
+        registros.forEach(reg => {
+            if (!reg.porcentagem_assertividade) return;
+
+            // Converter "100,00%" -> 100.00
+            const valorNum = parseFloat(reg.porcentagem_assertividade.replace('%', '').replace(',', '.'));
+            
+            // Regra Fim de Semana (Igual ao Geral.js)
+            // Se for Sábado/Domingo, joga para a Sexta anterior (ou data válida anterior)
+            let dataRef = new Date(reg.data_referencia + 'T12:00:00');
+            const diaSemana = dataRef.getDay(); // 0=Dom, 6=Sab
+            
+            if (diaSemana === 6) dataRef.setDate(dataRef.getDate() - 1); // Sábado -> Sexta
+            if (diaSemana === 0) dataRef.setDate(dataRef.getDate() - 2); // Domingo -> Sexta
+            
+            const dataKey = dataRef.toISOString().split('T')[0];
+
+            // Só computa se a data calculada estiver no range (mapaDias já tem as keys)
+            if (mapaDias[dataKey]) {
+                mapaDias[dataKey].soma += valorNum;
+                mapaDias[dataKey].qtd += 1; // Cada linha é 1 auditoria
+
+                // Para os totais gerais, conta tudo
+                totalSoma += valorNum;
+                totalQtd += 1;
             }
         });
+
+        // Prepara Arrays para o Gráfico
+        const labels = Object.keys(mapaDias).sort();
+        const dadosVolume = [];
+        const dadosMedia = [];
+
+        labels.forEach(dia => {
+            const d = mapaDias[dia];
+            const mediaDia = d.qtd > 0 ? (d.soma / d.qtd) : null; // Null para não desenhar ponto zero
+            
+            dadosVolume.push(d.qtd);
+            dadosMedia.push(mediaDia ? mediaDia.toFixed(2) : null);
+        });
+
+        // Renderiza
+        this.renderizarKPIs(totalSoma, totalQtd);
+        this.renderizarGrafico(labels, dadosVolume, dadosMedia);
     },
 
-    destroyChart: function() { if (this.chartInstance) this.chartInstance.destroy(); },
-    resetChart: function() { this.renderizarVisaoGeral(); }
+    renderizarKPIs: function(soma, qtd) {
+        // 1. Média
+        const media = qtd > 0 ? (soma / qtd) : 0;
+        const elMedia = document.getElementById('perf-kpi-media');
+        const elBar = document.getElementById('perf-bar-media');
+        
+        if(elMedia) elMedia.innerText = media.toFixed(2).replace('.', ',') + '%';
+        if(elBar) elBar.style.width = Math.min(media, 100) + '%';
+
+        // 2. Volume
+        const elVol = document.getElementById('perf-kpi-volume');
+        if(elVol) elVol.innerText = qtd.toLocaleString('pt-BR');
+
+        // 3. Status
+        const elStatus = document.getElementById('perf-badge-status');
+        const elDesc = document.getElementById('perf-status-desc');
+        const meta = 98.0;
+
+        if (qtd === 0) {
+            elStatus.className = "px-3 py-1 rounded-lg text-sm font-bold bg-slate-100 text-slate-500";
+            elStatus.innerText = "Sem Dados";
+            elDesc.innerText = "Aguardando auditorias...";
+        } else if (media >= meta) {
+            elStatus.className = "px-3 py-1 rounded-lg text-sm font-bold bg-emerald-100 text-emerald-700 border border-emerald-200";
+            elStatus.innerText = "Meta Atingida! 🏆";
+            elDesc.innerText = `Parabéns! Acima de ${meta}%`;
+        } else {
+            const gap = (meta - media).toFixed(2);
+            elStatus.className = "px-3 py-1 rounded-lg text-sm font-bold bg-rose-100 text-rose-700 border border-rose-200";
+            elStatus.innerText = "Abaixo da Meta";
+            elDesc.innerText = `Faltam ${gap}% para ${meta}%`;
+        }
+    },
+
+    renderizarGrafico: function(labels, volume, media) {
+        const ctx = document.getElementById('chartPerformance');
+        if (!ctx) return;
+
+        // Formatar datas para exibir "01/12"
+        const labelsFormatados = labels.map(d => d.split('-').reverse().slice(0, 2).join('/'));
+
+        if (this.chart) this.chart.destroy();
+
+        this.chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labelsFormatados,
+                datasets: [
+                    {
+                        label: 'Volume Auditado',
+                        data: volume,
+                        backgroundColor: '#bfdbfe', // blue-200
+                        hoverBackgroundColor: '#60a5fa', // blue-400
+                        borderRadius: 4,
+                        order: 2,
+                        yAxisID: 'yVolume'
+                    },
+                    {
+                        label: 'Assertividade (%)',
+                        data: media,
+                        type: 'line',
+                        borderColor: '#10b981', // emerald-500
+                        backgroundColor: '#10b981',
+                        borderWidth: 3,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: '#10b981',
+                        pointBorderWidth: 2,
+                        tension: 0.3, // Curva suave
+                        order: 1,
+                        yAxisID: 'yPercent',
+                        spanGaps: true // Pula dias sem dados sem quebrar a linha
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false,
+                },
+                plugins: {
+                    legend: { display: false }, // Legenda customizada no HTML
+                    tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#475569',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        titleFont: { size: 13, weight: 'bold' },
+                        padding: 10,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) label += ': ';
+                                if (context.parsed.y !== null) {
+                                    if (context.dataset.type === 'line') {
+                                        return label + context.parsed.y.toFixed(2) + '%';
+                                    }
+                                    return label + context.parsed.y;
+                                }
+                                return null;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { font: { size: 10 }, color: '#94a3b8' }
+                    },
+                    yVolume: {
+                        type: 'linear',
+                        display: false, // Esconde eixo de volume para ficar mais limpo
+                        position: 'right',
+                        grid: { display: false }
+                    },
+                    yPercent: {
+                        type: 'linear',
+                        display: true,
+                        position: 'left',
+                        min: 80, // Foca o gráfico entre 80% e 100% para ver detalhes
+                        max: 105,
+                        grid: { color: '#f1f5f9', borderDash: [5, 5] },
+                        ticks: { 
+                            callback: function(value) { return value + '%' },
+                            color: '#64748b',
+                            font: { weight: 'bold' }
+                        }
+                    }
+                }
+            }
+        });
+    }
 };
