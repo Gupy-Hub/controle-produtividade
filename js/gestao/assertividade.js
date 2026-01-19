@@ -4,7 +4,9 @@ Gestao.Assertividade = {
     inicializado: false,
     timerBusca: null,
     
-    // Estado dos filtros
+    // Configuração estática para aliviar o banco
+    opcoesStatus: ['OK', 'NOK', 'REV', 'VALIDO', 'INVALIDO', 'PENDENTE'],
+
     filtros: {
         busca: '',
         data: '',
@@ -16,29 +18,36 @@ Gestao.Assertividade = {
         obs: ''
     },
 
-    // Ponto de entrada chamado pelo Menu/Main
     carregar: async function() {
-        console.log("Gestao.Assertividade: Iniciando carregamento...");
+        console.log("Gestao.Assertividade: Iniciando módulo (v3 Otimizada)...");
+        
+        // Garante visibilidade
+        const view = document.getElementById('view-assertividade');
+        if (view && view.classList.contains('hidden')) {
+            view.classList.remove('hidden');
+        }
+
         try {
             if (!this.inicializado) {
-                // Tenta carregar selects dinâmicos, mas não bloqueia se falhar
-                await this.transformarFiltrosEmSelects().catch(err => console.warn("Falha ao montar selects:", err));
+                // Carrega status estático IMEDIATAMENTE (UX Instantânea)
+                this.montarSelectStatus();
+                
+                // Tenta carregar auditoras dinamicamente (assíncrono, não bloqueia)
+                this.transformarAuditorasEmSelect();
+                
                 this.inicializado = true;
             }
             this.atualizarFiltrosEBuscar();
         } catch (error) {
-            console.error("Gestao.Assertividade: Erro fatal no init", error);
-            const tbody = document.getElementById('lista-assertividade');
-            if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center text-red-500 py-4">Erro ao inicializar módulo: ${error.message}</td></tr>`;
+            console.error("Erro fatal init:", error);
+            this.exibirErroFatal(error.message);
         }
     },
 
-    // Função unificada para leitura do DOM e trigger de busca
     atualizarFiltrosEBuscar: function() {
         const tbody = document.getElementById('lista-assertividade');
         
-        // COLETA SEGURA DE DADOS (Blindagem contra TypeError)
-        // O uso de ?. previne o erro "Cannot read properties of null"
+        // Coleta Segura com Optional Chaining (?.)
         this.filtros.busca = document.getElementById('search-assert')?.value || '';
         this.filtros.data = document.getElementById('filtro-data')?.value || '';
         this.filtros.empresa = document.getElementById('filtro-empresa')?.value || '';
@@ -48,34 +57,25 @@ Gestao.Assertividade = {
         this.filtros.obs = document.getElementById('filtro-obs')?.value || '';
         this.filtros.auditora = document.getElementById('filtro-auditora')?.value || '';
 
-        // Feedback visual imediato de "dados desatualizados"
-        if (tbody) {
-            tbody.style.opacity = '0.5';
-        }
+        if (tbody) tbody.style.opacity = '0.5';
         
-        // Debounce para evitar múltiplas requisições enquanto digita
         clearTimeout(this.timerBusca);
-        this.timerBusca = setTimeout(() => {
-            this.buscarDados();
-        }, 500);
+        this.timerBusca = setTimeout(() => this.buscarDados(), 500);
     },
 
     buscarDados: async function() {
         const tbody = document.getElementById('lista-assertividade');
         const infoPag = document.getElementById('info-paginacao');
         
-        if (!tbody) {
-            console.warn("Gestao.Assertividade: Tabela não encontrada no DOM.");
-            return;
-        }
+        if (!tbody) return;
 
         tbody.style.opacity = '1';
-        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Processando dados...</p></td></tr>';
-        
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Processando...</p></td></tr>';
         if (infoPag) infoPag.innerText = "Filtrando...";
 
         try {
-            // Query base otimizada
+            if (!Sistema?.supabase) throw new Error("Supabase desconectado.");
+
             let query = Sistema.supabase
                 .from('assertividade')
                 .select('*')
@@ -83,10 +83,9 @@ Gestao.Assertividade = {
                 .order('id', { ascending: false })
                 .limit(100);
 
-            // Aplicação dos Filtros
+            // Aplicação Otimizada de Filtros
             if (this.filtros.busca) {
                 const termo = `%${this.filtros.busca}%`;
-                // Busca textual em colunas chave
                 query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
             }
 
@@ -99,135 +98,113 @@ Gestao.Assertividade = {
             if (this.filtros.status) query = query.eq('status', this.filtros.status);
 
             const { data, error } = await query;
-
             if (error) throw error;
 
             this.renderizarTabela(data || []);
-            if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros recentes.`;
+            if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros.`;
 
         } catch (error) {
-            console.error("Gestao.Assertividade: Erro na busca:", error);
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500 font-bold text-xs">Erro ao buscar dados: ${error.message}</td></tr>`;
+            console.error("Erro na busca:", error);
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-rose-500 font-bold text-xs">Erro de conexão: ${error.message}</td></tr>`;
         }
     },
 
     renderizarTabela: function(lista) {
         const tbody = document.getElementById('lista-assertividade');
-        
-        if (!lista || lista.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400 text-xs">Nenhum registro encontrado com esses filtros.</td></tr>';
+        if (!lista?.length) {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400 text-xs">Nenhum registro encontrado.</td></tr>';
             return;
         }
 
+        const formatNum = (v) => (v != null && v !== '') ? v : '-';
+        
         let html = '';
         lista.forEach(item => {
-            // Tratamento de Status (Cores e Badges)
-            let statusClass = 'bg-slate-100 text-slate-500 border-slate-200';
+            // Estilos de Status
+            let stClass = 'bg-slate-100 text-slate-500 border-slate-200';
             const st = (item.status || '').toUpperCase();
-            if (['OK', 'VALIDO'].includes(st)) statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            else if (st.includes('NOK')) statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
-            else if (st.includes('REV')) statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
+            if (['OK', 'VALIDO'].some(k => st.includes(k))) stClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            else if (st.includes('NOK')) stClass = 'bg-rose-50 text-rose-700 border-rose-200';
+            else if (st.includes('REV')) stClass = 'bg-amber-50 text-amber-700 border-amber-200';
 
-            // Formatação de Data (YYYY-MM-DD -> DD/MM/YYYY)
-            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
-            
-            // Tratamento Numérico Seguro
-            const formatNumber = (val) => (val !== null && val !== undefined && val !== '') ? val : '-';
-            
-            // Lógica de Cor para Porcentagem
-            const rawPorc = item.porcentagem_assertividade;
-            let displayPorc = '-';
-            let corPorc = "text-slate-300 font-light";
-
-            if (rawPorc !== null && rawPorc !== undefined && rawPorc !== '') {
-                displayPorc = rawPorc;
-                const valP = parseFloat(String(rawPorc).replace('%','').replace(',','.'));
-                if (!isNaN(valP)) {
-                    corPorc = "text-slate-500";
-                    if(valP >= 99) corPorc = "text-emerald-600 font-bold";
-                    else if(valP < 90) corPorc = "text-rose-600 font-bold";
-                }
+            // Porcentagem e Cor
+            let corPorc = "text-slate-300";
+            const porcVal = parseFloat(String(item.porcentagem_assertividade || '').replace('%','').replace(',','.'));
+            if (!isNaN(porcVal)) {
+                corPorc = porcVal >= 99 ? "text-emerald-600 font-bold" : (porcVal < 90 ? "text-rose-600 font-bold" : "text-slate-500");
             }
 
             html += `
                 <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap border-b border-slate-50">
-                    <td class="px-3 py-2 font-mono text-slate-600">${dataFmt}</td>
+                    <td class="px-3 py-2 font-mono text-slate-600">${item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-'}</td>
                     <td class="px-3 py-2 text-center text-slate-400 font-mono text-[10px]">${item.company_id || '-'}</td>
-                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome || ''}">${item.empresa_nome || '-'}</td>
-                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome || ''}">${item.assistente_nome || '-'}</td>
-                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name || ''}">${item.doc_name || '-'}</td>
-                    <td class="px-3 py-2 text-center">
-                        <span class="px-2 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide ${statusClass}">${item.status || 'N/A'}</span>
-                    </td>
-                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[200px]" title="${item.observacao || ''}">${item.observacao || ''}</td>
-                    
-                    <td class="px-3 py-2 text-center font-mono text-slate-500 border-l border-slate-100">${formatNumber(item.qtd_campos)}</td>
-                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/20">${formatNumber(item.qtd_ok)}</td>
-                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/20 border-r border-slate-100">${formatNumber(item.qtd_nok)}</td>
-                    
-                    <td class="px-3 py-2 text-center ${corPorc}">${displayPorc}</td>
+                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome}">${item.empresa_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome}">${item.assistente_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
+                    <td class="px-3 py-2 text-center"><span class="px-2 py-0.5 rounded border text-[9px] font-bold uppercase ${stClass}">${item.status || 'N/A'}</span></td>
+                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[150px]">${item.observacao || ''}</td>
+                    <td class="px-3 py-2 text-center border-l border-slate-100">${formatNum(item.qtd_campos)}</td>
+                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/20">${formatNum(item.qtd_ok)}</td>
+                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/20 border-r border-slate-100">${formatNum(item.qtd_nok)}</td>
+                    <td class="px-3 py-2 text-center ${corPorc}">${item.porcentagem_assertividade || '-'}</td>
                     <td class="px-3 py-2 text-slate-400 uppercase text-[9px]">${item.auditora_nome || '-'}</td>
-                </tr>
-            `;
+                </tr>`;
         });
-
         tbody.innerHTML = html;
     },
 
-    transformarFiltrosEmSelects: async function() {
-        // Elementos que serão convertidos de Input para Select
-        const campos = [
-            { id: 'filtro-auditora', key: 'auditoras', placeholder: 'Todas' },
-            { id: 'filtro-status', key: 'status', placeholder: 'Todos' }
-        ];
+    // --- MÉTODOS DE FILTRO OTIMIZADOS ---
 
-        // Verifica existência da RPC no Supabase antes de chamar
-        if (!Sistema.supabase) return;
+    // 1. Status: Usa lista estática (Rápido, sem DB)
+    montarSelectStatus: function() {
+        this.converterInputParaSelect('filtro-status', ['Todos', ...this.opcoesStatus]);
+    },
 
+    // 2. Auditoras: Tenta DB, falha silenciosamente mantendo input
+    transformarAuditorasEmSelect: async function() {
         try {
+            // Se falhar aqui, cai no catch e o input continua texto (fallback seguro)
             const { data, error } = await Sistema.supabase.rpc('get_filtros_unicos');
-            if (error) {
-                console.warn("RPC get_filtros_unicos falhou ou não existe:", error);
-                return; 
+            if (error) throw error;
+            
+            if (data && data.auditoras && data.auditoras.length > 0) {
+                this.converterInputParaSelect('filtro-auditora', ['Todas', ...data.auditoras]);
             }
-            if (!data) return;
-
-            campos.forEach(campo => {
-                const inputOriginal = document.getElementById(campo.id);
-                // Segurança: Se o elemento não existir no HTML, pula silenciosamente
-                if (!inputOriginal) return;
-
-                // Evita recriar se já for select (em caso de reload de aba)
-                let select;
-                if (inputOriginal.tagName === 'INPUT') {
-                    select = document.createElement('select');
-                    select.id = campo.id;
-                    // Mantém classes para consistência visual
-                    select.className = inputOriginal.className.replace('text-[10px]', 'text-[10px] cursor-pointer bg-slate-50'); 
-                    select.style.width = "100%";
-                    // Adiciona evento de change para disparar busca
-                    select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
-                    inputOriginal.parentNode.replaceChild(select, inputOriginal);
-                } else {
-                    select = inputOriginal;
-                }
-
-                let htmlOpts = `<option value="">${campo.placeholder}</option>`;
-                const lista = data[campo.key] || [];
-                lista.forEach(item => {
-                    if(item) htmlOpts += `<option value="${item}">${item}</option>`;
-                });
-                select.innerHTML = htmlOpts;
-            });
-
         } catch (e) {
-            console.warn("Erro ao processar filtros dinâmicos:", e);
+            console.warn("Filtro Auditora: Mantendo input de texto (Performance/Timeout)", e.message);
         }
     },
 
+    // Helper reutilizável para criar selects
+    converterInputParaSelect: function(elementId, opcoes) {
+        const input = document.getElementById(elementId);
+        if (!input) return;
+
+        // Se já for select, apenas atualiza (preservando valor se possível)
+        if (input.tagName === 'SELECT') return;
+
+        const select = document.createElement('select');
+        select.id = elementId;
+        select.className = input.className.replace('text-[10px]', 'text-[10px] cursor-pointer bg-slate-50 font-bold text-slate-700');
+        select.style.width = "100%";
+        select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
+
+        let html = '';
+        opcoes.forEach(opt => {
+            const val = (opt === 'Todas' || opt === 'Todos') ? '' : opt;
+            html += `<option value="${val}">${opt}</option>`;
+        });
+        select.innerHTML = html;
+
+        input.parentNode.replaceChild(select, input);
+    },
+
+    exibirErroFatal: function(msg) {
+        const tbody = document.getElementById('lista-assertividade');
+        if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center text-red-500 py-10 font-bold">Erro crítico: ${msg}</td></tr>`;
+    },
+
     mudarPagina: function(delta) {
-        // Implementação futura de paginação real via Supabase range()
-        console.log("Paginação solicitada:", delta);
-        alert("Paginação via scroll infinito (implementação futura).");
+        alert("Paginação em desenvolvimento.");
     }
 };
