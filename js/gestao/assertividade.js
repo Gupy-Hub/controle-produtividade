@@ -1,166 +1,212 @@
-// ARQUIVO: js/gestao/assertividade.js
 window.Gestao = window.Gestao || {};
 
 Gestao.Assertividade = {
-    chartErro: null,
-    chartAcerto: null,
-
-    init: function() {
-        console.log("📊 Gestão Assertividade: Engine V3 Iniciada");
-        this.popularAnos();
-        this.setDefaultDates();
-        this.carregar();
+    inicializado: false,
+    timerBusca: null,
+    
+    // Estado dos filtros
+    filtros: {
+        busca: '',
+        data: '',
+        empresa: '',
+        assistente: '',
+        auditora: '',
+        status: '',
+        doc: '',
+        obs: ''
     },
 
-    popularAnos: function() {
-        const sel = document.getElementById('assert-sel-ano');
-        if(!sel) return;
-        const anoAtual = new Date().getFullYear();
-        for(let i = anoAtual; i >= 2024; i--) {
-            sel.innerHTML += `<option value="${i}">${i}</option>`;
-        }
-    },
-
-    setDefaultDates: function() {
-        const hoje = new Date();
-        document.getElementById('assert-sel-mes').value = hoje.getMonth();
-        document.getElementById('assert-sel-data').value = hoje.toISOString().split('T')[0];
-    },
-
-    togglePeriodo: function() {
-        const tipo = document.getElementById('assert-tipo-periodo').value;
-        document.getElementById('assert-container-mes').classList.toggle('hidden', tipo !== 'mes');
-        document.getElementById('assert-container-dia').classList.toggle('hidden', tipo !== 'dia');
-        this.carregar();
-    },
-
-    getDatasFiltro: function() {
-        const tipo = document.getElementById('assert-tipo-periodo').value;
-        if (tipo === 'dia') {
-            const data = document.getElementById('assert-sel-data').value;
-            return { inicio: data, fim: data };
-        } else {
-            const ano = document.getElementById('assert-sel-ano').value;
-            const mes = document.getElementById('assert-sel-mes').value;
-            const ini = new Date(ano, mes, 1);
-            const fim = new Date(ano, parseInt(mes) + 1, 0);
-            const f = (d) => d.toISOString().split('T')[0];
-            return { inicio: f(ini), fim: f(fim) };
-        }
-    },
-
+    // Ponto de entrada chamado pelo Menu
     carregar: async function() {
-        const tbody = document.getElementById('assert-table-body');
-        const datas = this.getDatasFiltro();
+        if (!this.inicializado) {
+            await this.transformarFiltrosEmSelects();
+            this.inicializado = true;
+        }
+        this.atualizarFiltrosEBuscar();
+    },
+
+    // Função que o HTML chama no onkeyup/onchange
+    atualizarFiltrosEBuscar: function() {
+        const tbody = document.getElementById('lista-assertividade');
         
-        if(!tbody || !datas.inicio) return;
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Analisando dados do período...</td></tr>';
+        this.filtros.busca = document.getElementById('search-assert')?.value || '';
+        this.filtros.data = document.getElementById('filtro-data')?.value || '';
+        this.filtros.empresa = document.getElementById('filtro-empresa')?.value || '';
+        this.filtros.assistente = document.getElementById('filtro-assistente')?.value || '';
+        this.filtros.doc = document.getElementById('filtro-doc')?.value || '';
+        this.filtros.status = document.getElementById('filtro-status')?.value || '';
+        this.filtros.obs = document.getElementById('filtro-obs')?.value || '';
+        this.filtros.auditora = document.getElementById('filtro-auditora')?.value || '';
+
+        if (tbody) {
+            tbody.style.opacity = '0.5';
+        }
+        
+        clearTimeout(this.timerBusca);
+        this.timerBusca = setTimeout(() => {
+            this.buscarDados();
+        }, 500);
+    },
+
+    buscarDados: async function() {
+        const tbody = document.getElementById('lista-assertividade');
+        const infoPag = document.getElementById('info-paginacao');
+        
+        if (!tbody) return; 
+
+        tbody.style.opacity = '1';
+        tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i><p class="text-slate-400 mt-2 text-xs">Carregando dados...</p></td></tr>';
+        
+        if (infoPag) infoPag.innerText = "Filtrando...";
 
         try {
-            const { data, error } = await Sistema.supabase
+            let query = Sistema.supabase
                 .from('assertividade')
                 .select('*')
-                .gte('data_referencia', datas.inicio)
-                .lte('data_referencia', datas.fim)
-                .order('data_referencia', { ascending: false });
+                .order('data_referencia', { ascending: false })
+                .order('id', { ascending: false })
+                .limit(100);
+
+            // Filtros
+            if (this.filtros.busca) {
+                const termo = `%${this.filtros.busca}%`;
+                query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
+            }
+
+            if (this.filtros.data) query = query.eq('data_referencia', this.filtros.data);
+            if (this.filtros.empresa) query = query.ilike('empresa_nome', `%${this.filtros.empresa}%`);
+            if (this.filtros.assistente) query = query.ilike('assistente_nome', `%${this.filtros.assistente}%`);
+            if (this.filtros.doc) query = query.ilike('doc_name', `%${this.filtros.doc}%`);
+            if (this.filtros.obs) query = query.ilike('observacao', `%${this.filtros.obs}%`);
+            if (this.filtros.auditora) query = query.eq('auditora_nome', this.filtros.auditora);
+            if (this.filtros.status) query = query.eq('status', this.filtros.status);
+
+            const { data, error } = await query;
 
             if (error) throw error;
 
-            this.renderizar(data);
-            this.processarGraficos(data);
+            this.renderizarTabela(data || []);
+            if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros recentes.`;
 
         } catch (error) {
             console.error("Erro busca:", error);
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-10 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-4 text-red-500 font-bold text-xs">Erro: ${error.message}</td></tr>`;
         }
     },
 
-    renderizar: function(data) {
-        const tbody = document.getElementById('assert-table-body');
-        tbody.innerHTML = '';
-
-        if(data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center py-10 text-slate-400">Nenhum dado encontrado para o período.</td></tr>';
+    renderizarTabela: function(lista) {
+        const tbody = document.getElementById('lista-assertividade');
+        
+        if (!lista || lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-10 text-slate-400 text-xs">Nenhum registro encontrado com esses filtros.</td></tr>';
             return;
         }
 
-        let somaAssert = 0;
-        data.forEach(item => {
-            const pct = parseFloat(item.porcentagem_assertividade?.replace('%', '').replace(',', '.')) || 0;
-            somaAssert += pct;
+        let html = '';
+        lista.forEach(item => {
+            // Status Styles
+            let statusClass = 'bg-slate-100 text-slate-500 border-slate-200';
+            const st = (item.status || '').toUpperCase();
+            if (['OK', 'VALIDO'].includes(st)) statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            else if (st.includes('NOK')) statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
+            else if (st.includes('REV')) statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
 
-            tbody.innerHTML += `
-                <tr class="hover:bg-slate-50 transition border-b border-slate-100">
-                    <td class="px-6 py-3 text-slate-500 font-medium">${new Date(item.data_referencia + 'T12:00:00').toLocaleDateString()}</td>
-                    <td class="px-6 py-3 font-bold text-slate-700">${item.assistente_nome || '-'}</td>
-                    <td class="px-6 py-3 text-slate-600">${item.doc_name || '-'}</td>
-                    <td class="px-6 py-3 text-center font-mono">${item.qtd_campos || 0}</td>
-                    <td class="px-6 py-3 text-center font-bold text-emerald-600">${item.qtd_ok || 0}</td>
-                    <td class="px-6 py-3 text-center font-bold text-rose-600">${item.qtd_nok || 0}</td>
-                    <td class="px-6 py-3 text-center">
-                        <span class="px-2 py-1 rounded text-[10px] font-bold ${pct >= 98 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
-                            ${item.porcentagem_assertividade || '0%'}
-                        </span>
+            // Datas
+            const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
+            
+            // --- CORREÇÃO CRÍTICA DE VAZIOS/NULOS ---
+            // Se for null/undefined/vazio, exibe traço '-' e cor cinza.
+            // NÃO converte para 0.
+            
+            const rawPorc = item.porcentagem_assertividade;
+            let displayPorc = '-';
+            let corPorc = "text-slate-300 font-light"; // Cor neutra para vazio
+
+            // Verifica se tem valor REAL (não nulo, não vazio)
+            if (rawPorc !== null && rawPorc !== undefined && rawPorc !== '') {
+                displayPorc = rawPorc; // Exibe exatamente o que veio do banco (ex: "100,00%")
+                
+                // Cálculo apenas para cor
+                const valP = parseFloat(String(rawPorc).replace('%','').replace(',','.'));
+                
+                if (!isNaN(valP)) {
+                    corPorc = "text-slate-500"; // Cor padrão se for número
+                    if(valP >= 99) corPorc = "text-emerald-600 font-bold";
+                    else if(valP < 90) corPorc = "text-rose-600 font-bold";
+                }
+            }
+            
+            // Lógica similar para campos numéricos (Qtd Campos, OK, NOK)
+            // Se for null, mostra '-'
+            const qtdCampos = item.qtd_campos !== null ? item.qtd_campos : '-';
+            const qtdOk = item.qtd_ok !== null ? item.qtd_ok : '-';
+            const qtdNok = item.qtd_nok !== null ? item.qtd_nok : '-';
+
+            html += `
+                <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap">
+                    <td class="px-3 py-2 font-mono text-slate-600">${dataFmt}</td>
+                    <td class="px-3 py-2 text-center text-slate-400">${item.company_id || '-'}</td>
+                    <td class="px-3 py-2 font-bold text-slate-700 truncate max-w-[150px]" title="${item.empresa_nome}">${item.empresa_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome}">${item.assistente_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
+                    <td class="px-3 py-2 text-center">
+                        <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusClass}">${item.status || '-'}</span>
                     </td>
-                    <td class="px-6 py-3 text-slate-500">${item.auditora_nome || '-'}</td>
+                    <td class="px-3 py-2 text-slate-400 italic truncate max-w-[200px]" title="${item.observacao}">${item.observacao || ''}</td>
+                    
+                    <td class="px-3 py-2 text-center font-mono text-slate-500">${qtdCampos}</td>
+                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/30">${qtdOk}</td>
+                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/30">${qtdNok}</td>
+                    
+                    <td class="px-3 py-2 text-center ${corPorc}">${displayPorc}</td>
+                    <td class="px-3 py-2 text-slate-500 uppercase text-[10px]">${item.auditora_nome || '-'}</td>
                 </tr>
             `;
         });
 
-        // Atualiza KPIs
-        document.getElementById('kpi-assert-total').innerText = data.length.toLocaleString();
-        document.getElementById('kpi-assert-media').innerText = (somaAssert / data.length).toFixed(2).replace('.', ',') + '%';
+        tbody.innerHTML = html;
     },
 
-    processarGraficos: function(data) {
-        const mapaErros = {};
-        const mapaAcertos = {};
+    transformarFiltrosEmSelects: async function() {
+        const campos = [
+            { id: 'filtro-auditora', key: 'auditoras', placeholder: 'Todas' },
+            { id: 'filtro-status', key: 'status', placeholder: 'Todos' }
+        ];
 
-        data.forEach(item => {
-            const doc = item.doc_name || 'Desconhecido';
-            mapaErros[doc] = (mapaErros[doc] || 0) + (item.qtd_nok || 0);
-            mapaAcertos[doc] = (mapaAcertos[doc] || 0) + (item.qtd_ok || 0);
-        });
+        try {
+            const { data, error } = await Sistema.supabase.rpc('get_filtros_unicos');
+            if (error || !data) return;
 
-        const topErros = Object.entries(mapaErros).sort((a,b) => b[1] - a[1]).slice(0, 5);
-        const topAcertos = Object.entries(mapaAcertos).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            campos.forEach(campo => {
+                const inputOriginal = document.getElementById(campo.id);
+                if (!inputOriginal) return;
 
-        // Atualiza KPI de Ofensor
-        document.getElementById('kpi-assert-offensor').innerText = topErros[0] ? topErros[0][0] : '--';
-        document.getElementById('kpi-assert-doc').innerText = topErros[0] ? topErros[0][0] : '--';
+                let select;
+                if (inputOriginal.tagName === 'INPUT') {
+                    select = document.createElement('select');
+                    select.id = campo.id;
+                    select.className = inputOriginal.className + " font-bold text-slate-700 cursor-pointer";
+                    select.style.width = "100%";
+                    select.addEventListener('change', () => this.atualizarFiltrosEBuscar());
+                    inputOriginal.parentNode.replaceChild(select, inputOriginal);
+                } else {
+                    select = inputOriginal;
+                }
 
-        this.renderizarGrafico('chartDocsErro', topErros, '#f43f5e', 'Erro');
-        this.renderizarGrafico('chartDocsAcerto', topAcertos, '#10b981', 'Acerto');
+                let htmlOpts = `<option value="">${campo.placeholder}</option>`;
+                const lista = data[campo.key] || [];
+                lista.forEach(item => {
+                    if(item) htmlOpts += `<option value="${item}">${item}</option>`;
+                });
+                select.innerHTML = htmlOpts;
+            });
+
+        } catch (e) {
+            console.warn("Não foi possível carregar filtros dinâmicos:", e);
+        }
     },
 
-    renderizarGrafico: function(canvasId, dados, cor, label) {
-        const ctx = document.getElementById(canvasId);
-        if(!ctx) return;
-
-        if (canvasId === 'chartDocsErro' && this.chartErro) this.chartErro.destroy();
-        if (canvasId === 'chartDocsAcerto' && this.chartAcerto) this.chartAcerto.destroy();
-
-        const chart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: dados.map(d => d[0].substring(0, 15) + '...'),
-                datasets: [{
-                    label: label + 's',
-                    data: dados.map(d => d[1]),
-                    backgroundColor: cor,
-                    borderRadius: 5
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { x: { grid: { display: false } }, y: { grid: { display: false } } }
-            }
-        });
-
-        if (canvasId === 'chartDocsErro') this.chartErro = chart;
-        else this.chartAcerto = chart;
+    mudarPagina: function(delta) {
+        alert("Paginação simplificada para esta visualização.");
     }
 };
