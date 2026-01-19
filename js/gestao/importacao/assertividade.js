@@ -11,11 +11,12 @@ Importacao.Assertividade = {
             
             if (btn) {
                 originalText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Lendo arquivo...';
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processando...';
                 btn.disabled = true;
                 btn.classList.add('cursor-not-allowed', 'opacity-75');
             }
 
+            // Pequeno delay para a UI atualizar antes de travar a thread na leitura
             setTimeout(() => {
                 this.lerCSV(file).finally(() => {
                     input.value = ''; 
@@ -32,7 +33,7 @@ Importacao.Assertividade = {
     lerCSV: function(file) {
         return new Promise((resolve) => {
             console.time("TempoLeitura");
-            console.log("📂 [Importacao] Iniciando leitura estrita (Null é Null).");
+            console.log("📂 [Importacao] Iniciando leitura focada em end_time.");
             
             Papa.parse(file, {
                 header: true, 
@@ -40,13 +41,13 @@ Importacao.Assertividade = {
                 encoding: "UTF-8", 
                 complete: async (results) => {
                     console.timeEnd("TempoLeitura");
-                    console.log(`📊 Linhas encontradas: ${results.data.length}`);
+                    console.log(`📊 Linhas brutas encontradas: ${results.data.length}`);
                     await this.tratarEEnviar(results.data);
                     resolve();
                 },
                 error: (error) => {
                     console.error("Erro CSV:", error);
-                    alert("Erro crítico ao ler o arquivo CSV.");
+                    alert("Erro crítico ao ler o arquivo CSV. Verifique a codificação.");
                     resolve();
                 }
             });
@@ -57,50 +58,67 @@ Importacao.Assertividade = {
         console.time("TempoTratamento");
         const listaParaSalvar = [];
 
-        // --- TRATAMENTO ESTRITO DE NULOS ---
-        // Se estiver vazio, undefined ou for só espaço em branco -> Retorna NULL
-        // Não converte para 0.
-        
+        // Funções auxiliares de limpeza
         const tratarInt = (val) => {
-            if (val === "" || val === null || val === undefined || val.trim() === "") return null;
+            if (val === "" || val === null || val === undefined || (typeof val === 'string' && val.trim() === "")) return null;
             const parsed = parseInt(val);
             return isNaN(parsed) ? null : parsed;
         };
 
         const tratarString = (val) => {
-             if (val === "" || val === null || val === undefined || val.trim() === "") return null;
-             return val.trim();
+             if (val === "" || val === null || val === undefined || (typeof val === 'string' && val.trim() === "")) return null;
+             return String(val).trim();
         };
 
         for (let i = 0; i < linhas.length; i++) {
             const linha = linhas[i];
             
-            // Validação mínima para ignorar linhas totalmente vazias
-            if (!linha['ID PPC'] && !linha['end_time']) continue;
+            // --- VALIDAÇÃO CRÍTICA DO END_TIME ---
+            // Se não houver end_time, o registro não tem validade temporal para auditoria.
+            const endTimeRaw = tratarString(linha['end_time']);
+            if (!endTimeRaw) continue;
 
-            // Extração de data
-            const endTimeRaw = linha['end_time'];
+            // Extração precisa da Data de Referência baseada no end_time
+            // Formato esperado: ISO (ex: 2025-09-30T23:25:44.646Z) ou YYYY-MM-DD...
             let dataLiteral = null;
 
-            if (endTimeRaw && endTimeRaw.includes('T')) {
-                dataLiteral = endTimeRaw.split('T')[0];
-            } else if (endTimeRaw && endTimeRaw.length >= 10) {
-                dataLiteral = endTimeRaw.substring(0, 10);
+            try {
+                // Tenta extrair a data ISO (YYYY-MM-DD)
+                if (endTimeRaw.includes('T')) {
+                    dataLiteral = endTimeRaw.split('T')[0];
+                } else if (endTimeRaw.length >= 10) {
+                    // Fallback para formatos simples se necessário, mas prioriza a string exata
+                    dataLiteral = endTimeRaw.substring(0, 10);
+                }
+                
+                // Validação extra de data válida
+                const testeData = new Date(dataLiteral);
+                if (isNaN(testeData.getTime())) {
+                    console.warn(`[Ignorado] Data inválida na linha ${i}: ${endTimeRaw}`);
+                    continue; 
+                }
+            } catch (e) {
+                continue; // Pula se der erro no parse
             }
 
-            // Mapeamento mantendo a fidelidade aos vazios
+            // Mapeamento do Objeto
             const objeto = {
+                // Chaves de Identidade (Unique Constraint Candidate)
                 id_ppc: tratarInt(linha['ID PPC']),
-                data_referencia: dataLiteral,
-                end_time_raw: tratarString(linha['end_time']),
+                end_time_raw: endTimeRaw, // Ponto de conferência exato
+                doc_name: tratarString(linha['doc_name']),
+                schema_id: tratarInt(linha['Schema_id']),
+
+                // Dados Temporais
+                data_referencia: dataLiteral, // Usado para filtros de dashboard
                 data_auditoria: tratarString(linha['Data da Auditoria ']),
+
+                // Relacionamentos e Metadados
                 usuario_id: tratarInt(linha['id_assistente']),
                 company_id: tratarInt(linha['Company_id']),
-                schema_id: tratarInt(linha['Schema_id']),
                 empresa_nome: tratarString(linha['Empresa']),
                 assistente_nome: tratarString(linha['Assistente']),
                 auditora_nome: tratarString(linha['Auditora']),
-                doc_name: tratarString(linha['doc_name']),
                 status: tratarString(linha['STATUS']),
                 nome_ppc: tratarString(linha['Nome da PPC']),
                 observacao: tratarString(linha['Apontamentos/obs']),
@@ -108,13 +126,11 @@ Importacao.Assertividade = {
                 fila: tratarString(linha['Fila']),
                 revalidacao: tratarString(linha['Revalidação']),
                 
-                // Métricas: Se vier vazio no CSV, salva null no banco
+                // Métricas
                 qtd_campos: tratarInt(linha['nº Campos']),
                 qtd_ok: tratarInt(linha['Ok']),
                 qtd_nok: tratarInt(linha['Nok']),
                 qtd_docs_validados: tratarInt(linha['Quantidade_documentos_validados']),
-                
-                // Porcentagem: Texto exato (ex: "100,00%" ou null)
                 porcentagem_assertividade: tratarString(linha['% Assert'])
             };
 
@@ -126,7 +142,7 @@ Importacao.Assertividade = {
         if (listaParaSalvar.length > 0) {
             await this.enviarParaSupabase(listaParaSalvar);
         } else {
-            alert("Nenhum dado válido encontrado para importação.");
+            alert("Nenhum dado válido encontrado. Verifique se a coluna 'end_time' está presente e preenchida.");
         }
     },
 
@@ -137,37 +153,54 @@ Importacao.Assertividade = {
             const total = dados.length;
             const statusDiv = document.getElementById('status-importacao');
             
+            console.log(`📡 Preparando para enviar ${total} registros para o Supabase...`);
+
             for (let i = 0; i < total; i += BATCH_SIZE) {
                 const lote = dados.slice(i, i + BATCH_SIZE);
                 
-                // Usamos a chave composta criada anteriormente
+                // UPSERT baseado na chave composta definida no banco.
+                // Geralmente: id_ppc + end_time_raw + schema_id + doc_name
+                // Isso garante que se importarmos o mesmo arquivo 2x, ele atualiza/ignora em vez de duplicar.
                 const { error } = await Sistema.supabase
                     .from('assertividade') 
                     .upsert(lote, { 
                         onConflict: 'id_ppc,end_time_raw,schema_id,doc_name',
-                        ignoreDuplicates: false 
+                        ignoreDuplicates: false // False = Atualiza se existir (útil se mudou status)
                     });
 
                 if (error) throw error;
                 
                 totalInserido += lote.length;
                 
-                if (totalInserido % 5000 === 0 || totalInserido === total) {
+                // Feedback visual
+                if (statusDiv) {
                     const pct = Math.round((totalInserido / total) * 100);
-                    console.log(`🚀 Importando: ${pct}%`);
-                    if(statusDiv) statusDiv.innerText = `${pct}%`;
+                    statusDiv.innerText = `${pct}%`;
+                    statusDiv.style.width = `${pct}%`;
+                }
+                
+                if (totalInserido % 5000 === 0) {
+                     console.log(`🚀 Progresso: ${totalInserido}/${total}`);
                 }
             }
 
-            alert(`Sucesso! ${totalInserido} registros processados.`);
+            alert(`Importação Concluída!\n${totalInserido} registros processados com sucesso.`);
             
+            // Atualiza a grid se estiver na tela de gestão
             if (window.Gestao && Gestao.Assertividade) {
                 Gestao.Assertividade.carregar();
             }
 
         } catch (error) {
             console.error("Erro Supabase:", error);
-            alert(`Erro na importação: ${error.message}`);
+            alert(`Falha na importação: ${error.message || error.details}`);
+        } finally {
+            // Limpa status
+            const statusDiv = document.getElementById('status-importacao');
+            if(statusDiv) {
+                statusDiv.innerText = '';
+                statusDiv.style.width = '0%';
+            }
         }
     }
 };
