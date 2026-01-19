@@ -11,7 +11,7 @@ Produtividade.Consolidado = {
     monthToColMap: null,
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando V2 (Métricas Personalizadas)...");
+        console.log("🔧 Consolidado: Iniciando V3 (Tooltips de HC)...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
@@ -48,13 +48,18 @@ Produtividade.Consolidado = {
         }
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
+        
+        // Pequeno delay para UI não travar antes do prompt
         await new Promise(r => setTimeout(r, 50));
+        
         const motivo = prompt(`Motivo da alteração para ${val} (Obrigatório):`);
         if (!motivo || motivo.trim() === "") { 
             alert("Justificativa obrigatória."); 
+            // Reseta o input visualmente renderizando de novo
             this.renderizar(this.dadosCalculados); 
             return; 
         }
+        
         this.overridesHC[colIndex] = { valor: val, motivo: motivo.trim() };
         if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
     },
@@ -206,49 +211,49 @@ Produtividade.Consolidado = {
         headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${this.overridesHC[99]?.valor || ''}" placeholder="(${st[99].users.size || 17})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border"></div></th></tr>`;
         hRow.innerHTML = headerHTML;
 
+        // FUNÇÃO DE GERAÇÃO DE LINHA OTIMIZADA COM TOOLTIP
         const mkRow = (label, icon, color, getter, isCalc=false, isBold=false) => {
             let tr = `<tr class="${isBold ? 'bg-slate-50/50' : ''} border-b border-slate-100"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200"><div class="flex items-center gap-3"><i class="${icon} ${color} text-sm"></i><span class="text-xs uppercase ${isBold ? 'font-black' : 'font-medium'}">${label}</span></div></td>`;
+            
             [...Array(numCols).keys()].map(i => i + 1).concat(99).forEach(i => {
                 const s = st[i];
-                // HF = Total Assistentes (Manual ou Automático, padrão 17 se vazio)
-                const HF = this.overridesHC[i]?.valor || s.users.size || 17;
                 
-                // s = dados da coluna | d = diasUteis | HF = HeadCount
+                // Dados para cálculo de Headcount (HC)
+                const autoCount = s.users.size || 17; // Valor do sistema
+                const override = this.overridesHC[i]; // Objeto { valor, motivo } se existir
+                const HF = override ? override.valor : autoCount; // Valor final usado no cálculo
+                
                 const val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 
-                tr += `<td class="px-4 py-3 text-center text-xs ${i === 99 ? 'bg-blue-50/30 font-bold' : ''}">${(val !== undefined && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-'}</td>`;
+                // --- LÓGICA DO TOOLTIP E VISUAL ---
+                let cellHTML = (val !== undefined && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
+                
+                // Só aplica a lógica especial se for a linha de "Total de assistentes"
+                if (label === 'Total de assistentes') {
+                    if (override) {
+                        // Se foi alterado: Mostra tooltip com original + motivo e muda estilo
+                        const tooltip = `Sistema encontrou: ${autoCount} | Motivo: ${override.motivo}`;
+                        cellHTML = `<span title="${tooltip}" class="cursor-help text-amber-600 font-bold decoration-dotted underline decoration-amber-400 bg-amber-50 px-1 rounded transition hover:bg-amber-100 hover:text-amber-800">${cellHTML}</span>`;
+                    } else {
+                        // Padrão
+                        cellHTML = `<span title="Calculado automaticamente" class="cursor-default text-slate-500">${cellHTML}</span>`;
+                    }
+                }
+                
+                tr += `<td class="px-4 py-3 text-center text-xs ${i === 99 ? 'bg-blue-50/30 font-bold' : ''}">${cellHTML}</td>`;
             });
             return tr + '</tr>';
         };
 
-        // 1. Total de assistentes
         let rows = mkRow('Total de assistentes', 'fas fa-users-cog', 'text-indigo-400', (s, d, HF) => HF, true);
-        
-        // 2. Total de dias úteis trabalhado
         rows += mkRow('Total de dias úteis trabalhado', 'fas fa-calendar-day', 'text-cyan-500', s => s.diasUteis);
-        
-        // 3. Total de documentos Fifo
         rows += mkRow('Total de documentos Fifo', 'fas fa-sort-amount-down', 'text-slate-400', s => s.fifo);
-        
-        // 4. Total de documentos Gradual Parcial
         rows += mkRow('Total de documentos Gradual Parcial', 'fas fa-chart-area', 'text-teal-500', s => s.gp);
-        
-        // 5. Total de documentos Gradual Total
         rows += mkRow('Total de documentos Gradual Total', 'fas fa-chart-line', 'text-emerald-500', s => s.gt);
-        
-        // 6. Total de documentos Perfil Fc
         rows += mkRow('Total de documentos Perfil Fc', 'fas fa-id-card', 'text-purple-500', s => s.fc);
-        
-        // 7. Total de documentos validados
         rows += mkRow('Total de documentos validados', 'fas fa-layer-group', 'text-blue-600', s => s.qty, false, true);
-
-        // 8. Total validação diária Dias úteis (Total Doc / Dias Úteis)
         rows += mkRow('Total validação diária Dias úteis', 'fas fa-calendar-check', 'text-amber-600', (s, d, HF) => (d > 0) ? s.qty / d : 0, true);
-
-        // 9. Média validação diária Todas assistentes (Total Doc / Total Assistentes)
         rows += mkRow('Média validação diária Todas assistentes', 'fas fa-users', 'text-orange-600', (s, d, HF) => (HF > 0) ? s.qty / HF : 0, true);
-
-        // 10. Média validação diária Por Assistentes (Total Doc / Dias Úteis / Total Assistentes)
         rows += mkRow('Média validação diária Por Assistentes', 'fas fa-user-tag', 'text-pink-600', (s, d, HF) => (d > 0 && HF > 0) ? s.qty / d / HF : 0, true);
         
         tbody.innerHTML = rows;
