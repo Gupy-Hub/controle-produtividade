@@ -8,7 +8,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 0, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V26 (Client-Side Aggregation)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V27 (Fix 400 - Metas Separadas)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -53,51 +53,76 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Buscando dados brutos (Otimizado)...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Sincronizando dados...</td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
-        
+        // Determina mês/ano de referência baseados na data de início para buscar as metas
+        const dataRef = new Date(datas.inicio + 'T12:00:00'); // Compensar timezone simples
+        const mesRef = dataRef.getMonth() + 1;
+        const anoRef = dataRef.getFullYear();
+
         try {
-            // --- MUDANÇA ESTRUTURAL: Busca RAW DATA em vez de RPC ---
-            // Isso evita o timeout do banco de dados (Erro 57014)
-            const { data, error } = await Sistema.supabase
+            // 1. Busca Dados de Produção (Sem colunas inexistentes em usuarios)
+            // REMOVIDO: meta_producao, meta_assertividade de usuario:usuarios(...) para evitar erro 400
+            const reqProducao = Sistema.supabase
                 .from('producao')
                 .select(`
                     id, quantidade, data_referencia, fator, justificativa, 
                     fifo, gradual_total, gradual_parcial, perfil_fc, 
                     assertividade,
-                    usuario:usuarios (id, nome, funcao, contrato, meta_producao, meta_assertividade)
+                    usuario:usuarios (id, nome, funcao, contrato)
                 `)
                 .gte('data_referencia', datas.inicio)
                 .lte('data_referencia', datas.fim);
 
-            if (error) throw error;
+            // 2. Busca Metas do Mês separadamente
+            const reqMetas = Sistema.supabase
+                .from('metas')
+                .select('usuario_id, meta_producao, meta_assertividade')
+                .eq('mes', mesRef)
+                .eq('ano', anoRef);
 
-            console.log(`✅ [GupyMesa] Dados brutos recebidos: ${data.length} registros. Iniciando agregação local...`);
+            const [resProd, resMetas] = await Promise.all([reqProducao, reqMetas]);
+
+            if (resProd.error) throw resProd.error;
+            // Se der erro em metas (ex: tabela vazia), assumimos array vazio, não quebra tudo
+            const listaMetas = resMetas.data || [];
+
+            console.log(`✅ [GupyMesa] Produção: ${resProd.data.length} | Metas: ${listaMetas.length}`);
             
-            // Agregação via JavaScript (Muito mais rápido que RPC para < 100k registros)
-            this.processarDadosLocais(data, datas);
+            this.processarDadosLocais(resProd.data, listaMetas);
 
         } catch (error) { 
-            console.error("[GupyMesa] Erro:", error); 
+            console.error("[GupyMesa] Erro Fatal:", error); 
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
             this.setTxt('kpi-validacao-real', 'Erro');
         }
     },
 
-    processarDadosLocais: function(rawData, datas) {
+    processarDadosLocais: function(rawData, listaMetas) {
         const agrupado = {};
         const diasUnicosGlobais = new Set();
+        
+        // Cria mapa de metas para acesso rápido: { usuario_id: { meta_prod, meta_assert } }
+        const mapaMetas = {};
+        listaMetas.forEach(m => {
+            mapaMetas[m.usuario_id] = {
+                prod: Number(m.meta_producao) || 0,
+                assert: Number(m.meta_assertividade) || 98
+            };
+        });
 
         rawData.forEach(row => {
-            if (!row.usuario) return; // Ignora orfãos
+            if (!row.usuario) return;
 
             const uid = row.usuario.id;
             const dataRef = row.data_referencia;
             diasUnicosGlobais.add(dataRef);
 
-            // Inicializa objeto do usuário se não existir
             if (!agrupado[uid]) {
+                // Pega meta do mapa ou padrão
+                const metasUser = mapaMetas[uid] || { prod: 0, assert: 98 };
+
                 agrupado[uid] = {
                     usuario: {
                         id: uid,
@@ -105,8 +130,8 @@ Produtividade.Geral = {
                         funcao: row.usuario.funcao,
                         contrato: row.usuario.contrato
                     },
-                    meta_real: Number(row.usuario.meta_producao) || 0, // Pega do cadastro do user
-                    meta_assertividade: Number(row.usuario.meta_assertividade) || 98,
+                    meta_real: metasUser.prod,
+                    meta_assertividade: metasUser.assert,
                     totais: {
                         qty: 0,
                         diasUteis: 0,
@@ -122,21 +147,17 @@ Produtividade.Geral = {
                 };
             }
 
-            // Acumula Valores
             const u = agrupado[uid];
             u.totais.qty += Number(row.quantidade) || 0;
             u.totais.fifo += Number(row.fifo) || 0;
             u.totais.gt += Number(row.gradual_total) || 0;
             u.totais.gp += Number(row.gradual_parcial) || 0;
             
-            // Fator (Dias Úteis)
             const fator = (row.fator !== undefined && row.fator !== null) ? Number(row.fator) : 1;
             u.totais.diasUteis += fator;
 
-            // Justificativas (Concatena únicas)
             if (row.justificativa) u.totais.justificativa.add(row.justificativa);
 
-            // Assertividade (Parsing manual pois vem como string '98%' ou float)
             if (row.assertividade) {
                 let valStr = String(row.assertividade).replace('%', '').replace(',', '.').trim();
                 let val = parseFloat(valStr);
@@ -149,13 +170,11 @@ Produtividade.Geral = {
 
         this.diasAtivosGlobal = diasUnicosGlobais.size;
 
-        // Converte Objeto -> Array e formata justificativas
         this.dadosOriginais = Object.values(agrupado).map(d => {
             d.totais.justificativa = Array.from(d.totais.justificativa).join('; ');
             return d;
         });
 
-        // Aplica filtros e renderiza
         const filtroNome = document.getElementById('selected-name')?.textContent;
         if (this.usuarioSelecionado && filtroNome) {
             this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
@@ -164,6 +183,8 @@ Produtividade.Geral = {
             this.atualizarKPIsGlobal(this.dadosOriginais);
         }
     },
+    
+    // --- FUNÇÕES AUXILIARES E DE RENDERIZAÇÃO (Mantidas) ---
 
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
@@ -262,7 +283,6 @@ Produtividade.Geral = {
         }
         this.renderizarTabela();
         const dadosUser = this.dadosOriginais.filter(d => d.usuario.id == id);
-        // Quando filtra um user, passamos true, então ele entra nas contas de média
         this.atualizarKPIsGlobal(dadosUser, true); 
     },
 
@@ -274,19 +294,13 @@ Produtividade.Geral = {
         this.atualizarKPIsGlobal(this.dadosOriginais, false);
     },
 
-    // --- CORAÇÃO DO AJUSTE: KPIs HÍBRIDOS ---
     atualizarKPIsGlobal: function(dados, isFiltrado) {
-        // Acumuladores GERAIS (Volume Total = Todo mundo)
         let totalProdGeral = 0;
         let totalMetaGeral = 0;
-
-        // Acumuladores RESTRITOS (Média/Capacidade = Só Assistentes)
         let totalProdAssistentes = 0;
         let totalMetaAssistentes = 0;
         let manDaysAssistentes = 0;
         let ativosCountAssistentes = 0;
-        
-        // Qualidade (Também vou restringir a média de qualidade às assistentes para ser justo)
         let somaNotasAssistentes = 0;
         let qtdAuditoriasAssistentes = 0;
 
@@ -303,11 +317,9 @@ Produtividade.Geral = {
             const prodUser = Number(d.totais.qty);
             const metaUser = Number(d.meta_real) * diasUser;
 
-            // 1. VOLUME: Soma SEMPRE (Assistentes + Auditoras + Gestoras)
             totalProdGeral += prodUser;
             totalMetaGeral += metaUser;
 
-            // 2. MÉDIA/CAPACIDADE: Soma SÓ se for Assistente (ou se estiver filtrado especificamente)
             if (isAssistente || isFiltrado) {
                 ativosCountAssistentes++;
                 manDaysAssistentes += diasUser;
@@ -319,23 +331,16 @@ Produtividade.Geral = {
             }
         });
 
-        // --- RENDERIZAÇÃO ---
-
-        // 1. CARD VOLUME (Usa os totais GERAIS)
         this.setTxt('kpi-validacao-real', totalProdGeral.toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-esperado', totalMetaGeral.toLocaleString('pt-BR'));
-        
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
-        // 2. CARD QUALIDADE (Usa os dados de ASSISTENTES)
         const mediaGlobalAssert = qtdAuditoriasAssistentes > 0 ? (somaNotasAssistentes / qtdAuditoriasAssistentes) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
         
-        // % Atingimento da Meta (Baseado no Volume Geral vs Meta Geral)
         this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
-        // 3. CARD CAPACIDADE (Usa contagem de ASSISTENTES)
         const capacidadeTotalPadrao = 17; 
         this.setTxt('kpi-capacidade-info', `${ativosCountAssistentes}/${capacidadeTotalPadrao}`);
         const capPct = (ativosCountAssistentes / capacidadeTotalPadrao) * 100;
@@ -343,14 +348,12 @@ Produtividade.Geral = {
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        // 4. CARD VELOCIDADE (Usa produção/dias de ASSISTENTES)
         const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
         const velReal = Math.round(totalProdAssistentes / divisor);
         const velMeta = Math.round(totalMetaAssistentes / divisor);
         this.setTxt('kpi-media-real', `${velReal}`);
         this.setTxt('kpi-media-esperada', `${velMeta}`);
         
-        // Display de Dias Úteis
         let diasDisplay = this.diasAtivosGlobal;
         if (isFiltrado && dados.length > 0) {
             diasDisplay = dados[0].totais.diasUteis.toLocaleString('pt-BR');
@@ -363,7 +366,6 @@ Produtividade.Geral = {
     },
 
     renderTopLists: function(dados) {
-        // Top list remove gestão visualmente
         const op = dados.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
