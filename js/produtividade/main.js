@@ -1,71 +1,203 @@
-import { Sistema } from '../sistema.js';
-import { MenuGlobal } from '../menu/global.js';
-import { Filtros } from './filtros.js';
-import { Geral } from './geral.js';
-import { Consolidado } from './consolidado.js';
-import { Performance } from './performance.js';
-import { Matriz } from './matriz.js';
+// ARQUIVO: js/produtividade/main.js
 
-/**
- * Orquestrador de carregamento de dados por aba.
- * Exposto globalmente para ser chamado pelo objeto window.Produtividade definido no HTML.
- */
-window.AppLoader = async function(tabId) {
-    try {
-        console.log(`[PerformancePro] Carregando dados para: ${tabId}`);
-        
-        switch(tabId) {
-            case 'geral':
-                // Verifica qual método de inicialização está disponível no módulo geral.js
-                if (typeof Geral.carregarTela === 'function') await Geral.carregarTela();
-                else if (typeof Geral.init === 'function') await Geral.init();
-                break;
-            case 'consolidado':
-                await Consolidado.carregar();
-                break;
-            case 'performance':
-                await Performance.carregar();
-                break;
-            case 'matriz':
-                await Matriz.carregar();
-                break;
-            default:
-                console.warn('Aba não reconhecida:', tabId);
-        }
-    } catch (error) {
-        console.error(`Erro ao processar aba ${tabId}:`, error);
-        if (typeof Sistema.notificar === 'function') {
-            Sistema.notificar('Erro ao atualizar dados da aba.', 'error');
-        }
-    }
-};
+window.Produtividade = window.Produtividade || {};
 
-// Inicialização Principal ao carregar o DOM
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        // 1. Segurança: Verifica se o usuário está logado via Supabase/LocalStorage
-        await Sistema.verificarSessao();
+// Mesclamos as funções principais no objeto global existente
+Object.assign(window.Produtividade, {
+    supabase: null, 
+    usuario: null,
+    filtroPeriodo: 'mes', // Padrão
+
+    init: async function() {
+        console.log("Módulo Produtividade Iniciado");
         
-        // 2. UI: Renderiza o menu global (lateral/topo)
-        if (window.Menu && window.Menu.Global) {
-            window.Menu.Global.renderizar();
+        const storedUser = localStorage.getItem('usuario_logado');
+        if (!storedUser) {
+            window.location.href = 'index.html';
+            return;
+        }
+        this.usuario = JSON.parse(storedUser);
+
+        this.popularSeletoresIniciais();
+        this.carregarEstadoSalvo();
+        this.mudarAba('geral');
+    },
+
+    popularSeletoresIniciais: function() {
+        const anoSelect = document.getElementById('sel-ano');
+        const anoAtual = new Date().getFullYear();
+        let htmlAnos = '';
+        for (let i = anoAtual + 1; i >= anoAtual - 2; i--) {
+            htmlAnos += `<option value="${i}" ${i === anoAtual ? 'selected' : ''}>${i}</option>`;
+        }
+        if(anoSelect) anoSelect.innerHTML = htmlAnos;
+        
+        const mesSelect = document.getElementById('sel-mes');
+        const mesAtual = new Date().getMonth();
+        if(mesSelect) mesSelect.value = mesAtual;
+
+        // Data Dia Atual
+        const diaInput = document.getElementById('sel-data-dia');
+        if(diaInput && !diaInput.value) {
+            diaInput.value = new Date().toISOString().split('T')[0];
+        }
+    },
+
+    mudarPeriodo: function(tipo, salvar = true) {
+        this.filtroPeriodo = tipo;
+        
+        // Atualiza botões
+        ['dia', 'mes', 'semana', 'ano'].forEach(t => {
+            const btn = document.getElementById(`btn-periodo-${t}`);
+            if(btn) {
+                if(t === tipo) btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
+                else btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
+            }
+        });
+
+        // Alterna visibilidade
+        const selDia = document.getElementById('sel-data-dia');
+        const selMes = document.getElementById('sel-mes');
+        const selSemana = document.getElementById('sel-semana');
+        const selSubAno = document.getElementById('sel-subperiodo-ano');
+        const selAno = document.getElementById('sel-ano');
+
+        // Esconde tudo primeiro
+        if(selDia) selDia.classList.add('hidden');
+        if(selMes) selMes.classList.add('hidden');
+        if(selSemana) selSemana.classList.add('hidden');
+        if(selSubAno) selSubAno.classList.add('hidden');
+        if(selAno) selAno.classList.remove('hidden'); 
+
+        if (tipo === 'dia') {
+            if(selDia) selDia.classList.remove('hidden');
+            if(selAno) selAno.classList.add('hidden'); 
+        } else if (tipo === 'mes') {
+            if(selMes) selMes.classList.remove('hidden');
+        } else if (tipo === 'semana') {
+            if(selSemana) selSemana.classList.remove('hidden');
+            if(selMes) selMes.classList.remove('hidden'); 
+        } else if (tipo === 'ano') {
+            if(selSubAno) selSubAno.classList.remove('hidden');
+        }
+
+        if(salvar) this.salvarEAtualizar();
+    },
+
+    salvarEAtualizar: function() {
+        const estado = {
+            tipo: this.filtroPeriodo,
+            dia: document.getElementById('sel-data-dia').value,
+            ano: document.getElementById('sel-ano').value,
+            mes: document.getElementById('sel-mes').value,
+            semana: document.getElementById('sel-semana').value,
+            sub: document.getElementById('sel-subperiodo-ano').value
+        };
+        localStorage.setItem('prod_filtro_state', JSON.stringify(estado));
+        
+        this.atualizarTodasAbas();
+    },
+
+    carregarEstadoSalvo: function() {
+        const salvo = localStorage.getItem('prod_filtro_state');
+        if (salvo) {
+            try {
+                const s = JSON.parse(salvo);
+                if(document.getElementById('sel-data-dia')) document.getElementById('sel-data-dia').value = s.dia || new Date().toISOString().split('T')[0];
+                if(document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
+                if(document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
+                if(document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
+                if(document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
+                
+                this.mudarPeriodo(s.tipo, false);
+                return;
+            } catch(e) { console.error("Erro estado salvo", e); }
+        }
+        this.mudarPeriodo('mes', false);
+    },
+
+    getDatasFiltro: function() {
+        let inicio, fim;
+
+        if (this.filtroPeriodo === 'dia') {
+            const dataDia = document.getElementById('sel-data-dia').value;
+            inicio = dataDia;
+            fim = dataDia;
         } else {
-            MenuGlobal.render('produtividade');
-        }
-        
-        // 3. Filtros: Inicializa seletores de data e usuários
-        if (Filtros && typeof Filtros.init === 'function') {
-            await Filtros.init();
-        }
-        
-        // 4. Início: Carrega a aba padrão
-        const abaInicial = window.Produtividade ? window.Produtividade.abaAtiva : 'geral';
-        await window.AppLoader(abaInicial);
+            const ano = parseInt(document.getElementById('sel-ano').value);
+            const mes = parseInt(document.getElementById('sel-mes').value);
 
-    } catch (error) {
-        console.error('Erro fatal na inicialização do módulo de produtividade:', error);
-        if (Sistema && typeof Sistema.notificar === 'function') {
-            Sistema.notificar('Erro crítico ao carregar o sistema.', 'error');
+            if (this.filtroPeriodo === 'mes') {
+                inicio = new Date(ano, mes, 1);
+                fim = new Date(ano, mes + 1, 0);
+            } else if (this.filtroPeriodo === 'semana') {
+                const semanaIndex = parseInt(document.getElementById('sel-semana').value);
+                const diaInicio = (semanaIndex - 1) * 7 + 1;
+                let diaFim = diaInicio + 6;
+                const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
+                if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
+                
+                if (diaInicio > ultimoDiaMes) {
+                    inicio = new Date(ano, mes, ultimoDiaMes);
+                    fim = new Date(ano, mes, ultimoDiaMes);
+                } else {
+                    inicio = new Date(ano, mes, diaInicio);
+                    fim = new Date(ano, mes, diaFim);
+                }
+            } else if (this.filtroPeriodo === 'ano') {
+                const sub = document.getElementById('sel-subperiodo-ano').value;
+                if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
+                else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
+                else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
+                else if (sub.startsWith('T')) {
+                    const tri = parseInt(sub.replace('T', ''));
+                    const mesInicio = (tri - 1) * 3;
+                    const mesFim = mesInicio + 3;
+                    inicio = new Date(ano, mesInicio, 1);
+                    fim = new Date(ano, mesFim, 0);
+                }
+            }
         }
+
+        const fmt = (d) => {
+            if (typeof d === 'string') return d; 
+            const year = d.getFullYear();
+            const month = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        };
+        return { inicio: fmt(inicio), fim: fmt(fim) };
+    },
+
+    mudarAba: function(abaId) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+        const abaAlvo = document.getElementById(`tab-${abaId}`);
+        const btnAlvo = document.getElementById(`btn-${abaId}`);
+        
+        if (abaAlvo) abaAlvo.classList.remove('hidden');
+        if (btnAlvo) btnAlvo.classList.add('active');
+
+        const ctrlAlvo = document.getElementById(`ctrl-${abaId}`);
+        if(ctrlAlvo) ctrlAlvo.classList.remove('hidden');
+
+        if (abaId === 'geral' && this.Geral) this.Geral.init();
+        if (abaId === 'consolidado' && this.Consolidado) this.Consolidado.init();
+        if (abaId === 'performance' && this.Performance) this.Performance.init();
+        if (abaId === 'matriz' && this.Matriz) this.Matriz.init();
+    },
+    
+    atualizarTodasAbas: function() {
+        if(this.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) this.Geral.carregarTela();
+        if(this.Consolidado && !document.getElementById('tab-consolidado').classList.contains('hidden')) this.Consolidado.carregar();
+        if(this.Performance && !document.getElementById('tab-performance').classList.contains('hidden')) this.Performance.carregar();
+        if(this.Matriz && !document.getElementById('tab-matriz').classList.contains('hidden')) this.Matriz.carregar();
     }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        if(window.Produtividade && window.Produtividade.init) window.Produtividade.init();
+    }, 100);
 });
