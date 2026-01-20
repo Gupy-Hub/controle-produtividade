@@ -36,7 +36,7 @@ Menu.Global = {
                 <div class="flex items-center gap-6">
                     
                     <div class="flex items-center">
-                        <img src="img/logo.png" alt="Gupy" class="h-10 w-auto object-contain">
+                        <img src="img/logo.png" alt="Gupy" class="h-11 w-auto object-contain">
                     </div>
 
                     <div class="flex items-center gap-1">`;
