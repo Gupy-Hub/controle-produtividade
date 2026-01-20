@@ -5,10 +5,10 @@ Produtividade.Geral = {
     initialized: false,
     dadosOriginais: [], 
     usuarioSelecionado: null,
-    diasAtivosGlobal: 1, 
+    diasAtivosGlobal: 0, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V25 (KPIs Híbridos)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V26 (Client-Side Aggregation)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -53,64 +53,115 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Buscando dados...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Buscando dados brutos (Otimizado)...</td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
+            // --- MUDANÇA ESTRUTURAL: Busca RAW DATA em vez de RPC ---
+            // Isso evita o timeout do banco de dados (Erro 57014)
             const { data, error } = await Sistema.supabase
-                .rpc('get_painel_produtividade', { 
-                    data_inicio: datas.inicio, 
-                    data_fim: datas.fim 
-                });
+                .from('producao')
+                .select(`
+                    id, quantidade, data_referencia, fator, justificativa, 
+                    fifo, gradual_total, gradual_parcial, perfil_fc, 
+                    assertividade,
+                    usuario:usuarios (id, nome, funcao, contrato, meta_producao, meta_assertividade)
+                `)
+                .gte('data_referencia', datas.inicio)
+                .lte('data_referencia', datas.fim);
 
             if (error) throw error;
 
-            const { data: diasReais } = await Sistema.supabase
-                .rpc('get_dias_ativos', {
-                    data_inicio: datas.inicio,
-                    data_fim: datas.fim 
-                });
+            console.log(`✅ [GupyMesa] Dados brutos recebidos: ${data.length} registros. Iniciando agregação local...`);
             
-            this.diasAtivosGlobal = (diasReais && diasReais > 0) ? diasReais : 0; 
-
-            console.log(`✅ [GupyMesa] Dados recebidos: ${data.length} registros.`);
-
-            this.dadosOriginais = data.map(row => ({
-                usuario: {
-                    id: row.usuario_id,
-                    nome: row.nome,
-                    funcao: row.funcao,
-                    contrato: row.contrato
-                },
-                meta_real: row.meta_producao,
-                meta_assertividade: row.meta_assertividade,
-                totais: {
-                    qty: row.total_qty,
-                    diasUteis: Number(row.total_dias_uteis), 
-                    justificativa: row.justificativas, 
-                    fifo: row.total_fifo,
-                    gt: row.total_gt,
-                    gp: row.total_gp
-                },
-                auditoria: {
-                    qtd: row.qtd_auditorias,
-                    soma: row.soma_auditorias
-                }
-            }));
-            
-            const filtroNome = document.getElementById('selected-name')?.textContent;
-            if (this.usuarioSelecionado && filtroNome) {
-                this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
-            } else {
-                this.renderizarTabela();
-                this.atualizarKPIsGlobal(this.dadosOriginais);
-            }
+            // Agregação via JavaScript (Muito mais rápido que RPC para < 100k registros)
+            this.processarDadosLocais(data, datas);
 
         } catch (error) { 
             console.error("[GupyMesa] Erro:", error); 
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
             this.setTxt('kpi-validacao-real', 'Erro');
+        }
+    },
+
+    processarDadosLocais: function(rawData, datas) {
+        const agrupado = {};
+        const diasUnicosGlobais = new Set();
+
+        rawData.forEach(row => {
+            if (!row.usuario) return; // Ignora orfãos
+
+            const uid = row.usuario.id;
+            const dataRef = row.data_referencia;
+            diasUnicosGlobais.add(dataRef);
+
+            // Inicializa objeto do usuário se não existir
+            if (!agrupado[uid]) {
+                agrupado[uid] = {
+                    usuario: {
+                        id: uid,
+                        nome: row.usuario.nome,
+                        funcao: row.usuario.funcao,
+                        contrato: row.usuario.contrato
+                    },
+                    meta_real: Number(row.usuario.meta_producao) || 0, // Pega do cadastro do user
+                    meta_assertividade: Number(row.usuario.meta_assertividade) || 98,
+                    totais: {
+                        qty: 0,
+                        diasUteis: 0,
+                        justificativa: new Set(),
+                        fifo: 0,
+                        gt: 0,
+                        gp: 0
+                    },
+                    auditoria: {
+                        qtd: 0,
+                        soma: 0
+                    }
+                };
+            }
+
+            // Acumula Valores
+            const u = agrupado[uid];
+            u.totais.qty += Number(row.quantidade) || 0;
+            u.totais.fifo += Number(row.fifo) || 0;
+            u.totais.gt += Number(row.gradual_total) || 0;
+            u.totais.gp += Number(row.gradual_parcial) || 0;
+            
+            // Fator (Dias Úteis)
+            const fator = (row.fator !== undefined && row.fator !== null) ? Number(row.fator) : 1;
+            u.totais.diasUteis += fator;
+
+            // Justificativas (Concatena únicas)
+            if (row.justificativa) u.totais.justificativa.add(row.justificativa);
+
+            // Assertividade (Parsing manual pois vem como string '98%' ou float)
+            if (row.assertividade) {
+                let valStr = String(row.assertividade).replace('%', '').replace(',', '.').trim();
+                let val = parseFloat(valStr);
+                if (!isNaN(val) && val > 0) {
+                    u.auditoria.soma += val;
+                    u.auditoria.qtd += 1;
+                }
+            }
+        });
+
+        this.diasAtivosGlobal = diasUnicosGlobais.size;
+
+        // Converte Objeto -> Array e formata justificativas
+        this.dadosOriginais = Object.values(agrupado).map(d => {
+            d.totais.justificativa = Array.from(d.totais.justificativa).join('; ');
+            return d;
+        });
+
+        // Aplica filtros e renderiza
+        const filtroNome = document.getElementById('selected-name')?.textContent;
+        if (this.usuarioSelecionado && filtroNome) {
+            this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
+        } else {
+            this.renderizarTabela();
+            this.atualizarKPIsGlobal(this.dadosOriginais);
         }
     },
 
