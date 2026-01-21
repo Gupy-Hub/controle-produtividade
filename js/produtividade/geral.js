@@ -7,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V30 (Final Stable - Abonar Fix)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V31 (Fix Abono + Folga)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -26,7 +26,6 @@ Produtividade.Geral = {
                 </button>
             `;
         } else {
-            // Tenta novamente se o header ainda não carregou
             setTimeout(() => this.updateHeader(), 500);
         }
     },
@@ -59,7 +58,6 @@ Produtividade.Geral = {
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
-            // 1. Busca Painel Principal
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: datas.inicio, 
@@ -68,7 +66,6 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
-            // 2. Busca Dias Úteis Reais
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: datas.inicio,
@@ -97,12 +94,11 @@ Produtividade.Geral = {
                     gp: row.total_gp
                 },
                 auditoria: {
-                    qtd: row.qtd_auditorias, // Denominador (Qtd Real)
-                    soma: row.soma_auditorias // Numerador (Soma das Notas)
+                    qtd: row.qtd_auditorias,
+                    soma: row.soma_auditorias
                 }
             }));
             
-            // Mantém filtro de usuário se houver
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
                 this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
@@ -136,13 +132,12 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         
-        // --- TELA DE FOLGA / VAZIO ---
+        // --- TELA DE FOLGA ---
         if(listaComDados.length === 0) { 
             const isDia = Produtividade.filtroPeriodo === 'dia';
             let conteudoHTML = '';
 
             if (isDia) {
-                // Layout Animado "Hoje é Folga"
                 conteudoHTML = `
                     <div class="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in select-none">
                         <div class="relative">
@@ -166,7 +161,6 @@ Produtividade.Geral = {
                     </div>
                 `;
             } else {
-                // Layout Vazio Genérico
                 conteudoHTML = `
                     <div class="flex flex-col items-center justify-center gap-3 py-16 animate-fade-in">
                         <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
@@ -181,7 +175,6 @@ Produtividade.Geral = {
                     </div>
                 `;
             }
-
             tbody.innerHTML = `<tr><td colspan="12" class="bg-white border-b border-slate-100">${conteudoHTML}</td></tr>`;
             this.setTxt('total-registros-footer', 0);
             return; 
@@ -198,7 +191,6 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            // Assertividade
             let htmlAssertividade = '<span class="text-xs text-slate-300">-</span>';
             const qtdAuditada = Number(d.auditoria.qtd || 0);
             const somaPorcentagem = Number(d.auditoria.soma || 0);
@@ -304,7 +296,6 @@ Produtividade.Geral = {
     atualizarKPIsGlobal: function(dados, isFiltrado) {
         let totalProdGeral = 0; 
         let totalMetaGeral = 0;
-        
         let totalMetaAssistentes = 0;
         let manDaysAssistentes = 0;
         let ativosCountAssistentes = 0;
@@ -396,14 +387,15 @@ Produtividade.Geral = {
     
     toggleAll: function(checked) { document.querySelectorAll('.check-user').forEach(c => c.checked = checked); },
 
+    // --- CORREÇÃO AQUI: LÓGICA DE ABONO ROBUSTA ---
     abonarEmMassa: async function() {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
         
-        // Tenta pegar a data do filtro (se for dia) ou pergunta
+        // 1. Tenta pegar a data do filtro (se for dia) ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
-            dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data alvo (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            dataAlvo = prompt("📅 Aplicar Abono em Massa.\n\nDigite a data alvo (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
         }
 
@@ -416,13 +408,17 @@ Produtividade.Geral = {
 
         let justificativa = "";
         if (novoFator !== 1.0) {
-            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA (Ex: Atestado, Folga, Feriado):");
+            justificativa = prompt("📝 Digite a Justificativa (Obrigatório):");
             if (!justificativa) return alert("❌ Cancelado: Justificativa é obrigatória para abonos.");
         }
 
         if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
 
         let sucessos = 0;
+        // Feedback visual
+        const btnMassa = document.querySelector('button[onclick*="abonarEmMassa"]');
+        if(btnMassa) btnMassa.innerText = "Processando...";
+
         for (const chk of checks) {
             try {
                 await Sistema.supabase.rpc('abonar_producao', {
@@ -439,11 +435,11 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, fatorAtual) {
-        // Correção: Garante que temos uma data
+        // 1. Tenta pegar a data ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
              // Se não tiver data selecionada (ex: vendo mês), pede para confirmar qual dia quer abonar
-             dataAlvo = prompt("Digite a data para abonar (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+             dataAlvo = prompt("📅 Qual data você deseja abonar? (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
              if (!dataAlvo) return;
         }
 
@@ -456,7 +452,7 @@ Produtividade.Geral = {
 
         let justificativa = "";
         if (novoFator !== 1.0) {
-            justificativa = prompt("Digite a Justificativa (Obrigatório):");
+            justificativa = prompt("📝 Digite a Justificativa (Obrigatório):");
             if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
         }
 
@@ -488,7 +484,6 @@ Produtividade.Geral = {
             const { error } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dt);
             if(error) throw error;
             
-            // Opcional: Apagar assertividade também se quiser limpar o dia completo
             await Sistema.supabase.from('assertividade').delete().eq('data_referencia', dt);
 
             alert("✅ Dados do dia excluídos com sucesso."); 
