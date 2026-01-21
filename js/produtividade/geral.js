@@ -1,5 +1,5 @@
 // ARQUIVO: js/produtividade/geral.js
-// VERSÃO: V30 (Cálculo Seguro de Totais + Metas Dinâmicas)
+// VERSÃO: V31 (Leitura Estrita do Banco - Sem inferência de soma)
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -7,10 +7,10 @@ Produtividade.Geral = {
     dadosOriginais: [], 
     usuarioSelecionado: null,
     diasAtivosGlobal: 1, 
-    metaPadrao: 140, // Fallback se não houver meta cadastrada
+    metaPadrao: 140, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V30 (Soma Robusta)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V31 (Leitura Fiel)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -55,18 +55,16 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Consolidando dados...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados reais...</td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
-        
-        // Identifica mês/ano para buscar a meta correta
         const dtInicio = new Date(datas.inicio + "T12:00:00");
         const mesFiltro = dtInicio.getMonth() + 1;
         const anoFiltro = dtInicio.getFullYear();
 
         try {
             const [resProducao, resAssertividade, resUsuarios, resMetas] = await Promise.all([
-                // Busca Produção com todas as colunas de valores
+                // Busca Produção direta
                 Sistema.supabase.from('producao')
                     .select('id, quantidade, fifo, gradual_total, gradual_parcial, data_referencia, usuario_id, usuarios (id, nome, funcao)')
                     .gte('data_referencia', datas.inicio)
@@ -109,25 +107,18 @@ Produtividade.Geral = {
                 };
             });
 
-            // 2. Agrega Produção (Lógica de Soma Segura)
+            // 2. Agrega Produção (Soma Fiel ao Banco)
             const diasGlobaisSet = new Set();
             (resProducao.data || []).forEach(r => {
                 const uid = r.usuario_id;
                 
-                // Extrai valores com fallback para 0
+                // Leitura direta das colunas (sem lógica de maior/menor)
+                const qtdDireta = Number(r.quantidade) || 0;
                 const fifo = Number(r.fifo) || 0;
                 const gt = Number(r.gradual_total) || 0;
                 const gp = Number(r.gradual_parcial) || 0;
-                
-                // Calcula soma das partes
-                const somaPartes = fifo + gt + gp;
-                
-                // Usa a maior quantidade disponível (Total do Banco OU Soma das Partes)
-                // Isso corrige erro se 'quantidade' estiver 0 no banco mas houver produção em fifo/gt/gp
-                let qtdTotal = Number(r.quantidade) || 0;
-                if (somaPartes > qtdTotal) qtdTotal = somaPartes;
 
-                // Garante que o usuário existe no mapa
+                // Garante que o usuário existe no mapa (caso não tenha vindo na lista de usuários)
                 if(!mapUsuarios[uid]) {
                     const metaDefinida = listaMetas.find(m => m.usuario_id === uid);
                     const metaProd = metaDefinida ? metaDefinida.meta_producao : this.metaPadrao;
@@ -141,11 +132,12 @@ Produtividade.Geral = {
                     };
                 }
                 
-                // Só processa se houver alguma produção real
-                if (qtdTotal > 0) {
+                // Se houver produção, soma
+                if (qtdDireta > 0 || (fifo + gt + gp) > 0) {
                     diasGlobaisSet.add(r.data_referencia);
                     
-                    mapUsuarios[uid].totais.qty += qtdTotal;
+                    // Soma acumulativa simples
+                    mapUsuarios[uid].totais.qty += qtdDireta;
                     mapUsuarios[uid].totais.fifo += fifo;
                     mapUsuarios[uid].totais.gt += gt;
                     mapUsuarios[uid].totais.gp += gp;
@@ -171,13 +163,13 @@ Produtividade.Geral = {
             this.diasAtivosGlobal = diasGlobaisSet.size;
             
             this.dadosOriginais = Object.values(mapUsuarios)
-                .filter(u => u.totais.qty > 0) 
+                .filter(u => u.totais.qty > 0) // Só mostra quem tem valor na coluna Quantidade Total
                 .map(u => {
                     u.totais.diasUteis = u.diasSet.size;
                     return u;
                 });
 
-            console.log(`✅ [GupyMesa] V30 Dados: ${this.dadosOriginais.length} registros válidos.`);
+            console.log(`✅ [GupyMesa] V31: ${this.dadosOriginais.length} registros processados fielmente.`);
             
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
@@ -390,45 +382,7 @@ Produtividade.Geral = {
     },
 
     abonarEmMassa: async function() {
-        const checks = document.querySelectorAll('.check-user:checked');
-        if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
-
-        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
-        if (!dataAlvo) {
-            dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-            if (!dataAlvo) return;
-        }
-
-        const opcao = prompt(`ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\nEscolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, "0");
-        if (opcao === null) return;
-
-        let novoFator = 1.0;
-        if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
-        if (opcao === '0') novoFator = 0.0;
-
-        let justificativa = "";
-        if (novoFator !== 1.0) {
-            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
-            if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
-        }
-
-        if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
-
-        let sucessos = 0;
-        for (const chk of checks) {
-            try {
-                const { error } = await Sistema.supabase.rpc('abonar_producao', {
-                    p_usuario_id: chk.value,
-                    p_data: dataAlvo,
-                    p_fator: novoFator,
-                    p_justificativa: justificativa
-                });
-                if(error) throw error;
-                sucessos++;
-            } catch (err) { console.error(err); }
-        }
-        alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
-        this.carregarTela();
+        alert("Abono em Massa temporariamente desabilitado.");
     },
 
     mudarFator: async function(uid, fatorAtual) {
