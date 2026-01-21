@@ -1,5 +1,5 @@
 // ARQUIVO: js/produtividade/geral.js
-// VERSÃO: V31 (Leitura Estrita do Banco - Sem inferência de soma)
+// VERSÃO: V33 (DEBUG MODE - Diagnóstico Completo)
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -10,7 +10,8 @@ Produtividade.Geral = {
     metaPadrao: 140, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V31 (Leitura Fiel)...");
+        console.clear();
+        console.log("%c🚀 GupyMesa V33: MODO DIAGNÓSTICO ATIVADO", "color:white; background:red; font-size:14px; padding:4px; border-radius:4px;");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -55,31 +56,33 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Carregando dados reais...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Diagnóstico em andamento (Ver Console F12)...</td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
         const dtInicio = new Date(datas.inicio + "T12:00:00");
         const mesFiltro = dtInicio.getMonth() + 1;
         const anoFiltro = dtInicio.getFullYear();
 
+        console.group("🔎 1. PARÂMETROS DE BUSCA");
+        console.log("Data Início:", datas.inicio);
+        console.log("Data Fim:", datas.fim);
+        console.log("Mês Meta:", mesFiltro, "/", anoFiltro);
+        console.groupEnd();
+
         try {
             const [resProducao, resAssertividade, resUsuarios, resMetas] = await Promise.all([
-                // Busca Produção direta
                 Sistema.supabase.from('producao')
                     .select('id, quantidade, fifo, gradual_total, gradual_parcial, data_referencia, usuario_id, usuarios (id, nome, funcao)')
                     .gte('data_referencia', datas.inicio)
                     .lte('data_referencia', datas.fim),
                 
-                // Busca Qualidade
                 Sistema.supabase.from('assertividade')
                     .select('status, qtd_nok, data_referencia, assistente_nome')
                     .gte('data_referencia', datas.inicio)
                     .lte('data_referencia', datas.fim),
                 
-                // Busca Cadastro
                 Sistema.supabase.from('usuarios').select('id, nome, funcao'),
                 
-                // Busca Metas do Mês
                 Sistema.supabase.from('metas')
                     .select('usuario_id, meta_producao, meta_assertividade')
                     .eq('mes', mesFiltro)
@@ -88,10 +91,22 @@ Produtividade.Geral = {
 
             if (resProducao.error) throw resProducao.error;
             
+            // --- DIAGNÓSTICO DE DADOS BRUTOS ---
+            console.group("🔎 2. DADOS BRUTOS (SUPABASE)");
+            console.log(`Produção (Linhas): ${resProducao.data?.length || 0}`);
+            if(resProducao.data?.length > 0) {
+                console.table(resProducao.data.slice(0, 5)); // Mostra as 5 primeiras linhas
+            } else {
+                console.warn("⚠️ NENHUM DADO DE PRODUÇÃO ENCONTRADO NO PERÍODO!");
+            }
+            console.log(`Usuários: ${resUsuarios.data?.length}`);
+            console.log(`Metas Definidas: ${resMetas.data?.length}`);
+            console.groupEnd();
+            // ------------------------------------
+
             const mapUsuarios = {};
             const listaMetas = resMetas.data || [];
 
-            // 1. Inicializa Usuários e Metas
             (resUsuarios.data || []).forEach(u => {
                 const metaDefinida = listaMetas.find(m => m.usuario_id === u.id);
                 const metaProd = metaDefinida ? metaDefinida.meta_producao : this.metaPadrao;
@@ -107,20 +122,35 @@ Produtividade.Geral = {
                 };
             });
 
-            // 2. Agrega Produção (Soma Fiel ao Banco)
+            // Agregação com LOG de Discrepâncias
             const diasGlobaisSet = new Set();
+            let alertasDiscrepancia = 0;
+
             (resProducao.data || []).forEach(r => {
                 const uid = r.usuario_id;
                 
-                // Leitura direta das colunas (sem lógica de maior/menor)
-                const qtdDireta = Number(r.quantidade) || 0;
-                const fifo = Number(r.fifo) || 0;
-                const gt = Number(r.gradual_total) || 0;
-                const gp = Number(r.gradual_parcial) || 0;
+                // Conversão forçada para evitar erros de texto
+                const fifo = Number(r.fifo || 0);
+                const gt = Number(r.gradual_total || 0);
+                const gp = Number(r.gradual_parcial || 0);
+                const qtdBanco = Number(r.quantidade || 0);
+                
+                // LÓGICA V33: Prioriza a SOMA DAS PARTES
+                const somaCalculada = fifo + gt + gp;
+                
+                // Diagnóstico Individual de Erro
+                if (somaCalculada !== qtdBanco && alertasDiscrepancia < 3) {
+                    console.warn(`⚠️ Discrepância ID ${r.id}: Banco diz ${qtdBanco}, Soma diz ${somaCalculada} (F:${fifo}+GT:${gt}+GP:${gp})`);
+                    alertasDiscrepancia++;
+                }
 
-                // Garante que o usuário existe no mapa (caso não tenha vindo na lista de usuários)
+                // Decide qual valor usar (Soma se tiver dados, ou Banco se tiver dados e a soma for 0)
+                let valorFinal = 0;
+                if (somaCalculada > 0) valorFinal = somaCalculada;
+                else if (qtdBanco > 0) valorFinal = qtdBanco;
+
                 if(!mapUsuarios[uid]) {
-                    const metaDefinida = listaMetas.find(m => m.usuario_id === uid);
+                     const metaDefinida = listaMetas.find(m => m.usuario_id === uid);
                     const metaProd = metaDefinida ? metaDefinida.meta_producao : this.metaPadrao;
                     mapUsuarios[uid] = { 
                         usuario: r.usuarios || { id: uid, nome: 'Desconhecido', funcao: 'ND' },
@@ -132,12 +162,10 @@ Produtividade.Geral = {
                     };
                 }
                 
-                // Se houver produção, soma
-                if (qtdDireta > 0 || (fifo + gt + gp) > 0) {
+                if (valorFinal > 0) {
                     diasGlobaisSet.add(r.data_referencia);
                     
-                    // Soma acumulativa simples
-                    mapUsuarios[uid].totais.qty += qtdDireta;
+                    mapUsuarios[uid].totais.qty += valorFinal;
                     mapUsuarios[uid].totais.fifo += fifo;
                     mapUsuarios[uid].totais.gt += gt;
                     mapUsuarios[uid].totais.gp += gp;
@@ -146,7 +174,7 @@ Produtividade.Geral = {
                 }
             });
 
-            // 3. Agrega Assertividade
+            // Agrega Assertividade
             (resAssertividade.data || []).forEach(a => {
                 if(!a.assistente_nome) return;
                 const nomeAudit = a.assistente_nome.toLowerCase();
@@ -159,17 +187,22 @@ Produtividade.Geral = {
                 }
             });
 
-            // 4. Finaliza e Filtra (Produção > 0)
             this.diasAtivosGlobal = diasGlobaisSet.size;
             
+            // Filtro final: Só mostra quem produziu > 0
             this.dadosOriginais = Object.values(mapUsuarios)
-                .filter(u => u.totais.qty > 0) // Só mostra quem tem valor na coluna Quantidade Total
+                .filter(u => u.totais.qty > 0) 
                 .map(u => {
                     u.totais.diasUteis = u.diasSet.size;
                     return u;
                 });
 
-            console.log(`✅ [GupyMesa] V31: ${this.dadosOriginais.length} registros processados fielmente.`);
+            console.group("🔎 3. RESULTADO PROCESSADO");
+            console.log(`Registros Válidos (Produção > 0): ${this.dadosOriginais.length}`);
+            if (this.dadosOriginais.length > 0) {
+                console.log("Exemplo (1º User):", this.dadosOriginais[0].usuario.nome, this.dadosOriginais[0].totais);
+            }
+            console.groupEnd();
             
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
@@ -180,7 +213,7 @@ Produtividade.Geral = {
             }
 
         } catch (error) { 
-            console.error("[GupyMesa] Erro:", error); 
+            console.error("❌ ERRO CRÍTICO:", error); 
             tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
         }
     },
@@ -201,7 +234,7 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         if(lista.length === 0) { 
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>'; 
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado. Verifique o Console (F12).</td></tr>'; 
             this.setTxt('total-registros-footer', 0);
             return; 
         }
