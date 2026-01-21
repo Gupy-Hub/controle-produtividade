@@ -2,7 +2,9 @@ Produtividade.Performance = {
     initialized: false,
     chartInstance: null,
     miniChartInstance: null,
-    dadosCache: [], 
+    chartComparativoInstance: null, // Novo gráfico comparativo
+    dadosProducao: [], 
+    dadosAssertividade: [],
     
     init: function() {
         if (typeof Chart === 'undefined') { console.error("Chart.js não carregou."); return; }
@@ -12,23 +14,37 @@ Produtividade.Performance = {
 
     carregar: async function() {
         const listContainer = document.getElementById('ranking-list-container');
-        if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando dados...</div>';
+        if(listContainer) listContainer.innerHTML = '<div class="text-center text-slate-400 py-10 text-xs"><i class="fas fa-spinner fa-spin mr-2"></i> Buscando e cruzando dados...</div>';
         
         const datas = Produtividade.getDatasFiltro();
         const s = datas.inicio;
         const e = datas.fim;
 
         try {
-            const { data, error } = await Sistema.supabase
-                .from('producao')
-                .select(`id, quantidade, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`)
-                .gte('data_referencia', s)
-                .lte('data_referencia', e)
-                .order('data_referencia', { ascending: true });
+            // Busca PARALELA para performance (Produção + Detalhes de Erros)
+            const [resProducao, resAssertividade] = await Promise.all([
+                Sistema.supabase
+                    .from('producao')
+                    .select(`id, quantidade, data_referencia, assertividade, usuario:usuarios ( id, nome, perfil, funcao )`)
+                    .gte('data_referencia', s)
+                    .lte('data_referencia', e)
+                    .order('data_referencia', { ascending: true }),
                 
-            if (error) throw error;
-            this.dadosCache = data;
+                Sistema.supabase
+                    .from('assertividade')
+                    .select('id, data_referencia, assistente_nome, doc_name, qtd_nok, status, observacao')
+                    .gte('data_referencia', s)
+                    .lte('data_referencia', e)
+            ]);
+                
+            if (resProducao.error) throw resProducao.error;
+            if (resAssertividade.error) throw resAssertividade.error;
+
+            this.dadosProducao = resProducao.data;
+            this.dadosAssertividade = resAssertividade.data;
+
             this.renderizarVisaoGeral();
+            this.analisarQualidadeDocs(); // Nova análise de documentos
         } catch (err) {
             console.error(err);
             if(listContainer) listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro: ${err.message}</div>`;
@@ -42,29 +58,46 @@ Produtividade.Performance = {
         const elTitle = document.getElementById('chart-title');
         if(elTitle) elTitle.innerHTML = '<i class="fas fa-chart-line text-blue-500 mr-2"></i> Evolução do Time';
 
-        const data = this.dadosCache;
+        const data = this.dadosProducao;
         if (!data || data.length === 0) {
             this.destroyChart();
             return;
         }
 
-        const producaoPorDia = {}; const diasSet = new Set(); const producaoPorUser = {};
+        const producaoPorDia = {}; 
+        const diasSet = new Set(); 
+        const producaoPorUser = {};
         
+        // Processamento de PRODUÇÃO
         data.forEach(r => {
             if(!r.usuario) return;
             const cargo = r.usuario.funcao ? String(r.usuario.funcao).toUpperCase() : 'ASSISTENTE';
             if (['AUDITORA', 'GESTORA'].includes(cargo)) return;
             
-            const date = r.data_referencia; const qtd = Number(r.quantidade) || 0; const uid = r.usuario.id;
+            const date = r.data_referencia; 
+            const qtd = Number(r.quantidade) || 0; 
+            const uid = r.usuario.id;
+            
             diasSet.add(date);
-            if (!producaoPorDia[date]) producaoPorDia[date] = 0; producaoPorDia[date] += qtd;
+            if (!producaoPorDia[date]) producaoPorDia[date] = 0; 
+            producaoPorDia[date] += qtd;
             
             if (!producaoPorUser[uid]) {
-                producaoPorUser[uid] = { nome: r.usuario.nome, total: 0, id: uid, somaAssert: 0, qtdAssert: 0, diasAtivos: new Set() };
+                producaoPorUser[uid] = { 
+                    nome: r.usuario.nome, 
+                    total: 0, 
+                    id: uid, 
+                    somaAssert: 0, 
+                    qtdAssert: 0, 
+                    diasAtivos: new Set(),
+                    producaoDiaria: {} // Para identificar melhor/pior dia
+                };
             }
             producaoPorUser[uid].total += qtd;
             producaoPorUser[uid].diasAtivos.add(date);
+            producaoPorUser[uid].producaoDiaria[date] = (producaoPorUser[uid].producaoDiaria[date] || 0) + qtd;
 
+            // Assertividade vinda da tabela Produção (Resumida)
             if (r.assertividade) {
                 let pClean = String(r.assertividade).replace('%', '').replace(',', '.').trim();
                 let pVal = parseFloat(pClean);
@@ -76,13 +109,86 @@ Produtividade.Performance = {
         const values = labels.map(d => producaoPorDia[d] || 0);
         
         this.renderChart(labels, [{ 
-            label: 'Produção Total do Time', data: values, borderColor: '#3b82f6', 
-            backgroundColor: 'rgba(59, 130, 246, 0.1)', borderWidth: 2, tension: 0.3, fill: true 
+            label: 'Produção Total do Time', 
+            data: values, 
+            borderColor: '#3b82f6', 
+            backgroundColor: 'rgba(59, 130, 246, 0.1)', 
+            borderWidth: 2, 
+            tension: 0.3, 
+            fill: true 
         }]);
         
         const usersArray = Object.values(producaoPorUser);
         this.renderRankingList(usersArray);
         this.analisarExtremos(usersArray);
+        
+        // Verifica Melhor e Pior dia do Time Geral
+        this.analisarMelhorPiorDiaGeral(producaoPorDia);
+    },
+
+    // --- NOVA ANÁLISE: Documentos e Erros (Baseado na tabela Assertividade) ---
+    analisarQualidadeDocs: function(filtroNome = null) {
+        const container = document.getElementById('analise-qualidade-docs'); // Precisa ser criado no HTML
+        if(!container) return; // Se não houver container no HTML, ignora (ou injeta dinamicamente)
+
+        let dados = this.dadosAssertividade;
+        if(filtroNome) {
+            // Filtra por nome aproximado (já que assertividade usa string)
+            const nomeParte = filtroNome.split(' ')[0].toLowerCase();
+            dados = dados.filter(d => d.assistente_nome && d.assistente_nome.toLowerCase().includes(nomeParte));
+        }
+
+        const errosPorDoc = {};
+        let totalNok = 0;
+
+        dados.forEach(d => {
+            if(d.status === 'NOK' || (d.qtd_nok && d.qtd_nok > 0)) {
+                const doc = d.doc_name || 'Não Identificado';
+                if(!errosPorDoc[doc]) errosPorDoc[doc] = 0;
+                errosPorDoc[doc]++;
+                totalNok++;
+            }
+        });
+
+        // Ordena documentos com mais erros
+        const rankingDocs = Object.entries(errosPorDoc)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5); // Top 5
+
+        // Renderiza (ou retorna HTML para ser injetado)
+        this.renderizarWidgetQualidade(rankingDocs, totalNok, filtroNome);
+    },
+
+    renderizarWidgetQualidade: function(rankingDocs, totalNok, filtroNome) {
+        // Como o HTML original não tem esse container específico, vamos usar o container de "Insight" ou criar um novo espaço.
+        // Vou assumir que injetaremos no `analise-extremos-content` ou similar se estivermos no modo individual,
+        // ou criar um overlay visual. Para simplificar, vou atualizar o texto do diagnóstico se for individual.
+        
+        const areaDiagnostico = document.getElementById('insight-performance');
+        if(!areaDiagnostico) return;
+
+        if(filtroNome && rankingDocs.length > 0) {
+            let htmlDocs = rankingDocs.map(r => `<span class="bg-rose-900/30 px-1 rounded text-rose-200">${r[0]} (${r[1]})</span>`).join(' ');
+            areaDiagnostico.innerHTML += `<br><br><strong class="text-rose-300">⚠️ Pontos de Atenção (Docs com erro):</strong><br> ${htmlDocs}`;
+        }
+    },
+    // -------------------------------------------------------------------------
+
+    analisarMelhorPiorDiaGeral: function(producaoPorDia) {
+        const dias = Object.entries(producaoPorDia);
+        if(dias.length === 0) return;
+
+        dias.sort((a, b) => b[1] - a[1]); // Decrescente
+        const melhor = dias[0];
+        const pior = dias[dias.length - 1];
+        
+        // Aqui você pode atualizar a UI com "Melhor dia: Data (Qtd) / Pior Dia: Data (Qtd)"
+        // Vou injetar isso no subtítulo do gráfico para economizar espaço
+        const sub = document.getElementById('chart-subtitle');
+        if(sub) {
+            const fmt = d => d.split('-').reverse().slice(0,2).join('/');
+            sub.innerHTML = `Melhor dia: <b class="text-emerald-500">${fmt(melhor[0])}</b> (${melhor[1]}) | Pior dia: <b class="text-rose-500">${fmt(pior[0])}</b> (${pior[1]})`;
+        }
     },
 
     analisarExtremos: function(usersArray) {
@@ -92,19 +198,29 @@ Produtividade.Performance = {
         const bottom = ordenados[ordenados.length - 1];
 
         const container = document.getElementById('analise-extremos-content');
-        const gapPercentual = ((top.total / bottom.total - 1) * 100).toFixed(1);
+        const gapPercentual = bottom.total > 0 ? ((top.total / bottom.total - 1) * 100).toFixed(1) : '∞';
 
+        // Análise de Melhor/Pior Dia INDIVIDUAL para o TOP e BASE
+        const getMelhorDia = (user) => Object.entries(user.producaoDiaria).sort((a,b)=>b[1]-a[1])[0] || ['-',0];
+        const topDia = getMelhorDia(top);
+        
         container.innerHTML = `
-            <div class="flex items-center justify-between text-xs bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                <span class="font-bold text-emerald-700">🏆 Top: ${top.nome.split(' ')[0]}</span>
-                <span class="font-black text-emerald-800">${top.total.toLocaleString()} docs</span>
-            </div>
-            <div class="flex items-center justify-between text-xs bg-rose-50 p-2 rounded-lg border border-rose-100">
-                <span class="font-bold text-rose-700">📉 Base: ${bottom.nome.split(' ')[0]}</span>
-                <span class="font-black text-rose-800">${bottom.total.toLocaleString()} docs</span>
-            </div>
-            <div class="text-[10px] font-bold text-slate-500 uppercase pt-1 px-1">
-                GAP de Performance: <span class="text-slate-800">${gapPercentual}%</span>
+            <div class="flex flex-col gap-2">
+                <div class="flex items-center justify-between text-xs bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                    <div>
+                        <div class="font-bold text-emerald-700">🏆 Top: ${top.nome.split(' ')[0]}</div>
+                        <div class="text-[9px] text-emerald-600">Recorde: ${topDia[1]} docs em ${topDia[0].split('-').reverse().slice(0,2).join('/')}</div>
+                    </div>
+                    <span class="font-black text-emerald-800 text-lg">${top.total.toLocaleString()}</span>
+                </div>
+                <div class="flex items-center justify-between text-xs bg-rose-50 p-2 rounded-lg border border-rose-100">
+                    <span class="font-bold text-rose-700">📉 Base: ${bottom.nome.split(' ')[0]}</span>
+                    <span class="font-black text-rose-800 text-lg">${bottom.total.toLocaleString()}</span>
+                </div>
+                <div class="text-[10px] font-bold text-slate-500 uppercase pt-1 px-1 flex justify-between">
+                    <span>GAP Performance:</span>
+                    <span class="text-slate-800 bg-slate-200 px-1 rounded">${gapPercentual}%</span>
+                </div>
             </div>
         `;
 
@@ -119,16 +235,21 @@ Produtividade.Performance = {
         const mBottom = bottom.total / (bottom.diasAtivos.size || 1);
 
         let texto = "";
+        let classeBadge = "";
+        let textoBadge = "";
+
         if (gap > 40) {
-            badge.innerText = "TENDÊNCIA: DISPARIDADE";
-            badge.className = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-rose-500 text-white";
-            texto = `Análise detectou um gap crítico. Enquanto **${top.nome.split(' ')[0]}** opera com média de ${mTop.toFixed(1)}/dia, **${bottom.nome.split(' ')[0]}** entrega ${mBottom.toFixed(1)}/dia. Esta variação sugere necessidade de nivelamento técnico ou revisão de carga horária.`;
+            textoBadge = "DISPARIDADE ALTA";
+            classeBadge = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-rose-500 text-white";
+            texto = `Gap crítico detectado. **${top.nome.split(' ')[0]}** opera com média de ${mTop.toFixed(0)}/dia, enquanto **${bottom.nome.split(' ')[0]}** entrega ${mBottom.toFixed(0)}/dia. Sugere-se revisão de processos ou treinamento.`;
         } else {
-            badge.innerText = "TENDÊNCIA: EQUILÍBRIO";
-            badge.className = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-500 text-white";
-            texto = `O time apresenta alta coesão produtiva. A variação de ${gap}% entre os extremos é considerada orgânica. O fluxo de trabalho está distribuído de forma equitativa entre a equipe.`;
+            textoBadge = "EQUILIBRADO";
+            classeBadge = "ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-500 text-white";
+            texto = `Time com coesão produtiva. A variação é orgânica. O fluxo está bem distribuído.`;
         }
-        insight.innerHTML = texto;
+        
+        if(badge) { badge.innerText = textoBadge; badge.className = classeBadge; }
+        if(insight) insight.innerHTML = texto;
     },
 
     renderMiniChart: function(top, bottom) {
@@ -138,9 +259,9 @@ Produtividade.Performance = {
             type: 'doughnut',
             data: {
                 labels: [top.nome, bottom.nome],
-                datasets: [{ data: [top.total, bottom.total], backgroundColor: ['#10b981', '#f43f5e'], borderWidth: 0, cutout: '75%' }]
+                datasets: [{ data: [top.total, bottom.total], backgroundColor: ['#10b981', '#f43f5e'], borderWidth: 0, cutout: '70%' }]
             },
-            options: { plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: false }
+            options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, responsive: true, maintainAspectRatio: false }
         });
     },
 
@@ -151,12 +272,75 @@ Produtividade.Performance = {
         usersArray.forEach((u, index) => {
             let icon = `<div class="w-6 text-[10px] font-bold text-slate-400">#${index + 1}</div>`;
             if (index === 0) icon = `<i class="fas fa-crown text-yellow-500 w-6 text-center"></i>`;
+            
+            // Calcula média de assertividade se disponível
+            let assertInfo = '';
+            if(u.qtdAssert > 0) {
+                const mediaAssert = u.somaAssert / u.qtdAssert;
+                const cor = mediaAssert >= 98 ? 'text-emerald-500' : (mediaAssert < 95 ? 'text-rose-500' : 'text-blue-500');
+                assertInfo = `<span class="text-[10px] ${cor} font-bold mr-2">${mediaAssert.toFixed(1)}%</span>`;
+            }
+
             html += `<div onclick="Produtividade.Performance.renderizarVisaoIndividual('${u.id}', '${u.nome}')" class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer transition group border-b border-slate-50">
-                <div class="flex items-center gap-2">${icon}<span class="text-xs font-bold text-slate-700 truncate w-32">${u.nome}</span></div>
-                <span class="text-xs font-black text-slate-600">${u.total.toLocaleString()}</span>
+                <div class="flex items-center gap-2">${icon}<span class="text-xs font-bold text-slate-700 truncate w-24 sm:w-32">${u.nome}</span></div>
+                <div class="flex items-center">
+                    ${assertInfo}
+                    <span class="text-xs font-black text-slate-600 bg-slate-100 px-2 py-0.5 rounded">${u.total.toLocaleString()}</span>
+                </div>
             </div>`;
         });
         container.innerHTML = html;
+    },
+
+    // --- VISÃO INDIVIDUAL E COMPARATIVO ---
+    renderizarVisaoIndividual: function(uid, nome) {
+        const btnReset = document.getElementById('btn-reset-chart');
+        if(btnReset) btnReset.classList.remove('hidden');
+
+        const elTitle = document.getElementById('chart-title');
+        elTitle.innerHTML = `<i class="fas fa-user text-blue-500 mr-2"></i> Análise: ${nome}`;
+
+        // Filtra dados do usuário
+        const userRecs = this.dadosProducao.filter(r => r.usuario && r.usuario.id === uid);
+        const userMap = {};
+        userRecs.forEach(r => {
+            const d = r.data_referencia;
+            userMap[d] = (userMap[d] || 0) + Number(r.quantidade);
+        });
+
+        // Prepara dados para gráfico comparativo (Usuário vs Média do Time)
+        const labels = Object.keys(userMap).sort();
+        const dataUser = labels.map(d => userMap[d]);
+        
+        // Calcula média do time para esses dias
+        const dataMedia = labels.map(d => {
+            let soma = 0; let count = 0;
+            this.dadosProducao.forEach(r => {
+                if(r.data_referencia === d && r.quantidade > 0) {
+                    soma += Number(r.quantidade);
+                    count++;
+                }
+            });
+            return count > 0 ? (soma / count).toFixed(0) : 0;
+        });
+
+        this.renderChart(labels, [
+            { 
+                label: nome, 
+                data: dataUser, 
+                borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.2)', 
+                borderWidth: 2, tension: 0.3, fill: true 
+            },
+            { 
+                label: 'Média do Time', 
+                data: dataMedia, 
+                borderColor: '#94a3b8', borderDash: [5, 5], 
+                borderWidth: 2, tension: 0.3, fill: false, pointRadius: 0
+            }
+        ]);
+
+        // Chama análise qualitativa filtrada
+        this.analisarQualidadeDocs(nome);
     },
 
     renderChart: function(labels, datasets) {
@@ -168,8 +352,9 @@ Produtividade.Performance = {
             data: { labels: fmtLabels, datasets: datasets },
             options: {
                 responsive: true, maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
                 scales: { y: { beginAtZero: true, grid: { color: '#f1f5f9' } }, x: { grid: { display: false } } },
-                plugins: { legend: { position: 'bottom' } }
+                plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, usePointStyle: true } } }
             }
         });
     },
