@@ -7,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V32 (Fixed Locations)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V33 (Full Stable - Abono & Meta Proporcional)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -58,6 +58,7 @@ Produtividade.Geral = {
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
+            // 1. Busca Painel Principal (RPC Otimizada)
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: datas.inicio, 
@@ -66,6 +67,7 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
+            // 2. Busca Dias Úteis Reais
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: datas.inicio,
@@ -83,11 +85,11 @@ Produtividade.Geral = {
                     funcao: row.funcao,
                     contrato: row.contrato
                 },
-                meta_real: row.meta_producao,
+                meta_real: row.meta_producao, // Meta Base (ex: 130)
                 meta_assertividade: row.meta_assertividade,
                 totais: {
                     qty: row.total_qty,
-                    diasUteis: Number(row.total_dias_uteis), 
+                    diasUteis: Number(row.total_dias_uteis), // Fator (ex: 1.0 ou 0.5)
                     justificativa: row.justificativas, 
                     fifo: row.total_fifo,
                     gt: row.total_gt,
@@ -132,11 +134,13 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         
+        // --- TELA DE FOLGA / VAZIO ---
         if(listaComDados.length === 0) { 
             const isDia = Produtividade.filtroPeriodo === 'dia';
             let conteudoHTML = '';
 
             if (isDia) {
+                // Layout Animado "Hoje é Folga"
                 conteudoHTML = `
                     <div class="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in select-none">
                         <div class="relative">
@@ -160,6 +164,7 @@ Produtividade.Geral = {
                     </div>
                 `;
             } else {
+                // Layout Vazio Genérico
                 conteudoHTML = `
                     <div class="flex flex-col items-center justify-center gap-3 py-16 animate-fade-in">
                         <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
@@ -183,14 +188,22 @@ Produtividade.Geral = {
         listaComDados.sort((a,b) => (a.usuario.nome||'').localeCompare(b.usuario.nome||''));
 
         const htmlParts = listaComDados.map(d => {
-            const metaDia = d.meta_real; 
-            const atingimento = (metaDia > 0 && d.totais.diasUteis > 0) 
-                ? (d.totais.qty / (metaDia * d.totais.diasUteis)) * 100 
+            // CÁLCULO DE META PROPORCIONAL
+            const metaBaseDia = d.meta_real; // Ex: 130
+            const fatorDias = d.totais.diasUteis; // Ex: 0.5
+            
+            // Meta ajustada: 130 * 0.5 = 65
+            const metaProporcional = Math.round(metaBaseDia * fatorDias);
+            
+            // Atingimento sobre a meta proporcional
+            const atingimento = (metaProporcional > 0) 
+                ? (d.totais.qty / metaProporcional) * 100 
                 : 0;
             
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
+            // ASSERTIVIDADE
             let htmlAssertividade = '<span class="text-xs text-slate-300">-</span>';
             const qtdAuditada = Number(d.auditoria.qtd || 0);
             const somaPorcentagem = Number(d.auditoria.soma || 0);
@@ -226,6 +239,8 @@ Produtividade.Geral = {
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
+            
+            // Estilo do Fator (Abono)
             const styleAbono = (isAbonado || temJustificativa) 
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
                 : 'font-mono text-slate-500';
@@ -244,23 +259,32 @@ Produtividade.Geral = {
                         <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.funcao || 'ND'}</span>
                     </div>
                 </td>
+                
                 <td class="px-2 py-3 text-center" title="${temJustificativa ? d.totais.justificativa : ''}">
                     <span class="${styleAbono} px-1.5 py-0.5 inline-block">
-                        ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
+                        ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                         ${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
                     </span>
                 </td>
+
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
-                <td class="px-2 py-3 text-center bg-slate-50/50 text-slate-400 font-mono">${metaDia}</td>
-                <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">${Math.round(metaDia * d.totais.diasUteis).toLocaleString('pt-BR')}</td>
+                
+                <td class="px-2 py-3 text-center bg-slate-50/30 text-slate-400 font-mono text-[10px]">${metaBaseDia}</td>
+                
+                <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">
+                    ${metaProporcional.toLocaleString('pt-BR')}
+                </td>
+
                 <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">
                     ${d.totais.qty.toLocaleString('pt-BR')}
                 </td>
+                
                 <td class="px-2 py-3 text-center ${corProducao} ${corProducaoBg}">
                     ${atingimento.toFixed(1)}%
                 </td>
+                
                 <td class="px-2 py-2 text-center border-l border-slate-100 align-middle">
                     ${htmlAssertividade}
                 </td>
@@ -296,6 +320,7 @@ Produtividade.Geral = {
     atualizarKPIsGlobal: function(dados, isFiltrado) {
         let totalProdGeral = 0; 
         let totalMetaGeral = 0;
+        
         let totalMetaAssistentes = 0;
         let manDaysAssistentes = 0;
         let ativosCountAssistentes = 0;
@@ -313,6 +338,8 @@ Produtividade.Geral = {
             
             const diasUser = Number(d.totais.diasUteis);
             const prodUser = Number(d.totais.qty);
+            
+            // Meta considera o fator (Proporcional)
             const metaUser = Number(d.meta_real) * diasUser;
 
             totalProdGeral += prodUser;
@@ -328,7 +355,8 @@ Produtividade.Geral = {
         });
 
         this.setTxt('kpi-validacao-real', totalProdGeral.toLocaleString('pt-BR'));
-        this.setTxt('kpi-validacao-esperado', totalMetaGeral.toLocaleString('pt-BR'));
+        this.setTxt('kpi-validacao-esperado', Math.round(totalMetaGeral).toLocaleString('pt-BR'));
+        
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
@@ -343,6 +371,7 @@ Produtividade.Geral = {
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
+        // Velocidade Média
         const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
         const velReal = Math.round(totalProdGeral / divisor); 
         const velMeta = Math.round(totalMetaAssistentes / divisor);
@@ -391,6 +420,7 @@ Produtividade.Geral = {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
         
+        // 1. Tenta pegar a data do filtro (se for dia) ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
             dataAlvo = prompt("📅 Aplicar Abono em Massa.\n\nDigite a data alvo (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
@@ -418,6 +448,7 @@ Produtividade.Geral = {
 
         for (const chk of checks) {
             try {
+                // Chama a RPC que você criou no SQL
                 await Sistema.supabase.rpc('abonar_producao', {
                     p_usuario_id: chk.value, 
                     p_data: dataAlvo, 
@@ -428,12 +459,15 @@ Produtividade.Geral = {
             } catch (err) { console.error(err); }
         }
         alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
+        if(btnMassa) btnMassa.innerHTML = '<i class="fas fa-users-cog"></i> Massa';
         this.carregarTela();
     },
 
     mudarFator: async function(uid, fatorAtual) {
+        // 1. Tenta pegar a data ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
+             // Se não tiver data selecionada (ex: vendo mês), pede para confirmar qual dia quer abonar
              dataAlvo = prompt("📅 Qual data você deseja abonar? (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
              if (!dataAlvo) return;
         }
