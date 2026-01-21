@@ -7,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V28 (Full Fix Assertividade + Syntax)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V30 (Final Stable - Abonar Fix)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -26,7 +26,8 @@ Produtividade.Geral = {
                 </button>
             `;
         } else {
-            setTimeout(() => this.updateHeader(), 1000);
+            // Tenta novamente se o header ainda não carregou
+            setTimeout(() => this.updateHeader(), 500);
         }
     },
 
@@ -58,6 +59,7 @@ Produtividade.Geral = {
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
+            // 1. Busca Painel Principal
             const { data, error } = await Sistema.supabase
                 .rpc('get_painel_produtividade', { 
                     data_inicio: datas.inicio, 
@@ -66,6 +68,7 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
+            // 2. Busca Dias Úteis Reais
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: datas.inicio,
@@ -94,11 +97,12 @@ Produtividade.Geral = {
                     gp: row.total_gp
                 },
                 auditoria: {
-                    qtd: row.qtd_auditorias, // Denominador (Qtd de linhas)
-                    soma: row.soma_auditorias // Numerador (Soma das porcentagens)
+                    qtd: row.qtd_auditorias, // Denominador (Qtd Real)
+                    soma: row.soma_auditorias // Numerador (Soma das Notas)
                 }
             }));
             
+            // Mantém filtro de usuário se houver
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
                 this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
@@ -132,26 +136,53 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         
+        // --- TELA DE FOLGA / VAZIO ---
         if(listaComDados.length === 0) { 
             const isDia = Produtividade.filtroPeriodo === 'dia';
-            const msgTitulo = isDia ? "Esse dia não trabalhamos!" : "Sem atividades no período";
-            const msgSub = isDia ? "Não há registros de produção ou auditoria para esta data." : "Nenhum dado encontrado com os filtros atuais.";
+            let conteudoHTML = '';
 
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="12" class="text-center py-16 bg-white">
-                        <div class="flex flex-col items-center justify-center gap-3 animate-fade-in">
-                            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-2">
-                                <i class="fas fa-store-slash text-3xl text-slate-300"></i>
-                            </div>
-                            <div class="text-center">
-                                <h3 class="text-lg font-bold text-slate-600">${msgTitulo}</h3>
-                                <p class="text-xs text-slate-400 max-w-[200px] mx-auto leading-relaxed">${msgSub}</p>
+            if (isDia) {
+                // Layout Animado "Hoje é Folga"
+                conteudoHTML = `
+                    <div class="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in select-none">
+                        <div class="relative">
+                            <div class="absolute -top-4 -left-6 text-4xl animate-bounce" style="animation-delay: 0.1s">🍹</div>
+                            <div class="absolute -top-8 right-0 text-4xl animate-bounce" style="animation-delay: 0.3s">🎉</div>
+                            <div class="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-100 rounded-full flex items-center justify-center shadow-lg border-4 border-white">
+                                <i class="fas fa-umbrella-beach text-5xl text-amber-500 transform -rotate-12"></i>
                             </div>
                         </div>
-                    </td>
-                </tr>`; 
-            
+                        <div class="text-center space-y-2">
+                            <h3 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 drop-shadow-sm">
+                                Hoje é Folga, Uhuuuu!!!
+                            </h3>
+                            <p class="text-slate-400 font-medium text-lg">
+                                Recarregue as energias! 🔋✨
+                            </p>
+                            <span class="inline-block px-4 py-1 bg-amber-50 text-amber-600 rounded-full text-xs font-bold border border-amber-100 mt-2">
+                                <i class="fas fa-calendar-times mr-1"></i> Sem expediente registrado
+                            </span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Layout Vazio Genérico
+                conteudoHTML = `
+                    <div class="flex flex-col items-center justify-center gap-3 py-16 animate-fade-in">
+                        <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
+                            <i class="fas fa-wind text-4xl text-slate-300"></i>
+                        </div>
+                        <div class="text-center">
+                            <h3 class="text-xl font-bold text-slate-500">Tudo calmo por aqui...</h3>
+                            <p class="text-sm text-slate-400 max-w-[250px] mx-auto leading-relaxed">
+                                Nenhum registro de produção ou auditoria encontrado neste período.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            tbody.innerHTML = `<tr><td colspan="12" class="bg-white border-b border-slate-100">${conteudoHTML}</td></tr>`;
             this.setTxt('total-registros-footer', 0);
             return; 
         }
@@ -167,13 +198,12 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            // --- LÓGICA DE ASSERTIVIDADE (Média Ponderada) ---
+            // Assertividade
             let htmlAssertividade = '<span class="text-xs text-slate-300">-</span>';
             const qtdAuditada = Number(d.auditoria.qtd || 0);
             const somaPorcentagem = Number(d.auditoria.soma || 0);
 
             if (qtdAuditada > 0) {
-                // Cálculo: Soma das Porcentagens / Qtd de Auditorias
                 const mediaFinal = somaPorcentagem / qtdAuditada;
                 const metaAssert = Number(d.meta_assertividade || 98); 
                 
@@ -185,7 +215,7 @@ Produtividade.Geral = {
                     corTexto = 'text-emerald-600';
                     corBg = 'bg-emerald-50';
                     icon = '<i class="fas fa-check-circle ml-1"></i>';
-                } else if (mediaFinal >= (metaAssert - 2)) {
+                } else if (mediaFinal >= (metaAssert - 2)) { 
                     corTexto = 'text-amber-600';
                     corBg = 'bg-amber-50';
                     icon = '<i class="fas fa-exclamation-circle ml-1"></i>';
@@ -369,27 +399,37 @@ Produtividade.Geral = {
     abonarEmMassa: async function() {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
+        
+        // Tenta pegar a data do filtro (se for dia) ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
-            dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+            dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data alvo (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
         }
-        const opcao = prompt(`ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\nEscolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, "0");
+
+        const opcao = prompt(`ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\nEscolha o novo fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar / Atestado (0.0)\n\nDigite o código:`, "0");
         if (opcao === null) return;
+
         let novoFator = 1.0;
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
+
         let justificativa = "";
         if (novoFator !== 1.0) {
-            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
-            if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
+            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA (Ex: Atestado, Folga, Feriado):");
+            if (!justificativa) return alert("❌ Cancelado: Justificativa é obrigatória para abonos.");
         }
+
         if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
+
         let sucessos = 0;
         for (const chk of checks) {
             try {
                 await Sistema.supabase.rpc('abonar_producao', {
-                    p_usuario_id: chk.value, p_data: dataAlvo, p_fator: novoFator, p_justificativa: justificativa
+                    p_usuario_id: chk.value, 
+                    p_data: dataAlvo, 
+                    p_fator: novoFator, 
+                    p_justificativa: justificativa
                 });
                 sucessos++;
             } catch (err) { console.error(err); }
@@ -399,33 +439,62 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, fatorAtual) {
+        // Correção: Garante que temos uma data
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
-        if (!dataAlvo) dataAlvo = new Date().toISOString().split('T')[0];
-        const opcao = prompt(`ABONAR DIA (${dataAlvo})\n1 - Normal\n2 - Meio\n0 - Abono\nCódigo:`, "0");
+        if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
+             // Se não tiver data selecionada (ex: vendo mês), pede para confirmar qual dia quer abonar
+             dataAlvo = prompt("Digite a data para abonar (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
+             if (!dataAlvo) return;
+        }
+
+        const opcao = prompt(`ABONAR DIA (${dataAlvo})\n\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, "0");
         if (opcao === null) return;
+
         let novoFator = 1.0;
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
+
         let justificativa = "";
         if (novoFator !== 1.0) {
-            justificativa = prompt("Justificativa:");
-            if (!justificativa) return alert("Justificativa obrigatória.");
+            justificativa = prompt("Digite a Justificativa (Obrigatório):");
+            if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
         }
+
         try {
             const { error } = await Sistema.supabase.rpc('abonar_producao', {
-                p_usuario_id: uid, p_data: dataAlvo, p_fator: novoFator, p_justificativa: justificativa
+                p_usuario_id: uid, 
+                p_data: dataAlvo, 
+                p_fator: novoFator, 
+                p_justificativa: justificativa
             });
+
             if (error) throw error;
+            console.log("Abono aplicado com sucesso.");
             this.carregarTela();
-        } catch (error) { alert("Erro: " + error.message); }
+
+        } catch (error) { 
+            console.error(error);
+            alert("Erro ao abonar: " + error.message); 
+        }
     },
 
     excluirDadosDia: async function() {
-        const dt = document.getElementById('sel-data-dia').value;
-        if (!dt) return alert("Selecione um dia.");
-        if (!confirm(`TEM CERTEZA? Isso apagará TODA a produção de ${dt}.`)) return;
-        const { error } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dt);
-        if(error) alert("Erro: " + error.message);
-        else { alert("Dados excluídos."); this.carregarTela(); }
+        const dt = document.getElementById('sel-data-dia')?.value;
+        if (!dt) return alert("Selecione um dia específico no filtro para excluir.");
+        
+        if (!confirm(`⚠️ PERIGO! TEM CERTEZA?\n\nIsso apagará TODA a produção e auditorias do dia ${dt}.\nEssa ação não pode ser desfeita.`)) return;
+        
+        try {
+            const { error } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dt);
+            if(error) throw error;
+            
+            // Opcional: Apagar assertividade também se quiser limpar o dia completo
+            await Sistema.supabase.from('assertividade').delete().eq('data_referencia', dt);
+
+            alert("✅ Dados do dia excluídos com sucesso."); 
+            this.carregarTela();
+        } catch (e) {
+            alert("Erro: " + e.message);
+        }
     }
 };
