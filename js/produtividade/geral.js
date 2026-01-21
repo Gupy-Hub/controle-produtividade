@@ -8,7 +8,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V26 (Visual Clean)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V27 (Regra de Ouro HC)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -54,7 +54,6 @@ Produtividade.Geral = {
         this.resetarKPIs();
         this.updateHeader();
         
-        // Loader mais amigável
         tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><div class="flex flex-col items-center gap-2 text-emerald-600"><i class="fas fa-circle-notch fa-spin text-2xl"></i><span class="font-bold text-xs">Carregando indicadores...</span></div></td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
@@ -68,7 +67,6 @@ Produtividade.Geral = {
 
             if (error) throw error;
 
-            // Dias ativos para cálculo de metas
             const { data: diasReais } = await Sistema.supabase
                 .rpc('get_dias_ativos', {
                     data_inicio: datas.inicio,
@@ -107,8 +105,6 @@ Produtividade.Geral = {
                 this.filtrarUsuario(this.usuarioSelecionado, filtroNome);
             } else {
                 this.renderizarTabela();
-                // KPIs globais consideram todos os dados carregados (antes do filtro visual de zero)
-                // Se quiser que os KPIs zerem quando ninguém trabalhou, isso já acontece naturalmente pois a soma será 0
                 this.atualizarKPIsGlobal(this.dadosOriginais);
             }
 
@@ -125,25 +121,19 @@ Produtividade.Geral = {
 
         const mostrarGestao = document.getElementById('check-gestao')?.checked;
         
-        // 1. Filtro de Usuário Selecionado (Prioridade)
         let lista = this.usuarioSelecionado 
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
 
-        // 2. Filtro de Cargo (Oculta Gestão/Auditoria se checkbox desligado)
         if (!mostrarGestao && !this.usuarioSelecionado) {
             lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         }
 
-        // --- NOVA FUNÇÃO 1: SÓ MOSTRAR QUEM TEM DADOS ---
-        // Se a pessoa tem 0 produção E 0 auditorias, ela sai da lista.
         const listaComDados = lista.filter(d => Number(d.totais.qty) > 0 || Number(d.auditoria.qtd) > 0);
 
         tbody.innerHTML = '';
         
-        // --- NOVA FUNÇÃO 2: MENSAGEM "ESSE DIA NÃO TRABALHAMOS" ---
         if(listaComDados.length === 0) { 
-            // Mensagem personalizada dependendo se é Dia ou Período
             const isDia = Produtividade.filtroPeriodo === 'dia';
             const msgTitulo = isDia ? "Esse dia não trabalhamos!" : "Sem atividades no período";
             const msgSub = isDia ? "Não há registros de produção ou auditoria para esta data." : "Nenhum dado encontrado com os filtros atuais.";
@@ -167,7 +157,6 @@ Produtividade.Geral = {
             return; 
         }
 
-        // Ordenação Alfabética
         listaComDados.sort((a,b) => (a.usuario.nome||'').localeCompare(b.usuario.nome||''));
 
         const htmlParts = listaComDados.map(d => {
@@ -185,7 +174,6 @@ Produtividade.Geral = {
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
-            
             const styleAbono = (isAbonado || temJustificativa) 
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
                 : 'font-mono text-slate-500';
@@ -204,14 +192,12 @@ Produtividade.Geral = {
                         <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.funcao || 'ND'}</span>
                     </div>
                 </td>
-                
                 <td class="px-2 py-3 text-center" title="${temJustificativa ? d.totais.justificativa : ''}">
                     <span class="${styleAbono} px-1.5 py-0.5 inline-block">
                         ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
                         ${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
                     </span>
                 </td>
-
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
@@ -243,8 +229,6 @@ Produtividade.Geral = {
             nameSpan.innerText = nome;
         }
         this.renderizarTabela();
-        
-        // Mantém KPIs globais ou filtra? Geralmente KPIs mostram o que está na tela
         const dadosUser = this.dadosOriginais.filter(d => d.usuario.id == id);
         this.atualizarKPIsGlobal(dadosUser, true); 
     },
@@ -258,9 +242,10 @@ Produtividade.Geral = {
     },
 
     atualizarKPIsGlobal: function(dados, isFiltrado) {
-        let totalProdGeral = 0;
+        let totalProdGeral = 0; // Inclui Gestoras
         let totalMetaGeral = 0;
-        let totalProdAssistentes = 0;
+        
+        // Acumuladores exclusivos para MÉDIA
         let totalMetaAssistentes = 0;
         let manDaysAssistentes = 0;
         let ativosCountAssistentes = 0;
@@ -276,41 +261,38 @@ Produtividade.Geral = {
             const funcao = (d.usuario.funcao || '').toUpperCase();
             const isAssistente = !['AUDITORA', 'GESTORA'].includes(funcao);
             
-            // Só considera nos KPIs quem tem dados OU dias úteis > 0 (presença)
-            // Se quiser alinhar estritamente com a tabela visual (sem zeros), descomente abaixo:
-            // if (d.totais.qty === 0 && d.auditoria.qtd === 0) return;
-
             const diasUser = Number(d.totais.diasUteis);
             const prodUser = Number(d.totais.qty);
             const metaUser = Number(d.meta_real) * diasUser;
 
+            // 1. VOLUME: Soma SEMPRE (Regra: Gestoras contam na produção)
             totalProdGeral += prodUser;
             totalMetaGeral += metaUser;
 
+            // 2. MÉDIA/CAPACIDADE: Só conta se for Assistente (Regra: Não inflar HC)
             if (isAssistente || isFiltrado) {
-                // Se o dia útil for 0 mas tem produção, conta como ativo? Sim.
                 if (diasUser > 0 || prodUser > 0) ativosCountAssistentes++;
-                
                 manDaysAssistentes += diasUser;
-                totalProdAssistentes += prodUser;
                 totalMetaAssistentes += metaUser;
-                
                 somaNotasAssistentes += Number(d.auditoria.soma || 0);
                 qtdAuditoriasAssistentes += Number(d.auditoria.qtd || 0);
             }
         });
 
+        // --- RENDERIZAÇÃO CORRIGIDA ---
+
+        // Volume Total (Todos)
         this.setTxt('kpi-validacao-real', totalProdGeral.toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-esperado', totalMetaGeral.toLocaleString('pt-BR'));
-        
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
+        // Qualidade (Só Assistentes)
         const mediaGlobalAssert = qtdAuditoriasAssistentes > 0 ? (somaNotasAssistentes / qtdAuditoriasAssistentes) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
-        
         this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
+        // Capacidade (HC Assistentes)
         const capacidadeTotalPadrao = 17; 
         this.setTxt('kpi-capacidade-info', `${ativosCountAssistentes}/${capacidadeTotalPadrao}`);
         const capPct = (ativosCountAssistentes / capacidadeTotalPadrao) * 100;
@@ -318,29 +300,28 @@ Produtividade.Geral = {
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
+        // REGRA DE OURO: Velocidade = (Produção GERAL / Dias ASSISTENTES)
+        // Isso faz com que a produção da gestora ajude a equipe a bater a média
         const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
-        const velReal = Math.round(totalProdAssistentes / divisor);
+        const velReal = Math.round(totalProdGeral / divisor); // Aqui está o pulo do gato
         const velMeta = Math.round(totalMetaAssistentes / divisor);
+        
         this.setTxt('kpi-media-real', `${velReal}`);
         this.setTxt('kpi-media-esperada', `${velMeta}`);
         
-        // Exibição inteligente dos dias
+        // Display de Dias
         let diasDisplay = '--';
-        if (Produtividade.filtroPeriodo === 'dia') {
-            diasDisplay = '1'; // Dia único
-        } else if (isFiltrado && dados.length > 0) {
-            diasDisplay = dados[0].totais.diasUteis.toLocaleString('pt-BR');
-        } else {
-            // Se for período, mostra a média ou o total? Geralmente dias do período
-            diasDisplay = this.diasAtivosGlobal; 
-        }
+        if (Produtividade.filtroPeriodo === 'dia') diasDisplay = '1';
+        else if (isFiltrado && dados.length > 0) diasDisplay = dados[0].totais.diasUteis.toLocaleString('pt-BR');
+        else diasDisplay = this.diasAtivosGlobal; 
+        
         this.setTxt('kpi-dias-uteis', diasDisplay); 
 
         this.renderTopLists(dados);
     },
 
     renderTopLists: function(dados) {
-        // Filtra zero produção para o Top List também
+        // Top List: Mostra assistentes produtivos
         const op = dados.filter(d => 
             !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()) &&
             Number(d.totais.qty) > 0
@@ -353,57 +334,43 @@ Produtividade.Geral = {
             else listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
         }
 
-        const topAssert = [...dados] // Aqui pode incluir auditoras se tiverem nota
+        const topAssert = [...dados]
             .filter(d => Number(d.auditoria.qtd) > 0)
             .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
             .sort((a,b) => b.mediaCalc - a.mediaCalc)
             .slice(0, 3);
-
         const listAssert = document.getElementById('top-assert-list');
         if(listAssert) {
              if (topAssert.length === 0) listAssert.innerHTML = '<span class="text-[9px] text-slate-400 italic text-center block">Sem dados</span>';
              else listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.mediaCalc.toFixed(1)}%</span></div>`).join('');
         }
     },
-    
-    toggleAll: function(checked) {
-        document.querySelectorAll('.check-user').forEach(c => c.checked = checked);
-    },
-
+    // ... (restante das funções de abono mantidas igual) ...
+    toggleAll: function(checked) { document.querySelectorAll('.check-user').forEach(c => c.checked = checked); },
     abonarEmMassa: async function() {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
-
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
-             // Se não estiver no modo dia, pede a data
             dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
             if (!dataAlvo) return;
         }
-
         const opcao = prompt(`ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\nEscolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, "0");
         if (opcao === null) return;
-
         let novoFator = 1.0;
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
-
         let justificativa = "";
         if (novoFator !== 1.0) {
             justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
             if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
         }
-
         if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
-
         let sucessos = 0;
         for (const chk of checks) {
             try {
                 await Sistema.supabase.rpc('abonar_producao', {
-                    p_usuario_id: chk.value,
-                    p_data: dataAlvo,
-                    p_fator: novoFator,
-                    p_justificativa: justificativa
+                    p_usuario_id: chk.value, p_data: dataAlvo, p_fator: novoFator, p_justificativa: justificativa
                 });
                 sucessos++;
             } catch (err) { console.error(err); }
@@ -411,35 +378,27 @@ Produtividade.Geral = {
         alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
         this.carregarTela();
     },
-
     mudarFator: async function(uid, fatorAtual) {
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
-        // fallback se não estiver no filtro dia
         if (!dataAlvo) dataAlvo = new Date().toISOString().split('T')[0];
-
         const opcao = prompt(`ABONAR DIA (${dataAlvo})\n1 - Normal\n2 - Meio\n0 - Abono\nCódigo:`, "0");
         if (opcao === null) return;
-
         let novoFator = 1.0;
         if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
         if (opcao === '0') novoFator = 0.0;
-
         let justificativa = "";
         if (novoFator !== 1.0) {
             justificativa = prompt("Justificativa:");
             if (!justificativa) return alert("Justificativa obrigatória.");
         }
-
         try {
             const { error } = await Sistema.supabase.rpc('abonar_producao', {
                 p_usuario_id: uid, p_data: dataAlvo, p_fator: novoFator, p_justificativa: justificativa
             });
             if (error) throw error;
-            // Feedback sutil em vez de alert
             this.carregarTela();
         } catch (error) { alert("Erro: " + error.message); }
     },
-
     excluirDadosDia: async function() {
         const dt = document.getElementById('sel-data-dia').value;
         if (!dt) return alert("Selecione um dia.");
