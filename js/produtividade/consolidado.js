@@ -1,127 +1,113 @@
-/**
- * MÓDULO: Produtividade.Consolidado
- * FUNÇÃO: Visão gerencial agrupada por período
- */
+// ARQUIVO: js/produtividade/consolidado.js
+
 Produtividade.Consolidado = {
     initialized: false,
     ultimoCache: { key: null, data: null },
-    baseManualHC: 0, 
-    overridesHC: {}, 
+    overridesHC: {}, // Cache local dos ajustes carregados do banco
     dadosCalculados: null, 
     monthToColMap: null,
     
-    // CONFIGURAÇÃO: Headcount Padrão definido pela regra de negócio
+    // CONFIGURAÇÃO: Headcount Padrão
     PADRAO_HC: 17,
 
     init: async function() { 
-        console.log("🔧 Consolidado: Iniciando V7 (Tooltip Detalhado)...");
+        console.log("🔧 Consolidado: Iniciando V8 (Fix: Fator Real + HC Persistente)...");
         if(!this.initialized) { this.initialized = true; } 
         this.carregar();
     },
 
-    getStorageKey: function(t, s, e) {
-        return `gupy_consolidado_hc_${t}_${s}_${e}`;
-    },
-
-    carregarEstado: function(t, s, e) {
-        const key = this.getStorageKey(t, s, e);
-        const salvo = localStorage.getItem(key);
-        if (salvo) {
-            try {
-                this.overridesHC = JSON.parse(salvo);
-            } catch(e) { console.error("Erro ao ler estado", e); }
-        } else {
-            this.overridesHC = {}; 
-        }
-    },
-
-    salvarEstado: function() {
+    // Gera chave única para identificar o contexto do filtro atual no banco
+    getContextKey: function() {
         const datas = Produtividade.getDatasFiltro();
         let t = Produtividade.filtroPeriodo || 'mes';
-        if (t === 'semana') t = 'dia';
-        
-        const key = this.getStorageKey(t, datas.inicio, datas.fim);
-        localStorage.setItem(key, JSON.stringify(this.overridesHC));
+        if (t === 'semana') t = 'dia'; // Semana usa visualização diária
+        return `${t}_${datas.inicio}_${datas.fim}`;
     },
 
-    getSemanasDoMes: function(year, month) {
-        const weeks = [];
-        const firstDay = new Date(year, month - 1, 1);
-        const lastDay = new Date(year, month, 0);
-        let currentDay = firstDay;
-        
-        while (currentDay <= lastDay) {
-            const startOfWeek = new Date(currentDay);
-            const dayOfWeek = currentDay.getDay(); 
-            const daysToSaturday = 6 - dayOfWeek;
-            let endOfWeek = new Date(currentDay);
-            endOfWeek.setDate(currentDay.getDate() + daysToSaturday);
-            if (endOfWeek > lastDay) endOfWeek = lastDay;
-            weeks.push({
-                inicio: startOfWeek.toISOString().split('T')[0],
-                fim: endOfWeek.toISOString().split('T')[0]
-            });
-            currentDay = new Date(endOfWeek);
-            currentDay.setDate(currentDay.getDate() + 1);
+    // Carrega overrides do Banco de Dados (Substitui LocalStorage)
+    carregarOverrides: async function() {
+        const chave = this.getContextKey();
+        this.overridesHC = {}; // Reseta antes de carregar
+
+        try {
+            const { data, error } = await Sistema.supabase
+                .from('config_headcount')
+                .select('coluna_index, valor, motivo')
+                .eq('chave_contexto', chave);
+
+            if (error) throw error;
+
+            if (data) {
+                data.forEach(item => {
+                    this.overridesHC[item.coluna_index] = { 
+                        valor: item.valor, 
+                        motivo: item.motivo 
+                    };
+                });
+            }
+        } catch (e) {
+            console.error("Erro ao carregar Headcount config:", e);
         }
-        return weeks;
+    },
+
+    // Salva/Atualiza override no Banco de Dados
+    salvarOverride: async function(colIndex, valor, motivo) {
+        const chave = this.getContextKey();
+        
+        try {
+            if (valor === null) {
+                // Se valor é null, deletamos o registro (volta ao padrão)
+                await Sistema.supabase
+                    .from('config_headcount')
+                    .delete()
+                    .match({ chave_contexto: chave, coluna_index: colIndex });
+            } else {
+                // Upsert (Insere ou Atualiza)
+                await Sistema.supabase
+                    .from('config_headcount')
+                    .upsert({ 
+                        chave_contexto: chave, 
+                        coluna_index: colIndex, 
+                        valor: valor, 
+                        motivo: motivo 
+                    }, { onConflict: 'chave_contexto, coluna_index' });
+            }
+        } catch (e) {
+            console.error("Erro ao salvar Headcount:", e);
+            alert("Erro ao salvar configuração: " + e.message);
+        }
     },
 
     atualizarHC: async function(colIndex, novoValor) {
         const val = parseInt(novoValor);
         
-        // 1. Se inválido, volta para o padrão (deleta override)
-        if (isNaN(val) || val <= 0) { 
+        // 1. Volta ao padrão (Remove do banco)
+        if (isNaN(val) || val <= 0 || val === this.PADRAO_HC) { 
             delete this.overridesHC[colIndex]; 
-            this.salvarEstado(); 
+            await this.salvarOverride(colIndex, null); // Remove do DB
             this.renderizar(this.dadosCalculados); 
             return; 
         }
 
-        // 2. SMART RESET: Se for igual ao PADRÃO (17), remove override
-        if (val === this.PADRAO_HC) {
-            delete this.overridesHC[colIndex];
-            this.salvarEstado();
-            this.renderizar(this.dadosCalculados);
-            return;
-        }
-
-        // 3. Verifica se houve mudança real no valor manual
+        // 2. Verifica mudança
         const valorAtual = this.overridesHC[colIndex]?.valor;
         if (valorAtual === val) return;
         
-        // 4. Pede justificativa para sair do padrão 17
+        // 3. Exige Justificativa
         await new Promise(r => setTimeout(r, 50));
-        
-        const motivo = prompt(`O padrão é ${this.PADRAO_HC} assistentes. \nVocê está alterando para ${val}. \n\nQual o motivo? (Obrigatório):`);
+        const motivo = prompt(`O padrão é ${this.PADRAO_HC} assistentes. \nVocê está alterando para ${val}. \n\nQual o motivo? (Obrigatório para registro):`);
         
         if (!motivo || motivo.trim() === "") { 
-            alert("❌ Alteração cancelada: Justificativa obrigatória."); 
-            this.renderizar(this.dadosCalculados); 
+            alert("❌ Alteração cancelada: Justificativa obrigatória para auditoria."); 
+            this.renderizar(this.dadosCalculados); // Reseta visualmente
             return; 
         }
         
+        // 4. Salva Local e no Banco
         this.overridesHC[colIndex] = { valor: val, motivo: motivo.trim() };
-        this.salvarEstado();
+        await this.salvarOverride(colIndex, val, motivo.trim());
         
         if (this.dadosCalculados) this.renderizar(this.dadosCalculados);
-    },
-    
-    calcularDiasUteisCalendario: function(dataInicio, dataFim) {
-        const feriados = Produtividade.Geral && Produtividade.Geral.feriados ? Produtividade.Geral.feriados : [];
-        let count = 0; 
-        let cur = new Date(dataInicio + 'T12:00:00'); 
-        const end = new Date(dataFim + 'T12:00:00');
-        while (cur <= end) { 
-            const day = cur.getDay(); 
-            if (day !== 0 && day !== 6) {
-                const mes = String(cur.getMonth() + 1).padStart(2, '0');
-                const dia = String(cur.getDate()).padStart(2, '0');
-                if (!feriados.includes(`${mes}-${dia}`)) count++; 
-            }
-            cur.setDate(cur.getDate() + 1); 
-        }
-        return count;
     },
     
     carregar: async function(forcar = false) {
@@ -130,23 +116,21 @@ Produtividade.Consolidado = {
         const s = datas.inicio;
         const e = datas.fim;
         let t = Produtividade.filtroPeriodo || 'mes'; 
-
         if (t === 'semana') t = 'dia';
 
-        const cacheKey = `${t}_${s}_${e}`;
-        this.carregarEstado(t, s, e);
+        const cacheKey = this.getContextKey();
 
-        if (!forcar && this.ultimoCache.key === cacheKey && this.ultimoCache.data) { 
-            this.processarEExibir(this.ultimoCache.data, t, s, e); 
-            return; 
-        }
-        
-        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i> Carregando dados...</td></tr>';
+        // Loading State
+        if(tbody) tbody.innerHTML = '<tr><td colspan="15" class="text-center py-10 text-slate-400"><div class="flex flex-col items-center gap-2"><i class="fas fa-circle-notch fa-spin text-2xl text-blue-500"></i><span>Carregando dados de produção e configurações...</span></div></td></tr>';
 
         try {
+            // Carrega configurações de Headcount e Dados em paralelo
+            await this.carregarOverrides();
+
+            // CORREÇÃO LÓGICA: Buscamos a coluna 'fator' para calcular dias úteis reais
             const { data: rawData, error } = await Sistema.supabase
                 .from('producao')
-                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc')
+                .select('usuario_id, data_referencia, quantidade, fifo, gradual_total, gradual_parcial, perfil_fc, fator')
                 .gte('data_referencia', s)
                 .lte('data_referencia', e); 
 
@@ -154,10 +138,31 @@ Produtividade.Consolidado = {
             
             this.ultimoCache = { key: cacheKey, data: rawData, tipo: t };
             this.processarEExibir(rawData, t, s, e);
+
         } catch (e) { 
             console.error(e); 
-            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-red-500">Erro: ${e.message}</td></tr>`; 
+            if(tbody) tbody.innerHTML = `<tr><td colspan="15" class="text-center py-4 text-rose-500 font-bold"><i class="fas fa-exclamation-triangle"></i> Erro: ${e.message}</td></tr>`; 
         }
+    },
+
+    getSemanasDoMes: function(year, month) {
+        // ... (Mantém a lógica original auxiliar)
+        const weeks = [];
+        const firstDay = new Date(year, month - 1, 1);
+        const lastDay = new Date(year, month, 0);
+        let currentDay = firstDay;
+        while (currentDay <= lastDay) {
+            const startOfWeek = new Date(currentDay);
+            const dayOfWeek = currentDay.getDay(); 
+            const daysToSaturday = 6 - dayOfWeek;
+            let endOfWeek = new Date(currentDay);
+            endOfWeek.setDate(currentDay.getDate() + daysToSaturday);
+            if (endOfWeek > lastDay) endOfWeek = lastDay;
+            weeks.push({ inicio: startOfWeek.toISOString().split('T')[0], fim: endOfWeek.toISOString().split('T')[0] });
+            currentDay = new Date(endOfWeek);
+            currentDay.setDate(currentDay.getDate() + 1);
+        }
+        return weeks;
     },
 
     processarDados: function(rawData, t, dataInicio, dataFim) {
@@ -170,6 +175,7 @@ Produtividade.Consolidado = {
         const currentYear = dIni.getFullYear();
         const currentMonth = dIni.getMonth() + 1;
 
+        // --- Montagem das Colunas (Igual ao original) ---
         if (t === 'dia') { 
             let curr = new Date(dataInicio + 'T12:00:00');
             const end = new Date(dataFim + 'T12:00:00');
@@ -202,12 +208,13 @@ Produtividade.Consolidado = {
 
         const numCols = cols.length;
         let st = {}; 
-        for(let i=1; i<=numCols; i++) st[i] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
-        st[99] = { users: new Set(), dates: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
+        for(let i=1; i<=numCols; i++) st[i] = { users: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
+        st[99] = { users: new Set(), diasUteis: 0, qty: 0, fifo: 0, gt: 0, gp: 0, fc: 0 }; 
 
         if(rawData) {
             rawData.forEach(r => {
                 let b = -1;
+                // --- Lógica de Bucket ---
                 if (t === 'dia') { 
                     for(let k=1; k<=numCols; k++) if (datesMap[k].ini === r.data_referencia) b = k;
                 } else if (t === 'mes') { 
@@ -225,13 +232,15 @@ Produtividade.Consolidado = {
                         st[k].gt += Number(r.gradual_total) || 0;
                         st[k].gp += Number(r.gradual_parcial) || 0;
                         st[k].fc += Number(r.perfil_fc) || 0;
+                        
+                        // CORREÇÃO CRÍTICA: Uso do FATOR para dias úteis
+                        // Se fator (abono) for null, assume 1 (dia cheio). Se for 0.5, soma meio dia.
+                        const fatorDb = (r.fator !== undefined && r.fator !== null) ? Number(r.fator) : 1;
+                        st[k].diasUteis += fatorDb; 
                     });
                 }
             });
         }
-
-        for(let i=1; i<=numCols; i++) st[i].diasUteis = this.calcularDiasUteisCalendario(datesMap[i].ini, datesMap[i].fim);
-        for(let i=1; i<=numCols; i++) st[99].diasUteis += st[i].diasUteis;
         
         return { cols, st, numCols };
     },
@@ -246,58 +255,51 @@ Produtividade.Consolidado = {
         const hRow = document.getElementById('cons-table-header');
         if(!tbody || !hRow) return;
 
+        // Renderização do Header
         let headerHTML = `<tr class="bg-slate-50 border-b border-slate-200"><th class="px-6 py-4 sticky left-0 bg-slate-50 z-20 border-r border-slate-200 text-left min-w-[250px]"><span class="text-xs font-black text-slate-400 uppercase tracking-widest">Indicador</span></th>`;
         
-        // Loop das Colunas (Semana/Mes/Dia)
         cols.forEach((c, index) => {
             const colIdx = index + 1;
             const autoCount = this.PADRAO_HC; 
-            headerHTML += `<th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span><input type="number" value="${this.overridesHC[colIdx]?.valor || ''}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 border"></div></th>`;
+            const override = this.overridesHC[colIdx];
+            // Visualmente destaca se houver override
+            const bgInput = override ? 'bg-amber-50 border-amber-300 text-amber-700 font-bold' : 'bg-white border-slate-200';
+            
+            headerHTML += `<th class="px-2 py-2 text-center border-l border-slate-200 min-w-[80px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-bold text-slate-600 uppercase">${c}</span><input type="number" value="${override?.valor || ''}" placeholder="(${autoCount})" onchange="Produtividade.Consolidado.atualizarHC(${colIdx}, this.value)" class="w-full text-[10px] text-center rounded py-0.5 border ${bgInput} transition focus:ring-2 focus:ring-blue-200 outline-none"></div></th>`;
         });
         
-        // Coluna Total
-        const totalAuto = this.PADRAO_HC;
-        headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${this.overridesHC[99]?.valor || ''}" placeholder="(${totalAuto})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border"></div></th></tr>`;
+        const overrideTotal = this.overridesHC[99];
+        const bgInputTotal = overrideTotal ? 'bg-amber-50 border-amber-300 text-amber-700 font-bold' : 'bg-white border-blue-200';
+        headerHTML += `<th class="px-4 py-2 text-center bg-blue-50 border-l border-blue-100 min-w-[100px]"><div class="flex flex-col items-center gap-1"><span class="text-xs font-black text-blue-600 uppercase">TOTAL</span><input type="number" value="${overrideTotal?.valor || ''}" placeholder="(${this.PADRAO_HC})" onchange="Produtividade.Consolidado.atualizarHC(99, this.value)" class="w-full max-w-[60px] text-[10px] text-center rounded py-0.5 border ${bgInputTotal} outline-none"></div></th></tr>`;
         hRow.innerHTML = headerHTML;
 
+        // Renderização das Linhas
         const mkRow = (label, icon, color, getter, isCalc=false, isBold=false) => {
-            let tr = `<tr class="${isBold ? 'bg-slate-50/50' : ''} border-b border-slate-100"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200"><div class="flex items-center gap-3"><i class="${icon} ${color} text-sm"></i><span class="text-xs uppercase ${isBold ? 'font-black' : 'font-medium'}">${label}</span></div></td>`;
+            let tr = `<tr class="${isBold ? 'bg-slate-50/50' : ''} border-b border-slate-100 hover:bg-slate-50 transition"><td class="px-6 py-3 sticky left-0 bg-white z-10 border-r border-slate-200"><div class="flex items-center gap-3"><i class="${icon} ${color} text-sm w-4 text-center"></i><span class="text-xs uppercase ${isBold ? 'font-black' : 'font-medium'} text-slate-600">${label}</span></div></td>`;
             
             [...Array(numCols).keys()].map(i => i + 1).concat(99).forEach(i => {
                 const s = st[i];
-                
-                // === LÓGICA DE DETALHAMENTO DO TOOLTIP ===
-                
-                // 1. O que o sistema encontrou nos dados?
-                const foundBySystem = s.users.size || 0;
-                
-                // 2. Qual é a regra fixa?
-                const standardHC = this.PADRAO_HC;
-                
-                // 3. Existe alteração manual?
                 const override = this.overridesHC[i];
-                
-                // 4. Valor final para cálculo (Manual ou Padrão)
-                const HF = override ? override.valor : standardHC;
+                const HF = override ? override.valor : this.PADRAO_HC; // Headcount Final para cálculo
+                const foundBySystem = s.users.size || 0;
                 
                 const val = isCalc ? getter(s, s.diasUteis, HF) : getter(s);
                 let cellHTML = (val !== undefined && !isNaN(val)) ? Math.round(val).toLocaleString('pt-BR') : '-';
                 
+                // Tratamento visual especial para linha de Assistentes
                 if (label === 'Total de assistentes') {
                     if (override) {
-                        // CENÁRIO: Teve alteração
-                        // Tooltip: Mostra Padrão, Encontrado e Motivo
-                        const tooltip = `Padrão: ${standardHC} | Sistema encontrou: ${foundBySystem} | Motivo: ${override.motivo}`;
-                        cellHTML = `<span title="${tooltip}" class="cursor-help text-amber-600 font-bold decoration-dotted underline decoration-amber-400 bg-amber-50 px-1 rounded transition hover:bg-amber-100 hover:text-amber-800">${cellHTML}</span>`;
+                         const tooltip = `Padrão: ${this.PADRAO_HC} | Ativos: ${foundBySystem} | Motivo: ${override.motivo}`;
+                        cellHTML = `<span title="${tooltip}" class="cursor-help text-amber-600 font-bold decoration-dotted underline decoration-amber-400 bg-amber-50 px-2 py-0.5 rounded text-[10px]">${cellHTML} <i class="fas fa-info-circle text-[8px] ml-0.5"></i></span>`;
                     } else {
-                        // CENÁRIO: Padrão (17)
-                        // Tooltip: Mostra Padrão e o que o Sistema Encontrou (só a título de informação)
-                        const tooltip = `Padrão: ${standardHC} | Sistema encontrou: ${foundBySystem}`;
-                        cellHTML = `<span title="${tooltip}" class="cursor-help text-slate-500 border-b border-transparent hover:border-slate-300">${cellHTML}</span>`;
+                        cellHTML = `<span title="Ativos no Sistema: ${foundBySystem}" class="text-slate-400 cursor-default">${cellHTML}</span>`;
                     }
+                } else {
+                    // Estiliza zeros ou valores baixos
+                     if (cellHTML === '0' || cellHTML === '-') cellHTML = `<span class="text-slate-300">-</span>`;
                 }
                 
-                tr += `<td class="px-4 py-3 text-center text-xs ${i === 99 ? 'bg-blue-50/30 font-bold' : ''}">${cellHTML}</td>`;
+                tr += `<td class="px-4 py-3 text-center text-xs ${i === 99 ? 'bg-blue-50/30 font-bold text-blue-800' : 'text-slate-600'}">${cellHTML}</td>`;
             });
             return tr + '</tr>';
         };
