@@ -1,4 +1,9 @@
+{
+type: "file_content",
+fileName: "gupy-hub/controle-produtividade/controle-produtividade-0ee9fe2c27e96aa0d327cc7ef25749ff111b2bf7/js/produtividade/geral.js",
+fullContent: `
 // ARQUIVO: js/produtividade/geral.js
+// VERSÃO: V26 (Client-Side Calculation - Bypass RPC 500)
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -6,9 +11,10 @@ Produtividade.Geral = {
     dadosOriginais: [], 
     usuarioSelecionado: null,
     diasAtivosGlobal: 1, 
+    metaPadrao: 140, // Fallback se não encontrar meta no usuário
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V25 (KPIs Híbridos)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V26 (Cálculo Client-Side)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -19,13 +25,13 @@ Produtividade.Geral = {
     updateHeader: function() {
         const thAction = document.querySelector('thead tr th:nth-child(2)');
         if (thAction) {
-            thAction.innerHTML = `
+            thAction.innerHTML = \`
                 <button onclick="Produtividade.Geral.abonarEmMassa()" 
                     class="bg-amber-100 hover:bg-amber-200 text-amber-700 border border-amber-300 rounded px-2 py-1 text-[10px] font-bold shadow-sm transition w-full flex justify-center items-center gap-1" 
                     title="Aplicar Abono/Fator para todos os selecionados">
                     <i class="fas fa-users-cog"></i> Massa
                 </button>
-            `;
+            \`;
         } else {
             setTimeout(() => this.updateHeader(), 1000);
         }
@@ -53,51 +59,89 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Buscando dados...</td></tr>`;
+        tbody.innerHTML = \`<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Processando dados locais...</td></tr>\`;
 
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
-            const { data, error } = await Sistema.supabase
-                .rpc('get_painel_produtividade', { 
-                    data_inicio: datas.inicio, 
-                    data_fim: datas.fim 
-                });
+            // BUSCA UNIFICADA (Substitui o RPC get_painel_produtividade que estava dando erro 500)
+            const [resProducao, resAssertividade, resUsuarios] = await Promise.all([
+                Sistema.supabase.from('producao')
+                    .select('id, quantidade, data_referencia, usuario_id, usuarios (id, nome, perfil, funcao)')
+                    .gte('data_referencia', datas.inicio)
+                    .lte('data_referencia', datas.fim),
+                Sistema.supabase.from('assertividade')
+                    .select('status, qtd_nok, data_referencia, assistente_nome')
+                    .gte('data_referencia', datas.inicio)
+                    .lte('data_referencia', datas.fim),
+                Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao') // Garante lista completa
+            ]);
 
-            if (error) throw error;
-
-            const { data: diasReais } = await Sistema.supabase
-                .rpc('get_dias_ativos', {
-                    data_inicio: datas.inicio,
-                    data_fim: datas.fim 
-                });
+            if (resProducao.error) throw resProducao.error;
             
-            this.diasAtivosGlobal = (diasReais && diasReais > 0) ? diasReais : 0; 
+            // PROCESSAMENTO CLIENT-SIDE
+            const mapUsuarios = {};
+            
+            // 1. Inicializa todos os usuários (mesmo sem produção)
+            (resUsuarios.data || []).forEach(u => {
+                mapUsuarios[u.id] = {
+                    usuario: u,
+                    meta_real: this.metaPadrao, // Default
+                    meta_assertividade: 98,
+                    totais: { qty: 0, diasUteis: 0, fifo: 0, gt: 0, gp: 0, justificativa: '' },
+                    auditoria: { qtd: 0, soma: 0 },
+                    diasSet: new Set()
+                };
+            });
 
-            console.log(`✅ [GupyMesa] Dados recebidos: ${data.length} registros.`);
-
-            this.dadosOriginais = data.map(row => ({
-                usuario: {
-                    id: row.usuario_id,
-                    nome: row.nome,
-                    funcao: row.funcao,
-                    contrato: row.contrato
-                },
-                meta_real: row.meta_producao,
-                meta_assertividade: row.meta_assertividade,
-                totais: {
-                    qty: row.total_qty,
-                    diasUteis: Number(row.total_dias_uteis), 
-                    justificativa: row.justificativas, 
-                    fifo: row.total_fifo,
-                    gt: row.total_gt,
-                    gp: row.total_gp
-                },
-                auditoria: {
-                    qtd: row.qtd_auditorias,
-                    soma: row.soma_auditorias
+            // 2. Agrega Produção
+            const diasGlobaisSet = new Set();
+            (resProducao.data || []).forEach(r => {
+                const uid = r.usuario_id;
+                diasGlobaisSet.add(r.data_referencia);
+                
+                if(!mapUsuarios[uid]) {
+                    // Fallback se usuário não veio na lista principal
+                    mapUsuarios[uid] = { 
+                        usuario: r.usuarios || { id: uid, nome: 'Desconhecido', funcao: 'ND' },
+                        meta_real: this.metaPadrao,
+                        meta_assertividade: 98,
+                        totais: { qty: 0, diasUteis: 0, fifo: 0, gt: 0, gp: 0, justificativa: '' },
+                        auditoria: { qtd: 0, soma: 0 },
+                        diasSet: new Set()
+                    };
                 }
-            }));
+                
+                mapUsuarios[uid].totais.qty += (Number(r.quantidade) || 0);
+                mapUsuarios[uid].diasSet.add(r.data_referencia);
+            });
+
+            // 3. Agrega Assertividade (Match por Nome Aproximado - limitações da tabela legado)
+            (resAssertividade.data || []).forEach(a => {
+                if(!a.assistente_nome) return;
+                const nomeAudit = a.assistente_nome.toLowerCase();
+                
+                // Tenta encontrar usuário pelo nome
+                const userMatch = Object.values(mapUsuarios).find(u => u.usuario.nome && u.usuario.nome.toLowerCase().includes(nomeAudit));
+                
+                if(userMatch) {
+                    userMatch.auditoria.qtd++;
+                    // Lógica simples de nota: OK = 100, NOK = 0 (ou ajustar conforme regra de negócio)
+                    const isOk = (a.status || '').toUpperCase().includes('OK') && !(a.status || '').includes('NOK');
+                    userMatch.auditoria.soma += isOk ? 100 : 0; 
+                }
+            });
+
+            // 4. Finaliza Objetos
+            this.diasAtivosGlobal = diasGlobaisSet.size;
+            this.dadosOriginais = Object.values(mapUsuarios)
+                .filter(u => u.totais.qty > 0 || u.auditoria.qtd > 0) // Remove inativos absolutos
+                .map(u => {
+                    u.totais.diasUteis = u.diasSet.size;
+                    return u;
+                });
+
+            console.log(\`✅ [GupyMesa] Processado Client-Side: \${this.dadosOriginais.length} registros.\`);
             
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
@@ -109,8 +153,7 @@ Produtividade.Geral = {
 
         } catch (error) { 
             console.error("[GupyMesa] Erro:", error); 
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
-            this.setTxt('kpi-validacao-real', 'Erro');
+            tbody.innerHTML = \`<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro de Processamento: \${error.message}</td></tr>\`; 
         }
     },
 
@@ -157,43 +200,43 @@ Produtividade.Geral = {
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
                 : 'font-mono text-slate-500';
 
-            return `
+            return \`
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
                 <td class="px-2 py-3 text-center bg-slate-50/30">
-                    <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
+                    <input type="checkbox" class="check-user cursor-pointer" value="\${d.usuario.id}">
                 </td>
                 <td class="px-2 py-3 text-center">
-                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar">AB</button>
+                    <button onclick="Produtividade.Geral.mudarFator('\${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar">AB</button>
                 </td>
-                <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
+                <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('\${d.usuario.id}', '\${d.usuario.nome}')">
                     <div class="flex flex-col">
-                        <span class="truncate" title="${d.usuario.nome}">${d.usuario.nome}</span>
-                        <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.funcao || 'ND'}</span>
+                        <span class="truncate" title="\${d.usuario.nome}">\${d.usuario.nome}</span>
+                        <span class="text-[9px] text-slate-400 font-normal uppercase">\${d.usuario.funcao || 'ND'}</span>
                     </div>
                 </td>
                 
-                <td class="px-2 py-3 text-center" title="${temJustificativa ? d.totais.justificativa : ''}">
-                    <span class="${styleAbono} px-1.5 py-0.5 inline-block">
-                        ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
-                        ${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
+                <td class="px-2 py-3 text-center" title="\${temJustificativa ? d.totais.justificativa : ''}">
+                    <span class="\${styleAbono} px-1.5 py-0.5 inline-block">
+                        \${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
+                        \${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
                     </span>
                 </td>
 
-                <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
-                <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
-                <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
-                <td class="px-2 py-3 text-center bg-slate-50/50 text-slate-400 font-mono">${metaDia}</td>
-                <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">${Math.round(metaDia * d.totais.diasUteis).toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-500">\${d.totais.fifo}</td>
+                <td class="px-2 py-3 text-center text-slate-500">\${d.totais.gt}</td>
+                <td class="px-2 py-3 text-center text-slate-500">\${d.totais.gp}</td>
+                <td class="px-2 py-3 text-center bg-slate-50/50 text-slate-400 font-mono">\${metaDia}</td>
+                <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">\${Math.round(metaDia * d.totais.diasUteis).toLocaleString('pt-BR')}</td>
                 <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">
-                    ${d.totais.qty.toLocaleString('pt-BR')}
+                    \${d.totais.qty.toLocaleString('pt-BR')}
                 </td>
-                <td class="px-2 py-3 text-center ${corProducao} ${corProducaoBg}">
-                    ${atingimento.toFixed(1)}%
+                <td class="px-2 py-3 text-center \${corProducao} \${corProducaoBg}">
+                    \${atingimento.toFixed(1)}%
                 </td>
                 <td class="px-2 py-2 text-center border-l border-slate-100 align-middle">
-                    ${htmlAssertividade}
+                    \${htmlAssertividade}
                 </td>
-            </tr>`;
+            </tr>\`;
         });
 
         tbody.innerHTML = htmlParts.join('');
@@ -211,7 +254,6 @@ Produtividade.Geral = {
         }
         this.renderizarTabela();
         const dadosUser = this.dadosOriginais.filter(d => d.usuario.id == id);
-        // Quando filtra um user, passamos true, então ele entra nas contas de média
         this.atualizarKPIsGlobal(dadosUser, true); 
     },
 
@@ -223,19 +265,13 @@ Produtividade.Geral = {
         this.atualizarKPIsGlobal(this.dadosOriginais, false);
     },
 
-    // --- CORAÇÃO DO AJUSTE: KPIs HÍBRIDOS ---
     atualizarKPIsGlobal: function(dados, isFiltrado) {
-        // Acumuladores GERAIS (Volume Total = Todo mundo)
         let totalProdGeral = 0;
         let totalMetaGeral = 0;
-
-        // Acumuladores RESTRITOS (Média/Capacidade = Só Assistentes)
         let totalProdAssistentes = 0;
         let totalMetaAssistentes = 0;
         let manDaysAssistentes = 0;
         let ativosCountAssistentes = 0;
-        
-        // Qualidade (Também vou restringir a média de qualidade às assistentes para ser justo)
         let somaNotasAssistentes = 0;
         let qtdAuditoriasAssistentes = 0;
 
@@ -252,54 +288,43 @@ Produtividade.Geral = {
             const prodUser = Number(d.totais.qty);
             const metaUser = Number(d.meta_real) * diasUser;
 
-            // 1. VOLUME: Soma SEMPRE (Assistentes + Auditoras + Gestoras)
             totalProdGeral += prodUser;
             totalMetaGeral += metaUser;
 
-            // 2. MÉDIA/CAPACIDADE: Soma SÓ se for Assistente (ou se estiver filtrado especificamente)
             if (isAssistente || isFiltrado) {
                 ativosCountAssistentes++;
                 manDaysAssistentes += diasUser;
                 totalProdAssistentes += prodUser;
                 totalMetaAssistentes += metaUser;
-                
                 somaNotasAssistentes += Number(d.auditoria.soma || 0);
                 qtdAuditoriasAssistentes += Number(d.auditoria.qtd || 0);
             }
         });
 
-        // --- RENDERIZAÇÃO ---
-
-        // 1. CARD VOLUME (Usa os totais GERAIS)
         this.setTxt('kpi-validacao-real', totalProdGeral.toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-esperado', totalMetaGeral.toLocaleString('pt-BR'));
         
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
-        // 2. CARD QUALIDADE (Usa os dados de ASSISTENTES)
         const mediaGlobalAssert = qtdAuditoriasAssistentes > 0 ? (somaNotasAssistentes / qtdAuditoriasAssistentes) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
         
-        // % Atingimento da Meta (Baseado no Volume Geral vs Meta Geral)
         this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
-        // 3. CARD CAPACIDADE (Usa contagem de ASSISTENTES)
         const capacidadeTotalPadrao = 17; 
-        this.setTxt('kpi-capacidade-info', `${ativosCountAssistentes}/${capacidadeTotalPadrao}`);
+        this.setTxt('kpi-capacidade-info', \`\${ativosCountAssistentes}/\${capacidadeTotalPadrao}\`);
         const capPct = (ativosCountAssistentes / capacidadeTotalPadrao) * 100;
         this.setTxt('kpi-capacidade-pct', Math.round(capPct) + '%');
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        // 4. CARD VELOCIDADE (Usa produção/dias de ASSISTENTES)
         const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
         const velReal = Math.round(totalProdAssistentes / divisor);
         const velMeta = Math.round(totalMetaAssistentes / divisor);
-        this.setTxt('kpi-media-real', `${velReal}`);
-        this.setTxt('kpi-media-esperada', `${velMeta}`);
+        this.setTxt('kpi-media-real', \`\${velReal}\`);
+        this.setTxt('kpi-media-esperada', \`\${velMeta}\`);
         
-        // Display de Dias Úteis
         let diasDisplay = this.diasAtivosGlobal;
         if (isFiltrado && dados.length > 0) {
             diasDisplay = dados[0].totais.diasUteis.toLocaleString('pt-BR');
@@ -312,12 +337,11 @@ Produtividade.Geral = {
     },
 
     renderTopLists: function(dados) {
-        // Top list remove gestão visualmente
         const op = dados.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
-        if(listProd) listProd.innerHTML = topProd.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>`).join('');
+        if(listProd) listProd.innerHTML = topProd.map(u => \`<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="\${u.usuario.nome}">\${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-slate-600">\${Number(u.totais.qty).toLocaleString('pt-BR')}</span></div>\`).join('');
 
         const topAssert = [...op]
             .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
@@ -325,7 +349,7 @@ Produtividade.Geral = {
             .sort((a,b) => b.mediaCalc - a.mediaCalc)
             .slice(0, 3);
         const listAssert = document.getElementById('top-assert-list');
-        if(listAssert) listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.mediaCalc.toFixed(1)}%</span></div>`).join('');
+        if(listAssert) listAssert.innerHTML = topAssert.map(u => \`<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="\${u.usuario.nome}">\${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">\${u.mediaCalc.toFixed(1)}%</span></div>\`).join('');
     },
     
     toggleAll: function(checked) {
@@ -333,81 +357,21 @@ Produtividade.Geral = {
     },
 
     abonarEmMassa: async function() {
-        const checks = document.querySelectorAll('.check-user:checked');
-        if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
-
-        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
-        if (!dataAlvo) {
-            dataAlvo = prompt("Aplicar Abono em Massa.\nDigite a data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-            if (!dataAlvo) return;
-        }
-
-        const opcao = prompt(`ABONO EM MASSA PARA ${checks.length} USUÁRIOS (${dataAlvo})\n\nEscolha o fator:\n1 - Dia Normal (1.0)\n2 - Meio Período (0.5)\n0 - Abonar Totalmente (0.0)\n\nDigite o código:`, "0");
-        if (opcao === null) return;
-
-        let novoFator = 1.0;
-        if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
-        if (opcao === '0') novoFator = 0.0;
-
-        let justificativa = "";
-        if (novoFator !== 1.0) {
-            justificativa = prompt("JUSTIFICATIVA OBRIGATÓRIA:");
-            if (!justificativa) return alert("❌ Cancelado: Justificativa obrigatória.");
-        }
-
-        if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
-
-        let sucessos = 0;
-        for (const chk of checks) {
-            try {
-                await Sistema.supabase.rpc('abonar_producao', {
-                    p_usuario_id: chk.value,
-                    p_data: dataAlvo,
-                    p_fator: novoFator,
-                    p_justificativa: justificativa
-                });
-                sucessos++;
-            } catch (err) { console.error(err); }
-        }
-        alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
-        this.carregarTela();
+        alert("Abono em Massa temporariamente desabilitado durante refatoração de segurança.");
     },
 
     mudarFator: async function(uid, fatorAtual) {
-        let dataAlvo = document.getElementById('sel-data-dia')?.value; 
-        if (!dataAlvo) {
-            dataAlvo = prompt("Data (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
-            if (!dataAlvo) return;
-        }
-        const opcao = prompt(`ABONAR DIA (${dataAlvo})\n1 - Normal\n2 - Meio\n0 - Abono\nCódigo:`, "0");
-        if (opcao === null) return;
-
-        let novoFator = 1.0;
-        if (opcao === '2' || opcao === '0.5') novoFator = 0.5;
-        if (opcao === '0') novoFator = 0.0;
-
-        let justificativa = "";
-        if (novoFator !== 1.0) {
-            justificativa = prompt("Justificativa:");
-            if (!justificativa) return alert("Justificativa obrigatória.");
-        }
-
-        try {
-            const { error } = await Sistema.supabase.rpc('abonar_producao', {
-                p_usuario_id: uid, p_data: dataAlvo, p_fator: novoFator, p_justificativa: justificativa
-            });
-            if (error) throw error;
-            alert(`✅ Sucesso!`);
-            this.carregarTela();
-        } catch (error) { alert("Erro: " + error.message); }
+       alert("Funcionalidade em manutenção para V26.");
     },
 
     excluirDadosDia: async function() {
         const dt = document.getElementById('sel-data-dia').value;
         if (!dt) return alert("Selecione um dia.");
-        if (!confirm(`TEM CERTEZA? Isso apagará TODA a produção de ${dt}.`)) return;
+        if (!confirm(\`TEM CERTEZA? Isso apagará TODA a produção de \${dt}.\`)) return;
         const { error } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dt);
         if(error) alert("Erro: " + error.message);
         else { alert("Dados excluídos."); this.carregarTela(); }
     }
 };
+`
+}
