@@ -1,4 +1,3 @@
-// ARQUIVO: js/produtividade/geral.js
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -8,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V27 (Regra de Ouro HC)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V28 (Full Fix Assertividade + Syntax)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -95,8 +94,8 @@ Produtividade.Geral = {
                     gp: row.total_gp
                 },
                 auditoria: {
-                    qtd: row.qtd_auditorias,
-                    soma: row.soma_auditorias
+                    qtd: row.qtd_auditorias, // Denominador (Qtd de linhas)
+                    soma: row.soma_auditorias // Numerador (Soma das porcentagens)
                 }
             }));
             
@@ -114,8 +113,6 @@ Produtividade.Geral = {
             this.setTxt('kpi-validacao-real', 'Erro');
         }
     },
-
-    r// ARQUIVO: js/produtividade/geral.js
 
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
@@ -170,17 +167,16 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            // --- CORREÇÃO DA ASSERTIVIDADE (LÓGICA SAMARIA PARA QUALQUER PERÍODO) ---
+            // --- LÓGICA DE ASSERTIVIDADE (Média Ponderada) ---
             let htmlAssertividade = '<span class="text-xs text-slate-300">-</span>';
             const qtdAuditada = Number(d.auditoria.qtd || 0);
             const somaPorcentagem = Number(d.auditoria.soma || 0);
 
             if (qtdAuditada > 0) {
-                // Cálculo: Soma das notas / Quantidade de auditorias
+                // Cálculo: Soma das Porcentagens / Qtd de Auditorias
                 const mediaFinal = somaPorcentagem / qtdAuditada;
-                const metaAssert = Number(d.meta_assertividade || 98); // Padrão 98% se não tiver meta
+                const metaAssert = Number(d.meta_assertividade || 98); 
                 
-                // Cores baseadas na meta
                 let corTexto = 'text-rose-600';
                 let corBg = 'bg-rose-50';
                 let icon = '<i class="fas fa-times-circle ml-1"></i>';
@@ -189,7 +185,7 @@ Produtividade.Geral = {
                     corTexto = 'text-emerald-600';
                     corBg = 'bg-emerald-50';
                     icon = '<i class="fas fa-check-circle ml-1"></i>';
-                } else if (mediaFinal >= (metaAssert - 2)) { // Zona de atenção (ex: 96% a 97.9%)
+                } else if (mediaFinal >= (metaAssert - 2)) {
                     corTexto = 'text-amber-600';
                     corBg = 'bg-amber-50';
                     icon = '<i class="fas fa-exclamation-circle ml-1"></i>';
@@ -205,7 +201,6 @@ Produtividade.Geral = {
                     </span>
                 `;
             }
-            // -----------------------------------------------------------------------
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
@@ -277,10 +272,9 @@ Produtividade.Geral = {
     },
 
     atualizarKPIsGlobal: function(dados, isFiltrado) {
-        let totalProdGeral = 0; // Inclui Gestoras
+        let totalProdGeral = 0; 
         let totalMetaGeral = 0;
         
-        // Acumuladores exclusivos para MÉDIA
         let totalMetaAssistentes = 0;
         let manDaysAssistentes = 0;
         let ativosCountAssistentes = 0;
@@ -300,11 +294,9 @@ Produtividade.Geral = {
             const prodUser = Number(d.totais.qty);
             const metaUser = Number(d.meta_real) * diasUser;
 
-            // 1. VOLUME: Soma SEMPRE (Regra: Gestoras contam na produção)
             totalProdGeral += prodUser;
             totalMetaGeral += metaUser;
 
-            // 2. MÉDIA/CAPACIDADE: Só conta se for Assistente (Regra: Não inflar HC)
             if (isAssistente || isFiltrado) {
                 if (diasUser > 0 || prodUser > 0) ativosCountAssistentes++;
                 manDaysAssistentes += diasUser;
@@ -314,20 +306,15 @@ Produtividade.Geral = {
             }
         });
 
-        // --- RENDERIZAÇÃO CORRIGIDA ---
-
-        // Volume Total (Todos)
         this.setTxt('kpi-validacao-real', totalProdGeral.toLocaleString('pt-BR'));
         this.setTxt('kpi-validacao-esperado', totalMetaGeral.toLocaleString('pt-BR'));
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
-        // Qualidade (Só Assistentes)
         const mediaGlobalAssert = qtdAuditoriasAssistentes > 0 ? (somaNotasAssistentes / qtdAuditoriasAssistentes) : 0;
         this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
         this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
-        // Capacidade (HC Assistentes)
         const capacidadeTotalPadrao = 17; 
         this.setTxt('kpi-capacidade-info', `${ativosCountAssistentes}/${capacidadeTotalPadrao}`);
         const capPct = (ativosCountAssistentes / capacidadeTotalPadrao) * 100;
@@ -335,16 +322,13 @@ Produtividade.Geral = {
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        // REGRA DE OURO: Velocidade = (Produção GERAL / Dias ASSISTENTES)
-        // Isso faz com que a produção da gestora ajude a equipe a bater a média
         const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
-        const velReal = Math.round(totalProdGeral / divisor); // Aqui está o pulo do gato
+        const velReal = Math.round(totalProdGeral / divisor); 
         const velMeta = Math.round(totalMetaAssistentes / divisor);
         
         this.setTxt('kpi-media-real', `${velReal}`);
         this.setTxt('kpi-media-esperada', `${velMeta}`);
         
-        // Display de Dias
         let diasDisplay = '--';
         if (Produtividade.filtroPeriodo === 'dia') diasDisplay = '1';
         else if (isFiltrado && dados.length > 0) diasDisplay = dados[0].totais.diasUteis.toLocaleString('pt-BR');
@@ -356,7 +340,6 @@ Produtividade.Geral = {
     },
 
     renderTopLists: function(dados) {
-        // Top List: Mostra assistentes produtivos
         const op = dados.filter(d => 
             !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()) &&
             Number(d.totais.qty) > 0
@@ -380,8 +363,9 @@ Produtividade.Geral = {
              else listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.mediaCalc.toFixed(1)}%</span></div>`).join('');
         }
     },
-    // ... (restante das funções de abono mantidas igual) ...
+    
     toggleAll: function(checked) { document.querySelectorAll('.check-user').forEach(c => c.checked = checked); },
+
     abonarEmMassa: async function() {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
@@ -413,6 +397,7 @@ Produtividade.Geral = {
         alert(`✅ Processo finalizado! ${sucessos}/${checks.length} atualizados.`);
         this.carregarTela();
     },
+
     mudarFator: async function(uid, fatorAtual) {
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo) dataAlvo = new Date().toISOString().split('T')[0];
@@ -434,6 +419,7 @@ Produtividade.Geral = {
             this.carregarTela();
         } catch (error) { alert("Erro: " + error.message); }
     },
+
     excluirDadosDia: async function() {
         const dt = document.getElementById('sel-data-dia').value;
         if (!dt) return alert("Selecione um dia.");
