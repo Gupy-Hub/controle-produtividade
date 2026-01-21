@@ -115,6 +115,8 @@ Produtividade.Geral = {
         }
     },
 
+    r// ARQUIVO: js/produtividade/geral.js
+
     renderizarTabela: function() {
         const tbody = document.getElementById('tabela-corpo');
         if(!tbody) return;
@@ -168,9 +170,42 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            const htmlAssertividade = window.Produtividade.Assertividade 
-                ? Produtividade.Assertividade.renderizarCelula(d.auditoria, d.meta_assertividade)
-                : '<span class="text-xs">-</span>';
+            // --- CORREÇÃO DA ASSERTIVIDADE (LÓGICA SAMARIA PARA QUALQUER PERÍODO) ---
+            let htmlAssertividade = '<span class="text-xs text-slate-300">-</span>';
+            const qtdAuditada = Number(d.auditoria.qtd || 0);
+            const somaPorcentagem = Number(d.auditoria.soma || 0);
+
+            if (qtdAuditada > 0) {
+                // Cálculo: Soma das notas / Quantidade de auditorias
+                const mediaFinal = somaPorcentagem / qtdAuditada;
+                const metaAssert = Number(d.meta_assertividade || 98); // Padrão 98% se não tiver meta
+                
+                // Cores baseadas na meta
+                let corTexto = 'text-rose-600';
+                let corBg = 'bg-rose-50';
+                let icon = '<i class="fas fa-times-circle ml-1"></i>';
+
+                if (mediaFinal >= metaAssert) {
+                    corTexto = 'text-emerald-600';
+                    corBg = 'bg-emerald-50';
+                    icon = '<i class="fas fa-check-circle ml-1"></i>';
+                } else if (mediaFinal >= (metaAssert - 2)) { // Zona de atenção (ex: 96% a 97.9%)
+                    corTexto = 'text-amber-600';
+                    corBg = 'bg-amber-50';
+                    icon = '<i class="fas fa-exclamation-circle ml-1"></i>';
+                }
+
+                htmlAssertividade = `
+                    <div class="flex items-center justify-center gap-1 ${corTexto} font-bold text-xs px-2 py-1 rounded ${corBg}">
+                        ${mediaFinal.toFixed(2)}%
+                        ${icon}
+                    </div>
+                    <span class="text-[9px] text-slate-400 block mt-0.5" title="Baseado em ${qtdAuditada} auditorias">
+                        (${qtdAuditada} aud.)
+                    </span>
+                `;
+            }
+            // -----------------------------------------------------------------------
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
