@@ -7,7 +7,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V31 (Fix Abono + Folga)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V32 (Fixed Locations)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -132,7 +132,6 @@ Produtividade.Geral = {
 
         tbody.innerHTML = '';
         
-        // --- TELA DE FOLGA ---
         if(listaComDados.length === 0) { 
             const isDia = Produtividade.filtroPeriodo === 'dia';
             let conteudoHTML = '';
@@ -175,6 +174,7 @@ Produtividade.Geral = {
                     </div>
                 `;
             }
+
             tbody.innerHTML = `<tr><td colspan="12" class="bg-white border-b border-slate-100">${conteudoHTML}</td></tr>`;
             this.setTxt('total-registros-footer', 0);
             return; 
@@ -387,12 +387,10 @@ Produtividade.Geral = {
     
     toggleAll: function(checked) { document.querySelectorAll('.check-user').forEach(c => c.checked = checked); },
 
-    // --- CORREÇÃO AQUI: LÓGICA DE ABONO ROBUSTA ---
     abonarEmMassa: async function() {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
         
-        // 1. Tenta pegar a data do filtro (se for dia) ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
             dataAlvo = prompt("📅 Aplicar Abono em Massa.\n\nDigite a data alvo (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
@@ -415,7 +413,6 @@ Produtividade.Geral = {
         if (!confirm(`Confirmar ação para ${checks.length} usuários?\nData: ${dataAlvo}\nFator: ${novoFator}\nMotivo: ${justificativa || 'Nenhum'}`)) return;
 
         let sucessos = 0;
-        // Feedback visual
         const btnMassa = document.querySelector('button[onclick*="abonarEmMassa"]');
         if(btnMassa) btnMassa.innerText = "Processando...";
 
@@ -435,10 +432,8 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, fatorAtual) {
-        // 1. Tenta pegar a data ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
-             // Se não tiver data selecionada (ex: vendo mês), pede para confirmar qual dia quer abonar
              dataAlvo = prompt("📅 Qual data você deseja abonar? (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
              if (!dataAlvo) return;
         }
