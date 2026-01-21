@@ -1,5 +1,5 @@
 // ARQUIVO: js/produtividade/geral.js
-// VERSÃO: V27 (Filtro Rígido: Apenas Produção > 0)
+// VERSÃO: V28 (Correção: Colunas FIFO/GT/GP e Filtro > 0)
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -10,7 +10,7 @@ Produtividade.Geral = {
     metaPadrao: 140, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V27 (Clean View)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V28 (Colunas Fixas)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -60,10 +60,10 @@ Produtividade.Geral = {
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
-            // Nota: Removido 'perfil' da seleção para evitar erro se a coluna não existir
+            // CORREÇÃO 1: Adicionado fifo, gradual_total, gradual_parcial na query
             const [resProducao, resAssertividade, resUsuarios] = await Promise.all([
                 Sistema.supabase.from('producao')
-                    .select('id, quantidade, data_referencia, usuario_id, usuarios (id, nome, funcao)')
+                    .select('id, quantidade, fifo, gradual_total, gradual_parcial, data_referencia, usuario_id, usuarios (id, nome, funcao)')
                     .gte('data_referencia', datas.inicio)
                     .lte('data_referencia', datas.fim),
                 Sistema.supabase.from('assertividade')
@@ -75,7 +75,6 @@ Produtividade.Geral = {
 
             if (resProducao.error) throw resProducao.error;
             
-            // PROCESSAMENTO CLIENT-SIDE
             const mapUsuarios = {};
             
             // 1. Inicializa Usuários
@@ -90,14 +89,12 @@ Produtividade.Geral = {
                 };
             });
 
-            // 2. Agrega Produção
+            // 2. Agrega Produção (Incluindo colunas detalhadas)
             const diasGlobaisSet = new Set();
             (resProducao.data || []).forEach(r => {
                 const uid = r.usuario_id;
                 const qtd = Number(r.quantidade) || 0;
                 
-                // Se a produção for 0, nem processamos para os dias ativos deste registro específico
-                // Mas precisamos ver se o usuário existe
                 if(!mapUsuarios[uid]) {
                     mapUsuarios[uid] = { 
                         usuario: r.usuarios || { id: uid, nome: 'Desconhecido', funcao: 'ND' },
@@ -111,7 +108,13 @@ Produtividade.Geral = {
                 
                 if (qtd > 0) {
                     diasGlobaisSet.add(r.data_referencia);
+                    
+                    // CORREÇÃO 2: Somando as colunas específicas
                     mapUsuarios[uid].totais.qty += qtd;
+                    mapUsuarios[uid].totais.fifo += (Number(r.fifo) || 0);
+                    mapUsuarios[uid].totais.gt += (Number(r.gradual_total) || 0);
+                    mapUsuarios[uid].totais.gp += (Number(r.gradual_parcial) || 0);
+                    
                     mapUsuarios[uid].diasSet.add(r.data_referencia);
                 }
             });
@@ -129,17 +132,17 @@ Produtividade.Geral = {
                 }
             });
 
-            // 4. Finaliza Objetos e APLICA O FILTRO RÍGIDO
+            // 4. Finaliza e Filtra (Produção > 0)
             this.diasAtivosGlobal = diasGlobaisSet.size;
             
             this.dadosOriginais = Object.values(mapUsuarios)
-                .filter(u => u.totais.qty > 0) // <--- AQUI: Só mostra se tiver produção maior que 0
+                .filter(u => u.totais.qty > 0) // Mantendo filtro de quem produziu
                 .map(u => {
                     u.totais.diasUteis = u.diasSet.size;
                     return u;
                 });
 
-            console.log(`✅ [GupyMesa] Registros filtrados (Produção > 0): ${this.dadosOriginais.length}`);
+            console.log(`✅ [GupyMesa] V28 Carregado: ${this.dadosOriginais.length} registros com dados.`);
             
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
@@ -165,14 +168,13 @@ Produtividade.Geral = {
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
 
-        // Filtro adicional de gestão
         if (!mostrarGestao && !this.usuarioSelecionado) {
             lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         }
 
         tbody.innerHTML = '';
         if(lista.length === 0) { 
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro com produção encontrada para este período.</td></tr>'; 
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>'; 
             this.setTxt('total-registros-footer', 0);
             return; 
         }
@@ -194,10 +196,7 @@ Produtividade.Geral = {
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
-            
-            const styleAbono = (isAbonado || temJustificativa) 
-                ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
-                : 'font-mono text-slate-500';
+            const styleAbono = (isAbonado || temJustificativa) ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help underline decoration-dotted' : 'font-mono text-slate-500';
 
             return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
@@ -205,7 +204,7 @@ Produtividade.Geral = {
                     <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
                 </td>
                 <td class="px-2 py-3 text-center">
-                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition" title="Abonar">AB</button>
+                    <button onclick="Produtividade.Geral.mudarFator('${d.usuario.id}', 0)" class="text-[10px] font-bold text-slate-400 hover:text-blue-500 border border-slate-200 rounded px-1 py-0.5 hover:bg-white transition">AB</button>
                 </td>
                 <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                     <div class="flex flex-col">
@@ -214,16 +213,16 @@ Produtividade.Geral = {
                     </div>
                 </td>
                 
-                <td class="px-2 py-3 text-center" title="${temJustificativa ? d.totais.justificativa : ''}">
+                <td class="px-2 py-3 text-center">
                     <span class="${styleAbono} px-1.5 py-0.5 inline-block">
                         ${Number(d.totais.diasUteis).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}
-                        ${temJustificativa ? '<span class="text-[8px] align-top text-amber-500">*</span>' : ''}
+                        ${temJustificativa ? '<span class="text-[8px] text-amber-500">*</span>' : ''}
                     </span>
                 </td>
 
-                <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
-                <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
-                <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
+                <td class="px-2 py-3 text-center text-slate-500 font-mono">${d.totais.fifo.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-500 font-mono">${d.totais.gt.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center text-slate-500 font-mono">${d.totais.gp.toLocaleString('pt-BR')}</td>
                 <td class="px-2 py-3 text-center bg-slate-50/50 text-slate-400 font-mono">${metaDia}</td>
                 <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">${Math.round(metaDia * d.totais.diasUteis).toLocaleString('pt-BR')}</td>
                 <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">
@@ -383,7 +382,6 @@ Produtividade.Geral = {
         let sucessos = 0;
         for (const chk of checks) {
             try {
-                // Chama a RPC 'abonar_producao' que criamos no SQL
                 const { error } = await Sistema.supabase.rpc('abonar_producao', {
                     p_usuario_id: chk.value,
                     p_data: dataAlvo,
