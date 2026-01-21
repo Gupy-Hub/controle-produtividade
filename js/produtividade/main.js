@@ -84,6 +84,8 @@ Object.assign(window.Produtividade, {
         if(salvar) this.salvarEAtualizar();
     },
 
+    debounceTimer: null,
+
     salvarEAtualizar: function() {
         const estado = {
             tipo: this.filtroPeriodo,
@@ -95,7 +97,17 @@ Object.assign(window.Produtividade, {
         };
         localStorage.setItem('prod_filtro_state', JSON.stringify(estado));
         
-        this.atualizarTodasAbas();
+        // --- CÓDIGO NOVO (DEBOUNCE) ---
+        // Cancela a chamada anterior se ela acontecer em menos de 1 segundo
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+
+        const statusEl = document.getElementById('tabela-corpo');
+        if(statusEl) statusEl.innerHTML = '<tr><td colspan="12" class="text-center py-4 text-blue-400"><i class="fas fa-hourglass-half fa-spin"></i> Aguardando filtro...</td></tr>';
+
+        this.debounceTimer = setTimeout(() => {
+            this.atualizarTodasAbas();
+        }, 800); // Espera 800ms após o último clique para chamar o banco
+        // ------------------------------
     },
 
     carregarEstadoSalvo: function() {
