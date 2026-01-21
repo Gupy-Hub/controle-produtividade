@@ -1,5 +1,5 @@
 // ARQUIVO: js/produtividade/geral.js
-// VERSÃO: V28 (Correção: Colunas FIFO/GT/GP e Filtro > 0)
+// VERSÃO: V29 (Integração com Tabela de Metas do Mês)
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -7,10 +7,10 @@ Produtividade.Geral = {
     dadosOriginais: [], 
     usuarioSelecionado: null,
     diasAtivosGlobal: 1, 
-    metaPadrao: 140, 
+    metaPadrao: 140, // Fallback apenas se não houver meta cadastrada
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V28 (Colunas Fixas)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V29 (Metas Dinâmicas)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -55,13 +55,18 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Processando dados...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Buscando dados e metas...</td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
         
+        // Calcula Mês e Ano baseados na data de início do filtro para buscar a meta correta
+        const dtInicio = new Date(datas.inicio + "T12:00:00");
+        const mesFiltro = dtInicio.getMonth() + 1;
+        const anoFiltro = dtInicio.getFullYear();
+
         try {
-            // CORREÇÃO 1: Adicionado fifo, gradual_total, gradual_parcial na query
-            const [resProducao, resAssertividade, resUsuarios] = await Promise.all([
+            // CORREÇÃO: Adicionado busca na tabela 'metas'
+            const [resProducao, resAssertividade, resUsuarios, resMetas] = await Promise.all([
                 Sistema.supabase.from('producao')
                     .select('id, quantidade, fifo, gradual_total, gradual_parcial, data_referencia, usuario_id, usuarios (id, nome, funcao)')
                     .gte('data_referencia', datas.inicio)
@@ -70,36 +75,54 @@ Produtividade.Geral = {
                     .select('status, qtd_nok, data_referencia, assistente_nome')
                     .gte('data_referencia', datas.inicio)
                     .lte('data_referencia', datas.fim),
-                Sistema.supabase.from('usuarios').select('id, nome, funcao') 
+                Sistema.supabase.from('usuarios').select('id, nome, funcao'),
+                Sistema.supabase.from('metas')
+                    .select('usuario_id, meta_producao, meta_assertividade')
+                    .eq('mes', mesFiltro)
+                    .eq('ano', anoFiltro)
             ]);
 
             if (resProducao.error) throw resProducao.error;
+            if (resMetas.error) console.warn("Erro ao buscar metas (usando padrão):", resMetas.error);
             
             const mapUsuarios = {};
-            
-            // 1. Inicializa Usuários
+            const listaMetas = resMetas.data || [];
+
+            // 1. Inicializa Usuários com as METAS do banco
             (resUsuarios.data || []).forEach(u => {
+                // Tenta encontrar a meta específica para este usuário neste mês
+                const metaDefinida = listaMetas.find(m => m.usuario_id === u.id);
+                
+                // Se achou, usa. Se não, usa o padrão (140 e 98%)
+                const metaProd = metaDefinida ? metaDefinida.meta_producao : this.metaPadrao;
+                const metaAssert = metaDefinida ? metaDefinida.meta_assertividade : 98;
+
                 mapUsuarios[u.id] = {
                     usuario: u,
-                    meta_real: this.metaPadrao,
-                    meta_assertividade: 98,
+                    meta_real: Number(metaProd), 
+                    meta_assertividade: Number(metaAssert),
                     totais: { qty: 0, diasUteis: 0, fifo: 0, gt: 0, gp: 0, justificativa: '' },
                     auditoria: { qtd: 0, soma: 0 },
                     diasSet: new Set()
                 };
             });
 
-            // 2. Agrega Produção (Incluindo colunas detalhadas)
+            // 2. Agrega Produção
             const diasGlobaisSet = new Set();
             (resProducao.data || []).forEach(r => {
                 const uid = r.usuario_id;
                 const qtd = Number(r.quantidade) || 0;
                 
                 if(!mapUsuarios[uid]) {
+                    // Fallback para usuário não listado anteriormente
+                    const metaDefinida = listaMetas.find(m => m.usuario_id === uid);
+                    const metaProd = metaDefinida ? metaDefinida.meta_producao : this.metaPadrao;
+                    const metaAssert = metaDefinida ? metaDefinida.meta_assertividade : 98;
+
                     mapUsuarios[uid] = { 
                         usuario: r.usuarios || { id: uid, nome: 'Desconhecido', funcao: 'ND' },
-                        meta_real: this.metaPadrao,
-                        meta_assertividade: 98,
+                        meta_real: Number(metaProd),
+                        meta_assertividade: Number(metaAssert),
                         totais: { qty: 0, diasUteis: 0, fifo: 0, gt: 0, gp: 0, justificativa: '' },
                         auditoria: { qtd: 0, soma: 0 },
                         diasSet: new Set()
@@ -108,13 +131,10 @@ Produtividade.Geral = {
                 
                 if (qtd > 0) {
                     diasGlobaisSet.add(r.data_referencia);
-                    
-                    // CORREÇÃO 2: Somando as colunas específicas
                     mapUsuarios[uid].totais.qty += qtd;
                     mapUsuarios[uid].totais.fifo += (Number(r.fifo) || 0);
                     mapUsuarios[uid].totais.gt += (Number(r.gradual_total) || 0);
                     mapUsuarios[uid].totais.gp += (Number(r.gradual_parcial) || 0);
-                    
                     mapUsuarios[uid].diasSet.add(r.data_referencia);
                 }
             });
@@ -136,13 +156,13 @@ Produtividade.Geral = {
             this.diasAtivosGlobal = diasGlobaisSet.size;
             
             this.dadosOriginais = Object.values(mapUsuarios)
-                .filter(u => u.totais.qty > 0) // Mantendo filtro de quem produziu
+                .filter(u => u.totais.qty > 0) 
                 .map(u => {
                     u.totais.diasUteis = u.diasSet.size;
                     return u;
                 });
 
-            console.log(`✅ [GupyMesa] V28 Carregado: ${this.dadosOriginais.length} registros com dados.`);
+            console.log(`✅ [GupyMesa] V29 Carregado: ${this.dadosOriginais.length} registros com metas aplicadas.`);
             
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
