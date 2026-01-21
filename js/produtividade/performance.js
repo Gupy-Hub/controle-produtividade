@@ -20,11 +20,11 @@ Produtividade.Performance = {
         const e = datas.fim;
 
         try {
-            // Busca PARALELA para performance (Produção + Detalhes de Erros)
+            // Removido perfil da query para evitar erros de schema antigo
             const [resProducao, resAssertividade] = await Promise.all([
                 Sistema.supabase
                     .from('producao')
-                    .select('id, quantidade, data_referencia, usuarios ( id, nome, perfil, funcao )')
+                    .select('id, quantidade, data_referencia, usuarios ( id, nome, funcao )')
                     .gte('data_referencia', s)
                     .lte('data_referencia', e)
                     .order('data_referencia', { ascending: true }),
@@ -39,15 +39,14 @@ Produtividade.Performance = {
             if (resProducao.error) throw resProducao.error;
             if (resAssertividade.error) throw resAssertividade.error;
 
-            // Normalização: Garante que 'usuario' exista
             this.dadosProducao = (resProducao.data || []).map(r => {
-                r.usuario = r.usuario || r.usuarios; // Fallback para compatibilidade
+                r.usuario = r.usuario || r.usuarios; 
                 return r;
             });
             this.dadosAssertividade = resAssertividade.data || [];
 
             this.renderizarVisaoGeral();
-            this.analisarQualidadeDocs(); // Nova análise de documentos
+            this.analisarQualidadeDocs(); 
         } catch (err) {
             console.error(err);
             if(listContainer) listContainer.innerHTML = `<div class="text-center text-red-400 py-4 text-xs">Erro: ${err.message}</div>`;
@@ -79,6 +78,10 @@ Produtividade.Performance = {
             
             const date = r.data_referencia; 
             const qtd = Number(r.quantidade) || 0; 
+            
+            // FILTRO RÍGIDO: Se não produziu nada, não conta para o gráfico
+            if (qtd <= 0) return;
+
             const uid = r.usuario.id;
             
             diasSet.add(date);
@@ -91,7 +94,7 @@ Produtividade.Performance = {
                     total: 0, 
                     id: uid, 
                     diasAtivos: new Set(),
-                    producaoDiaria: {} // Para identificar melhor/pior dia
+                    producaoDiaria: {} 
                 };
             }
             producaoPorUser[uid].total += qtd;
@@ -115,19 +118,13 @@ Produtividade.Performance = {
         const usersArray = Object.values(producaoPorUser);
         this.renderRankingList(usersArray);
         this.analisarExtremos(usersArray);
-        
-        // Verifica Melhor e Pior dia do Time Geral
         this.analisarMelhorPiorDiaGeral(producaoPorDia);
     },
 
     // --- NOVA ANÁLISE: Documentos e Erros (Baseado na tabela Assertividade) ---
     analisarQualidadeDocs: function(filtroNome = null) {
-        const container = document.getElementById('analise-qualidade-docs'); // Precisa ser criado no HTML
-        // Mesmo sem container, processamos para exibir no widget de Diagnóstico
-
         let dados = this.dadosAssertividade;
         if(filtroNome) {
-            // Filtra por nome aproximado (já que assertividade usa string)
             const nomeParte = filtroNome.split(' ')[0].toLowerCase();
             dados = dados.filter(d => d.assistente_nome && d.assistente_nome.toLowerCase().includes(nomeParte));
         }
@@ -144,12 +141,10 @@ Produtividade.Performance = {
             }
         });
 
-        // Ordena documentos com mais erros
         const rankingDocs = Object.entries(errosPorDoc)
             .sort((a, b) => b[1] - a[1])
-            .slice(0, 5); // Top 5
+            .slice(0, 5); 
 
-        // Renderiza (ou retorna HTML para ser injetado)
         this.renderizarWidgetQualidade(rankingDocs, totalNok, filtroNome);
     },
 
@@ -162,8 +157,6 @@ Produtividade.Performance = {
                 ? rankingDocs.map(r => `<span class="bg-rose-900/30 px-1 rounded text-rose-200">${r[0]} (${r[1]})</span>`).join(' ')
                 : "Nenhum erro crítico registrado.";
             
-            // Adiciona ao texto existente sem apagar
-            // Verifica se já não adicionamos para evitar duplicação em múltiplos cliques
             if(!areaDiagnostico.innerHTML.includes('Erros Frequentes')) {
                  areaDiagnostico.innerHTML += `<br><br><strong class="text-rose-300">⚠️ Erros Frequentes:</strong><br> ${htmlDocs}`;
             }
@@ -174,7 +167,7 @@ Produtividade.Performance = {
         const dias = Object.entries(producaoPorDia);
         if(dias.length === 0) return;
 
-        dias.sort((a, b) => b[1] - a[1]); // Decrescente
+        dias.sort((a, b) => b[1] - a[1]); 
         const melhor = dias[0];
         const pior = dias[dias.length - 1];
         
@@ -194,7 +187,6 @@ Produtividade.Performance = {
         const container = document.getElementById('analise-extremos-content');
         const gapPercentual = bottom.total > 0 ? ((top.total / bottom.total - 1) * 100).toFixed(1) : '∞';
 
-        // Análise de Melhor/Pior Dia INDIVIDUAL para o TOP e BASE
         const getMelhorDia = (user) => Object.entries(user.producaoDiaria).sort((a,b)=>b[1]-a[1])[0] || ['-',0];
         const topDia = getMelhorDia(top);
         
@@ -285,7 +277,6 @@ Produtividade.Performance = {
         const elTitle = document.getElementById('chart-title');
         elTitle.innerHTML = `<i class="fas fa-user text-blue-500 mr-2"></i> Análise: ${nome}`;
 
-        // Filtra dados do usuário
         const userRecs = this.dadosProducao.filter(r => r.usuario && r.usuario.id === uid);
         const userMap = {};
         userRecs.forEach(r => {
@@ -293,11 +284,9 @@ Produtividade.Performance = {
             userMap[d] = (userMap[d] || 0) + Number(r.quantidade);
         });
 
-        // Prepara dados para gráfico comparativo (Usuário vs Média do Time)
         const labels = Object.keys(userMap).sort();
         const dataUser = labels.map(d => userMap[d]);
         
-        // Calcula média do time para esses dias
         const dataMedia = labels.map(d => {
             let soma = 0; let count = 0;
             this.dadosProducao.forEach(r => {
@@ -324,7 +313,6 @@ Produtividade.Performance = {
             }
         ]);
 
-        // Chama análise qualitativa filtrada
         this.analisarQualidadeDocs(nome);
     },
 

@@ -1,3 +1,5 @@
+// ARQUIVO: js/produtividade/geral.js
+// VERSÃO: V27 (Filtro Rígido: Apenas Produção > 0)
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -5,10 +7,10 @@ Produtividade.Geral = {
     dadosOriginais: [], 
     usuarioSelecionado: null,
     diasAtivosGlobal: 1, 
-    metaPadrao: 140, // Fallback se não encontrar meta no usuário
+    metaPadrao: 140, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V26 (Cálculo Client-Side)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V27 (Clean View)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -53,22 +55,22 @@ Produtividade.Geral = {
 
         this.resetarKPIs();
         this.updateHeader();
-        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Processando dados locais...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-12"><i class="fas fa-server fa-pulse text-emerald-500"></i> Processando dados...</td></tr>`;
 
         const datas = Produtividade.getDatasFiltro(); 
         
         try {
-            // BUSCA UNIFICADA (Substitui o RPC get_painel_produtividade que estava dando erro 500)
+            // Nota: Removido 'perfil' da seleção para evitar erro se a coluna não existir
             const [resProducao, resAssertividade, resUsuarios] = await Promise.all([
                 Sistema.supabase.from('producao')
-                    .select('id, quantidade, data_referencia, usuario_id, usuarios (id, nome, perfil, funcao)')
+                    .select('id, quantidade, data_referencia, usuario_id, usuarios (id, nome, funcao)')
                     .gte('data_referencia', datas.inicio)
                     .lte('data_referencia', datas.fim),
                 Sistema.supabase.from('assertividade')
                     .select('status, qtd_nok, data_referencia, assistente_nome')
                     .gte('data_referencia', datas.inicio)
                     .lte('data_referencia', datas.fim),
-                Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao') // Garante lista completa
+                Sistema.supabase.from('usuarios').select('id, nome, funcao') 
             ]);
 
             if (resProducao.error) throw resProducao.error;
@@ -76,11 +78,11 @@ Produtividade.Geral = {
             // PROCESSAMENTO CLIENT-SIDE
             const mapUsuarios = {};
             
-            // 1. Inicializa todos os usuários (mesmo sem produção)
+            // 1. Inicializa Usuários
             (resUsuarios.data || []).forEach(u => {
                 mapUsuarios[u.id] = {
                     usuario: u,
-                    meta_real: this.metaPadrao, // Default
+                    meta_real: this.metaPadrao,
                     meta_assertividade: 98,
                     totais: { qty: 0, diasUteis: 0, fifo: 0, gt: 0, gp: 0, justificativa: '' },
                     auditoria: { qtd: 0, soma: 0 },
@@ -92,10 +94,11 @@ Produtividade.Geral = {
             const diasGlobaisSet = new Set();
             (resProducao.data || []).forEach(r => {
                 const uid = r.usuario_id;
-                diasGlobaisSet.add(r.data_referencia);
+                const qtd = Number(r.quantidade) || 0;
                 
+                // Se a produção for 0, nem processamos para os dias ativos deste registro específico
+                // Mas precisamos ver se o usuário existe
                 if(!mapUsuarios[uid]) {
-                    // Fallback se usuário não veio na lista principal
                     mapUsuarios[uid] = { 
                         usuario: r.usuarios || { id: uid, nome: 'Desconhecido', funcao: 'ND' },
                         meta_real: this.metaPadrao,
@@ -106,36 +109,37 @@ Produtividade.Geral = {
                     };
                 }
                 
-                mapUsuarios[uid].totais.qty += (Number(r.quantidade) || 0);
-                mapUsuarios[uid].diasSet.add(r.data_referencia);
+                if (qtd > 0) {
+                    diasGlobaisSet.add(r.data_referencia);
+                    mapUsuarios[uid].totais.qty += qtd;
+                    mapUsuarios[uid].diasSet.add(r.data_referencia);
+                }
             });
 
-            // 3. Agrega Assertividade (Match por Nome Aproximado - limitações da tabela legado)
+            // 3. Agrega Assertividade
             (resAssertividade.data || []).forEach(a => {
                 if(!a.assistente_nome) return;
                 const nomeAudit = a.assistente_nome.toLowerCase();
-                
-                // Tenta encontrar usuário pelo nome
                 const userMatch = Object.values(mapUsuarios).find(u => u.usuario.nome && u.usuario.nome.toLowerCase().includes(nomeAudit));
                 
                 if(userMatch) {
                     userMatch.auditoria.qtd++;
-                    // Lógica simples de nota: OK = 100, NOK = 0 (ou ajustar conforme regra de negócio)
                     const isOk = (a.status || '').toUpperCase().includes('OK') && !(a.status || '').includes('NOK');
                     userMatch.auditoria.soma += isOk ? 100 : 0; 
                 }
             });
 
-            // 4. Finaliza Objetos
+            // 4. Finaliza Objetos e APLICA O FILTRO RÍGIDO
             this.diasAtivosGlobal = diasGlobaisSet.size;
+            
             this.dadosOriginais = Object.values(mapUsuarios)
-                .filter(u => u.totais.qty > 0 || u.auditoria.qtd > 0) // Remove inativos absolutos
+                .filter(u => u.totais.qty > 0) // <--- AQUI: Só mostra se tiver produção maior que 0
                 .map(u => {
                     u.totais.diasUteis = u.diasSet.size;
                     return u;
                 });
 
-            console.log(`✅ [GupyMesa] Processado Client-Side: ${this.dadosOriginais.length} registros.`);
+            console.log(`✅ [GupyMesa] Registros filtrados (Produção > 0): ${this.dadosOriginais.length}`);
             
             const filtroNome = document.getElementById('selected-name')?.textContent;
             if (this.usuarioSelecionado && filtroNome) {
@@ -147,7 +151,7 @@ Produtividade.Geral = {
 
         } catch (error) { 
             console.error("[GupyMesa] Erro:", error); 
-            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro de Processamento: ${error.message}</td></tr>`; 
+            tbody.innerHTML = `<tr><td colspan="12" class="text-center py-8 text-rose-500 font-bold">Erro: ${error.message}</td></tr>`; 
         }
     },
 
@@ -161,13 +165,14 @@ Produtividade.Geral = {
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
 
+        // Filtro adicional de gestão
         if (!mostrarGestao && !this.usuarioSelecionado) {
             lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
         }
 
         tbody.innerHTML = '';
         if(lista.length === 0) { 
-            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado para este período.</td></tr>'; 
+            tbody.innerHTML = '<tr><td colspan="12" class="text-center py-12 text-slate-400 italic">Nenhum registro com produção encontrada para este período.</td></tr>'; 
             this.setTxt('total-registros-footer', 0);
             return; 
         }
