@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Regras V2: Validados = Todos Auditados)
+   DESCRIÇÃO: Engine de Assertividade (Regras V3: Definição Gupy vs NDF)
 */
 
 MinhaArea.Comparativo = {
@@ -19,7 +19,7 @@ MinhaArea.Comparativo = {
         'DOC_NDF_OUTROS'
     ],
 
-    // Fallback para visualização (Feed/Gráfico)
+    // Fallback para visualização
     listaNdfConhecidos: [
         'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
         'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
@@ -58,13 +58,13 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados da equipe...</div>';
 
         try {
-            // Busca TUDO para aplicar as regras em memória
+            // Busca TUDO
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
             // --- REGRAS DE NEGÓCIO ---
 
-            // 1. Definição de ERRO (Apenas para o Feed/Gráfico, não para o Card Validados)
+            // 1. Definição de ERRO (Para Feed e Gráfico)
             const isErro = (d) => {
                 const qtd = Number(d.qtd_nok || 0);
                 const status = (d.status || '').toUpperCase();
@@ -76,32 +76,41 @@ MinhaArea.Comparativo = {
                 return d.auditora_nome && d.auditora_nome.trim() !== '';
             };
 
-            // 3. Definição de NDF ESTRITO (Para o Card NDF)
+            // 3. Definição de NDF ESTRITO (Lista Oficial)
             const isNDFRegra = (d) => {
                 const doc = (d.documento || '').toUpperCase().trim();
                 return this.codigosNdfOficiais.includes(doc);
             };
 
+            // 4. Definição de GUPY (Não começa com DOC_NDF_)
+            const isGupyRegra = (d) => {
+                const doc = (d.documento || '').toUpperCase().trim();
+                return !doc.startsWith('DOC_NDF_');
+            };
+
             // --- CÁLCULO DOS CARDS ---
 
-            // CARD 1: Total de Erros Validados
-            // NOVA REGRA: Todos os documentos que têm auditoria (OK ou NOK)
+            // CARD 1 (Topo): Total de Erros Validados (Volume Auditado Total)
             const listaErrosValidados = dados.filter(d => isAuditado(d));
             if(elErrosValidados) elErrosValidados.innerText = listaErrosValidados.length;
 
-            // CARD 2: Total de erros Gupy (Placeholder)
-            if(elErrosGupy) elErrosGupy.innerText = "--"; 
+            // CARD 1 (Base): Total de erros Gupy
+            // Regra: Auditado E (Não começa com DOC_NDF_)
+            const listaErrosGupy = dados.filter(d => isAuditado(d) && isGupyRegra(d));
+            if(elErrosGupy) elErrosGupy.innerText = listaErrosGupy.length; 
 
-            // CARD 3: Total de Erros NDF (Regra Estrita)
+            // CARD 2 (Topo): Total de Erros NDF
+            // Regra: Está na lista oficial NDF (Auditado ou Não)
             const listaNdfTotal = dados.filter(d => isNDFRegra(d));
             if(elNdfTotal) elNdfTotal.innerText = listaNdfTotal.length;
 
-            // CARD 4: Erros NDF Auditados (Placeholder)
-            if(elNdfAuditados) elNdfAuditados.innerText = "--";
+            // CARD 2 (Base): Erros NDF Auditados
+            // Placeholder ou Regra Implícita (Auditado + NDF)
+            const listaNdfAuditados = dados.filter(d => isAuditado(d) && isNDFRegra(d));
+            if(elNdfAuditados) elNdfAuditados.innerText = listaNdfAuditados.length;
 
-            // --- ALIMENTAÇÃO DO FEED E GRÁFICO ---
-            // O Feed foca nos Problemas (Erros Reais + NDFs encontrados)
-            // Filtramos apenas o que é NOK ou NDF para não poluir a lista com "OKs"
+            // --- FEED E GRÁFICO ---
+            // Mostra o que é relevante: Erros Reais ou NDFs
             const listaVisualizacao = dados.filter(d => (isErro(d) || this.isNDF(d)));
 
             if (listaVisualizacao.length === 0) {
@@ -120,7 +129,7 @@ MinhaArea.Comparativo = {
     },
 
     isNDF: function(d) {
-        // Wrapper visual (aceita códigos oficiais OU nomes conhecidos)
+        // Wrapper visual
         const docOficial = (d.documento || '').toUpperCase().trim();
         if (this.codigosNdfOficiais.includes(docOficial)) return true;
         const nomeDoc = (d.doc_name || '').trim();
@@ -160,7 +169,6 @@ MinhaArea.Comparativo = {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
         if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        // Recalcula visualização baseada no estado atual
         this.carregar();
     },
 
@@ -339,7 +347,6 @@ MinhaArea.Comparativo = {
         let todos = [];
         let page = 0;
         let continuar = true;
-        
         while(continuar) {
             let query = Sistema.supabase
                 .from('assertividade')
@@ -352,7 +359,6 @@ MinhaArea.Comparativo = {
 
             const { data, error } = await query;
             if(error) throw error;
-            
             todos = todos.concat(data);
             if(data.length < 1000) continuar = false;
             else page++;
