@@ -1,3 +1,8 @@
+/* ARQUIVO: js/minha_area/geral.js
+   DESCRIÇÃO: Engine do Painel "Dia a Dia" (Minha Área)
+   CORREÇÃO: Ajuste de colunas da tabela assertividade (data_referencia, porcentagem_assertividade)
+*/
+
 MinhaArea.Geral = {
     carregar: async function() {
         const uid = MinhaArea.getUsuarioAlvo();
@@ -25,36 +30,69 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // 1. Buscas Otimizadas
+            // 1. Buscas Otimizadas (Correção de Colunas Aqui)
             const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
-                Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim).limit(2000), 
-                Sistema.supabase.from('assertividade').select('data_auditoria, porcentagem').eq('usuario_id', uid).gte('data_auditoria', inicio).lte('data_auditoria', fim).not('porcentagem', 'is', null).neq('porcentagem', '').limit(5000), 
-                Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim),
-                // Busca histórico de validações
-                Sistema.supabase.from('checking_diario').select('data_referencia, status').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim)
+                // Produção
+                Sistema.supabase.from('producao')
+                    .select('*')
+                    .eq('usuario_id', uid)
+                    .gte('data_referencia', inicio)
+                    .lte('data_referencia', fim)
+                    .limit(2000), 
+                
+                // Assertividade (Nomes Corrigidos)
+                Sistema.supabase.from('assertividade')
+                    .select('data_referencia, porcentagem_assertividade') // CORRIGIDO
+                    .eq('usuario_id', uid)
+                    .gte('data_referencia', inicio) // CORRIGIDO
+                    .lte('data_referencia', fim) // CORRIGIDO
+                    .not('porcentagem_assertividade', 'is', null) // CORRIGIDO
+                    .limit(5000), 
+                
+                // Metas
+                Sistema.supabase.from('metas')
+                    .select('mes, ano, meta, meta_assertividade')
+                    .eq('usuario_id', uid)
+                    .gte('ano', anoInicio)
+                    .lte('ano', anoFim),
+                
+                // Histórico Checking
+                Sistema.supabase.from('checking_diario')
+                    .select('data_referencia, status')
+                    .eq('usuario_id', uid)
+                    .gte('data_referencia', inicio)
+                    .lte('data_referencia', fim)
             ]);
 
-            if (prodRes.error) throw prodRes.error;
-            if (checkRes.error) throw checkRes.error;
+            // Tratamento de erro silencioso (Logs no console, mas não trava UI)
+            if (prodRes.error) console.error("Erro Produção:", prodRes.error);
+            if (assertRes.error) console.error("Erro Assertividade:", assertRes.error);
+
+            // Dados Seguros (Evita o TypeError 'forEach of null')
+            const dadosProducao = prodRes.data || [];
+            const dadosAssertividade = assertRes.data || [];
+            const dadosMetas = metasRes.data || [];
+            const dadosCheckins = checkRes.data || [];
 
             // --- PROCESSA A INTERFACE DE CHECKING (Topo da Tela) ---
-            await this.processarCheckingInterface(uid, checkRes.data || []);
+            await this.processarCheckingInterface(uid, dadosCheckins);
 
             // 2. Mapas de Dados
             const mapMetas = {};
-            (metasRes.data || []).forEach(m => {
+            dadosMetas.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 mapMetas[m.ano][m.mes] = { prod: Number(m.meta), assert: Number(m.meta_assertividade) };
             });
 
             const mapProd = new Map();
-            prodRes.data.forEach(p => mapProd.set(p.data_referencia, p));
+            dadosProducao.forEach(p => mapProd.set(p.data_referencia, p));
 
             const mapAssert = new Map();
-            assertRes.data.forEach(a => {
-                const key = a.data_auditoria;
+            dadosAssertividade.forEach(a => {
+                const key = a.data_referencia; // CORRIGIDO
                 if(!mapAssert.has(key)) mapAssert.set(key, { soma: 0, qtd: 0 });
-                const valRaw = a.porcentagem;
+                
+                const valRaw = a.porcentagem_assertividade; // CORRIGIDO
                 if (valRaw !== null && valRaw !== undefined && String(valRaw).trim() !== '') {
                     mapAssert.get(key).soma += this.parseValorPorcentagem(valRaw);
                     mapAssert.get(key).qtd++;
@@ -62,7 +100,7 @@ MinhaArea.Geral = {
             });
 
             const mapCheckins = new Set();
-            (checkRes.data || []).forEach(c => mapCheckins.add(c.data_referencia));
+            dadosCheckins.forEach(c => mapCheckins.add(c.data_referencia));
 
             // 5. Cálculo do Calendário
             const listaGrid = [];
@@ -205,29 +243,24 @@ MinhaArea.Geral = {
             this.setTxt('kpi-meta-dia', metaReferencia);
 
         } catch (err) {
-            console.error(err);
+            console.error("Erro Crítico Geral:", err);
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
 
-    // --- NOVA LÓGICA DE CHECKING (COM ESTADO CONFIRMADO E DATA FIXA DE TESTE) ---
+    // --- LÓGICA DE CHECKING ---
     processarCheckingInterface: async function(uid, checkins) {
-        // Se for gestor vendo outra pessoa, não mostra o card de topo
         if (MinhaArea.usuario.id !== parseInt(uid)) return;
 
-        // --- MODO TESTE ATIVADO ---
-        // Forçando a validação para o dia 16/12/2025 conforme solicitado.
-        const ontemStr = '2025-12-16';
+        // DATA DE TESTE FIXA (Conforme solicitado)
+        const ontemStr = '2025-12-16'; 
         const ontemFormatado = '16/12/2025';
 
-        // 2. Verifica Status
         const jaValidou = checkins.some(c => c.data_referencia === ontemStr);
-
         const container = document.getElementById('container-checkin-alert');
         if (!container) return;
 
         if (!jaValidou) {
-            // ESTADO 1: PENDENTE (Card com Ação)
             container.innerHTML = `
                 <div class="bg-white border-l-4 border-blue-500 shadow-md rounded-r-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in">
                     <div class="flex items-center gap-3">
@@ -245,7 +278,6 @@ MinhaArea.Geral = {
                 </div>`;
             container.classList.remove('hidden');
         } else {
-            // ESTADO 2: CONFIRMADO (Feedback Estático sem botão)
             container.innerHTML = `
                 <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-center gap-2 shadow-sm opacity-90 transition-all">
                     <i class="fas fa-check-circle text-emerald-600"></i>
@@ -265,9 +297,7 @@ MinhaArea.Geral = {
                 .insert({ usuario_id: uid, data_referencia: dataStr, status: 'VALIDADO' });
 
             if (error) throw error;
-
             this.carregar();
-
         } catch (e) {
             alert('Erro ao validar: ' + e.message);
         }
