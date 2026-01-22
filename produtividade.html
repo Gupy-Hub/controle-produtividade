@@ -232,42 +232,29 @@
             </div>
         </div>
 
-        <div id="tab-performance" class="view-section hidden animate-fade-in space-y-6">
-            <div id="container-analise-extremos" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex items-center justify-between">
-                    <div id="analise-extremos-content" class="space-y-3 flex-1">
-                        <div class="animate-pulse flex space-x-4">
-                            <div class="flex-1 space-y-2 py-1"><div class="h-2 bg-slate-200 rounded"></div><div class="h-2 bg-slate-200 rounded w-5/6"></div></div>
-                        </div>
-                    </div>
-                    <div class="w-32 h-32 ml-4">
-                        <canvas id="chartMiniComparativo"></canvas>
-                    </div>
+        <div id="tab-performance" class="view-section hidden animate-fade-in">
+            <div class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 border-b border-slate-100 pb-4">
+                <div>
+                    <h2 class="text-2xl font-black text-slate-700 tracking-tight">
+                        <i class="fas fa-tachometer-alt mr-2 text-indigo-500"></i>Performance 360°
+                    </h2>
+                    <p class="text-xs text-slate-400 mt-1 font-medium">Análise bipolar de produtividade e qualidade</p>
                 </div>
-                <div class="bg-slate-800 rounded-xl p-5 text-white flex flex-col justify-center">
-                    <div class="flex items-center gap-2 mb-2">
-                        <i class="fas fa-robot text-blue-400"></i>
-                        <h4 class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Diagnóstico Performance Pro</h4>
-                        <span id="badge-tendencia" class="ml-auto text-[9px] px-2 py-0.5 rounded-full font-bold">--</span>
-                    </div>
-                    <p id="insight-performance" class="text-xs leading-relaxed text-slate-200 italic">
-                        Por favor, selecione um período para processar o diagnóstico comparativo entre os maiores e menores volumes de produção da equipa.
-                    </p>
+                
+                <div class="bg-slate-100 p-1.5 rounded-xl flex shadow-inner border border-slate-200">
+                    <button onclick="Produtividade.Performance.setMode('tracao')" id="btn-mode-tracao" class="flex items-center gap-2 px-6 py-2 text-sm font-bold rounded-lg transition-all duration-300 shadow-sm bg-white text-indigo-600 ring-1 ring-slate-200">
+                        <span>🚀 Tração</span>
+                    </button>
+                    <button onclick="Produtividade.Performance.setMode('atrito')" id="btn-mode-atrito" class="flex items-center gap-2 px-6 py-2 text-sm font-bold rounded-lg transition-all duration-300 text-slate-400 hover:text-slate-600">
+                        <span>⚠️ Atrito</span>
+                    </button>
                 </div>
             </div>
-            <div class="grid grid-cols-12 gap-6 h-[calc(100vh-340px)]">
-                <div class="col-span-8 flex flex-col gap-4">
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center">
-                        <div><h3 class="font-bold text-slate-700 text-lg flex items-center gap-2"><i class="fas fa-chart-line text-blue-500"></i><span id="chart-title">Evolução de Produtividade</span></h3><p class="text-xs text-slate-400 mt-0.5" id="chart-subtitle">Soma da produção diária de toda a equipa no período</p></div>
-                        <button id="btn-reset-chart" onclick="Produtividade.Performance.resetChart()" class="hidden text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-2 shadow-sm border border-slate-200 active:scale-95"><i class="fas fa-arrow-left"></i> Voltar à Visão Geral</button>
-                    </div>
-                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex-1 relative min-h-[300px]"><canvas id="evolutionChart"></canvas></div>
-                </div>
-                <div class="col-span-4 flex flex-col gap-4">
-                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm flex-1 flex flex-col overflow-hidden">
-                        <div class="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center"><span class="text-xs font-bold text-slate-500 uppercase tracking-widest">Ranking Operacional</span><i class="fas fa-filter text-slate-300"></i></div>
-                        <div class="overflow-y-auto custom-scrollbar flex-1 p-2" id="ranking-list-container"></div>
-                    </div>
+        
+            <div id="performance-engine-container" class="space-y-6">
+                <div class="text-center py-20 text-slate-300">
+                    <i class="fas fa-circle-notch fa-spin fa-3x mb-4"></i>
+                    <p>Carregando dados da engine...</p>
                 </div>
             </div>
         </div>
