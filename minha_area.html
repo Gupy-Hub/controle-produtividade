@@ -161,16 +161,39 @@
                             <canvas id="graficoTopOfensores"></canvas>
                         </div>
 
-                        <div class="mt-6 grid grid-cols-2 gap-3">
-                            <div class="p-3 bg-slate-50 rounded-lg border border-slate-100 text-center">
-                                <h4 class="text-[10px] font-bold text-slate-500 uppercase">Total Erros</h4>
-                                <span class="text-2xl font-black text-rose-600" id="total-nok-detalhe">--</span>
+                        <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div class="bg-slate-50 p-4 rounded-xl border border-rose-100 shadow-sm relative overflow-hidden group">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-[10px] font-bold text-rose-400 uppercase tracking-wider">Erros Geral</p>
+                                        <h3 class="text-2xl font-black text-rose-600 mt-1" id="total-nok-detalhe">--</h3>
+                                    </div>
+                                    <div class="text-rose-300 group-hover:scale-110 transition"><i class="fas fa-bug"></i></div>
+                                </div>
+                                <div class="my-2 border-t border-rose-100/50"></div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">Erros Gupy</span>
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-sm font-black text-slate-600" id="total-nok-gupy">--</span>
+                                    </div>
+                                </div>
                             </div>
-                            <div onclick="MinhaArea.Comparativo.mudarVisao('ndf')" class="p-3 bg-amber-50 rounded-lg border border-amber-100 text-center cursor-pointer hover:bg-amber-100 transition" title="Clique para ver os erros em documentos Não Default">
-                                <h4 class="text-[10px] font-bold text-amber-600 uppercase flex items-center justify-center gap-1">
-                                    <i class="fas fa-exclamation-circle"></i> Erros NDF
-                                </h4>
-                                <span class="text-2xl font-black text-amber-600" id="total-ndf-detalhe">--</span>
+
+                            <div class="bg-slate-50 p-4 rounded-xl border border-amber-100 shadow-sm relative overflow-hidden group">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-[10px] font-bold text-amber-400 uppercase tracking-wider">NDF Não Audit.</p>
+                                        <h3 class="text-2xl font-black text-amber-600 mt-1" id="total-ndf-detalhe">--</h3>
+                                    </div>
+                                    <div class="text-amber-300 group-hover:scale-110 transition"><i class="fas fa-file-contract"></i></div>
+                                </div>
+                                <div class="my-2 border-t border-amber-100/50"></div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-[10px] font-bold text-slate-400 uppercase">NDF Auditados</span>
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-sm font-black text-slate-600" id="total-ndf-auditados">--</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>

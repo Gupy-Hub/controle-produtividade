@@ -1,6 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade e Ofensores (Minha Área)
-   ATUALIZAÇÃO: Drill-down detalhado na visão de NDFs
+   DESCRIÇÃO: Engine de Assertividade (Dash Visual Atualizado)
 */
 
 MinhaArea.Comparativo = {
@@ -36,16 +35,19 @@ MinhaArea.Comparativo = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         
+        // Elementos DOM (Cards Atualizados)
         const containerFeed = document.getElementById('feed-erros-container');
-        const containerTotal = document.getElementById('total-nok-detalhe');
-        const containerNdf = document.getElementById('total-ndf-detalhe');
+        const elErrosGeral = document.getElementById('total-nok-detalhe');
+        const elErrosGupy = document.getElementById('total-nok-gupy'); // Novo
+        const elNdfNaoAuditados = document.getElementById('total-ndf-detalhe'); // Renomeado Visualmente
+        const elNdfAuditados = document.getElementById('total-ndf-auditados'); // Novo
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
-            // Busca dados paginados com colunas corrigidas
+            // Busca dados paginados
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
             // Filtra NOKs (Quantidade > 0 ou Status NOK/REPROVADO)
@@ -56,11 +58,22 @@ MinhaArea.Comparativo = {
                 return qtd > 0 || isNokStatus;
             });
             
-            if(containerTotal) containerTotal.innerText = this.dadosNoksCache.length;
+            // --- MÉTRICAS (Aguardando regras específicas) ---
             
-            // Contagem NDF
+            // 1. Erros Geral
+            if(elErrosGeral) elErrosGeral.innerText = this.dadosNoksCache.length;
+            
+            // 2. Erros Doc Gupy (Placeholder)
+            if(elErrosGupy) elErrosGupy.innerText = "--"; 
+
+            // 3. Erros NDF (Atuais)
             const totalNdf = this.dadosNoksCache.filter(d => this.isNDF(d)).length;
-            if(containerNdf) containerNdf.innerText = totalNdf;
+            if(elNdfNaoAuditados) elNdfNaoAuditados.innerText = totalNdf;
+
+            // 4. Doc NDF Auditados (Placeholder)
+            if(elNdfAuditados) elNdfAuditados.innerText = "--";
+
+            // ------------------------------------------------
 
             if (this.dadosNoksCache.length === 0) {
                 this.renderizarVazio(containerFeed);
@@ -79,11 +92,9 @@ MinhaArea.Comparativo = {
 
     // --- FUNÇÃO INTELIGENTE PARA DETECTAR NDF ---
     isNDF: function(d) {
-        // 1. Tenta pelo código oficial
         const tipoOficial = (d.nome_documento || d.documento || '').toUpperCase();
         if (tipoOficial.startsWith('DOC_NDF') || tipoOficial.includes('NDF')) return true;
 
-        // 2. Tenta pela lista de nomes conhecidos (Fallback)
         const nomeDoc = (d.doc_name || '').trim();
         return this.listaNdfConhecidos.some(ndfName => 
             nomeDoc.toLowerCase().includes(ndfName.toLowerCase())
@@ -150,21 +161,18 @@ MinhaArea.Comparativo = {
     filtrarPorSelecao: function(valor) {
         let filtrados = [];
         
-        // CORREÇÃO: Lógica de filtro específica para cada visão
         if (this.visaoAtual === 'empresa') {
             filtrados = this.dadosNoksCache.filter(d => {
                 const emp = d.empresa || d.empresa_nome || 'Desconhecida';
                 return emp.includes(valor.replace('...', ''));
             });
         } else if (this.visaoAtual === 'ndf') {
-            // CORREÇÃO: No modo NDF, filtra pelo nome exato do documento NDF
             filtrados = this.dadosNoksCache.filter(d => {
-                if (!this.isNDF(d)) return false; // Garante que é NDF
+                if (!this.isNDF(d)) return false;
                 const nome = d.doc_name || d.nome_documento || 'Sem Nome';
                 return nome.includes(valor.replace('...', ''));
             });
         } else {
-            // Modo Geral (Doc)
             filtrados = this.dadosNoksCache.filter(d => {
                 const tipo = this.getDocType(d);
                 if (valor === 'Documentos NDF') return this.isNDF(d);
@@ -188,10 +196,8 @@ MinhaArea.Comparativo = {
             if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
             } else if (this.visaoAtual === 'ndf') {
-                // CORREÇÃO: Se estamos vendo NDFs, queremos o nome REAL do documento, não o grupo
                 chave = item.doc_name || item.nome_documento || 'Sem Nome';
             } else {
-                // Se visão 'doc', agrupa NDFs para não poluir
                 chave = this.getDocType(item);
             }
             
@@ -281,7 +287,7 @@ MinhaArea.Comparativo = {
         const _this = this;
         let barColor = '#f43f5e'; 
         if (this.visaoAtual === 'empresa') barColor = '#3b82f6';
-        if (this.visaoAtual === 'ndf') barColor = '#d97706'; // Âmbar para NDF
+        if (this.visaoAtual === 'ndf') barColor = '#d97706';
 
         this.chartOfensores = new Chart(ctx, {
             type: 'bar',
@@ -329,7 +335,6 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         while(continuar) {
-            // CORREÇÃO: Colunas data_referencia e auditora_nome
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
