@@ -1,14 +1,14 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Regras de Negócio: Erros Validados e NDF Oficial)
+   DESCRIÇÃO: Engine de Assertividade (Regras V2: Validados = Todos Auditados)
 */
 
 MinhaArea.Comparativo = {
     chartOfensores: null,
-    dadosBrutosCache: [], // Cache de todos os dados (Auditados e Não Auditados)
+    dadosBrutosCache: [], // Cache de todos os dados
     visaoAtual: 'doc', 
     mostrarTodos: false,
 
-    // REGRAS DE NEGÓCIO: Códigos Oficiais NDF (Coluna DOCUMENTO)
+    // REGRAS DE NEGÓCIO: Códigos Oficiais NDF
     codigosNdfOficiais: [
         'DOC_NDF_100%',
         'DOC_NDF_CATEGORIA PROFISSIONAL',
@@ -19,7 +19,7 @@ MinhaArea.Comparativo = {
         'DOC_NDF_OUTROS'
     ],
 
-    // Fallback para visualização
+    // Fallback para visualização (Feed/Gráfico)
     listaNdfConhecidos: [
         'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
         'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
@@ -58,27 +58,25 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados da equipe...</div>';
 
         try {
-            // BUSCA TUDO (Auditados e Pendentes) para poder calcular NDF total
+            // Busca TUDO para aplicar as regras em memória
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
-            // --- APLICAÇÃO DAS REGRAS DE NEGÓCIO ---
+            // --- REGRAS DE NEGÓCIO ---
 
-            // 1. Definição de ERRO (NOK)
-            // Consideramos Erro se tiver qtd_nok > 0 OU status contiver NOK/REPROV
+            // 1. Definição de ERRO (Apenas para o Feed/Gráfico, não para o Card Validados)
             const isErro = (d) => {
                 const qtd = Number(d.qtd_nok || 0);
                 const status = (d.status || '').toUpperCase();
                 return qtd > 0 || status.includes('NOK') || status.includes('REPROV');
             };
 
-            // 2. Definição de AUDITADO
-            // Usamos auditora_nome como proxy de "tem data de auditoria" (já que a coluna data deu erro)
+            // 2. Definição de AUDITADO (Tem auditora)
             const isAuditado = (d) => {
                 return d.auditora_nome && d.auditora_nome.trim() !== '';
             };
 
-            // 3. Definição de NDF (Pela coluna DOCUMENTO)
+            // 3. Definição de NDF ESTRITO (Para o Card NDF)
             const isNDFRegra = (d) => {
                 const doc = (d.documento || '').toUpperCase().trim();
                 return this.codigosNdfOficiais.includes(doc);
@@ -87,15 +85,14 @@ MinhaArea.Comparativo = {
             // --- CÁLCULO DOS CARDS ---
 
             // CARD 1: Total de Erros Validados
-            // Regra: Erros que foram Auditados
-            const listaErrosValidados = dados.filter(d => isErro(d) && isAuditado(d));
+            // NOVA REGRA: Todos os documentos que têm auditoria (OK ou NOK)
+            const listaErrosValidados = dados.filter(d => isAuditado(d));
             if(elErrosValidados) elErrosValidados.innerText = listaErrosValidados.length;
 
-            // CARD 2: Total de Erros Gupy (Placeholder)
+            // CARD 2: Total de erros Gupy (Placeholder)
             if(elErrosGupy) elErrosGupy.innerText = "--"; 
 
-            // CARD 3: Total de Erros NDF
-            // Regra: Contar coluna DOCUMENTO (independente de auditoria ou status NOK, pois NDF é um tipo de erro per se)
+            // CARD 3: Total de Erros NDF (Regra Estrita)
             const listaNdfTotal = dados.filter(d => isNDFRegra(d));
             if(elNdfTotal) elNdfTotal.innerText = listaNdfTotal.length;
 
@@ -103,9 +100,9 @@ MinhaArea.Comparativo = {
             if(elNdfAuditados) elNdfAuditados.innerText = "--";
 
             // --- ALIMENTAÇÃO DO FEED E GRÁFICO ---
-            // O Feed mostra por padrão os Erros Validados (foco principal) + NDFs encontrados
-            // Unimos as listas relevantes para exibição
-            const listaVisualizacao = [...new Set([...listaErrosValidados, ...listaNdfTotal])];
+            // O Feed foca nos Problemas (Erros Reais + NDFs encontrados)
+            // Filtramos apenas o que é NOK ou NDF para não poluir a lista com "OKs"
+            const listaVisualizacao = dados.filter(d => (isErro(d) || this.isNDF(d)));
 
             if (listaVisualizacao.length === 0) {
                 this.renderizarVazio(containerFeed);
@@ -123,11 +120,9 @@ MinhaArea.Comparativo = {
     },
 
     isNDF: function(d) {
-        // Wrapper para compatibilidade com funções visuais antigas
+        // Wrapper visual (aceita códigos oficiais OU nomes conhecidos)
         const docOficial = (d.documento || '').toUpperCase().trim();
         if (this.codigosNdfOficiais.includes(docOficial)) return true;
-        
-        // Fallback visual para nomes (caso documento venha vazio do banco)
         const nomeDoc = (d.doc_name || '').trim();
         if (nomeDoc && this.listaNdfConhecidos.some(ndfName => nomeDoc.toLowerCase().includes(ndfName.toLowerCase()))) {
             return true;
@@ -146,7 +141,6 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        // Filtra sobre os dados brutos para permitir encontrar qualquer coisa
         const filtrados = this.dadosBrutosCache.filter(d => {
             const nome = (d.doc_name || '').toLowerCase();
             const tipo = (this.getDocType(d) || '').toLowerCase();
@@ -166,8 +160,7 @@ MinhaArea.Comparativo = {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
         if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        // Recalcula gráfico com base no feed atual (não temos o contexto filtrado aqui, então pegamos do cache global por simplicidade ou idealmente guardaríamos o estado do filtro atual)
-        // Simplificação: Recarrega
+        // Recalcula visualização baseada no estado atual
         this.carregar();
     },
 
@@ -185,7 +178,6 @@ MinhaArea.Comparativo = {
         if(btnNdf) btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
 
         this.limparFiltro(false);
-        // Filtra os dados base para a visão correta antes de atualizar
         this.carregar(); 
     },
 
@@ -193,7 +185,6 @@ MinhaArea.Comparativo = {
         const container = document.getElementById('feed-erros-container');
         let filtrados = [];
         
-        // Filtra sobre o CACHE BRUTO para garantir que encontramos tudo
         if (this.visaoAtual === 'empresa') {
             filtrados = this.dadosBrutosCache.filter(d => {
                 const emp = d.empresa || d.empresa_nome || 'Desconhecida';
@@ -224,7 +215,6 @@ MinhaArea.Comparativo = {
         const agrupamento = {};
         
         dadosParaGrafico.forEach(item => {
-            // Se visão for NDF, só conta NDFs
             if (this.visaoAtual === 'ndf' && !this.isNDF(item)) return;
 
             let chave = 'Outros';
@@ -254,7 +244,7 @@ MinhaArea.Comparativo = {
     limparFiltro: function(renderizar = true) {
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) btn.classList.add('hidden');
-        if (renderizar) this.carregar(); // Recarrega estado inicial
+        if (renderizar) this.carregar();
     },
 
     renderizarFeed: function(lista, container) {
@@ -276,7 +266,6 @@ MinhaArea.Comparativo = {
             const isNdf = this.isNDF(doc);
             const docOficial = doc.documento || '';
             
-            // Badge Condicional
             let badgeClass = 'bg-slate-100 text-slate-600';
             let badgeText = 'AUDIT';
             
@@ -284,7 +273,6 @@ MinhaArea.Comparativo = {
                 badgeClass = 'bg-amber-100 text-amber-700';
                 badgeText = 'NDF';
             } else {
-                // Se não é NDF, verifica se é erro validado
                 const qtd = Number(doc.qtd_nok || 0);
                 const status = (doc.status || '').toUpperCase();
                 if (qtd > 0 || status.includes('NOK')) {
@@ -347,7 +335,6 @@ MinhaArea.Comparativo = {
         if (ctx && this.chartOfensores) this.chartOfensores.destroy();
     },
 
-    // --- BUSCA SEM FILTRO DE AUDITORIA (Traz tudo para calcular NDF Total) ---
     buscarTudoPaginado: async function(uid, inicio, fim) {
         let todos = [];
         let page = 0;
@@ -361,14 +348,11 @@ MinhaArea.Comparativo = {
                 .lte('data_referencia', fim)
                 .range(page*1000, (page+1)*1000-1);
 
-            // Filtro de usuário opcional (se uid nulo, traz geral)
-            if (uid) {
-                query = query.eq('usuario_id', uid);
-            }
+            if (uid) query = query.eq('usuario_id', uid);
 
             const { data, error } = await query;
-            
             if(error) throw error;
+            
             todos = todos.concat(data);
             if(data.length < 1000) continuar = false;
             else page++;
