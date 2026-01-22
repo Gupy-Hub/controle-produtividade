@@ -1,3 +1,7 @@
+/* ARQUIVO: js/minha_area/main.js
+   DESCRIÇÃO: Controlador Minha Área (Com Visão Geral Habilitada)
+*/
+
 const MinhaArea = {
     usuario: null,
     usuarioAlvoId: null,
@@ -13,26 +17,20 @@ const MinhaArea = {
         }
         this.usuario = JSON.parse(storedUser);
         
-        // Configura container, mas a lista será carregada dinamicamente
         await this.setupAdminAccess();
         if (!this.isAdmin()) {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // 1. Popula Selects Iniciais
         this.popularSeletoresIniciais();
-
-        // 2. Carrega Estado Salvo e Força Atualização Inicial
         this.carregarEstadoSalvo();
         
-        // Garante que lista e grid sejam carregados na entrada
         this.atualizarTudo();
-
         this.mudarAba('diario');
     },
 
     isAdmin: function() {
-        return ['GESTORA', 'AUDITORA', 'ADMIN'].includes(this.usuario.funcao) || this.usuario.perfil === 'admin' || this.usuario.id == 1;
+        return ['GESTORA', 'AUDITORA', 'ADMINISTRADOR', 'ADMIN'].includes(this.usuario.funcao) || this.usuario.perfil === 'admin' || this.usuario.id == 1;
     },
 
     setupAdminAccess: async function() {
@@ -42,6 +40,7 @@ const MinhaArea = {
         }
     },
 
+    // --- ATUALIZAÇÃO 1: Opção "Visão Geral" no Select ---
     atualizarListaAssistentes: async function() {
         if (!this.isAdmin()) return;
 
@@ -51,7 +50,7 @@ const MinhaArea = {
         const { inicio, fim } = this.getDatasFiltro();
 
         try {
-            // 1. Busca IDs únicos que têm produção no período
+            // Busca IDs com produção
             const { data: prodData, error: prodError } = await Sistema.supabase
                 .from('producao')
                 .select('usuario_id')
@@ -63,11 +62,10 @@ const MinhaArea = {
             const idsComDados = [...new Set(prodData.map(p => p.usuario_id))];
 
             if (idsComDados.length === 0) {
-                select.innerHTML = '<option value="" disabled selected>🚫 Ninguém com dados neste período</option>';
+                select.innerHTML = '<option value="" selected>🚫 Ninguém com dados neste período</option>';
                 return;
             }
 
-            // 2. Busca nomes desses usuários
             const { data: users, error: userError } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome')
@@ -77,8 +75,8 @@ const MinhaArea = {
 
             if (userError) throw userError;
 
-            // 3. Reconstrói o Select
-            let options = `<option value="" disabled ${!this.usuarioAlvoId ? 'selected' : ''}>👉 Selecionar Colaboradora...</option>`;
+            // Opção Padrão alterada para "Visão Geral"
+            let options = `<option value="" ${!this.usuarioAlvoId ? 'selected' : ''}>👥 Visão Geral da Equipe</option>`;
             
             users.forEach(u => {
                 if (u.id !== this.usuario.id) {
@@ -94,9 +92,11 @@ const MinhaArea = {
         }
     },
 
+    // --- ATUALIZAÇÃO 2: Aceita ID nulo (Geral) ---
     mudarUsuarioAlvo: function(novoId) {
-        if (!novoId) return;
-        this.usuarioAlvoId = parseInt(novoId);
+        // Se novoId for vazio, definimos como null (Visão Geral)
+        this.usuarioAlvoId = novoId ? parseInt(novoId) : null;
+        
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -120,8 +120,6 @@ const MinhaArea = {
         if(mesSelect) mesSelect.value = mesAtual;
     },
 
-    // --- PERSISTÊNCIA E EVENTOS ---
-
     salvarEAtualizar: function() {
         const estado = {
             tipo: this.filtroPeriodo,
@@ -131,7 +129,6 @@ const MinhaArea = {
             sub: document.getElementById('sel-subperiodo-ano').value
         };
         localStorage.setItem('ma_filtro_state', JSON.stringify(estado));
-        
         this.atualizarTudo();
     },
 
@@ -189,54 +186,31 @@ const MinhaArea = {
         if (this.filtroPeriodo === 'mes') {
             inicio = new Date(ano, mes, 1);
             fim = new Date(ano, mes + 1, 0);
-        } 
-        // --- CORREÇÃO: LÓGICA SEMANAL (Domingo a Sábado) ---
-        else if (this.filtroPeriodo === 'semana') {
+        } else if (this.filtroPeriodo === 'semana') {
             const semanaIndex = parseInt(document.getElementById('sel-semana').value);
-            
-            // Começa dia 1
             let current = new Date(ano, mes, 1);
             
-            // Avança para a semana correta
             if (semanaIndex > 1) {
-                // Vai para o primeiro domingo
-                while (current.getDay() !== 0) {
-                    current.setDate(current.getDate() + 1);
-                }
-                // Adiciona as semanas
+                while (current.getDay() !== 0) current.setDate(current.getDate() + 1);
                 current.setDate(current.getDate() + (semanaIndex - 2) * 7);
             }
             
             inicio = new Date(current);
-            
-            // Fim é o próximo sábado
             fim = new Date(current);
-            while (fim.getDay() !== 6) {
-                fim.setDate(fim.getDate() + 1);
-            }
+            while (fim.getDay() !== 6) fim.setDate(fim.getDate() + 1);
             
-            // Verifica estouro do mês
             const ultimoDiaMes = new Date(ano, mes + 1, 0);
-            
-            if (inicio.getMonth() !== mes) {
-                inicio = ultimoDiaMes;
-                fim = ultimoDiaMes;
-            } else {
-                if (fim > ultimoDiaMes) fim = ultimoDiaMes;
-            }
-        } 
-        // ----------------------------------------------------
-        else if (this.filtroPeriodo === 'ano') {
+            if (inicio.getMonth() !== mes) { inicio = ultimoDiaMes; fim = ultimoDiaMes; } 
+            else { if (fim > ultimoDiaMes) fim = ultimoDiaMes; }
+        } else if (this.filtroPeriodo === 'ano') {
             const sub = document.getElementById('sel-subperiodo-ano').value;
             if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
             else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
             else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
             else if (sub.startsWith('T')) {
                 const tri = parseInt(sub.replace('T', ''));
-                const mesInicio = (tri - 1) * 3;
-                const mesFim = mesInicio + 3;
-                inicio = new Date(ano, mesInicio, 1);
-                fim = new Date(ano, mesFim, 0);
+                inicio = new Date(ano, (tri - 1) * 3, 1);
+                fim = new Date(ano, (tri - 1) * 3 + 3, 0);
             }
         }
 
@@ -268,8 +242,11 @@ const MinhaArea = {
         this.carregarDadosAba(abaId);
     },
 
+    // --- ATUALIZAÇÃO 3: Permite carregar sem ID selecionado (para Comparativo) ---
     carregarDadosAba: function(abaId) {
-        if (this.isAdmin() && !this.usuarioAlvoId) return;
+        // Removemos a trava global. Cada arquivo JS (geral.js, comparativo.js)
+        // decide se precisa de ID obrigatório ou não.
+        
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
         if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
