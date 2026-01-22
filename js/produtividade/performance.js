@@ -1,14 +1,18 @@
 /* ARQUIVO: js/produtividade/performance.js
-   DESCRIÇÃO: Engine de Performance V2 (Híbrida: RPC + Raw Data)
-   CORREÇÃO: Removeu dependência de coluna inexistente 'assertividade' na tabela 'producao'
+   DESCRIÇÃO: Engine de Performance V3 (Tração Premium + Master/Detail UX)
+   AUTOR: Equipe GupyMesa
 */
 
 Produtividade.Performance = {
     initialized: false,
-    dadosRPC: [],     // Dados sumarizados por usuário (vem do Banco)
-    dadosTimeline: [], // Dados brutos para o gráfico de linha
-    mode: 'tracao',   // 'tracao' | 'atrito'
+    dadosRPC: [],        // KPIs gerais do RPC
+    dadosTimeline: [],   // Produção dia-a-dia para gráficos
+    dadosDocs: [],       // Dados de assertividade para análise de documentos
+    
+    usuarioSelecionado: null, // null = Visão Time Global
+    mode: 'tracao',      // 'tracao' | 'atrito'
     chartInstance: null,
+    chartDocsInstance: null,
 
     init: function() {
         if (typeof Chart === 'undefined') { console.error("Chart.js required"); return; }
@@ -19,12 +23,10 @@ Produtividade.Performance = {
 
     setMode: function(novoModo, recarregar = true) {
         this.mode = novoModo;
-        
-        // Atualiza UI dos botões (Toggle Visual)
+        // Atualiza botões (Toggle Visual)
         const btnTracao = document.getElementById('btn-mode-tracao');
         const btnAtrito = document.getElementById('btn-mode-atrito');
-        
-        const activeClass = "bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200";
+        const activeClass = "bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200 transform scale-105";
         const inactiveClass = "text-slate-400 hover:text-slate-600 bg-transparent shadow-none ring-0";
 
         if(btnTracao && btnAtrito) {
@@ -36,343 +38,360 @@ Produtividade.Performance = {
                 btnAtrito.className = `flex items-center gap-2 px-6 py-2 text-sm font-bold rounded-lg transition-all duration-300 ${activeClass.replace('indigo', 'rose').replace('text-indigo-600', 'text-rose-600')}`;
             }
         }
-
         if(recarregar && this.dadosRPC.length > 0) this.renderizarCenario();
     },
 
     carregar: async function() {
         const container = document.getElementById('performance-engine-container');
-        if(container) container.innerHTML = '<div class="text-center text-slate-400 py-20 animate-pulse"><i class="fas fa-circle-notch fa-spin mr-2"></i> Cruzando dados de performance...</div>';
+        if(container) container.innerHTML = '<div class="text-center text-slate-400 py-24 animate-pulse"><i class="fas fa-circle-notch fa-spin text-2xl mb-4 text-indigo-400"></i><p class="font-medium">Carregando inteligência de dados...</p></div>';
 
         const datas = Produtividade.getDatasFiltro();
-        
-        try {
-            // --- ESTRATÉGIA HÍBRIDA ---
-            // 1. Busca Dados Sumarizados (KPIs e Rankings) via RPC (Mesma lógica da aba Geral)
-            const reqRPC = Sistema.supabase
-                .rpc('get_painel_produtividade', { 
-                    data_inicio: datas.inicio, 
-                    data_fim: datas.fim 
-                });
+        this.usuarioSelecionado = null; // Reseta seleção ao recarregar período
 
-            // 2. Busca Dados Brutos APENAS para o Gráfico de Evolução (Timeline)
-            // Removemos 'assertividade' daqui para corrigir o Erro 400
-            const reqTimeline = Sistema.supabase
-                .from('producao')
-                .select('quantidade, data_referencia')
-                .gte('data_referencia', datas.inicio)
-                .lte('data_referencia', datas.fim)
+        try {
+            // 1. KPIs Gerais
+            const reqRPC = Sistema.supabase.rpc('get_painel_produtividade', { 
+                data_inicio: datas.inicio, data_fim: datas.fim 
+            });
+
+            // 2. Timeline (Evolução) - Trazendo usuario_id para filtro local
+            const reqTimeline = Sistema.supabase.from('producao')
+                .select('quantidade, data_referencia, usuario_id')
+                .gte('data_referencia', datas.inicio).lte('data_referencia', datas.fim)
                 .order('data_referencia', { ascending: true });
 
-            const [resRPC, resTimeline] = await Promise.all([reqRPC, reqTimeline]);
+            // 3. Documentos (Assertividade) - Para o ranking de docs
+            // Buscamos 'doc_name' e status. Tentamos usar assistente_nome para linkar depois.
+            const reqDocs = Sistema.supabase.from('assertividade')
+                .select('doc_name, status, assistente_nome, data_referencia')
+                .gte('data_referencia', datas.inicio).lte('data_referencia', datas.fim)
+                .limit(2000); // Limite de segurança para performance
+
+            const [resRPC, resTimeline, resDocs] = await Promise.all([reqRPC, reqTimeline, reqDocs]);
 
             if (resRPC.error) throw resRPC.error;
             if (resTimeline.error) throw resTimeline.error;
 
             this.dadosRPC = resRPC.data || [];
             this.dadosTimeline = resTimeline.data || [];
+            this.dadosDocs = resDocs.data || [];
 
             this.renderizarCenario();
 
         } catch (err) {
             console.error("Erro Performance:", err);
-            if(container) container.innerHTML = `
-                <div class="bg-red-50 text-red-600 p-6 rounded-xl border border-red-100 text-center max-w-lg mx-auto mt-10">
-                    <i class="fas fa-bug text-3xl mb-3 block"></i>
-                    <h3 class="font-bold">Falha no processamento</h3>
-                    <p class="text-sm mt-1">${err.message}</p>
-                    <button onclick="Produtividade.Performance.carregar()" class="mt-4 bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-xs font-bold transition">Tentar Novamente</button>
-                </div>`;
+            if(container) container.innerHTML = `<div class="bg-red-50 text-red-600 p-6 rounded-xl border border-red-100 text-center"><p>Erro ao processar dados: ${err.message}</p></div>`;
         }
     },
 
-    processarDados: function() {
-        // Stats Globais
+    selecionarUsuario: function(id) {
+        // Se clicar no mesmo, desseleciona (volta pro global)
+        this.usuarioSelecionado = (this.usuarioSelecionado === id) ? null : id;
+        this.renderizarCenario();
+    },
+
+    // --- PROCESSAMENTO PRINCIPAL ---
+    processarDadosAtuais: function() {
+        // Filtra os dados baseados no usuarioSelecionado
+        const usuariosFiltrados = this.usuarioSelecionado 
+            ? this.dadosRPC.filter(u => u.usuario_id == this.usuarioSelecionado)
+            : this.dadosRPC;
+
+        const producaoFiltrada = this.usuarioSelecionado
+            ? this.dadosTimeline.filter(p => p.usuario_id == this.usuarioSelecionado)
+            : this.dadosTimeline;
+
+        // Para docs, precisamos filtrar por nome aproximado pois a tabela assertividade pode não ter ID
+        // Vamos tentar pegar o nome do usuário selecionado
+        let nomeUsuarioSel = null;
+        if(this.usuarioSelecionado) {
+            const u = this.dadosRPC.find(x => x.usuario_id == this.usuarioSelecionado);
+            if(u) nomeUsuarioSel = u.nome;
+        }
+
+        const docsFiltrados = nomeUsuarioSel
+            ? this.dadosDocs.filter(d => d.assistente_nome && d.assistente_nome.toLowerCase().includes(nomeUsuarioSel.toLowerCase().split(' ')[0].toLowerCase())) // Match básico pelo primeiro nome
+            : this.dadosDocs;
+
+        // --- CÁLCULOS ---
         const stats = {
             totalProducao: 0,
-            totalMeta: 0,
-            totalErrosEstimados: 0,
             somaAssert: 0,
-            qtdAuditorias: 0,
-            usuarios: []
+            qtdAud: 0,
+            mediaAssert: 0,
+            usuarios: [],
+            melhorDia: { data: '-', qtd: 0 },
+            topDocs: []
         };
 
-        // Processa dados vindos da RPC (Já agrupados por usuário)
-        this.dadosRPC.forEach(row => {
-            // Filtra cargos de gestão
-            const funcao = (row.funcao || '').toUpperCase();
-            if(['GESTORA', 'AUDITORA'].includes(funcao)) return;
+        // 1. KPIs Básicos
+        usuariosFiltrados.forEach(u => {
+            const cargo = (u.funcao || '').toUpperCase();
+            if(['GESTORA', 'AUDITORA'].includes(cargo) && !this.usuarioSelecionado) return; // Se global, ignora gestão
 
-            const qty = Number(row.total_qty) || 0;
-            const meta = Number(row.meta_producao || 0) * Number(row.total_dias_uteis || 0); // Meta proporcional
-            const somaAud = Number(row.soma_auditorias) || 0;
-            const qtdAud = Number(row.qtd_auditorias) || 0;
-            
-            // Cálculos Individuais
-            const mediaAssert = qtdAud > 0 ? (somaAud / qtdAud) : 100; // Se não tem auditoria, assume 100% para não penalizar injustamente
-            const errosEst = qty * ((100 - mediaAssert) / 100);
+            stats.totalProducao += (Number(u.total_qty) || 0);
+            stats.somaAssert += (Number(u.soma_auditorias) || 0);
+            stats.qtdAud += (Number(u.qtd_auditorias) || 0);
+            stats.usuarios.push(u);
+        });
+        
+        stats.mediaAssert = stats.qtdAud > 0 ? (stats.somaAssert / stats.qtdAud) : (stats.totalProducao > 0 ? 100 : 0);
 
-            stats.totalProducao += qty;
-            stats.totalMeta += meta;
-            stats.somaAssert += somaAud;
-            stats.qtdAuditorias += qtdAud;
-            stats.totalErrosEstimados += errosEst;
-
-            stats.usuarios.push({
-                id: row.usuario_id,
-                nome: row.nome,
-                total: qty,
-                meta: meta,
-                mediaAssert: mediaAssert,
-                qtdAud: qtdAud,
-                erros: errosEst
-            });
+        // 2. Melhor Dia
+        const prodPorDia = {};
+        producaoFiltrada.forEach(p => {
+            prodPorDia[p.data_referencia] = (prodPorDia[p.data_referencia] || 0) + (Number(p.quantidade) || 0);
+        });
+        Object.entries(prodPorDia).forEach(([data, qtd]) => {
+            if (qtd > stats.melhorDia.qtd) stats.melhorDia = { data, qtd };
         });
 
-        // Média Global de Assertividade
-        stats.mediaGlobalAssert = stats.qtdAuditorias > 0 
-            ? (stats.somaAssert / stats.qtdAuditorias) 
-            : 0; // Se ninguém foi auditado, média é 0 ou deveria ser N/A? Vamos deixar 0 para alertar.
-            
-        // Se não houver produção, assertividade é 100 (padrão visual)
-        if(stats.totalProducao === 0 && stats.qtdAuditorias === 0) stats.mediaGlobalAssert = 100;
+        // 3. Top Docs (Assertividade)
+        const docsMap = {};
+        docsFiltrados.forEach(d => {
+            const nomeDoc = d.doc_name || 'Outros';
+            if(!docsMap[nomeDoc]) docsMap[nomeDoc] = { nome: nomeDoc, ok: 0, total: 0 };
+            docsMap[nomeDoc].total++;
+            if(['OK', 'VALIDO'].includes((d.status||'').toUpperCase())) docsMap[nomeDoc].ok++;
+        });
+        stats.topDocs = Object.values(docsMap)
+            .sort((a,b) => b.ok - a.ok) // Ordena por volume de acertos
+            .slice(0, 5);
 
         return stats;
     },
 
     renderizarCenario: function() {
         const container = document.getElementById('performance-engine-container');
-        const stats = this.processarDados();
-        
-        if(stats.usuarios.length === 0) {
-            container.innerHTML = `
-                <div class="flex flex-col items-center justify-center py-20 text-slate-400">
-                    <i class="fas fa-inbox text-4xl mb-3 text-slate-300"></i>
-                    <p>Sem dados produtivos para análise neste período.</p>
-                </div>`;
+        const stats = this.processarDadosAtuais();
+        const isGlobal = !this.usuarioSelecionado;
+
+        if (this.dadosRPC.length === 0) {
+            container.innerHTML = '<div class="text-center text-slate-400 py-20">Sem dados para análise.</div>';
             return;
         }
 
-        let html = '';
-        if(this.mode === 'tracao') {
-            html = this.buildTracaoView(stats);
-        } else {
-            html = this.buildAtritoView(stats);
-        }
+        // --- LAYOUT GRID: SIDEBAR (Ranking) + MAIN CONTENT ---
+        let html = `
+        <div class="grid grid-cols-12 gap-6 h-full">
+            
+            <div class="col-span-12 lg:col-span-3 flex flex-col gap-4">
+                <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[800px]">
+                    <div class="p-4 border-b border-slate-100 bg-slate-50">
+                        <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wider flex justify-between items-center">
+                            <span>🏆 Top Performers</span>
+                            ${!isGlobal ? `<button onclick="Produtividade.Performance.selecionarUsuario(null)" class="text-[10px] bg-white border border-slate-300 px-2 py-1 rounded text-slate-500 hover:text-indigo-600 transition">Ver Todos</button>` : ''}
+                        </h4>
+                    </div>
+                    <div class="overflow-y-auto custom-scrollbar p-2 space-y-1">
+                        ${this.renderSidebarList()}
+                    </div>
+                </div>
+                
+                <div class="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl p-5 text-white shadow-lg relative overflow-hidden">
+                    <i class="fas fa-trophy absolute -bottom-4 -right-4 text-6xl text-white/10"></i>
+                    <p class="text-indigo-200 text-xs font-bold uppercase mb-1">Dica de Gestão</p>
+                    <p class="text-sm font-medium leading-relaxed">
+                        ${isGlobal ? 'Clique em um nome na lista acima para filtrar todos os gráficos.' : 'Você está visualizando os dados individuais. Clique em "Ver Todos" para voltar.'}
+                    </p>
+                </div>
+            </div>
+
+            <div class="col-span-12 lg:col-span-9 space-y-6">
+                
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-black text-slate-800 tracking-tight">
+                            ${this.getNomeContexto()}
+                        </h2>
+                        <p class="text-sm text-slate-400 font-medium">Análise de Performance • ${this.mode === 'tracao' ? 'Visão de Crescimento' : 'Visão de Correção'}</p>
+                    </div>
+                    <div class="text-right hidden sm:block">
+                         <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            <i class="far fa-calendar-alt mr-2"></i> ${stats.melhorDia.data !== '-' ? 'Melhor Dia: ' + stats.melhorDia.data.split('-').reverse().slice(0,2).join('/') : '--'}
+                         </span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Volume Total</span>
+                        <div class="flex items-end justify-between mt-2">
+                            <span class="text-3xl font-black text-slate-800">${stats.totalProducao.toLocaleString()}</span>
+                            <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><i class="fas fa-layer-group"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Assertividade</span>
+                        <div class="flex items-end justify-between mt-2">
+                            <span class="text-3xl font-black ${stats.mediaAssert >= 98 ? 'text-emerald-600' : 'text-amber-500'}">${stats.mediaAssert.toFixed(2)}%</span>
+                            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><i class="fas fa-check-circle"></i></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition relative overflow-hidden">
+                        <div class="absolute top-0 right-0 w-16 h-16 bg-gradient-to-bl from-amber-100 to-transparent rounded-bl-full opacity-50"></div>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider z-10">Recorde Diário</span>
+                        <div class="mt-2 z-10">
+                            <span class="text-2xl font-black text-amber-600 block">${stats.melhorDia.qtd} Docs</span>
+                            <span class="text-xs font-bold text-slate-400">${stats.melhorDia.data !== '-' ? stats.melhorDia.data.split('-').reverse().join('/') : '-'}</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-wider">Auditorias</span>
+                        <div class="flex items-end justify-between mt-2">
+                            <span class="text-3xl font-black text-slate-700">${stats.qtdAud.toLocaleString()}</span>
+                            <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center"><i class="fas fa-search"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <div class="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+                        <h4 class="font-bold text-slate-700 mb-6 flex items-center justify-between">
+                            <span><i class="fas fa-chart-line text-indigo-500 mr-2"></i> Evolução Temporal</span>
+                            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded font-bold uppercase" id="label-periodo-chart">Dinâmico</span>
+                        </h4>
+                        <div class="h-72">
+                            <canvas id="chart-evolution"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col">
+                        <h4 class="font-bold text-slate-700 mb-4 flex items-center">
+                            <i class="fas fa-file-contract text-emerald-500 mr-2"></i> Documentos de Ouro
+                        </h4>
+                        <p class="text-[10px] text-slate-400 mb-4">Tipos de documentos com maior volume de acertos no período.</p>
+                        
+                        <div class="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2">
+                            ${stats.topDocs.length === 0 ? '<p class="text-center text-xs text-slate-300 italic py-10">Sem dados de documentos.</p>' : ''}
+                            ${stats.topDocs.map((doc, i) => `
+                                <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
+                                    <div class="flex items-center gap-3 overflow-hidden">
+                                        <div class="w-6 h-6 rounded-full bg-white text-xs font-bold flex items-center justify-center text-slate-400 border border-slate-200 shadow-sm flex-shrink-0">${i+1}</div>
+                                        <span class="text-xs font-bold text-slate-600 truncate" title="${doc.nome}">${doc.nome}</span>
+                                    </div>
+                                    <div class="text-right flex-shrink-0">
+                                        <span class="block text-xs font-black text-emerald-600">${doc.ok} <span class="text-[9px] font-normal text-emerald-400">OK</span></span>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>`;
 
         container.innerHTML = html;
-        
-        // Renderiza gráfico com pequeno delay para o DOM estar pronto
+
         setTimeout(() => {
-            if(this.mode === 'tracao') this.renderChartTracao(stats);
-            else this.renderChartAtrito(stats.usuarios);
-        }, 50);
+            this.renderChartEvolution(stats);
+        }, 100);
     },
 
-    // --- VIEW: TRAÇÃO ---
-    buildTracaoView: function(stats) {
-        const users = stats.usuarios;
-        const top3 = [...users].sort((a, b) => b.total - a.total).slice(0, 3);
-        const mediaGeral = stats.totalProducao / (users.length || 1);
+    // --- RENDERIZADORES AUXILIARES ---
+
+    renderSidebarList: function() {
+        // Ordena usuários pela métrica principal (Volume)
+        const sorted = [...this.dadosRPC]
+            .filter(u => !['GESTORA', 'AUDITORA'].includes((u.funcao||'').toUpperCase())) // Esconde gestores da lista lateral para focar na operação
+            .sort((a,b) => Number(b.total_qty) - Number(a.total_qty));
+
+        return sorted.map((u, i) => {
+            const isSelected = this.usuarioSelecionado == u.usuario_id;
+            const activeClass = isSelected ? 'bg-indigo-50 border-indigo-200 shadow-inner' : 'bg-white border-transparent hover:bg-slate-50 hover:border-slate-100';
+            const textClass = isSelected ? 'text-indigo-700' : 'text-slate-600';
+            
+            // Medalhas
+            let icon = `<div class="w-6 text-center text-xs font-bold text-slate-300">#${i+1}</div>`;
+            if(i === 0) icon = '🥇';
+            if(i === 1) icon = '🥈';
+            if(i === 2) icon = '🥉';
+
+            return `
+            <div onclick="Produtividade.Performance.selecionarUsuario('${u.usuario_id}')" 
+                 class="group cursor-pointer p-3 rounded-xl border transition-all duration-200 flex items-center gap-3 ${activeClass}">
+                <div class="flex-shrink-0 text-lg grayscale group-hover:grayscale-0 transition">${icon}</div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-xs font-bold ${textClass} truncate">${u.nome}</p>
+                    <p class="text-[10px] text-slate-400">${Number(u.total_qty).toLocaleString()} docs</p>
+                </div>
+                ${isSelected ? '<i class="fas fa-chevron-right text-indigo-400 text-xs"></i>' : ''}
+            </div>`;
+        }).join('');
+    },
+
+    getNomeContexto: function() {
+        if (!this.usuarioSelecionado) return "Visão Global do Time";
+        const u = this.dadosRPC.find(x => x.usuario_id == this.usuarioSelecionado);
+        return u ? u.nome : "Usuário";
+    },
+
+    renderChartEvolution: function(stats) {
+        const ctx = document.getElementById('chart-evolution').getContext('2d');
+        if (this.chartInstance) this.chartInstance.destroy();
+
+        // Filtra timeline pelo usuário se selecionado
+        const rawData = this.usuarioSelecionado 
+            ? this.dadosTimeline.filter(p => p.usuario_id == this.usuarioSelecionado)
+            : this.dadosTimeline;
+
+        // Decisão Inteligente: Agrupar por Mês ou Dia?
+        const datas = rawData.map(d => d.data_referencia).sort();
+        if(datas.length === 0) return;
+
+        const dtInicio = new Date(datas[0]);
+        const dtFim = new Date(datas[datas.length-1]);
+        const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
         
-        return `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
-            <div class="bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl p-5 text-white shadow-lg shadow-indigo-200 transform hover:scale-[1.02] transition duration-300">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-indigo-100 text-xs font-bold uppercase tracking-wider">Volume Total</p>
-                        <h3 class="text-3xl font-black mt-1">${stats.totalProducao.toLocaleString()}</h3>
-                    </div>
-                    <div class="bg-white/20 p-2 rounded-lg backdrop-blur-sm"><i class="fas fa-rocket"></i></div>
-                </div>
-                <div class="mt-4 text-xs text-indigo-100 font-medium">
-                    <i class="fas fa-users mr-1"></i> ${users.length} Colaboradores ativos
-                </div>
-            </div>
+        const isMonthView = diffDays > 35; // Se mais de 35 dias, agrupa por Mês
+        document.getElementById('label-periodo-chart').innerText = isMonthView ? "Mês a Mês" : "Dia a Dia";
 
-            <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Média / Colaborador</p>
-                        <h3 class="text-3xl font-black text-slate-700 mt-1">${Math.round(mediaGeral).toLocaleString()}</h3>
-                    </div>
-                    <div class="bg-emerald-50 text-emerald-600 p-2 rounded-lg"><i class="fas fa-chart-bar"></i></div>
-                </div>
-                <div class="mt-4 text-xs text-slate-400">
-                    Capacidade individual média
-                </div>
-            </div>
-
-            <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Qualidade Global</p>
-                        <h3 class="text-3xl font-black text-slate-700 mt-1">${stats.mediaGlobalAssert.toFixed(2)}%</h3>
-                    </div>
-                    <div class="bg-blue-50 text-blue-600 p-2 rounded-lg"><i class="fas fa-check-double"></i></div>
-                </div>
-                 <div class="mt-4 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                    <div class="bg-blue-500 h-1.5 rounded-full" style="width: ${Math.min(stats.mediaGlobalAssert, 100)}%"></div>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-            <div class="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                <h4 class="font-bold text-slate-700 mb-6 flex items-center">
-                    <i class="fas fa-chart-area text-indigo-500 mr-2"></i> Fluxo de Entrega Diária
-                </h4>
-                <div class="h-72">
-                    <canvas id="chart-main"></canvas>
-                </div>
-            </div>
-
-            <div class="bg-gradient-to-b from-slate-50 to-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                <h4 class="font-bold text-slate-700 mb-6 flex items-center">
-                    <i class="fas fa-crown text-yellow-500 mr-2"></i> Top Performers
-                </h4>
-                <div class="space-y-4">
-                    ${top3.map((u, i) => `
-                        <div class="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-100 shadow-sm hover:shadow-md transition cursor-pointer group">
-                            <div class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full font-black text-sm ${i===0 ? 'bg-yellow-100 text-yellow-700' : (i===1 ? 'bg-slate-200 text-slate-600' : 'bg-orange-100 text-orange-700')}">
-                                ${i+1}
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <p class="text-sm font-bold text-slate-700 truncate group-hover:text-indigo-600 transition">${u.nome}</p>
-                                <div class="flex items-center gap-2 mt-0.5">
-                                    <span class="text-[10px] bg-slate-100 px-1.5 rounded text-slate-500 font-bold">${u.mediaAssert.toFixed(1)}% Qualidade</span>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <span class="block text-sm font-black text-indigo-600">${u.total.toLocaleString()}</span>
-                                <span class="text-[9px] text-slate-400 uppercase">Docs</span>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>`;
-    },
-
-    // --- VIEW: ATRITO ---
-    buildAtritoView: function(stats) {
-        // Ordena por menor assertividade, mas filtra quem tem produção relevante (>0)
-        const atencaoList = [...stats.usuarios]
-            .filter(u => u.qtdAud > 0) // Só mostra quem foi auditado
-            .sort((a, b) => a.mediaAssert - b.mediaAssert)
-            .slice(0, 5);
+        const dataMap = {};
         
-        const totalErros = Math.round(stats.totalErrosEstimados);
-        const taxaErroGlobal = stats.totalProducao > 0 ? (totalErros / stats.totalProducao * 100) : 0;
-
-        return `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in">
-            <div class="bg-white rounded-2xl p-5 border border-rose-100 shadow-sm relative overflow-hidden group">
-                <div class="absolute right-0 top-0 p-10 bg-rose-50 rounded-bl-full opacity-50 -mr-6 -mt-6 transition group-hover:scale-110"></div>
-                <div class="relative z-10">
-                    <p class="text-rose-400 text-xs font-bold uppercase tracking-wider">Desvios Estimados</p>
-                    <h3 class="text-3xl font-black text-rose-600 mt-1">${totalErros.toLocaleString()}</h3>
-                    <p class="text-xs text-rose-300 mt-1">Refações potenciais</p>
-                </div>
-            </div>
-
-            <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm">
-                <div class="flex justify-between items-center">
-                    <div>
-                        <p class="text-slate-400 text-xs font-bold uppercase tracking-wider">Taxa de Erro</p>
-                        <h3 class="text-3xl font-black text-slate-700 mt-1">${taxaErroGlobal.toFixed(2)}%</h3>
-                    </div>
-                    <div class="h-10 w-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">
-                        <i class="fas fa-percent"></i>
-                    </div>
-                </div>
-            </div>
-
-            <div class="bg-slate-800 rounded-2xl p-5 text-slate-300 shadow-lg">
-                <p class="text-xs font-bold uppercase tracking-wider text-slate-500">Diagnóstico IA</p>
-                <div class="mt-2 text-sm leading-relaxed flex items-start gap-2">
-                    <i class="fas fa-robot text-blue-400 mt-1"></i>
-                    <div>
-                    ${taxaErroGlobal > 2 
-                        ? 'Alerta: A taxa de erro excede o limite de controle (2%). Sugere-se revisão de processos.' 
-                        : 'A operação está estável. Os índices de qualidade estão dentro da zona segura.'}
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-            <div class="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
-                <h4 class="font-bold text-slate-700 mb-6 flex items-center">
-                    <i class="fas fa-exclamation-triangle text-rose-500 mr-2"></i> Pontos de Atenção (Baixa Assertividade)
-                </h4>
-                <div class="h-72">
-                    <canvas id="chart-main"></canvas>
-                </div>
-            </div>
-
-            <div class="bg-rose-50 rounded-2xl p-6 border border-rose-100 shadow-inner">
-                <h4 class="font-bold text-rose-800 mb-6 flex items-center">
-                    <i class="fas fa-user-nurse text-rose-600 mr-2"></i> Prioridade de Treinamento
-                </h4>
-                <div class="space-y-3">
-                    ${atencaoList.length === 0 ? '<p class="text-xs text-rose-400 italic">Nenhum desvio crítico encontrado.</p>' : ''}
-                    ${atencaoList.map(u => `
-                        <div class="bg-white p-3 rounded-lg border border-rose-100 shadow-sm flex justify-between items-center">
-                            <div>
-                                <p class="text-xs font-bold text-slate-700">${u.nome}</p>
-                                <p class="text-[10px] text-slate-400">Vol: ${u.total.toLocaleString()}</p>
-                            </div>
-                            <div class="text-right">
-                                <span class="block text-sm font-black ${u.mediaAssert < 95 ? 'text-rose-600' : 'text-amber-500'}">${u.mediaAssert.toFixed(2)}%</span>
-                                <span class="text-[9px] text-rose-300 font-bold uppercase">Assertividade</span>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>`;
-    },
-
-    // --- CHART LOGIC ---
-    
-    renderChartTracao: function(stats) {
-        const ctx = document.getElementById('chart-main').getContext('2d');
-        if(this.chartInstance) this.chartInstance.destroy();
-
-        // Agrupa os dados brutos da Timeline por Data
-        const producaoPorDia = {};
-        this.dadosTimeline.forEach(row => {
-            const data = row.data_referencia;
-            producaoPorDia[data] = (producaoPorDia[data] || 0) + (Number(row.quantidade) || 0);
+        rawData.forEach(row => {
+            let key = row.data_referencia; // Padrão YYYY-MM-DD
+            if (isMonthView) {
+                // Converte para YYYY-MM para agrupar
+                key = key.substring(0, 7); 
+            }
+            dataMap[key] = (dataMap[key] || 0) + (Number(row.quantidade) || 0);
         });
 
-        const labels = Object.keys(producaoPorDia).sort();
-        const dataValues = labels.map(d => producaoPorDia[d]);
-        const labelsFmt = labels.map(d => d.split('-').reverse().slice(0, 2).join('/')); // DD/MM
+        const labels = Object.keys(dataMap).sort();
+        const values = labels.map(k => dataMap[k]);
+        
+        // Formatação das Labels para o usuário
+        const fmtLabels = labels.map(k => {
+            if (isMonthView) {
+                const [ano, mes] = k.split('-');
+                const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+                return `${meses[parseInt(mes)-1]}/${ano.slice(2)}`;
+            } else {
+                return k.split('-').reverse().slice(0, 2).join('/');
+            }
+        });
 
         this.chartInstance = new Chart(ctx, {
-            type: 'line',
+            type: isMonthView ? 'bar' : 'line', // Barra para meses, Linha para dias
             data: {
-                labels: labelsFmt,
+                labels: fmtLabels,
                 datasets: [{
-                    label: 'Produção Total',
-                    data: dataValues,
+                    label: 'Produção',
+                    data: values,
+                    backgroundColor: isMonthView ? '#6366f1' : 'rgba(99, 102, 241, 0.1)',
                     borderColor: '#6366f1',
-                    backgroundColor: (context) => {
-                        const ctx = context.chart.ctx;
-                        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-                        gradient.addColorStop(0, 'rgba(99, 102, 241, 0.4)');
-                        gradient.addColorStop(1, 'rgba(99, 102, 241, 0.0)');
-                        return gradient;
-                    },
-                    borderWidth: 3,
-                    pointBackgroundColor: '#ffffff',
-                    pointBorderColor: '#6366f1',
+                    borderWidth: 2,
+                    borderRadius: 4,
+                    fill: !isMonthView,
+                    tension: 0.4,
                     pointRadius: 4,
-                    pointHoverRadius: 6,
-                    fill: true,
-                    tension: 0.4
+                    pointBackgroundColor: '#fff',
+                    pointBorderColor: '#6366f1'
                 }]
             },
             options: {
@@ -382,62 +401,6 @@ Produtividade.Performance = {
                 scales: {
                     y: { beginAtZero: true, grid: { color: '#f1f5f9' }, border: { display: false } },
                     x: { grid: { display: false }, border: { display: false } }
-                },
-                interaction: { mode: 'nearest', axis: 'x', intersect: false }
-            }
-        });
-    },
-
-    renderChartAtrito: function(users) {
-        const ctx = document.getElementById('chart-main').getContext('2d');
-        if(this.chartInstance) this.chartInstance.destroy();
-
-        // Pega os 10 usuários com MENOR assertividade (que tenham auditoria)
-        const bottomUsers = [...users]
-            .filter(u => u.qtdAud > 0)
-            .sort((a, b) => a.mediaAssert - b.mediaAssert)
-            .slice(0, 10);
-
-        if(bottomUsers.length === 0) return; // Nada para plotar
-
-        this.chartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: bottomUsers.map(u => u.nome.split(' ')[0]),
-                datasets: [
-                    {
-                        label: 'Assertividade (%)',
-                        data: bottomUsers.map(u => u.mediaAssert),
-                        type: 'line',
-                        borderColor: '#f43f5e',
-                        borderWidth: 2,
-                        pointBackgroundColor: '#f43f5e',
-                        yAxisID: 'y1',
-                        order: 0
-                    },
-                    {
-                        label: 'Volume Produzido',
-                        data: bottomUsers.map(u => u.total),
-                        backgroundColor: '#cbd5e1',
-                        borderRadius: 4,
-                        yAxisID: 'y',
-                        order: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: true, position: 'bottom' } },
-                scales: {
-                    y: { 
-                        type: 'linear', display: true, position: 'left', grid: { display: false } 
-                    },
-                    y1: { 
-                        type: 'linear', display: true, position: 'right', min: 80, max: 100,
-                        grid: { color: '#fff1f2', borderDash: [5, 5] }
-                    },
-                    x: { grid: { display: false } }
                 }
             }
         });
