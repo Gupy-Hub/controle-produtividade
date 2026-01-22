@@ -38,12 +38,10 @@ const MinhaArea = {
     setupAdminAccess: async function() {
         if (this.isAdmin()) {
             const container = document.getElementById('admin-selector-container');
-            // Apenas exibe o container. As opções serão carregadas via atualizarListaAssistentes()
             if (container) container.classList.remove('hidden');
         }
     },
 
-    // --- NOVA FUNÇÃO: Filtra assistentes por atividade no período ---
     atualizarListaAssistentes: async function() {
         if (!this.isAdmin()) return;
 
@@ -62,7 +60,6 @@ const MinhaArea = {
 
             if (prodError) throw prodError;
 
-            // Extrai IDs únicos (Set)
             const idsComDados = [...new Set(prodData.map(p => p.usuario_id))];
 
             if (idsComDados.length === 0) {
@@ -100,7 +97,6 @@ const MinhaArea = {
     mudarUsuarioAlvo: function(novoId) {
         if (!novoId) return;
         this.usuarioAlvoId = parseInt(novoId);
-        // Chama carregarDadosAba diretamente para não recarregar a lista de assistentes (loop)
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');
@@ -193,21 +189,44 @@ const MinhaArea = {
         if (this.filtroPeriodo === 'mes') {
             inicio = new Date(ano, mes, 1);
             fim = new Date(ano, mes + 1, 0);
-        } else if (this.filtroPeriodo === 'semana') {
+        } 
+        // --- CORREÇÃO: LÓGICA SEMANAL (Domingo a Sábado) ---
+        else if (this.filtroPeriodo === 'semana') {
             const semanaIndex = parseInt(document.getElementById('sel-semana').value);
-            const diaInicio = (semanaIndex - 1) * 7 + 1;
-            let diaFim = diaInicio + 6;
-            const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
-            if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
             
-            if (diaInicio > ultimoDiaMes) {
-                inicio = new Date(ano, mes, ultimoDiaMes);
-                fim = new Date(ano, mes, ultimoDiaMes);
-            } else {
-                inicio = new Date(ano, mes, diaInicio);
-                fim = new Date(ano, mes, diaFim);
+            // Começa dia 1
+            let current = new Date(ano, mes, 1);
+            
+            // Avança para a semana correta
+            if (semanaIndex > 1) {
+                // Vai para o primeiro domingo
+                while (current.getDay() !== 0) {
+                    current.setDate(current.getDate() + 1);
+                }
+                // Adiciona as semanas
+                current.setDate(current.getDate() + (semanaIndex - 2) * 7);
             }
-        } else if (this.filtroPeriodo === 'ano') {
+            
+            inicio = new Date(current);
+            
+            // Fim é o próximo sábado
+            fim = new Date(current);
+            while (fim.getDay() !== 6) {
+                fim.setDate(fim.getDate() + 1);
+            }
+            
+            // Verifica estouro do mês
+            const ultimoDiaMes = new Date(ano, mes + 1, 0);
+            
+            if (inicio.getMonth() !== mes) {
+                inicio = ultimoDiaMes;
+                fim = ultimoDiaMes;
+            } else {
+                if (fim > ultimoDiaMes) fim = ultimoDiaMes;
+            }
+        } 
+        // ----------------------------------------------------
+        else if (this.filtroPeriodo === 'ano') {
             const sub = document.getElementById('sel-subperiodo-ano').value;
             if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
             else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
@@ -231,10 +250,7 @@ const MinhaArea = {
     },
 
     atualizarTudo: function() {
-        // 1. Atualiza a lista de assistentes com base nas datas selecionadas
         this.atualizarListaAssistentes();
-
-        // 2. Atualiza os dados da aba ativa
         const abaAtiva = document.querySelector('.tab-btn.active');
         if (abaAtiva) {
             const id = abaAtiva.id.replace('btn-ma-', '');

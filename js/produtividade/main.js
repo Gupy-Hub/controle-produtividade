@@ -97,8 +97,7 @@ Object.assign(window.Produtividade, {
         };
         localStorage.setItem('prod_filtro_state', JSON.stringify(estado));
         
-        // --- CÓDIGO NOVO (DEBOUNCE) ---
-        // Cancela a chamada anterior se ela acontecer em menos de 1 segundo
+        // --- DEBOUNCE ---
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
 
         const statusEl = document.getElementById('tabela-corpo');
@@ -106,8 +105,7 @@ Object.assign(window.Produtividade, {
 
         this.debounceTimer = setTimeout(() => {
             this.atualizarTodasAbas();
-        }, 800); // Espera 800ms após o último clique para chamar o banco
-        // ------------------------------
+        }, 800); 
     },
 
     carregarEstadoSalvo: function() {
@@ -142,21 +140,46 @@ Object.assign(window.Produtividade, {
             if (this.filtroPeriodo === 'mes') {
                 inicio = new Date(ano, mes, 1);
                 fim = new Date(ano, mes + 1, 0);
-            } else if (this.filtroPeriodo === 'semana') {
+            } 
+            // --- CORREÇÃO: LÓGICA SEMANAL (Domingo a Sábado) ---
+            else if (this.filtroPeriodo === 'semana') {
                 const semanaIndex = parseInt(document.getElementById('sel-semana').value);
-                const diaInicio = (semanaIndex - 1) * 7 + 1;
-                let diaFim = diaInicio + 6;
-                const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
-                if (diaFim > ultimoDiaMes) diaFim = ultimoDiaMes;
                 
-                if (diaInicio > ultimoDiaMes) {
-                    inicio = new Date(ano, mes, ultimoDiaMes);
-                    fim = new Date(ano, mes, ultimoDiaMes);
-                } else {
-                    inicio = new Date(ano, mes, diaInicio);
-                    fim = new Date(ano, mes, diaFim);
+                // Começa no dia 1 do mês
+                let current = new Date(ano, mes, 1);
+                
+                // Se não for a Semana 1, avança até o primeiro Domingo e soma semanas
+                if (semanaIndex > 1) {
+                    // Avança até o primeiro domingo
+                    while (current.getDay() !== 0) {
+                        current.setDate(current.getDate() + 1);
+                    }
+                    // Soma as semanas restantes
+                    current.setDate(current.getDate() + (semanaIndex - 2) * 7);
                 }
-            } else if (this.filtroPeriodo === 'ano') {
+                
+                inicio = new Date(current);
+                
+                // O fim é o próximo Sábado
+                fim = new Date(current);
+                while (fim.getDay() !== 6) {
+                    fim.setDate(fim.getDate() + 1);
+                }
+                
+                // Limites do mês (Clamp)
+                const ultimoDiaMes = new Date(ano, mes + 1, 0);
+                
+                // Se o início da semana caiu no mês seguinte (ex: Semana 5 num mês curto)
+                if (inicio.getMonth() !== mes) {
+                    inicio = ultimoDiaMes;
+                    fim = ultimoDiaMes;
+                } else {
+                    // Se o fim passou do mês, corta no último dia
+                    if (fim > ultimoDiaMes) fim = ultimoDiaMes;
+                }
+            } 
+            // ----------------------------------------------------
+            else if (this.filtroPeriodo === 'ano') {
                 const sub = document.getElementById('sel-subperiodo-ano').value;
                 if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
                 else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
