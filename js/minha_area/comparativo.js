@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/comparativo.js
    DESCRIÇÃO: Engine de Assertividade e Ofensores (Minha Área)
-   CORREÇÃO: Atualização de nomes de colunas (data_referencia, auditora_nome)
+   ATUALIZAÇÃO: Drill-down detalhado na visão de NDFs
 */
 
 MinhaArea.Comparativo = {
@@ -149,18 +149,29 @@ MinhaArea.Comparativo = {
 
     filtrarPorSelecao: function(valor) {
         let filtrados = [];
+        
+        // CORREÇÃO: Lógica de filtro específica para cada visão
         if (this.visaoAtual === 'empresa') {
             filtrados = this.dadosNoksCache.filter(d => {
                 const emp = d.empresa || d.empresa_nome || 'Desconhecida';
                 return emp.includes(valor.replace('...', ''));
             });
+        } else if (this.visaoAtual === 'ndf') {
+            // CORREÇÃO: No modo NDF, filtra pelo nome exato do documento NDF
+            filtrados = this.dadosNoksCache.filter(d => {
+                if (!this.isNDF(d)) return false; // Garante que é NDF
+                const nome = d.doc_name || d.nome_documento || 'Sem Nome';
+                return nome.includes(valor.replace('...', ''));
+            });
         } else {
+            // Modo Geral (Doc)
             filtrados = this.dadosNoksCache.filter(d => {
                 const tipo = this.getDocType(d);
                 if (valor === 'Documentos NDF') return this.isNDF(d);
                 return tipo.includes(valor.replace('...', ''));
             });
         }
+        
         this.aplicarFiltroVisual(filtrados, valor);
     },
 
@@ -176,9 +187,14 @@ MinhaArea.Comparativo = {
             let chave = 'Outros';
             if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
+            } else if (this.visaoAtual === 'ndf') {
+                // CORREÇÃO: Se estamos vendo NDFs, queremos o nome REAL do documento, não o grupo
+                chave = item.doc_name || item.nome_documento || 'Sem Nome';
             } else {
+                // Se visão 'doc', agrupa NDFs para não poluir
                 chave = this.getDocType(item);
             }
+            
             if(chave.length > 25) chave = chave.substring(0, 22) + '...';
             if (!agrupamento[chave]) agrupamento[chave] = 0;
             agrupamento[chave]++;
@@ -222,12 +238,10 @@ MinhaArea.Comparativo = {
             return;
         }
         
-        // CORREÇÃO: Usar data_referencia para ordenar
         listaNok.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
         
         let html = '';
         listaNok.forEach(doc => {
-            // CORREÇÃO: Usar data_referencia para exibir
             const data = doc.data_referencia ? new Date(doc.data_referencia).toLocaleDateString('pt-BR') : '-';
             const nome = doc.doc_name || 'Sem Nome';
             const tipo = this.getDocType(doc);
@@ -267,7 +281,7 @@ MinhaArea.Comparativo = {
         const _this = this;
         let barColor = '#f43f5e'; 
         if (this.visaoAtual === 'empresa') barColor = '#3b82f6';
-        if (this.visaoAtual === 'ndf') barColor = '#d97706';
+        if (this.visaoAtual === 'ndf') barColor = '#d97706'; // Âmbar para NDF
 
         this.chartOfensores = new Chart(ctx, {
             type: 'bar',
@@ -320,10 +334,10 @@ MinhaArea.Comparativo = {
                 .from('assertividade')
                 .select('*')
                 .eq('usuario_id', uid)
-                .gte('data_referencia', inicio) // CORRIGIDO
-                .lte('data_referencia', fim)    // CORRIGIDO
-                .neq('auditora_nome', null)     // CORRIGIDO (era auditora)
-                .neq('auditora_nome', '')       // CORRIGIDO
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .neq('auditora_nome', null)
+                .neq('auditora_nome', '')
                 .range(page*1000, (page+1)*1000-1);
             
             if(error) throw error;
