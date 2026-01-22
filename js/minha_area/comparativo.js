@@ -1,18 +1,25 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Com Suporte a Visão Geral da Equipe)
+   DESCRIÇÃO: Engine de Assertividade (Regras de Negócio: Erros Validados e NDF Oficial)
 */
 
 MinhaArea.Comparativo = {
     chartOfensores: null,
-    dadosNoksCache: [],
+    dadosBrutosCache: [], // Cache de todos os dados (Auditados e Não Auditados)
     visaoAtual: 'doc', 
     mostrarTodos: false,
 
+    // REGRAS DE NEGÓCIO: Códigos Oficiais NDF (Coluna DOCUMENTO)
     codigosNdfOficiais: [
-        'DOC_NDF_100%', 'DOC_NDF_CATEGORIA PROFISSIONAL', 'DOC_NDF_DEPENDENTE',
-        'DOC_NDF_ESTADO CIVIL', 'DOC_NDF_ESTRANGEIRO', 'DOC_NDF_LAUDO', 'DOC_NDF_OUTROS'
+        'DOC_NDF_100%',
+        'DOC_NDF_CATEGORIA PROFISSIONAL',
+        'DOC_NDF_DEPENDENTE',
+        'DOC_NDF_ESTADO CIVIL',
+        'DOC_NDF_ESTRANGEIRO',
+        'DOC_NDF_LAUDO',
+        'DOC_NDF_OUTROS'
     ],
 
+    // Fallback para visualização
     listaNdfConhecidos: [
         'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
         'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
@@ -36,13 +43,12 @@ MinhaArea.Comparativo = {
         console.log("🚀 UX Dashboard: Iniciando...");
         const uid = MinhaArea.getUsuarioAlvo();
         
-        // --- ATUALIZAÇÃO: Permite execução se for Admin/Gestor mesmo sem UID ---
         if (!uid && !MinhaArea.isAdmin()) return;
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         
         const containerFeed = document.getElementById('feed-erros-container');
-        const elErrosGeral = document.getElementById('total-nok-detalhe');
+        const elErrosValidados = document.getElementById('total-nok-detalhe');
         const elErrosGupy = document.getElementById('total-nok-gupy'); 
         const elNdfTotal = document.getElementById('total-ndf-detalhe'); 
         const elNdfAuditados = document.getElementById('total-ndf-auditados'); 
@@ -52,31 +58,63 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados da equipe...</div>';
 
         try {
-            // Busca dados (Passando UID que pode ser null)
-            const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
+            // BUSCA TUDO (Auditados e Pendentes) para poder calcular NDF total
+            const dados = await this.buscarTudoPaginado(uid, inicio, fim);
+            this.dadosBrutosCache = dados;
 
-            this.dadosNoksCache = dados.filter(d => {
+            // --- APLICAÇÃO DAS REGRAS DE NEGÓCIO ---
+
+            // 1. Definição de ERRO (NOK)
+            // Consideramos Erro se tiver qtd_nok > 0 OU status contiver NOK/REPROV
+            const isErro = (d) => {
                 const qtd = Number(d.qtd_nok || 0);
                 const status = (d.status || '').toUpperCase();
-                const isNokStatus = status.includes('NOK') || status.includes('REPROV');
-                return qtd > 0 || isNokStatus;
-            });
-            
-            // --- CÁLCULO DE KPIS ---
-            if(elErrosGeral) elErrosGeral.innerText = this.dadosNoksCache.length;
+                return qtd > 0 || status.includes('NOK') || status.includes('REPROV');
+            };
+
+            // 2. Definição de AUDITADO
+            // Usamos auditora_nome como proxy de "tem data de auditoria" (já que a coluna data deu erro)
+            const isAuditado = (d) => {
+                return d.auditora_nome && d.auditora_nome.trim() !== '';
+            };
+
+            // 3. Definição de NDF (Pela coluna DOCUMENTO)
+            const isNDFRegra = (d) => {
+                const doc = (d.documento || '').toUpperCase().trim();
+                return this.codigosNdfOficiais.includes(doc);
+            };
+
+            // --- CÁLCULO DOS CARDS ---
+
+            // CARD 1: Total de Erros Validados
+            // Regra: Erros que foram Auditados
+            const listaErrosValidados = dados.filter(d => isErro(d) && isAuditado(d));
+            if(elErrosValidados) elErrosValidados.innerText = listaErrosValidados.length;
+
+            // CARD 2: Total de Erros Gupy (Placeholder)
             if(elErrosGupy) elErrosGupy.innerText = "--"; 
-            const totalNdf = this.dadosNoksCache.filter(d => this.isNDF(d)).length;
-            if(elNdfTotal) elNdfTotal.innerText = totalNdf;
+
+            // CARD 3: Total de Erros NDF
+            // Regra: Contar coluna DOCUMENTO (independente de auditoria ou status NOK, pois NDF é um tipo de erro per se)
+            const listaNdfTotal = dados.filter(d => isNDFRegra(d));
+            if(elNdfTotal) elNdfTotal.innerText = listaNdfTotal.length;
+
+            // CARD 4: Erros NDF Auditados (Placeholder)
             if(elNdfAuditados) elNdfAuditados.innerText = "--";
 
-            if (this.dadosNoksCache.length === 0) {
+            // --- ALIMENTAÇÃO DO FEED E GRÁFICO ---
+            // O Feed mostra por padrão os Erros Validados (foco principal) + NDFs encontrados
+            // Unimos as listas relevantes para exibição
+            const listaVisualizacao = [...new Set([...listaErrosValidados, ...listaNdfTotal])];
+
+            if (listaVisualizacao.length === 0) {
                 this.renderizarVazio(containerFeed);
                 this.renderizarGraficoVazio();
                 return;
             }
 
-            this.atualizarGrafico();
-            this.atualizarFeedPorVisao();
+            this.atualizarGrafico(listaVisualizacao);
+            this.renderizarFeed(listaVisualizacao, containerFeed);
 
         } catch (err) {
             console.error("Erro Comparativo:", err);
@@ -85,8 +123,11 @@ MinhaArea.Comparativo = {
     },
 
     isNDF: function(d) {
+        // Wrapper para compatibilidade com funções visuais antigas
         const docOficial = (d.documento || '').toUpperCase().trim();
         if (this.codigosNdfOficiais.includes(docOficial)) return true;
+        
+        // Fallback visual para nomes (caso documento venha vazio do banco)
         const nomeDoc = (d.doc_name || '').trim();
         if (nomeDoc && this.listaNdfConhecidos.some(ndfName => nomeDoc.toLowerCase().includes(ndfName.toLowerCase()))) {
             return true;
@@ -105,14 +146,17 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        const filtrados = this.dadosNoksCache.filter(d => {
+        // Filtra sobre os dados brutos para permitir encontrar qualquer coisa
+        const filtrados = this.dadosBrutosCache.filter(d => {
             const nome = (d.doc_name || '').toLowerCase();
             const tipo = (this.getDocType(d) || '').toLowerCase();
             const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
             const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
             const docOficial = (d.documento || '').toLowerCase();
+            
             return nome.includes(termo) || tipo.includes(termo) || obs.includes(termo) || emp.includes(termo) || docOficial.includes(termo);
         });
+
         this.renderizarFeed(filtrados, document.getElementById('feed-erros-container'));
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) { btn.classList.remove('hidden'); btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar Busca`; }
@@ -122,7 +166,9 @@ MinhaArea.Comparativo = {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
         if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        this.atualizarGrafico();
+        // Recalcula gráfico com base no feed atual (não temos o contexto filtrado aqui, então pegamos do cache global por simplicidade ou idealmente guardaríamos o estado do filtro atual)
+        // Simplificação: Recarrega
+        this.carregar();
     },
 
     mudarVisao: function(novaVisao) {
@@ -133,63 +179,69 @@ MinhaArea.Comparativo = {
         const baseClass = "px-3 py-1 text-[10px] font-bold rounded transition ";
         const activeClass = "bg-white text-rose-600 shadow-sm";
         const inactiveClass = "text-slate-500 hover:bg-white";
+
         if(btnDoc) btnDoc.className = baseClass + (novaVisao === 'doc' ? activeClass : inactiveClass);
         if(btnEmpresa) btnEmpresa.className = baseClass + (novaVisao === 'empresa' ? activeClass : inactiveClass);
         if(btnNdf) btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
+
         this.limparFiltro(false);
-        this.atualizarGrafico();
-        this.atualizarFeedPorVisao();
+        // Filtra os dados base para a visão correta antes de atualizar
+        this.carregar(); 
     },
 
     filtrarPorSelecao: function(valor) {
+        const container = document.getElementById('feed-erros-container');
         let filtrados = [];
+        
+        // Filtra sobre o CACHE BRUTO para garantir que encontramos tudo
         if (this.visaoAtual === 'empresa') {
-            filtrados = this.dadosNoksCache.filter(d => {
+            filtrados = this.dadosBrutosCache.filter(d => {
                 const emp = d.empresa || d.empresa_nome || 'Desconhecida';
                 return emp.includes(valor.replace('...', ''));
             });
         } else if (this.visaoAtual === 'ndf') {
-            filtrados = this.dadosNoksCache.filter(d => {
+            filtrados = this.dadosBrutosCache.filter(d => {
                 if (!this.isNDF(d)) return false;
                 const identificador = d.documento || d.doc_name || 'Sem Nome';
                 return identificador.includes(valor.replace('...', ''));
             });
         } else {
-            filtrados = this.dadosNoksCache.filter(d => {
+            filtrados = this.dadosBrutosCache.filter(d => {
                 const tipo = this.getDocType(d);
                 if (valor === 'Documentos NDF') return this.isNDF(d);
                 return tipo.includes(valor.replace('...', ''));
             });
         }
+        
         this.aplicarFiltroVisual(filtrados, valor);
     },
 
-    atualizarGrafico: function() {
-        const agrupamento = {};
-        let dadosFiltrados = this.dadosNoksCache;
-        if (this.visaoAtual === 'ndf') dadosFiltrados = this.dadosNoksCache.filter(d => this.isNDF(d));
+    atualizarGrafico: function(dadosParaGrafico) {
+        const ctx = document.getElementById('graficoTopOfensores');
+        if (!ctx) return;
+        if (this.chartOfensores) this.chartOfensores.destroy();
 
-        dadosFiltrados.forEach(item => {
+        const agrupamento = {};
+        
+        dadosParaGrafico.forEach(item => {
+            // Se visão for NDF, só conta NDFs
+            if (this.visaoAtual === 'ndf' && !this.isNDF(item)) return;
+
             let chave = 'Outros';
             if (this.visaoAtual === 'empresa') chave = item.empresa || item.empresa_nome || 'Desconhecida';
             else if (this.visaoAtual === 'ndf') chave = item.documento || item.doc_name || 'Sem Nome';
             else chave = this.getDocType(item);
             
             if(chave.length > 25) chave = chave.substring(0, 22) + '...';
+            
             if (!agrupamento[chave]) agrupamento[chave] = 0;
             agrupamento[chave]++;
         });
 
         let dadosGrafico = Object.entries(agrupamento).sort((a, b) => b[1] - a[1]);
         if (!this.mostrarTodos) dadosGrafico = dadosGrafico.slice(0, 5);
-        this.renderizarGraficoOfensores(dadosGrafico);
-    },
 
-    atualizarFeedPorVisao: function() {
-        const container = document.getElementById('feed-erros-container');
-        let lista = this.dadosNoksCache;
-        if (this.visaoAtual === 'ndf') lista = this.dadosNoksCache.filter(d => this.isNDF(d));
-        this.renderizarFeed(lista, container);
+        this.renderizarGraficoOfensores(dadosGrafico);
     },
 
     aplicarFiltroVisual: function(lista, nomeFiltro) {
@@ -202,18 +254,20 @@ MinhaArea.Comparativo = {
     limparFiltro: function(renderizar = true) {
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) btn.classList.add('hidden');
-        if (renderizar) this.atualizarFeedPorVisao();
+        if (renderizar) this.carregar(); // Recarrega estado inicial
     },
 
-    renderizarFeed: function(listaNok, container) {
+    renderizarFeed: function(lista, container) {
         if(!container) return;
-        if (listaNok.length === 0) {
-            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado nesta visão.</div>';
+        if (lista.length === 0) {
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum registro encontrado.</div>';
             return;
         }
-        listaNok.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
+        
+        lista.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
+        
         let html = '';
-        listaNok.forEach(doc => {
+        lista.forEach(doc => {
             const data = doc.data_referencia ? new Date(doc.data_referencia).toLocaleDateString('pt-BR') : '-';
             const nome = doc.doc_name || 'Sem Nome';
             const tipo = this.getDocType(doc);
@@ -221,11 +275,30 @@ MinhaArea.Comparativo = {
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             const isNdf = this.isNDF(doc);
             const docOficial = doc.documento || '';
-            const borderClass = isNdf ? 'border-l-amber-500' : 'border-l-rose-500';
-            const badgeClass = isNdf ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600';
-            const badgeText = isNdf ? 'NDF' : 'NOK';
+            
+            // Badge Condicional
+            let badgeClass = 'bg-slate-100 text-slate-600';
+            let badgeText = 'AUDIT';
+            
+            if (isNdf) {
+                badgeClass = 'bg-amber-100 text-amber-700';
+                badgeText = 'NDF';
+            } else {
+                // Se não é NDF, verifica se é erro validado
+                const qtd = Number(doc.qtd_nok || 0);
+                const status = (doc.status || '').toUpperCase();
+                if (qtd > 0 || status.includes('NOK')) {
+                    badgeClass = 'bg-rose-50 text-rose-600';
+                    badgeText = 'NOK';
+                } else {
+                    badgeClass = 'bg-emerald-50 text-emerald-600';
+                    badgeText = 'OK';
+                }
+            }
+
+            const borderClass = isNdf ? 'border-l-amber-500' : (badgeText === 'NOK' ? 'border-l-rose-500' : 'border-l-emerald-500');
             const subtitulo = isNdf && docOficial ? docOficial : `${tipo}`;
-            const assistenteInfo = (!MinhaArea.getUsuarioAlvo()) ? `<span class="block text-[9px] text-blue-500 font-bold mt-1">👤 ${doc.assistente_nome || 'Assistente'}</span>` : '';
+            const assistenteInfo = (!MinhaArea.getUsuarioAlvo()) ? `<span class="block text-[9px] text-blue-500 font-bold mt-1">👤 ${doc.assistente_nome || 'Equipe'}</span>` : '';
 
             html += `
             <div class="bg-white p-4 rounded-lg border-l-4 ${borderClass} shadow-sm hover:shadow-md transition border border-slate-100 group">
@@ -255,7 +328,7 @@ MinhaArea.Comparativo = {
         if (this.visaoAtual === 'ndf') barColor = '#d97706';
         this.chartOfensores = new Chart(ctx, {
             type: 'bar',
-            data: { labels: labels, datasets: [{ label: 'Reprovações', data: values, backgroundColor: barColor, borderRadius: 4, barThickness: 20, hoverBackgroundColor: '#be123c' }] },
+            data: { labels: labels, datasets: [{ label: 'Ocorrências', data: values, backgroundColor: barColor, borderRadius: 4, barThickness: 20, hoverBackgroundColor: '#be123c' }] },
             options: {
                 indexAxis: 'y', responsive: true, maintainAspectRatio: false,
                 onClick: (e, elements) => { if (elements.length > 0) { const index = elements[0].index; _this.filtrarPorSelecao(labels[index]); } },
@@ -274,8 +347,8 @@ MinhaArea.Comparativo = {
         if (ctx && this.chartOfensores) this.chartOfensores.destroy();
     },
 
-    // --- ATUALIZAÇÃO 4: Lógica de Busca Condicional (Se uid=null, busca todos) ---
-    buscarAuditoriasPaginadas: async function(uid, inicio, fim) {
+    // --- BUSCA SEM FILTRO DE AUDITORIA (Traz tudo para calcular NDF Total) ---
+    buscarTudoPaginado: async function(uid, inicio, fim) {
         let todos = [];
         let page = 0;
         let continuar = true;
@@ -286,11 +359,9 @@ MinhaArea.Comparativo = {
                 .select('*')
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
-                .neq('auditora_nome', null)
-                .neq('auditora_nome', '')
                 .range(page*1000, (page+1)*1000-1);
 
-            // Só filtra por usuário SE um usuário estiver selecionado
+            // Filtro de usuário opcional (se uid nulo, traz geral)
             if (uid) {
                 query = query.eq('usuario_id', uid);
             }
