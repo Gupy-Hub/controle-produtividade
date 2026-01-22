@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Dash Visual Atualizado)
+   DESCRIÇÃO: Engine de Assertividade (Com Regra de Negócio NDF Estrita)
 */
 
 MinhaArea.Comparativo = {
@@ -8,7 +8,18 @@ MinhaArea.Comparativo = {
     visaoAtual: 'doc', 
     mostrarTodos: false,
 
-    // LISTA DE DOCUMENTOS CONHECIDOS COMO NDF (Fallback)
+    // REGRAS DE NEGÓCIO: Códigos Oficiais NDF (Coluna DOCUMENTO)
+    codigosNdfOficiais: [
+        'DOC_NDF_100%',
+        'DOC_NDF_CATEGORIA PROFISSIONAL',
+        'DOC_NDF_DEPENDENTE',
+        'DOC_NDF_ESTADO CIVIL',
+        'DOC_NDF_ESTRANGEIRO',
+        'DOC_NDF_LAUDO',
+        'DOC_NDF_OUTROS'
+    ],
+
+    // Fallback: Nomes conhecidos (usado apenas se a coluna DOCUMENTO estiver vazia)
     listaNdfConhecidos: [
         'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
         'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
@@ -35,19 +46,17 @@ MinhaArea.Comparativo = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         
-        // Elementos DOM (Cards Atualizados)
         const containerFeed = document.getElementById('feed-erros-container');
         const elErrosGeral = document.getElementById('total-nok-detalhe');
-        const elErrosGupy = document.getElementById('total-nok-gupy'); // Novo
-        const elNdfNaoAuditados = document.getElementById('total-ndf-detalhe'); // Renomeado Visualmente
-        const elNdfAuditados = document.getElementById('total-ndf-auditados'); // Novo
+        const elErrosGupy = document.getElementById('total-nok-gupy'); 
+        const elNdfTotal = document.getElementById('total-ndf-detalhe'); 
+        const elNdfAuditados = document.getElementById('total-ndf-auditados'); 
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
-            // Busca dados paginados
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
             // Filtra NOKs (Quantidade > 0 ou Status NOK/REPROVADO)
@@ -58,22 +67,22 @@ MinhaArea.Comparativo = {
                 return qtd > 0 || isNokStatus;
             });
             
-            // --- MÉTRICAS (Aguardando regras específicas) ---
+            // --- CÁLCULO DE KPIS ---
             
-            // 1. Erros Geral
+            // 1. Total de Erros Validados (Geral)
             if(elErrosGeral) elErrosGeral.innerText = this.dadosNoksCache.length;
             
-            // 2. Erros Doc Gupy (Placeholder)
+            // 2. Total de erros Gupy (Placeholder - Aguardando regra)
             if(elErrosGupy) elErrosGupy.innerText = "--"; 
 
-            // 3. Erros NDF (Atuais)
+            // 3. Total de Erros NDF (Regra Estrita: Coluna DOCUMENTO)
             const totalNdf = this.dadosNoksCache.filter(d => this.isNDF(d)).length;
-            if(elNdfNaoAuditados) elNdfNaoAuditados.innerText = totalNdf;
+            if(elNdfTotal) elNdfTotal.innerText = totalNdf;
 
-            // 4. Doc NDF Auditados (Placeholder)
+            // 4. Erros NDF Auditados (Placeholder - Aguardando regra)
             if(elNdfAuditados) elNdfAuditados.innerText = "--";
 
-            // ------------------------------------------------
+            // -----------------------
 
             if (this.dadosNoksCache.length === 0) {
                 this.renderizarVazio(containerFeed);
@@ -90,15 +99,19 @@ MinhaArea.Comparativo = {
         }
     },
 
-    // --- FUNÇÃO INTELIGENTE PARA DETECTAR NDF ---
+    // --- ENGINE NDF (Regra de Negócio) ---
     isNDF: function(d) {
-        const tipoOficial = (d.nome_documento || d.documento || '').toUpperCase();
-        if (tipoOficial.startsWith('DOC_NDF') || tipoOficial.includes('NDF')) return true;
+        // 1. Verifica coluna DOCUMENTO contra lista oficial (Prioridade Total)
+        const docOficial = (d.documento || '').toUpperCase().trim();
+        if (this.codigosNdfOficiais.includes(docOficial)) return true;
 
+        // 2. Fallback: Se não tem código oficial, tenta pelo nome do documento (Legado)
         const nomeDoc = (d.doc_name || '').trim();
-        return this.listaNdfConhecidos.some(ndfName => 
-            nomeDoc.toLowerCase().includes(ndfName.toLowerCase())
-        );
+        if (nomeDoc && this.listaNdfConhecidos.some(ndfName => nomeDoc.toLowerCase().includes(ndfName.toLowerCase()))) {
+            return true;
+        }
+
+        return false;
     },
 
     getDocType: function(d) {
@@ -118,7 +131,9 @@ MinhaArea.Comparativo = {
             const tipo = (this.getDocType(d) || '').toLowerCase();
             const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
             const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
-            return nome.includes(termo) || tipo.includes(termo) || obs.includes(termo) || emp.includes(termo);
+            const docOficial = (d.documento || '').toLowerCase();
+            
+            return nome.includes(termo) || tipo.includes(termo) || obs.includes(termo) || emp.includes(termo) || docOficial.includes(termo);
         });
 
         const container = document.getElementById('feed-erros-container');
@@ -167,12 +182,15 @@ MinhaArea.Comparativo = {
                 return emp.includes(valor.replace('...', ''));
             });
         } else if (this.visaoAtual === 'ndf') {
+            // Filtro específico dentro da visão NDF (ex: clicar na barra "DOC_NDF_100%")
             filtrados = this.dadosNoksCache.filter(d => {
                 if (!this.isNDF(d)) return false;
-                const nome = d.doc_name || d.nome_documento || 'Sem Nome';
-                return nome.includes(valor.replace('...', ''));
+                // Tenta casar pelo código oficial primeiro, depois pelo nome
+                const identificador = d.documento || d.doc_name || 'Sem Nome';
+                return identificador.includes(valor.replace('...', ''));
             });
         } else {
+            // Visão Geral
             filtrados = this.dadosNoksCache.filter(d => {
                 const tipo = this.getDocType(d);
                 if (valor === 'Documentos NDF') return this.isNDF(d);
@@ -196,12 +214,15 @@ MinhaArea.Comparativo = {
             if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
             } else if (this.visaoAtual === 'ndf') {
-                chave = item.doc_name || item.nome_documento || 'Sem Nome';
+                // Na visão NDF, mostramos o CÓDIGO OFICIAL se existir, senão o nome
+                chave = item.documento || item.doc_name || 'Sem Nome';
             } else {
                 chave = this.getDocType(item);
             }
             
+            // Limita tamanho do label
             if(chave.length > 25) chave = chave.substring(0, 22) + '...';
+            
             if (!agrupamento[chave]) agrupamento[chave] = 0;
             agrupamento[chave]++;
         });
@@ -254,16 +275,21 @@ MinhaArea.Comparativo = {
             const empresa = doc.empresa || doc.empresa_nome || '';
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             const isNdf = this.isNDF(doc);
+            const docOficial = doc.documento || ''; // Mostra o código NDF se houver
+
             const borderClass = isNdf ? 'border-l-amber-500' : 'border-l-rose-500';
             const badgeClass = isNdf ? 'bg-amber-100 text-amber-700' : 'bg-rose-50 text-rose-600';
             const badgeText = isNdf ? 'NDF' : 'NOK';
+
+            // Subtitulo inteligente: mostra o código oficial se for NDF
+            const subtitulo = isNdf && docOficial ? docOficial : `${tipo}`;
 
             html += `
             <div class="bg-white p-4 rounded-lg border-l-4 ${borderClass} shadow-sm hover:shadow-md transition border border-slate-100 group">
                 <div class="flex justify-between items-start mb-2">
                     <div>
                         <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">
-                            ${data} • ${tipo} ${empresa ? '• ' + empresa : ''}
+                            ${data} • ${subtitulo} ${empresa ? '• ' + empresa : ''}
                         </span>
                         <h4 class="font-bold text-slate-700 text-sm leading-tight group-hover:text-rose-600 transition">${nome}</h4>
                     </div>
@@ -335,6 +361,7 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         while(continuar) {
+            // Nota: Buscamos '*', então 'documento' virá junto
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
