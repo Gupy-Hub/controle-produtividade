@@ -1,3 +1,7 @@
+/* ARQUIVO: js/produtividade/geral.js
+   DESCRIÇÃO: Engine V34 (Com Regra de Visibilidade Inteligente para Admin/Gestão)
+*/
+
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -7,7 +11,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V33 (Full Stable - Abono & Meta Proporcional)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V34 (Smart Visibility)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -85,11 +89,11 @@ Produtividade.Geral = {
                     funcao: row.funcao,
                     contrato: row.contrato
                 },
-                meta_real: row.meta_producao, // Meta Base (ex: 130)
+                meta_real: row.meta_producao, 
                 meta_assertividade: row.meta_assertividade,
                 totais: {
                     qty: row.total_qty,
-                    diasUteis: Number(row.total_dias_uteis), // Fator (ex: 1.0 ou 0.5)
+                    diasUteis: Number(row.total_dias_uteis),
                     justificativa: row.justificativas, 
                     fifo: row.total_fifo,
                     gt: row.total_gt,
@@ -126,8 +130,16 @@ Produtividade.Geral = {
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
 
+        // --- NOVA LÓGICA DE FILTRO INTELIGENTE ---
         if (!mostrarGestao && !this.usuarioSelecionado) {
-            lista = lista.filter(d => !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()));
+            lista = lista.filter(d => {
+                const funcao = (d.usuario.funcao || '').toUpperCase();
+                const isGestao = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN'].includes(funcao);
+                const temProducao = Number(d.totais.qty) > 0;
+                
+                // MOSTRA SE: Não for gestão OU (For gestão MAS produziu algo)
+                return !isGestao || temProducao;
+            });
         }
 
         const listaComDados = lista.filter(d => Number(d.totais.qty) > 0 || Number(d.auditoria.qtd) > 0);
@@ -140,7 +152,6 @@ Produtividade.Geral = {
             let conteudoHTML = '';
 
             if (isDia) {
-                // Layout Animado "Hoje é Folga"
                 conteudoHTML = `
                     <div class="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in select-none">
                         <div class="relative">
@@ -157,14 +168,10 @@ Produtividade.Geral = {
                             <p class="text-slate-400 font-medium text-lg">
                                 Recarregue as energias! 🔋✨
                             </p>
-                            <span class="inline-block px-4 py-1 bg-amber-50 text-amber-600 rounded-full text-xs font-bold border border-amber-100 mt-2">
-                                <i class="fas fa-calendar-times mr-1"></i> Sem expediente registrado
-                            </span>
                         </div>
                     </div>
                 `;
             } else {
-                // Layout Vazio Genérico
                 conteudoHTML = `
                     <div class="flex flex-col items-center justify-center gap-3 py-16 animate-fade-in">
                         <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
@@ -188,14 +195,10 @@ Produtividade.Geral = {
         listaComDados.sort((a,b) => (a.usuario.nome||'').localeCompare(b.usuario.nome||''));
 
         const htmlParts = listaComDados.map(d => {
-            // CÁLCULO DE META PROPORCIONAL
-            const metaBaseDia = d.meta_real; // Ex: 130
-            const fatorDias = d.totais.diasUteis; // Ex: 0.5
-            
-            // Meta ajustada: 130 * 0.5 = 65
+            const metaBaseDia = d.meta_real; 
+            const fatorDias = d.totais.diasUteis; 
             const metaProporcional = Math.round(metaBaseDia * fatorDias);
             
-            // Atingimento sobre a meta proporcional
             const atingimento = (metaProporcional > 0) 
                 ? (d.totais.qty / metaProporcional) * 100 
                 : 0;
@@ -239,14 +242,17 @@ Produtividade.Geral = {
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
-            
-            // Estilo do Fator (Abono)
             const styleAbono = (isAbonado || temJustificativa) 
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
                 : 'font-mono text-slate-500';
 
+            // Destaque visual se for Admin/Gestor
+            const cargo = (d.usuario.funcao || 'ND').toUpperCase();
+            const isAdmin = ['ADMINISTRADOR', 'ADMIN', 'GESTORA'].includes(cargo);
+            const styleCargo = isAdmin ? 'text-indigo-600 bg-indigo-50 px-1 rounded border border-indigo-100' : 'text-slate-400';
+
             return `
-            <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600">
+            <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 group text-xs text-slate-600 ${isAdmin ? 'bg-indigo-50/10' : ''}">
                 <td class="px-2 py-3 text-center bg-slate-50/30">
                     <input type="checkbox" class="check-user cursor-pointer" value="${d.usuario.id}">
                 </td>
@@ -256,7 +262,7 @@ Produtividade.Geral = {
                 <td class="px-3 py-3 font-bold text-slate-700 group-hover:text-blue-600 transition cursor-pointer" onclick="Produtividade.Geral.filtrarUsuario('${d.usuario.id}', '${d.usuario.nome}')">
                     <div class="flex flex-col">
                         <span class="truncate max-w-[150px]" title="${d.usuario.nome}">${d.usuario.nome}</span>
-                        <span class="text-[9px] text-slate-400 font-normal uppercase">${d.usuario.funcao || 'ND'}</span>
+                        <span class="text-[9px] font-normal uppercase ${styleCargo}">${d.usuario.funcao || 'ND'}</span>
                     </div>
                 </td>
                 
@@ -270,24 +276,11 @@ Produtividade.Geral = {
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.fifo}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gt}</td>
                 <td class="px-2 py-3 text-center text-slate-500">${d.totais.gp}</td>
-                
                 <td class="px-2 py-3 text-center bg-slate-50/30 text-slate-400 font-mono text-[10px]">${metaBaseDia}</td>
-                
-                <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">
-                    ${metaProporcional.toLocaleString('pt-BR')}
-                </td>
-
-                <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">
-                    ${d.totais.qty.toLocaleString('pt-BR')}
-                </td>
-                
-                <td class="px-2 py-3 text-center ${corProducao} ${corProducaoBg}">
-                    ${atingimento.toFixed(1)}%
-                </td>
-                
-                <td class="px-2 py-2 text-center border-l border-slate-100 align-middle">
-                    ${htmlAssertividade}
-                </td>
+                <td class="px-2 py-3 text-center font-bold text-slate-600 bg-slate-50/50">${metaProporcional.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center font-black text-blue-700 bg-blue-50/30 border-x border-blue-100 text-sm">${d.totais.qty.toLocaleString('pt-BR')}</td>
+                <td class="px-2 py-3 text-center ${corProducao} ${corProducaoBg}">${atingimento.toFixed(1)}%</td>
+                <td class="px-2 py-2 text-center border-l border-slate-100 align-middle">${htmlAssertividade}</td>
             </tr>`;
         });
 
@@ -334,18 +327,19 @@ Produtividade.Geral = {
 
         dados.forEach(d => {
             const funcao = (d.usuario.funcao || '').toUpperCase();
-            const isAssistente = !['AUDITORA', 'GESTORA'].includes(funcao);
+            // KPI Global considera todos que produzem, não só assistentes
+            const isAssistente = !['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN'].includes(funcao);
+            const hasProduction = Number(d.totais.qty) > 0;
             
             const diasUser = Number(d.totais.diasUteis);
             const prodUser = Number(d.totais.qty);
-            
-            // Meta considera o fator (Proporcional)
             const metaUser = Number(d.meta_real) * diasUser;
 
             totalProdGeral += prodUser;
             totalMetaGeral += metaUser;
 
-            if (isAssistente || isFiltrado) {
+            // Para KPIs de capacidade/média, incluímos Admin se ele produziu
+            if (isAssistente || isFiltrado || hasProduction) {
                 if (diasUser > 0 || prodUser > 0) ativosCountAssistentes++;
                 manDaysAssistentes += diasUser;
                 totalMetaAssistentes += metaUser;
@@ -371,7 +365,6 @@ Produtividade.Geral = {
         const barCap = document.getElementById('bar-capacidade');
         if(barCap) barCap.style.width = Math.min(capPct, 100) + '%';
 
-        // Velocidade Média
         const divisor = manDaysAssistentes > 0 ? manDaysAssistentes : 1;
         const velReal = Math.round(totalProdGeral / divisor); 
         const velMeta = Math.round(totalMetaAssistentes / divisor);
@@ -390,10 +383,8 @@ Produtividade.Geral = {
     },
 
     renderTopLists: function(dados) {
-        const op = dados.filter(d => 
-            !['AUDITORA', 'GESTORA'].includes((d.usuario.funcao || '').toUpperCase()) &&
-            Number(d.totais.qty) > 0
-        );
+        // Ranking inclui Admin se tiver produção
+        const op = dados.filter(d => Number(d.totais.qty) > 0);
         
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
@@ -420,7 +411,6 @@ Produtividade.Geral = {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
         
-        // 1. Tenta pegar a data do filtro (se for dia) ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
             dataAlvo = prompt("📅 Aplicar Abono em Massa.\n\nDigite a data alvo (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
@@ -448,7 +438,6 @@ Produtividade.Geral = {
 
         for (const chk of checks) {
             try {
-                // Chama a RPC que você criou no SQL
                 await Sistema.supabase.rpc('abonar_producao', {
                     p_usuario_id: chk.value, 
                     p_data: dataAlvo, 
@@ -464,10 +453,8 @@ Produtividade.Geral = {
     },
 
     mudarFator: async function(uid, fatorAtual) {
-        // 1. Tenta pegar a data ou pergunta
         let dataAlvo = document.getElementById('sel-data-dia')?.value; 
         if (!dataAlvo || Produtividade.filtroPeriodo !== 'dia') {
-             // Se não tiver data selecionada (ex: vendo mês), pede para confirmar qual dia quer abonar
              dataAlvo = prompt("📅 Qual data você deseja abonar? (AAAA-MM-DD):", new Date().toISOString().split('T')[0]);
              if (!dataAlvo) return;
         }
@@ -494,9 +481,7 @@ Produtividade.Geral = {
             });
 
             if (error) throw error;
-            console.log("Abono aplicado com sucesso.");
             this.carregarTela();
-
         } catch (error) { 
             console.error(error);
             alert("Erro ao abonar: " + error.message); 
@@ -512,9 +497,7 @@ Produtividade.Geral = {
         try {
             const { error } = await Sistema.supabase.from('producao').delete().eq('data_referencia', dt);
             if(error) throw error;
-            
             await Sistema.supabase.from('assertividade').delete().eq('data_referencia', dt);
-
             alert("✅ Dados do dia excluídos com sucesso."); 
             this.carregarTela();
         } catch (e) {
