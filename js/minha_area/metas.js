@@ -1,3 +1,8 @@
+/* ARQUIVO: js/minha_area/metas.js
+   DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
+   CORREÇÃO: Ajuste de colunas da tabela assertividade (Schema V3)
+*/
+
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
@@ -18,14 +23,21 @@ MinhaArea.Metas = {
         try {
             // 1. Buscas Básicas
             const [prodRes, metasRes] = await Promise.all([
-                Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
-                Sistema.supabase.from('metas').select('mes, ano, meta, meta_assertividade').eq('usuario_id', uid).gte('ano', anoInicio).lte('ano', anoFim)
+                Sistema.supabase.from('producao')
+                    .select('*')
+                    .eq('usuario_id', uid)
+                    .gte('data_referencia', inicio)
+                    .lte('data_referencia', fim),
+                Sistema.supabase.from('metas')
+                    .select('mes, ano, meta, meta_assertividade')
+                    .eq('usuario_id', uid)
+                    .gte('ano', anoInicio)
+                    .lte('ano', anoFim)
             ]);
 
             if (prodRes.error) throw prodRes.error;
 
-            // 2. BUSCA ROBUSTA DE AUDITORIA (Paginada)
-            // Trazemos tudo para o volume, mas filtraremos para a assertividade
+            // 2. BUSCA ROBUSTA DE AUDITORIA (Paginada e Corrigida)
             const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
             console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
 
@@ -45,16 +57,18 @@ MinhaArea.Metas = {
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
             assertData.forEach(a => {
-                const dataKey = a.data_auditoria ? a.data_auditoria.split('T')[0] : null;
+                // CORREÇÃO: Usar data_referencia
+                const dataKey = a.data_referencia ? a.data_referencia.split('T')[0] : null;
                 if (!dataKey) return;
 
-                // FILTRO DO GRÁFICO: Só adiciona se for status válido (OK, NOK, JUST, REC)
+                // FILTRO DO GRÁFICO: Só adiciona se for status válido
                 const status = (a.status || '').toUpperCase();
                 if (STATUS_IGNORAR.includes(status)) return; 
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                 
-                let valStr = String(a.porcentagem || '0').replace('%','').replace(',','.');
+                // CORREÇÃO: Usar porcentagem_assertividade
+                let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
                 let val = parseFloat(valStr);
                 
                 if (!isNaN(val)) {
@@ -148,6 +162,9 @@ MinhaArea.Metas = {
 
         } catch (err) {
             console.error("❌ Erro Metas:", err);
+            // Fallback visual
+            const container = document.getElementById('chart-container-wrapper'); // Se existir
+            if(container) container.innerHTML = `<div class="text-red-500 text-center py-10">Erro ao carregar gráficos: ${err.message}</div>`;
         }
     },
 
@@ -158,14 +175,15 @@ MinhaArea.Metas = {
         let continuar = true;
 
         while(continuar) {
+            // CORREÇÃO: Colunas corretas do banco
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*') 
                 .eq('usuario_id', uid)
-                .gte('data_auditoria', inicio)
-                .lte('data_auditoria', fim)
-                .neq('auditora', null) 
-                .neq('auditora', '')
+                .gte('data_referencia', inicio) // CORRIGIDO
+                .lte('data_referencia', fim)    // CORRIGIDO
+                .neq('auditora_nome', null)     // CORRIGIDO (era auditora)
+                .neq('auditora_nome', '')       // CORRIGIDO
                 .range(page * size, (page + 1) * size - 1);
 
             if(error) {
@@ -173,9 +191,13 @@ MinhaArea.Metas = {
                 throw error;
             }
 
-            todos = todos.concat(data);
-            if(data.length < size) continuar = false;
-            else page++;
+            if (!data || data.length === 0) {
+                continuar = false;
+            } else {
+                todos = todos.concat(data);
+                if(data.length < size) continuar = false;
+                else page++;
+            }
         }
         return todos;
     },
@@ -188,7 +210,6 @@ MinhaArea.Metas = {
         let totalOk = 0;
         let totalNok = 0;
 
-        // Lista de status neutros (Igual ao gráfico)
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
         const mapProd = new Map();
@@ -215,28 +236,23 @@ MinhaArea.Metas = {
         asserts.forEach(a => {
             const status = (a.status || '').toUpperCase();
             
-            // Só entra na conta de média se NÃO for neutro
             if (!STATUS_IGNORAR.includes(status)) {
-                let val = parseFloat(String(a.porcentagem).replace('%','').replace(',','.'));
+                // CORREÇÃO: usar porcentagem_assertividade
+                let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { 
                     somaAssert += val; 
                     qtdAssert++; 
                 }
             }
             
-            // Contagem OK/NOK (Independente da média)
             if (Number(a.qtd_nok) > 0) totalNok++; 
             if (status === 'OK') totalOk++; 
         });
 
         const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
-        
-        // Volume: Aqui contamos TUDO (incluindo REV, EMPR) porque foi trabalho feito
         const totalAuditados = asserts.length; 
-        
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
 
-        // --- UPDATE UI ---
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
