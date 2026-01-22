@@ -1,3 +1,7 @@
+/* ARQUIVO: js/login.js
+   DESCRIÇÃO: Módulo de Autenticação (Com Redirecionamento Robusto)
+*/
+
 const Login = {
     init: function() {
         // Verifica se o Sistema foi carregado corretamente
@@ -34,10 +38,7 @@ const Login = {
         if(msgErro) msgErro.classList.add('hidden');
 
         try {
-            // --- CHAMADA SEGURA AO BANCO ---
-            // O frontend envia a senha "limpa" via HTTPS.
-            // O Banco (SQL) faz o Hash e compara, garantindo segurança total.
-            
+            // Chamada segura ao banco (RPC verifica o hash)
             const { data, error } = await Sistema.supabase.rpc('api_login', { 
                 p_id: parseInt(id), 
                 p_senha: senha 
@@ -48,19 +49,17 @@ const Login = {
             // --- SUCESSO ---
             Sistema.salvarSessao(data);
 
-            // 1. Verificação de Troca de Senha Obrigatória
+            // 1. Verificação de Troca de Senha
             if (data.trocar_senha === true) {
                 alert("⚠️ AVISO DE SEGURANÇA:\n\nSua senha foi resetada pelo administrador.\nPor favor, defina uma nova senha assim que acessar o sistema.");
-                // Futuramente, aqui redirecionaremos para uma tela de 'trocar_senha.html'
             }
             
-            // 2. Redirecionamento baseado no Perfil
+            // 2. Redirecionamento
             this.redirecionar(data);
 
         } catch (error) {
             console.error("Erro Login:", error);
             
-            // Tratamento de Erros Específicos do SQL (RPC)
             if (error.code === 'P0001') {
                 this.mostrarErro('Senha incorreta.');
             } else if (error.code === 'P0002') {
@@ -71,7 +70,6 @@ const Login = {
                 this.mostrarErro('Erro ao conectar: ' + (error.message || 'Erro desconhecido'));
             }
         } finally {
-            // Restaura o botão se algo der errado (se der certo, a página muda antes)
             if (btn) {
                 btn.innerHTML = textoOriginal;
                 btn.disabled = false;
@@ -80,9 +78,19 @@ const Login = {
     },
 
     redirecionar: function(usuario) {
-        if (usuario.perfil === 'admin' || usuario.perfil === 'gestor') {
+        // Normaliza o perfil para evitar erros de Maiúscula/Minúscula
+        const perfil = (usuario.perfil || '').toLowerCase().trim();
+        const funcao = (usuario.funcao || '').toLowerCase().trim();
+
+        // Lista de perfis permitidos na Gestão
+        const perfisGestao = ['admin', 'administrador', 'gestor', 'gestora'];
+
+        // Verifica se o perfil OU a função dão acesso à gestão
+        if (perfisGestao.includes(perfil) || perfisGestao.includes(funcao)) {
+            console.log("🔒 Acesso concedido: Painel de Gestão");
             window.location.href = 'gestao.html';
         } else {
+            console.log("👤 Acesso concedido: Minha Área");
             window.location.href = 'minha_area.html';
         }
     },
@@ -98,8 +106,7 @@ const Login = {
     }
 };
 
-// Inicializa o módulo quando a página carregar
+// Inicializa o módulo
 document.addEventListener('DOMContentLoaded', () => {
-    // Pequeno delay para garantir que config.js e sistema.js carregaram
     setTimeout(() => Login.init(), 100);
 });
