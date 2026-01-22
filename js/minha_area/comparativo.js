@@ -1,11 +1,15 @@
+/* ARQUIVO: js/minha_area/comparativo.js
+   DESCRIÇÃO: Engine de Assertividade e Ofensores (Minha Área)
+   CORREÇÃO: Atualização de nomes de colunas (data_referencia, auditora_nome)
+*/
+
 MinhaArea.Comparativo = {
     chartOfensores: null,
     dadosNoksCache: [],
     visaoAtual: 'doc', 
     mostrarTodos: false,
 
-    // LISTA DE DOCUMENTOS CONHECIDOS COMO NDF (Extraída da análise)
-    // Se o banco não tem a coluna DOC_NDF, usamos esta lista como referência.
+    // LISTA DE DOCUMENTOS CONHECIDOS COMO NDF (Fallback)
     listaNdfConhecidos: [
         'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
         'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
@@ -41,17 +45,20 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados...</div>';
 
         try {
+            // Busca dados paginados com colunas corrigidas
             const dados = await this.buscarAuditoriasPaginadas(uid, inicio, fim);
 
+            // Filtra NOKs (Quantidade > 0 ou Status NOK/REPROVADO)
             this.dadosNoksCache = dados.filter(d => {
                 const qtd = Number(d.qtd_nok || 0);
-                const isNokStatus = (d.status || '').toUpperCase() === 'NOK';
+                const status = (d.status || '').toUpperCase();
+                const isNokStatus = status.includes('NOK') || status.includes('REPROV');
                 return qtd > 0 || isNokStatus;
             });
             
             if(containerTotal) containerTotal.innerText = this.dadosNoksCache.length;
             
-            // Contagem NDF usando a nova lógica robusta
+            // Contagem NDF
             const totalNdf = this.dadosNoksCache.filter(d => this.isNDF(d)).length;
             if(containerNdf) containerNdf.innerText = totalNdf;
 
@@ -65,33 +72,28 @@ MinhaArea.Comparativo = {
             this.atualizarFeedPorVisao();
 
         } catch (err) {
-            console.error(err);
-            if(containerFeed) containerFeed.innerHTML = '<div class="text-rose-500 text-center py-8">Erro ao carregar dashboard.</div>';
+            console.error("Erro Comparativo:", err);
+            if(containerFeed) containerFeed.innerHTML = `<div class="text-rose-500 text-center py-8">Erro ao carregar dashboard: ${err.message}</div>`;
         }
     },
 
     // --- FUNÇÃO INTELIGENTE PARA DETECTAR NDF ---
     isNDF: function(d) {
-        // 1. Tenta pelo código oficial (caso um dia a coluna exista)
+        // 1. Tenta pelo código oficial
         const tipoOficial = (d.nome_documento || d.documento || '').toUpperCase();
         if (tipoOficial.startsWith('DOC_NDF') || tipoOficial.includes('NDF')) return true;
 
         // 2. Tenta pela lista de nomes conhecidos (Fallback)
         const nomeDoc = (d.doc_name || '').trim();
-        // Verifica se o nome do documento contém algum termo da lista (match parcial para ser mais seguro)
         return this.listaNdfConhecidos.some(ndfName => 
             nomeDoc.toLowerCase().includes(ndfName.toLowerCase())
         );
     },
 
     getDocType: function(d) {
-        // Se for NDF, retorna o nome amigável "Documento NDF" para agrupamento
         if (this.isNDF(d)) return "Documentos NDF";
         return d.doc_name || d.nome_documento || 'Geral';
     },
-
-    // ... (MANTENHA AS OUTRAS FUNÇÕES IGUAIS: filtrarPorBusca, toggleMostrarTodos, mudarVisao, etc) ...
-    // ... Vou repetir as principais abaixo para garantir o arquivo completo ...
 
     filtrarPorBusca: function(texto) {
         if (!texto || texto.trim() === '') {
@@ -136,9 +138,9 @@ MinhaArea.Comparativo = {
         const activeClass = "bg-white text-rose-600 shadow-sm";
         const inactiveClass = "text-slate-500 hover:bg-white";
 
-        btnDoc.className = baseClass + (novaVisao === 'doc' ? activeClass : inactiveClass);
-        btnEmpresa.className = baseClass + (novaVisao === 'empresa' ? activeClass : inactiveClass);
-        btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
+        if(btnDoc) btnDoc.className = baseClass + (novaVisao === 'doc' ? activeClass : inactiveClass);
+        if(btnEmpresa) btnEmpresa.className = baseClass + (novaVisao === 'empresa' ? activeClass : inactiveClass);
+        if(btnNdf) btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
 
         this.limparFiltro(false);
         this.atualizarGrafico();
@@ -155,7 +157,6 @@ MinhaArea.Comparativo = {
         } else {
             filtrados = this.dadosNoksCache.filter(d => {
                 const tipo = this.getDocType(d);
-                // Se o valor for "Documentos NDF", filtra todos os NDFs
                 if (valor === 'Documentos NDF') return this.isNDF(d);
                 return tipo.includes(valor.replace('...', ''));
             });
@@ -176,15 +177,12 @@ MinhaArea.Comparativo = {
             if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
             } else {
-                chave = this.getDocType(item); // Agora usa a função getDocType inteligente
+                chave = this.getDocType(item);
             }
             if(chave.length > 25) chave = chave.substring(0, 22) + '...';
             if (!agrupamento[chave]) agrupamento[chave] = 0;
             agrupamento[chave]++;
         });
-
-        const containerTotal = document.getElementById('total-nok-detalhe');
-        if(containerTotal) containerTotal.innerText = dadosFiltrados.length;
 
         let dadosGrafico = Object.entries(agrupamento).sort((a, b) => b[1] - a[1]);
         if (!this.mostrarTodos) dadosGrafico = dadosGrafico.slice(0, 5);
@@ -223,12 +221,16 @@ MinhaArea.Comparativo = {
             container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado nesta visão.</div>';
             return;
         }
-        listaNok.sort((a, b) => new Date(b.data_auditoria) - new Date(a.data_auditoria));
+        
+        // CORREÇÃO: Usar data_referencia para ordenar
+        listaNok.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
+        
         let html = '';
         listaNok.forEach(doc => {
-            const data = doc.data_auditoria ? new Date(doc.data_auditoria).toLocaleDateString('pt-BR') : '-';
+            // CORREÇÃO: Usar data_referencia para exibir
+            const data = doc.data_referencia ? new Date(doc.data_referencia).toLocaleDateString('pt-BR') : '-';
             const nome = doc.doc_name || 'Sem Nome';
-            const tipo = this.getDocType(doc); // Agora mostra "Documentos NDF" se for o caso
+            const tipo = this.getDocType(doc);
             const empresa = doc.empresa || doc.empresa_nome || '';
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             const isNdf = this.isNDF(doc);
@@ -313,14 +315,15 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         while(continuar) {
+            // CORREÇÃO: Colunas data_referencia e auditora_nome
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*')
                 .eq('usuario_id', uid)
-                .gte('data_auditoria', inicio)
-                .lte('data_auditoria', fim)
-                .neq('auditora', null)
-                .neq('auditora', '')
+                .gte('data_referencia', inicio) // CORRIGIDO
+                .lte('data_referencia', fim)    // CORRIGIDO
+                .neq('auditora_nome', null)     // CORRIGIDO (era auditora)
+                .neq('auditora_nome', '')       // CORRIGIDO
                 .range(page*1000, (page+1)*1000-1);
             
             if(error) throw error;
