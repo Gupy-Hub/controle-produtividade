@@ -82,39 +82,48 @@
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
             <div id="container-checkin-alert" class="hidden mb-4"></div>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div class="kpi-card border-l-4 border-l-blue-500"><i class="fas fa-cubes kpi-icon-bg text-blue-500"></i><div><div class="kpi-title text-blue-600">Volume Produzido</div><div class="kpi-main-val text-slate-800" id="kpi-total">--</div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-volume" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Meta Esperada:</span><span id="kpi-meta-acumulada" class="font-bold text-blue-600">--</span></div></div>
-                <div class="kpi-card border-l-4 border-l-emerald-500"><i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i><div><div class="kpi-title text-emerald-600">Qualidade</div><div class="flex items-baseline gap-2"><span class="kpi-main-val text-emerald-700" id="kpi-assertividade-val">--%</span><span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span></div></div><div class="kpi-sub-row text-slate-500"><span>Atingimento:</span><span id="kpi-pct" class="font-bold text-emerald-600">--%</span></div></div>
-                <div class="kpi-card border-l-4 border-l-purple-500"><i class="fas fa-calendar-check kpi-icon-bg text-purple-500"></i><div><div class="kpi-title text-purple-600">Dias Produtivos</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="kpi-dias">--</span><span class="text-[9px] font-bold text-slate-400">dias</span></div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-dias" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-purple-600">--</span></div></div>
-                <div class="kpi-card border-l-4 border-l-amber-500"><i class="fas fa-bolt kpi-icon-bg text-amber-500"></i><div><div class="kpi-title text-amber-600">Velocidade</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="kpi-media">--</span><span class="text-[10px] text-slate-400 font-bold mb-1">docs/dia</span></div></div><div class="kpi-sub-row text-slate-500"><span>Meta Ideal:</span><span id="kpi-meta-dia" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--</span></div></div>
+           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    
+    <div class="bg-white p-5 rounded-2xl border border-rose-100 shadow-sm relative overflow-hidden group">
+        <div class="flex justify-between items-start">
+            <div>
+                <p class="text-xs font-bold text-rose-400 uppercase tracking-wider">Total de Erros Validados</p>
+                <h3 class="text-3xl font-black text-rose-600 mt-1" id="total-nok-detalhe">--</h3>
             </div>
-            <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]">
-                <div class="overflow-auto custom-scrollbar flex-1">
-                    <table class="w-full text-sm text-left border-collapse">
-                        <thead class="bg-slate-50 text-slate-600 font-bold uppercase text-[10px] tracking-wide sticky top-0 z-10 shadow-sm">
-                            <tr class="divide-x divide-slate-200 border-b border-slate-300">
-                                <th class="px-3 py-3 w-[10%] text-left">Data</th>
-                                <th class="px-2 py-3 w-[6%] text-center">Fator</th>
-                                <th class="px-2 py-3 w-[6%] text-center">FIFO</th>
-                                <th class="px-2 py-3 w-[6%] text-center">G. Total</th>
-                                <th class="px-2 py-3 w-[6%] text-center">G. Parcial</th>
-                                <th class="px-2 py-3 w-[8%] text-center bg-blue-50/50 text-blue-700 border-x border-blue-100">Produção</th>
-                                <th class="px-2 py-3 w-[8%] text-center">Meta Prod.</th>
-                                <th class="px-2 py-3 w-[6%] text-center">% Prod.</th>
-                                <th class="px-2 py-3 w-[8%] text-center">Meta Assert.</th>
-                                <th class="px-2 py-3 w-[6%] text-center">% Assert.</th>
-                                <th class="px-3 py-3 text-left">Observação</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tabela-extrato" class="divide-y divide-slate-200 bg-white"></tbody>
-                    </table>
-                </div>
-                <div class="bg-slate-50 border-t border-slate-200 px-4 py-2 text-[10px] text-slate-500 font-bold flex justify-between items-center">
-                    <span><i class="fas fa-table mr-1"></i> Visão de Grade</span>
-                    <span>Total Registros: <span id="total-registros-footer">--</span></span>
-                </div>
+            <div class="bg-rose-50 p-3 rounded-xl text-rose-500 group-hover:scale-110 transition"><i class="fas fa-bug"></i></div>
+        </div>
+        
+        <div class="my-3 border-t border-rose-50"></div>
+
+        <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-slate-400 uppercase">Total de erros Gupy</span>
+            <div class="flex items-center gap-2">
+                <span class="text-lg font-black text-slate-600" id="total-nok-gupy">--</span>
+                <span class="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">Gupy</span>
             </div>
         </div>
+    </div>
+
+    <div class="bg-white p-5 rounded-2xl border border-amber-100 shadow-sm relative overflow-hidden group">
+        <div class="flex justify-between items-start">
+            <div>
+                <p class="text-xs font-bold text-amber-400 uppercase tracking-wider">Total de Erros NDF</p>
+                <h3 class="text-3xl font-black text-amber-600 mt-1" id="total-ndf-detalhe">--</h3>
+            </div>
+            <div class="bg-amber-50 p-3 rounded-xl text-amber-500 group-hover:scale-110 transition"><i class="fas fa-file-contract"></i></div>
+        </div>
+
+        <div class="my-3 border-t border-amber-50"></div>
+
+        <div class="flex justify-between items-center">
+            <span class="text-[11px] font-bold text-slate-400 uppercase">Erros NDF Auditados</span>
+            <div class="flex items-center gap-2">
+                <span class="text-lg font-black text-slate-600" id="total-ndf-auditados">--</span>
+                <span class="text-[9px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded border border-emerald-100">Auditados</span>
+            </div>
+        </div>
+    </div>
+</div>
 
         <div id="ma-tab-metas" class="ma-view hidden animate-enter space-y-6">
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
