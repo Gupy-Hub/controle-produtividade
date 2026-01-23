@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Regras V3: Definição Gupy vs NDF)
+   DESCRIÇÃO: Engine de Assertividade (Regras V4: Alinhamento Matemático Estrito)
 */
 
 MinhaArea.Comparativo = {
@@ -7,37 +7,6 @@ MinhaArea.Comparativo = {
     dadosBrutosCache: [], // Cache de todos os dados
     visaoAtual: 'doc', 
     mostrarTodos: false,
-
-    // REGRAS DE NEGÓCIO: Códigos Oficiais NDF
-    codigosNdfOficiais: [
-        'DOC_NDF_100%',
-        'DOC_NDF_CATEGORIA PROFISSIONAL',
-        'DOC_NDF_DEPENDENTE',
-        'DOC_NDF_ESTADO CIVIL',
-        'DOC_NDF_ESTRANGEIRO',
-        'DOC_NDF_LAUDO',
-        'DOC_NDF_OUTROS'
-    ],
-
-    // Fallback para visualização
-    listaNdfConhecidos: [
-        'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
-        'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
-        'Registro Órgão de Classe', 'Regularização do Conselho Profissional', 
-        'Certificado de Curso Técnico', 'Foto para Crachá', 'Informações para agendamento do ASO', 
-        'Declaração de Imposto de Renda', 'Passaporte', 'Visto Brasileiro para estrangeiros', 
-        'Contato de Emergência', 'CNH do Cônjuge', 'Visto', 'Formulário Allya', 
-        'Cartão de Vacinação', 'Dados Bancários - Santander', 'Escolaridade', 
-        'Cartão de Transporte', 'Curso ou certificação', 'Vale Transporte - Roteiro',
-        'ASO - Atestado de Saúde Ocupacional', 'Laudo MTE', 'Imposto de Renda', 
-        'Multiplos vínculos', 'Registro de Identificação Civil - RIC', 
-        'Diploma, Declaração ou Histórico Escolar', 'Tamanho de Uniforme', 
-        'Reservista (Acima de 45 anos)', 'Comprovante de Ensino Médio', 
-        'Certidão de Prontuário da CNH', 'Tipo de Conta Bancária', 
-        'Certidão Negativa do Conselho Regional', 'Carteira de vacinação atualizada',
-        'Declaração de Residência', 'Informações Complementares', 'Carta Proposta',
-        'CPF Mãe', 'Registro Administrativo de Nascimento de Indígena'
-    ],
 
     carregar: async function() {
         console.log("🚀 UX Dashboard: Iniciando...");
@@ -55,72 +24,53 @@ MinhaArea.Comparativo = {
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
-        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Analisando dados da equipe...</div>';
+        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Processando métricas...</div>';
 
         try {
-            // Busca TUDO
+            // Busca TUDO do período
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
-            // --- REGRAS DE NEGÓCIO ---
+            // --- REGRAS DE NEGÓCIO ESTRITAS (Baseado na Análise Jan/2026) ---
 
-            // 1. Definição de ERRO (Para Feed e Gráfico)
-            const isErro = (d) => {
-                const qtd = Number(d.qtd_nok || 0);
-                const status = (d.status || '').toUpperCase();
-                return qtd > 0 || status.includes('NOK') || status.includes('REPROV');
-            };
+            // REGRA BASE: Tem nome de auditora
+            const temAuditora = (d) => d.auditora_nome && d.auditora_nome.trim() !== '';
 
-            // 2. Definição de AUDITADO (Tem auditora)
-            const isAuditado = (d) => {
-                return d.auditora_nome && d.auditora_nome.trim() !== '';
-            };
+            // REGRA DOCUMENTO: Começa com DOC_NDF_
+            const isDocNdf = (d) => (d.documento || '').toUpperCase().startsWith('DOC_NDF_');
 
-            // 3. Definição de NDF ESTRITO (Lista Oficial)
-            const isNDFRegra = (d) => {
-                const doc = (d.documento || '').toUpperCase().trim();
-                return this.codigosNdfOficiais.includes(doc);
-            };
+            // 1. Total de Erros Validados
+            // Lógica: Todos que tem Nome da Auditora
+            const listaValidados = dados.filter(d => temAuditora(d));
+            
+            // 2. Total de erros Gupy
+            // Lógica: Tem Auditora MAS NÃO TEM Doc_NDF_
+            const listaGupy = listaValidados.filter(d => !isDocNdf(d));
 
-            // 4. Definição de GUPY (Não começa com DOC_NDF_)
-            const isGupyRegra = (d) => {
-                const doc = (d.documento || '').toUpperCase().trim();
-                return !doc.startsWith('DOC_NDF_');
-            };
+            // 3. Total de Erros NDF
+            // Lógica: Tem Auditora E TEM Doc_NDF_
+            const listaNdf = listaValidados.filter(d => isDocNdf(d));
 
-            // --- CÁLCULO DOS CARDS ---
+            // 4. Erros NDF Auditados (Card Específico)
+            // Lógica: Tem Auditora E apenas os que tem DOC_NDF_OUTROS
+            const listaNdfOutros = listaValidados.filter(d => (d.documento || '').toUpperCase() === 'DOC_NDF_OUTROS');
 
-            // CARD 1 (Topo): Total de Erros Validados (Volume Auditado Total)
-            const listaErrosValidados = dados.filter(d => isAuditado(d));
-            if(elErrosValidados) elErrosValidados.innerText = listaErrosValidados.length;
-
-            // CARD 1 (Base): Total de erros Gupy
-            // Regra: Auditado E (Não começa com DOC_NDF_)
-            const listaErrosGupy = dados.filter(d => isAuditado(d) && isGupyRegra(d));
-            if(elErrosGupy) elErrosGupy.innerText = listaErrosGupy.length; 
-
-            // CARD 2 (Topo): Total de Erros NDF
-            // Regra: Está na lista oficial NDF (Auditado ou Não)
-            const listaNdfTotal = dados.filter(d => isNDFRegra(d));
-            if(elNdfTotal) elNdfTotal.innerText = listaNdfTotal.length;
-
-            // CARD 2 (Base): Erros NDF Auditados
-            // Placeholder ou Regra Implícita (Auditado + NDF)
-            const listaNdfAuditados = dados.filter(d => isAuditado(d) && isNDFRegra(d));
-            if(elNdfAuditados) elNdfAuditados.innerText = listaNdfAuditados.length;
+            // --- ATUALIZAÇÃO DOS CARDS ---
+            if(elErrosValidados) elErrosValidados.innerText = listaValidados.length;
+            if(elErrosGupy) elErrosGupy.innerText = listaGupy.length; 
+            if(elNdfTotal) elNdfTotal.innerText = listaNdf.length;
+            if(elNdfAuditados) elNdfAuditados.innerText = listaNdfOutros.length;
 
             // --- FEED E GRÁFICO ---
-            // Mostra o que é relevante: Erros Reais ou NDFs
-            const listaVisualizacao = dados.filter(d => (isErro(d) || this.isNDF(d)));
-
-            if (listaVisualizacao.length === 0) {
+            // O Feed mostra por padrão a lista de Validados (Universo Base)
+            if (listaValidados.length === 0) {
                 this.renderizarVazio(containerFeed);
                 this.renderizarGraficoVazio();
                 return;
             }
 
-            this.atualizarGrafico(listaVisualizacao);
-            this.renderizarFeed(listaVisualizacao, containerFeed);
+            this.atualizarGrafico(listaValidados);
+            this.renderizarFeed(listaValidados, containerFeed);
 
         } catch (err) {
             console.error("Erro Comparativo:", err);
@@ -128,20 +78,18 @@ MinhaArea.Comparativo = {
         }
     },
 
+    // Auxiliar para identificar visualmente no Feed/Gráfico
     isNDF: function(d) {
-        // Wrapper visual
-        const docOficial = (d.documento || '').toUpperCase().trim();
-        if (this.codigosNdfOficiais.includes(docOficial)) return true;
-        const nomeDoc = (d.doc_name || '').trim();
-        if (nomeDoc && this.listaNdfConhecidos.some(ndfName => nomeDoc.toLowerCase().includes(ndfName.toLowerCase()))) {
-            return true;
-        }
-        return false;
+        return (d.documento || '').toUpperCase().startsWith('DOC_NDF_');
     },
 
     getDocType: function(d) {
-        if (this.isNDF(d)) return "Documentos NDF";
-        return d.doc_name || d.nome_documento || 'Geral';
+        if (this.isNDF(d)) {
+            // Se for NDF, retorna o nome técnico (ex: DOC_NDF_LAUDO)
+            return d.documento || "DOC_NDF_GENERICO";
+        }
+        // Se for Gupy, retorna o nome amigável do documento
+        return d.doc_name || d.nome_documento || 'Documento Gupy';
     },
 
     filtrarPorBusca: function(texto) {
@@ -150,7 +98,10 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        const filtrados = this.dadosBrutosCache.filter(d => {
+        // Filtra sobre o universo auditado para manter consistência
+        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        
+        const filtrados = base.filter(d => {
             const nome = (d.doc_name || '').toLowerCase();
             const tipo = (this.getDocType(d) || '').toLowerCase();
             const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
@@ -169,14 +120,16 @@ MinhaArea.Comparativo = {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
         if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        this.carregar();
+        this.atualizarGrafico(this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== ''));
     },
 
     mudarVisao: function(novaVisao) {
         this.visaoAtual = novaVisao;
+        
         const btnDoc = document.getElementById('btn-view-doc');
         const btnEmpresa = document.getElementById('btn-view-empresa');
         const btnNdf = document.getElementById('btn-view-ndf');
+        
         const baseClass = "px-3 py-1 text-[10px] font-bold rounded transition ";
         const activeClass = "bg-white text-rose-600 shadow-sm";
         const inactiveClass = "text-slate-500 hover:bg-white";
@@ -186,28 +139,42 @@ MinhaArea.Comparativo = {
         if(btnNdf) btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
 
         this.limparFiltro(false);
-        this.carregar(); 
+        
+        // Reaplica o filtro base (Auditados) e a visão
+        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        let filtrados = base;
+        
+        if (novaVisao === 'ndf') {
+            filtrados = base.filter(d => this.isNDF(d));
+        } else if (novaVisao === 'doc') {
+            // Em 'doc', mostramos tudo (Gupy + NDF)
+            filtrados = base;
+        }
+        
+        this.atualizarGrafico(filtrados);
+        this.renderizarFeed(filtrados, document.getElementById('feed-erros-container'));
     },
 
     filtrarPorSelecao: function(valor) {
         const container = document.getElementById('feed-erros-container');
+        // Sempre trabalha sobre a base auditada
+        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
         let filtrados = [];
         
         if (this.visaoAtual === 'empresa') {
-            filtrados = this.dadosBrutosCache.filter(d => {
+            filtrados = base.filter(d => {
                 const emp = d.empresa || d.empresa_nome || 'Desconhecida';
                 return emp.includes(valor.replace('...', ''));
             });
         } else if (this.visaoAtual === 'ndf') {
-            filtrados = this.dadosBrutosCache.filter(d => {
+            filtrados = base.filter(d => {
                 if (!this.isNDF(d)) return false;
                 const identificador = d.documento || d.doc_name || 'Sem Nome';
                 return identificador.includes(valor.replace('...', ''));
             });
         } else {
-            filtrados = this.dadosBrutosCache.filter(d => {
+            filtrados = base.filter(d => {
                 const tipo = this.getDocType(d);
-                if (valor === 'Documentos NDF') return this.isNDF(d);
                 return tipo.includes(valor.replace('...', ''));
             });
         }
@@ -223,11 +190,12 @@ MinhaArea.Comparativo = {
         const agrupamento = {};
         
         dadosParaGrafico.forEach(item => {
-            if (this.visaoAtual === 'ndf' && !this.isNDF(item)) return;
-
             let chave = 'Outros';
             if (this.visaoAtual === 'empresa') chave = item.empresa || item.empresa_nome || 'Desconhecida';
-            else if (this.visaoAtual === 'ndf') chave = item.documento || item.doc_name || 'Sem Nome';
+            else if (this.visaoAtual === 'ndf') {
+                // Na visão NDF, usamos o código técnico
+                chave = item.documento || item.doc_name || 'Sem Nome';
+            }
             else chave = this.getDocType(item);
             
             if(chave.length > 25) chave = chave.substring(0, 22) + '...';
@@ -347,6 +315,7 @@ MinhaArea.Comparativo = {
         let todos = [];
         let page = 0;
         let continuar = true;
+        
         while(continuar) {
             let query = Sistema.supabase
                 .from('assertividade')
@@ -359,6 +328,7 @@ MinhaArea.Comparativo = {
 
             const { data, error } = await query;
             if(error) throw error;
+            
             todos = todos.concat(data);
             if(data.length < 1000) continuar = false;
             else page++;
