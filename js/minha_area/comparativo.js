@@ -26,8 +26,8 @@ MinhaArea.Comparativo = {
         // Inicializações se necessário
     },
 
-    // --- CORREÇÃO DO ERRO ---
-    // O main.js chama .carregar(), então criamos esta função para redirecionar
+    // --- CORREÇÃO DO ERRO CRÍTICO ---
+    // O main.js chama .carregar(), então criamos esta função para redirecionar para a lógica de atualização
     carregar: async function() {
         console.log("[Comparativo] Iniciando carga...");
         await this.atualizar();
@@ -47,7 +47,7 @@ MinhaArea.Comparativo = {
             this.atualizarInterface();
         } catch (error) {
             console.error("[Comparativo] Erro ao processar dados:", error);
-            // Sistema.Notificacao é opcional, dependendo se existe no sistema.js
+            // Verifica se o módulo de notificação existe antes de chamar
             if(window.Sistema && Sistema.Notificacao) {
                 Sistema.Notificacao.mostrar("Erro ao processar dados do comparativo.", "erro");
             }
@@ -193,14 +193,9 @@ MinhaArea.Comparativo = {
 
     limparFiltro: function() {
         this.filtroBusca = '';
-        const input = document.querySelector('#feed-erros-container input'); // fallback se não achar ID especifico fora
-        // Na estrutura HTML atual o input tem onkeyup, vamos tentar limpá-lo se tivermos acesso direto ou via seletor do pai
-        // Como o input está no HTML principal, o ideal é o usuário limpar ou usarmos um ID no input. 
-        // O código anterior assumia um seletor. Vamos manter simples:
-        const inputs = document.getElementsByTagName('input');
-        for(let inp of inputs) {
-            if(inp.placeholder.includes('Buscar')) inp.value = '';
-        }
+        // Limpa inputs de busca visíveis
+        const inputs = document.querySelectorAll('input[placeholder*="Buscar"]');
+        inputs.forEach(inp => inp.value = '');
 
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) btn.classList.add('hidden');
@@ -235,6 +230,7 @@ MinhaArea.Comparativo = {
         if (this.filtroBusca.length > 0) {
             dadosFeed = dadosFeed.filter(item => {
                 // Aplica o mapa de nomes amigáveis também na busca do feed
+                // Assim, se a usuária buscar "Categoria DIP", o sistema encontra "DOC_NDF_CATEGORIA PROFISSIONAL"
                 const nomeAmigavelOfensor = FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
                 
                 return (item.ofensor && item.ofensor.toLowerCase().includes(this.filtroBusca)) ||
@@ -263,7 +259,9 @@ MinhaArea.Comparativo = {
             return;
         }
 
+        // =========================================================
         // APLICAÇÃO DO MAPEAMENTO DE NOMES AMIGÁVEIS (UX)
+        // =========================================================
         const labels = data.map(item => {
             return FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
         });
@@ -371,7 +369,6 @@ MinhaArea.Comparativo = {
     },
 
     renderizarEstadoVazio: function() {
-        // Implementar visual de estado vazio se necessário
         const cvs = document.getElementById('graficoTopOfensores');
         const feed = document.getElementById('feed-erros-container');
         if(feed) feed.innerHTML = '<div class="text-center py-10 text-slate-300">Aguardando dados...</div>';
