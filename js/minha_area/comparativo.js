@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade Otimizada (Índices + Server-Side Filter)
+   DESCRIÇÃO: Engine de Assertividade Otimizada (Parallel Fetching + UX + Server-Side Filter)
 */
 
 // ====================================================================
@@ -41,8 +41,7 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Carregando registros...</div>';
 
         try {
-            // 1. BUSCA OTIMIZADA
-            // O filtro de auditora agora acontece no BANCO, reduzindo o download.
+            // 1. BUSCA PARALELA OTIMIZADA
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
@@ -59,7 +58,7 @@ MinhaArea.Comparativo = {
             for (let i = 0; i < dados.length; i++) {
                 const d = dados[i];
                 
-                // Validação redundante (caso venha string vazia não nula)
+                // Validação redundante (segurança extra)
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
                 listaValidados.push(d); 
@@ -121,11 +120,12 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        const base = this.dadosBrutosCache; // Já filtrado no download
+        const base = this.dadosBrutosCache; 
         
         const filtrados = [];
         let matches = 0;
         
+        // Loop otimizado com break
         for (let i = 0; i < base.length; i++) {
             if (matches >= 100) break;
             
@@ -224,6 +224,7 @@ MinhaArea.Comparativo = {
 
         const agrupamento = {};
         
+        // Limita processamento para garantir fluidez da UI (50k amostra)
         const limitProcess = Math.min(dadosParaGrafico.length, 50000);
 
         for (let i = 0; i < limitProcess; i++) {
@@ -270,6 +271,8 @@ MinhaArea.Comparativo = {
     renderizarFeed: function(lista, container) {
         if(!container) return;
         
+        // --- OTIMIZAÇÃO: VIRTUALIZAÇÃO SIMPLES ---
+        // Renderiza apenas os 100 últimos registros
         const LIMITE_RENDER = 100;
         const totalItens = lista.length;
         
@@ -413,38 +416,64 @@ MinhaArea.Comparativo = {
         if (ctx && this.chartOfensores) this.chartOfensores.destroy();
     },
 
+    // =================================================================
+    // ENGINE PARALELA (BURST FETCHING)
+    // =================================================================
     buscarTudoPaginado: async function(uid, inicio, fim) {
-        let todos = [];
-        let page = 0;
-        let continuar = true;
+        // 1. Descobre o TOTAL de registros primeiro (Count Rápido)
+        let queryCount = Sistema.supabase
+            .from('assertividade')
+            .select('*', { count: 'exact', head: true }) // head: true não baixa dados, só conta
+            .gte('data_referencia', inicio)
+            .lte('data_referencia', fim)
+            .neq('auditora_nome', null);
+
+        if (uid) queryCount = queryCount.eq('usuario_id', uid);
+
+        const { count, error: errCount } = await queryCount;
         
+        if (errCount) throw errCount;
+        if (count === 0) return [];
+
+        console.log(`📊 Estratégia Paralela: Baixando ${count} registros simultaneamente...`);
+
+        // 2. Define o tamanho da página e monta as promessas
+        const PAGE_SIZE = 1000;
+        const totalPages = Math.ceil(count / PAGE_SIZE);
+        const promises = [];
+        
+        // Colunas verificadas (empresa_nome correto)
         const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa_nome, assistente_nome, qtd_nok';
 
-        while(continuar) {
+        // Trava de segurança para não explodir o navegador
+        const MAX_PAGES = 300; // 300k registros
+        const pagesToFetch = Math.min(totalPages, MAX_PAGES);
+
+        for (let i = 0; i < pagesToFetch; i++) {
             let query = Sistema.supabase
                 .from('assertividade')
                 .select(colunas)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
-                .neq('auditora_nome', null) // Filtra nulos no banco (Server Side)
-                .neq('auditora_nome', '')   // Filtra vazios no banco (Server Side)
-                .range(page*1000, (page+1)*1000-1);
+                .neq('auditora_nome', null)
+                .range(i * PAGE_SIZE, (i + 1) * PAGE_SIZE - 1);
 
             if (uid) query = query.eq('usuario_id', uid);
-
-            const { data, error } = await query;
-            if(error) throw error;
             
-            todos = todos.concat(data);
-            if(data.length < 1000) continuar = false;
-            else page++;
-            
-            // LIMITE AUMENTADO PARA 300 PÁGINAS (300k Registros)
-            if (page > 300) { 
-                console.warn("Limite de segurança atingido (300k registros)");
-                continuar = false; 
-            }
+            promises.push(query);
         }
+
+        // 3. Dispara todas as requisições AO MESMO TEMPO
+        const responses = await Promise.all(promises);
+
+        // 4. Consolida os resultados
+        let todos = [];
+        responses.forEach(({ data, error }) => {
+            if (!error && data) {
+                todos = todos.concat(data);
+            }
+        });
+
         return todos;
     }
 };
