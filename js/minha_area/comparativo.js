@@ -41,15 +41,13 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Baixando dados...</div>';
 
         try {
-            // 1. BUSCA OTIMIZADA (Apenas colunas úteis)
+            // 1. BUSCA OTIMIZADA (Colunas Corrigidas)
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
             console.log(`📦 Processando ${dados.length} registros...`);
 
             // --- REGRAS DE NEGÓCIO (Processamento em Lote) ---
-
-            // Pré-cálculos para evitar loopings repetitivos
             let countValidados = 0;
             let countGupy = 0;
             let countNdf = 0;
@@ -57,14 +55,14 @@ MinhaArea.Comparativo = {
 
             const listaValidados = [];
 
-            // Loop único para categorização (Muito mais rápido que 4 filters seguidos)
+            // Loop único para categorização
             for (let i = 0; i < dados.length; i++) {
                 const d = dados[i];
                 
                 // Regra Base: Tem auditora
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
-                listaValidados.push(d); // Mantemos referência para o Feed
+                listaValidados.push(d); 
                 countValidados++;
 
                 const tipoDocUpper = (d.tipo_documento || '').toUpperCase();
@@ -92,7 +90,6 @@ MinhaArea.Comparativo = {
                 return;
             }
 
-            // Inicializa visualização
             this.mudarVisao(this.visaoAtual); 
             console.timeEnd("PerformanceTotal");
 
@@ -115,8 +112,8 @@ MinhaArea.Comparativo = {
         if (this.isNDF(d)) {
             return d.tipo_documento || "DOC_NDF_GENERICO";
         }
-        // Fallback seguro se doc_name não vier no select otimizado
-        return d.doc_name || d.nome_documento || d.tipo_documento || 'Documento Gupy';
+        // Fallback seguro usando propriedades que existem no banco ou undefined
+        return d.doc_name || d.tipo_documento || 'Documento Gupy';
     },
 
     filtrarPorBusca: function(texto) {
@@ -126,22 +123,20 @@ MinhaArea.Comparativo = {
         }
         const termo = texto.toLowerCase();
         
-        // Filtra apenas validados
         const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
         
-        // Limita a busca para não travar em datasets gigantes
         const filtrados = [];
         let matches = 0;
         
         for (let i = 0; i < base.length; i++) {
-            if (matches >= 100) break; // Otimização: para de buscar se já achou 100 resultados
+            if (matches >= 100) break;
             
             const d = base[i];
             const nome = (d.doc_name || '').toLowerCase();
             const tipoTecnico = (this.getDocType(d) || '');
             const tipoAmigavel = this.getFriendlyName(tipoTecnico).toLowerCase();
-            const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
-            const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
+            const obs = (d.observacao || '').toLowerCase();
+            const emp = (d.empresa || '').toLowerCase();
             
             if (nome.includes(termo) || 
                 tipoTecnico.toLowerCase().includes(termo) || 
@@ -189,7 +184,6 @@ MinhaArea.Comparativo = {
         if (novaVisao === 'ndf') {
             filtrados = base.filter(d => this.isNDF(d));
         } else {
-            // Visão Geral e Empresa usam a base completa de validados
             filtrados = base;
         }
         
@@ -202,14 +196,13 @@ MinhaArea.Comparativo = {
         const filtrados = [];
         let limit = 0;
 
-        // Otimização: Loop com limite de resultados para o feed
         for (let i = 0; i < base.length; i++) {
-            if (limit >= 200) break; // Trava de segurança UI
+            if (limit >= 200) break;
             const d = base[i];
             
             let match = false;
             if (this.visaoAtual === 'empresa') {
-                const emp = d.empresa || d.empresa_nome || 'Desconhecida';
+                const emp = d.empresa || 'Desconhecida';
                 match = (emp === valorAmigavel || emp.includes(valorAmigavel.replace('...', '')));
             } else {
                 const tipoTecnico = this.visaoAtual === 'ndf' ? (d.tipo_documento || '') : this.getDocType(d);
@@ -231,10 +224,9 @@ MinhaArea.Comparativo = {
         if (!ctx) return;
         if (this.chartOfensores) this.chartOfensores.destroy();
 
-        // Agrupamento Otimizado
         const agrupamento = {};
         
-        // Processar no máximo 20.000 itens para o gráfico para não travar a UI
+        // Limita processamento para não travar a UI
         const limitProcess = Math.min(dadosParaGrafico.length, 50000);
 
         for (let i = 0; i < limitProcess; i++) {
@@ -242,7 +234,7 @@ MinhaArea.Comparativo = {
             let chave = 'Outros';
             
             if (this.visaoAtual === 'empresa') {
-                chave = item.empresa || item.empresa_nome || 'Desconhecida';
+                chave = item.empresa || 'Desconhecida';
             } else if (this.visaoAtual === 'ndf') {
                 const codigoTecnico = item.tipo_documento || item.doc_name || 'Sem Nome';
                 chave = this.getFriendlyName(codigoTecnico);
@@ -258,7 +250,7 @@ MinhaArea.Comparativo = {
 
         let dadosGrafico = Object.entries(agrupamento).sort((a, b) => b[1] - a[1]);
         if (!this.mostrarTodos) dadosGrafico = dadosGrafico.slice(0, 5);
-        else dadosGrafico = dadosGrafico.slice(0, 50); // Hard limit de 50 barras mesmo em "Ver Todos"
+        else dadosGrafico = dadosGrafico.slice(0, 50);
 
         this.renderizarGraficoOfensores(dadosGrafico);
     },
@@ -281,11 +273,14 @@ MinhaArea.Comparativo = {
     renderizarFeed: function(lista, container) {
         if(!container) return;
         
-        // OTIMIZAÇÃO CRÍTICA DE RENDERIZAÇÃO
-        // Se houver mais de 100 erros, corta e avisa.
-        // Renderizar 116k divs trava o navegador.
+        // --- OTIMIZAÇÃO DE RENDERIZAÇÃO ---
+        // Renderiza apenas os 100 últimos para não travar o DOM
         const LIMITE_RENDER = 100;
         const totalItens = lista.length;
+        
+        // Ordena antes de cortar (Mais recentes primeiro)
+        lista.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
+        
         const itensVisiveis = lista.slice(0, LIMITE_RENDER);
         
         if (totalItens === 0) {
@@ -293,15 +288,8 @@ MinhaArea.Comparativo = {
             return;
         }
         
-        // Ordenação apenas dos visíveis (ou top 1000 antes do slice se performance permitir)
-        // Como o array original pode ser grande, evitamos sort() no array de 100k
-        // Vamos assumir que o banco já traz mais ou menos ordenado ou ordenamos só o slice se necessário
-        // Para garantir ordem cronológica no topo:
-        itensVisiveis.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
-        
         let html = '';
         
-        // Aviso de performance se cortou
         if (totalItens > LIMITE_RENDER) {
             html += `<div class="bg-blue-50 text-blue-600 text-[10px] font-bold p-2 rounded mb-2 text-center border border-blue-100">
                 <i class="fas fa-info-circle"></i> Exibindo os ${LIMITE_RENDER} erros mais recentes de um total de ${totalItens.toLocaleString()}.
@@ -313,8 +301,8 @@ MinhaArea.Comparativo = {
             const nomeDocumentoOriginal = doc.doc_name || 'Sem Nome';
             const tipoTecnico = this.getDocType(doc);
             const subtitulo = this.getFriendlyName(tipoTecnico);
-            const empresa = doc.empresa || doc.empresa_nome || '';
-            const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
+            const empresa = doc.empresa || '';
+            const obs = doc.observacao || 'Sem observação.';
             const isNdf = this.isNDF(doc);
             
             let badgeClass = 'bg-slate-100 text-slate-600';
@@ -407,8 +395,6 @@ MinhaArea.Comparativo = {
                     x: { 
                         beginAtZero: true, 
                         grid: { color: '#f1f5f9' }, 
-                        // CORREÇÃO DO WARNING DE PERFORMANCE DO CHART.JS
-                        // Removemos stepSize: 1 e deixamos automático com limite de ticks
                         ticks: { 
                             autoSkip: true,
                             maxTicksLimit: 8,
@@ -438,9 +424,10 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         
-        // OTIMIZAÇÃO: Selecionar apenas colunas necessárias reduz drasticamente o tráfego de rede
-        // Removido SELECT *
-        const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, nome_documento, observacao, obs, apontamentos, status, empresa, empresa_nome, assistente_nome, qtd_nok';
+        // CORREÇÃO DE QUERY: Solicitamos apenas colunas que EXISTEM de fato na tabela
+        // Removidos: nome_documento, empresa_nome, obs, apontamentos
+        // Mantidos: doc_name, empresa, observacao, tipo_documento, etc.
+        const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa, assistente_nome, qtd_nok';
 
         while(continuar) {
             let query = Sistema.supabase
@@ -459,7 +446,6 @@ MinhaArea.Comparativo = {
             if(data.length < 1000) continuar = false;
             else page++;
             
-            // Safety break para admin em periodos longos
             if (page > 50) { 
                 console.warn("Limite de segurança de paginação atingido (50k registros)");
                 continuar = false; 
