@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Lógica Ajustada: Acertos vs Erros com Layout Dia-a-Dia)
+   DESCRIÇÃO: Engine de Assertividade (Cards Ajustados + Produtividade Total)
 */
 
 // ====================================================================
@@ -24,7 +24,7 @@ MinhaArea.Comparativo = {
 
     carregar: async function() {
         console.time("PerformanceTotal");
-        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: Novos Cards)...");
+        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: Novos Cards + Produtividade)...");
         const uid = MinhaArea.getUsuarioAlvo();
         
         if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
@@ -33,14 +33,16 @@ MinhaArea.Comparativo = {
         
         const containerFeed = document.getElementById('feed-erros-container');
         
-        // --- SELETORES DOS CARDS (IDs mantidos no novo HTML) ---
+        // --- SELETORES DOS CARDS ---
         const elTotalAuditados = document.getElementById('card-total-auditados');
+        const elTotalProdutividade = document.getElementById('card-total-produtividade'); // Novo
+        
         const elTotalAcertos = document.getElementById('card-total-acertos');
-        const elTotalErros = document.getElementById('card-total-erros'); // Agora no rodapé do card Acertos
+        const elTotalErros = document.getElementById('card-total-erros');
 
         const elErrosGupy = document.getElementById('card-erros-gupy'); 
         const elErrosNdf = document.getElementById('card-erros-ndf'); 
-        const elEmpresaValidar = document.getElementById('card-empresa-validar'); // Agora no rodapé do card NDF
+        const elEmpresaValidar = document.getElementById('card-empresa-validar'); 
 
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
@@ -48,16 +50,33 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Analisando auditorias...</div>';
 
         try {
-            // 1. BUSCA PARALELA OTIMIZADA
-            const dados = await this.buscarTudoPaginado(uid, inicio, fim);
-            this.dadosBrutosCache = dados;
+            // 1. BUSCA PARALELA OTIMIZADA (Assertividade + Contagem de Produção)
+            
+            // Promise A: Busca os dados detalhados de assertividade
+            const promiseAssertividade = this.buscarTudoPaginado(uid, inicio, fim);
+            
+            // Promise B: Busca apenas o count da produtividade total (para o Card 1)
+            let queryProd = Sistema.supabase
+                .from('extrato_producao')
+                .select('*', { count: 'exact', head: true })
+                .gte('data', inicio)
+                .lte('data', fim);
+            
+            if (uid) queryProd = queryProd.eq('usuario_id', uid);
+            const promiseProducao = queryProd;
 
-            console.log(`📦 Base Total: ${dados.length} registros auditados.`);
+            // Executa em paralelo
+            const [dados, resProducao] = await Promise.all([promiseAssertividade, promiseProducao]);
+            
+            this.dadosBrutosCache = dados;
+            const totalProdutividade = resProducao.count || 0;
+
+            console.log(`📦 Base Assertividade: ${dados.length} | 📦 Base Produção: ${totalProdutividade}`);
 
             // --- REGRAS DE NEGÓCIO ---
-            let countTotalAuditados = 0; // Universo Total
+            let countTotalAuditados = 0; // Universo Auditado
             let countErrosGupy = 0;      // < 100% e não é NDF
-            let countErrosNdf = 0;       // < 100% e é NDF (inclui 'Outros')
+            let countErrosNdf = 0;       // < 100% e é NDF (inclui 'Outros' - Validação Empresa)
             let countNdfEmpresa = 0;     // Apenas 'DOC_NDF_OUTROS'
 
             const listaErros = []; // Apenas para o Feed e Gráfico
@@ -68,7 +87,7 @@ MinhaArea.Comparativo = {
                 // Regra 1: Deve ter auditora
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
-                // Incrementa o universo total
+                // Incrementa o universo total auditado
                 countTotalAuditados++;
 
                 // Regra 2: É erro? (Qtd NOK > 0)
@@ -81,8 +100,8 @@ MinhaArea.Comparativo = {
                     const isNdf = tipoDocUpper.startsWith('DOC_NDF_');
 
                     if (isNdf) {
-                        countErrosNdf++;
-                        if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfEmpresa++;
+                        countErrosNdf++; // Soma em NDF Geral
+                        if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfEmpresa++; // Marca como Validação Empresa
                     } else {
                         countErrosGupy++;
                     }
@@ -98,18 +117,25 @@ MinhaArea.Comparativo = {
             // 2. Total de Acertos (Restante)
             const totalAcertos = countTotalAuditados - totalErrosReais;
 
-            // 3. Separação visual: "Erros NDF" exibido retira o "Empresa Valida"
-            const displayErrosNdf = countErrosNdf - countNdfEmpresa;
+            // 3. Display NDF: O usuário pediu para SOMAR, ou seja, mostrar o valor cheio.
+            // O loop acima já incluiu 'countNdfEmpresa' dentro de 'countErrosNdf'.
+            // Então não precisamos subtrair nada aqui.
+            const displayErrosNdf = countErrosNdf; 
 
             // --- ATUALIZAÇÃO DO DOM (CARDS) ---
             
-            // Card 1: Visão Geral
+            // Card 1: Total Auditados & Produção
             if(elTotalAuditados) elTotalAuditados.innerText = countTotalAuditados.toLocaleString('pt-BR');
+            if(elTotalProdutividade) elTotalProdutividade.innerText = totalProdutividade.toLocaleString('pt-BR');
+            
+            // Card 2: Acertos & Erros
             if(elTotalAcertos) elTotalAcertos.innerText = totalAcertos.toLocaleString('pt-BR');
             if(elTotalErros) elTotalErros.innerText = totalErrosReais.toLocaleString('pt-BR');
             
-            // Card 2 & 3 & 4
+            // Card 3: Gupy
             if(elErrosGupy) elErrosGupy.innerText = countErrosGupy.toLocaleString('pt-BR'); 
+            
+            // Card 4: NDF & Empresa
             if(elErrosNdf) elErrosNdf.innerText = displayErrosNdf.toLocaleString('pt-BR'); 
             if(elEmpresaValidar) elEmpresaValidar.innerText = countNdfEmpresa.toLocaleString('pt-BR');
 

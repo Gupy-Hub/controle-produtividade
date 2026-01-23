@@ -30,7 +30,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Estilo dos Cards (KPI) - Padrão Dia a Dia */
+        /* Estilo dos Cards (KPI) */
         .kpi-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); border: 1px solid #f1f5f9; padding: 12px 16px; display: flex; flex-direction: column; justify-content: space-between; height: 100px; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
         .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
@@ -145,7 +145,8 @@
                         <div class="kpi-main-val text-slate-800" id="card-total-auditados">--</div>
                     </div>
                     <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Volume Geral</span>
+                        <span>Total Produtividade:</span>
+                        <span id="card-total-produtividade" class="font-bold text-blue-500">--</span>
                     </div>
                 </div>
 
@@ -156,7 +157,7 @@
                         <div class="kpi-main-val text-slate-800" id="card-total-acertos">--</div>
                     </div>
                     <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Total Erros:</span>
+                        <span>Total de Erros:</span>
                         <span id="card-total-erros" class="font-bold text-rose-500">--</span>
                     </div>
                 </div>
