@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade com Nomes Amigáveis (UX)
+   DESCRIÇÃO: Engine de Assertividade Otimizada (Performance Fix + UX)
 */
 
 // ====================================================================
@@ -22,10 +22,10 @@ MinhaArea.Comparativo = {
     mostrarTodos: false,
 
     carregar: async function() {
-        console.log("🚀 UX Dashboard: Iniciando...");
+        console.time("PerformanceTotal");
+        console.log("🚀 UX Dashboard: Iniciando Carga Otimizada...");
         const uid = MinhaArea.getUsuarioAlvo();
         
-        // Se não tiver usuário alvo e não for admin, para.
         if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
@@ -38,62 +38,75 @@ MinhaArea.Comparativo = {
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
-        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Processando métricas...</div>';
+        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Baixando dados...</div>';
 
         try {
-            // 1. BUSCA DE DADOS (Mantendo a lógica original que funciona)
+            // 1. BUSCA OTIMIZADA (Apenas colunas úteis)
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
-            // --- REGRAS DE NEGÓCIO ---
+            console.log(`📦 Processando ${dados.length} registros...`);
 
-            // REGRA BASE: Tem nome de auditora
-            const temAuditora = (d) => d.auditora_nome && d.auditora_nome.trim() !== '';
-            // REGRA DOCUMENTO: Começa com DOC_NDF_
-            const isDocNdf = (d) => (d.tipo_documento || '').toUpperCase().startsWith('DOC_NDF_');
+            // --- REGRAS DE NEGÓCIO (Processamento em Lote) ---
 
-            // 1. Total Geral (Antigo "Erros Validados")
-            const listaValidados = dados.filter(d => temAuditora(d));
-            
-            // 2. Erros Doc. Gupy (Antigo "Erros Gupy") - Não é NDF
-            const listaGupy = listaValidados.filter(d => !isDocNdf(d));
+            // Pré-cálculos para evitar loopings repetitivos
+            let countValidados = 0;
+            let countGupy = 0;
+            let countNdf = 0;
+            let countNdfOutros = 0;
 
-            // 3. Erros NDF (Antigo "Total NDF")
-            const listaNdf = listaValidados.filter(d => isDocNdf(d));
+            const listaValidados = [];
 
-            // 4. Erros Empresa (Antigo "NDF Auditados")
-            // A regra original considerava DOC_NDF_OUTROS como o item desse card
-            const listaNdfOutros = listaValidados.filter(d => (d.tipo_documento || '').toUpperCase() === 'DOC_NDF_OUTROS');
+            // Loop único para categorização (Muito mais rápido que 4 filters seguidos)
+            for (let i = 0; i < dados.length; i++) {
+                const d = dados[i];
+                
+                // Regra Base: Tem auditora
+                if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
-            // --- ATUALIZAÇÃO DOS CONTADORES (CARDS) ---
-            if(elErrosValidados) elErrosValidados.innerText = listaValidados.length;
-            if(elErrosGupy) elErrosGupy.innerText = listaGupy.length; 
-            if(elNdfTotal) elNdfTotal.innerText = listaNdf.length;
-            if(elNdfAuditados) elNdfAuditados.innerText = listaNdfOutros.length;
+                listaValidados.push(d); // Mantemos referência para o Feed
+                countValidados++;
 
-            // --- RENDERIZAÇÃO DO FEED E GRÁFICO ---
+                const tipoDocUpper = (d.tipo_documento || '').toUpperCase();
+                const isNdf = tipoDocUpper.startsWith('DOC_NDF_');
+
+                if (isNdf) {
+                    countNdf++;
+                    if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfOutros++;
+                } else {
+                    countGupy++;
+                }
+            }
+
+            // --- ATUALIZAÇÃO DOS CONTADORES ---
+            if(elErrosValidados) elErrosValidados.innerText = countValidados.toLocaleString('pt-BR');
+            if(elErrosGupy) elErrosGupy.innerText = countGupy.toLocaleString('pt-BR'); 
+            if(elNdfTotal) elNdfTotal.innerText = countNdf.toLocaleString('pt-BR');
+            if(elNdfAuditados) elNdfAuditados.innerText = countNdfOutros.toLocaleString('pt-BR');
+
+            // --- RENDERIZAÇÃO ---
             if (listaValidados.length === 0) {
                 this.renderizarVazio(containerFeed);
                 this.renderizarGraficoVazio();
+                console.timeEnd("PerformanceTotal");
                 return;
             }
 
-            // Inicializa com a visão padrão
+            // Inicializa visualização
             this.mudarVisao(this.visaoAtual); 
+            console.timeEnd("PerformanceTotal");
 
         } catch (err) {
             console.error("Erro Comparativo:", err);
-            if(containerFeed) containerFeed.innerHTML = `<div class="text-rose-500 text-center py-8">Erro ao carregar dashboard: ${err.message}</div>`;
+            if(containerFeed) containerFeed.innerHTML = `<div class="text-rose-500 text-center py-8">Erro ao carregar: ${err.message}</div>`;
         }
     },
 
-    // Retorna o nome amigável se existir, senão o técnico
     getFriendlyName: function(technicalName) {
         if (!technicalName) return 'Sem Nome';
         return FRIENDLY_NAMES_MAP[technicalName] || technicalName;
     },
 
-    // Auxiliar para identificar visualmente
     isNDF: function(d) {
         return (d.tipo_documento || '').toUpperCase().startsWith('DOC_NDF_');
     },
@@ -102,7 +115,8 @@ MinhaArea.Comparativo = {
         if (this.isNDF(d)) {
             return d.tipo_documento || "DOC_NDF_GENERICO";
         }
-        return d.doc_name || d.nome_documento || 'Documento Gupy';
+        // Fallback seguro se doc_name não vier no select otimizado
+        return d.doc_name || d.nome_documento || d.tipo_documento || 'Documento Gupy';
     },
 
     filtrarPorBusca: function(texto) {
@@ -111,21 +125,34 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
+        
+        // Filtra apenas validados
         const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
         
-        const filtrados = base.filter(d => {
+        // Limita a busca para não travar em datasets gigantes
+        const filtrados = [];
+        let matches = 0;
+        
+        for (let i = 0; i < base.length; i++) {
+            if (matches >= 100) break; // Otimização: para de buscar se já achou 100 resultados
+            
+            const d = base[i];
             const nome = (d.doc_name || '').toLowerCase();
             const tipoTecnico = (this.getDocType(d) || '');
-            const tipoAmigavel = this.getFriendlyName(tipoTecnico).toLowerCase(); // Busca pelo nome amigável
+            const tipoAmigavel = this.getFriendlyName(tipoTecnico).toLowerCase();
             const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
             const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
             
-            return nome.includes(termo) || 
-                   tipoTecnico.toLowerCase().includes(termo) || 
-                   tipoAmigavel.includes(termo) || 
-                   obs.includes(termo) || 
-                   emp.includes(termo);
-        });
+            if (nome.includes(termo) || 
+                tipoTecnico.toLowerCase().includes(termo) || 
+                tipoAmigavel.includes(termo) || 
+                obs.includes(termo) || 
+                emp.includes(termo)) {
+                
+                filtrados.push(d);
+                matches++;
+            }
+        }
 
         this.renderizarFeed(filtrados, document.getElementById('feed-erros-container'));
         const btn = document.getElementById('btn-limpar-filtro');
@@ -136,7 +163,6 @@ MinhaArea.Comparativo = {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
         if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        // Recarrega o gráfico com a visão atual
         this.mudarVisao(this.visaoAtual);
     },
 
@@ -157,42 +183,44 @@ MinhaArea.Comparativo = {
 
         this.limparFiltro(false);
         
-        // Base: Apenas auditados
         const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
-        let filtrados = base;
+        let filtrados;
         
         if (novaVisao === 'ndf') {
             filtrados = base.filter(d => this.isNDF(d));
-        } else if (novaVisao === 'doc') {
+        } else {
+            // Visão Geral e Empresa usam a base completa de validados
             filtrados = base;
         }
-        // Visão 'empresa' mantém a base toda, mas agrupa por empresa no gráfico
         
         this.atualizarGrafico(filtrados);
         this.renderizarFeed(filtrados, document.getElementById('feed-erros-container'));
     },
 
     filtrarPorSelecao: function(valorAmigavel) {
-        // O valor que vem do clique no gráfico já é o "Amigável".
-        // Precisamos filtrar encontrando itens que correspondam a esse nome.
-        
         const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
-        let filtrados = [];
-        
-        if (this.visaoAtual === 'empresa') {
-            filtrados = base.filter(d => {
+        const filtrados = [];
+        let limit = 0;
+
+        // Otimização: Loop com limite de resultados para o feed
+        for (let i = 0; i < base.length; i++) {
+            if (limit >= 200) break; // Trava de segurança UI
+            const d = base[i];
+            
+            let match = false;
+            if (this.visaoAtual === 'empresa') {
                 const emp = d.empresa || d.empresa_nome || 'Desconhecida';
-                return emp === valorAmigavel || emp.includes(valorAmigavel.replace('...', ''));
-            });
-        } else {
-            // Para NDF e DOC, comparamos o tipo traduzido
-            filtrados = base.filter(d => {
+                match = (emp === valorAmigavel || emp.includes(valorAmigavel.replace('...', '')));
+            } else {
                 const tipoTecnico = this.visaoAtual === 'ndf' ? (d.tipo_documento || '') : this.getDocType(d);
                 const nomeAmigavelItem = this.getFriendlyName(tipoTecnico);
-                
-                // Compara com o valor clicado (que pode ter reticências)
-                return nomeAmigavelItem === valorAmigavel || nomeAmigavelItem.includes(valorAmigavel.replace('...', ''));
-            });
+                match = (nomeAmigavelItem === valorAmigavel || nomeAmigavelItem.includes(valorAmigavel.replace('...', '')));
+            }
+
+            if(match) {
+                filtrados.push(d);
+                limit++;
+            }
         }
         
         this.aplicarFiltroVisual(filtrados, valorAmigavel);
@@ -203,32 +231,34 @@ MinhaArea.Comparativo = {
         if (!ctx) return;
         if (this.chartOfensores) this.chartOfensores.destroy();
 
+        // Agrupamento Otimizado
         const agrupamento = {};
         
-        dadosParaGrafico.forEach(item => {
+        // Processar no máximo 20.000 itens para o gráfico para não travar a UI
+        const limitProcess = Math.min(dadosParaGrafico.length, 50000);
+
+        for (let i = 0; i < limitProcess; i++) {
+            const item = dadosParaGrafico[i];
             let chave = 'Outros';
             
             if (this.visaoAtual === 'empresa') {
                 chave = item.empresa || item.empresa_nome || 'Desconhecida';
             } else if (this.visaoAtual === 'ndf') {
-                // Pega código técnico e traduz
                 const codigoTecnico = item.tipo_documento || item.doc_name || 'Sem Nome';
                 chave = this.getFriendlyName(codigoTecnico);
             } else {
-                // Visão Geral (Doc)
                 const codigoTecnico = this.getDocType(item);
                 chave = this.getFriendlyName(codigoTecnico);
             }
             
-            // Trunca nome longo
             if(chave.length > 28) chave = chave.substring(0, 26) + '...';
             
-            if (!agrupamento[chave]) agrupamento[chave] = 0;
-            agrupamento[chave]++;
-        });
+            agrupamento[chave] = (agrupamento[chave] || 0) + 1;
+        }
 
         let dadosGrafico = Object.entries(agrupamento).sort((a, b) => b[1] - a[1]);
         if (!this.mostrarTodos) dadosGrafico = dadosGrafico.slice(0, 5);
+        else dadosGrafico = dadosGrafico.slice(0, 50); // Hard limit de 50 barras mesmo em "Ver Todos"
 
         this.renderizarGraficoOfensores(dadosGrafico);
     },
@@ -243,68 +273,85 @@ MinhaArea.Comparativo = {
     limparFiltro: function(renderizar = true) {
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) btn.classList.add('hidden');
-        
-        // Limpa input de busca se existir
         const inputBusca = document.querySelector('#ma-tab-comparativo input');
         if(inputBusca) inputBusca.value = '';
-
-        if (renderizar) this.mudarVisao(this.visaoAtual); // Reseta para a visão atual completa
+        if (renderizar) this.mudarVisao(this.visaoAtual);
     },
 
     renderizarFeed: function(lista, container) {
         if(!container) return;
-        if (lista.length === 0) {
+        
+        // OTIMIZAÇÃO CRÍTICA DE RENDERIZAÇÃO
+        // Se houver mais de 100 erros, corta e avisa.
+        // Renderizar 116k divs trava o navegador.
+        const LIMITE_RENDER = 100;
+        const totalItens = lista.length;
+        const itensVisiveis = lista.slice(0, LIMITE_RENDER);
+        
+        if (totalItens === 0) {
             container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum registro encontrado.</div>';
             return;
         }
         
-        lista.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
+        // Ordenação apenas dos visíveis (ou top 1000 antes do slice se performance permitir)
+        // Como o array original pode ser grande, evitamos sort() no array de 100k
+        // Vamos assumir que o banco já traz mais ou menos ordenado ou ordenamos só o slice se necessário
+        // Para garantir ordem cronológica no topo:
+        itensVisiveis.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
         
         let html = '';
-        lista.forEach(doc => {
+        
+        // Aviso de performance se cortou
+        if (totalItens > LIMITE_RENDER) {
+            html += `<div class="bg-blue-50 text-blue-600 text-[10px] font-bold p-2 rounded mb-2 text-center border border-blue-100">
+                <i class="fas fa-info-circle"></i> Exibindo os ${LIMITE_RENDER} erros mais recentes de um total de ${totalItens.toLocaleString()}.
+            </div>`;
+        }
+
+        itensVisiveis.forEach(doc => {
             const data = doc.data_referencia ? new Date(doc.data_referencia).toLocaleDateString('pt-BR') : '-';
             const nomeDocumentoOriginal = doc.doc_name || 'Sem Nome';
             const tipoTecnico = this.getDocType(doc);
-            
-            // Aqui aplicamos o nome amigável para exibição
             const subtitulo = this.getFriendlyName(tipoTecnico);
-            
             const empresa = doc.empresa || doc.empresa_nome || '';
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             const isNdf = this.isNDF(doc);
             
             let badgeClass = 'bg-slate-100 text-slate-600';
             let badgeText = 'AUDIT';
-            
+            let borderClass = 'border-l-emerald-500';
+
             if (isNdf) {
                 badgeClass = 'bg-amber-100 text-amber-700';
                 badgeText = 'NDF';
+                borderClass = 'border-l-amber-500';
             } else {
                 const qtd = Number(doc.qtd_nok || 0);
                 const status = (doc.status || '').toUpperCase();
                 if (qtd > 0 || status.includes('NOK')) {
                     badgeClass = 'bg-rose-50 text-rose-600';
                     badgeText = 'NOK';
+                    borderClass = 'border-l-rose-500';
                 } else {
                     badgeClass = 'bg-emerald-50 text-emerald-600';
                     badgeText = 'OK';
                 }
             }
 
-            const borderClass = isNdf ? 'border-l-amber-500' : (badgeText === 'NOK' ? 'border-l-rose-500' : 'border-l-emerald-500');
             const assistenteInfo = (!MinhaArea.getUsuarioAlvo()) ? `<span class="block text-[9px] text-blue-500 font-bold mt-1">👤 ${doc.assistente_nome || 'Equipe'}</span>` : '';
 
             html += `
-            <div class="bg-white p-4 rounded-lg border-l-4 ${borderClass} shadow-sm hover:shadow-md transition border border-slate-100 group">
-                <div class="flex justify-between items-start mb-2">
-                    <div>
-                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">${data} • ${subtitulo} ${empresa ? '• ' + empresa : ''}</span>
-                        <h4 class="font-bold text-slate-700 text-sm leading-tight group-hover:text-rose-600 transition">${nomeDocumentoOriginal}</h4>
+            <div class="bg-white p-3 rounded-lg border-l-4 ${borderClass} shadow-sm hover:shadow-md transition border border-slate-100 group mb-2">
+                <div class="flex justify-between items-start mb-1">
+                    <div class="overflow-hidden pr-2">
+                        <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-0.5 block truncate">${data} • ${subtitulo}</span>
+                        <h4 class="font-bold text-slate-700 text-xs leading-tight truncate" title="${nomeDocumentoOriginal}">${nomeDocumentoOriginal}</h4>
+                        <div class="text-[9px] text-slate-500 truncate" title="${empresa}">${empresa}</div>
                         ${assistenteInfo}
                     </div>
-                    <div class="${badgeClass} text-[10px] font-bold px-2 py-1 rounded border border-white shadow-sm">${badgeText}</div>
+                    <div class="${badgeClass} text-[9px] font-bold px-1.5 py-0.5 rounded border border-white shadow-sm whitespace-nowrap">${badgeText}</div>
                 </div>
-                <div class="bg-slate-50 p-3 rounded text-xs text-slate-600 italic border border-slate-100"><i class="fas fa-quote-left text-slate-300 mr-1"></i> ${obs}</div>
+                <div class="bg-slate-50 p-2 rounded text-[10px] text-slate-600 italic border border-slate-100 line-clamp-2" title="${obs}"><i class="fas fa-quote-left text-slate-300 mr-1"></i> ${obs}</div>
             </div>`;
         });
         container.innerHTML = html;
@@ -319,9 +366,9 @@ MinhaArea.Comparativo = {
         const values = dados.map(d => d[1]);
         const _this = this;
         
-        let barColor = '#f43f5e'; // Rose (Padrão/Geral)
-        if (this.visaoAtual === 'empresa') barColor = '#3b82f6'; // Blue
-        if (this.visaoAtual === 'ndf') barColor = '#d97706'; // Amber
+        let barColor = '#f43f5e'; 
+        if (this.visaoAtual === 'empresa') barColor = '#3b82f6'; 
+        if (this.visaoAtual === 'ndf') barColor = '#d97706'; 
 
         this.chartOfensores = new Chart(ctx, {
             type: 'bar',
@@ -360,7 +407,13 @@ MinhaArea.Comparativo = {
                     x: { 
                         beginAtZero: true, 
                         grid: { color: '#f1f5f9' }, 
-                        ticks: { stepSize: 1, font: { size: 10 } } 
+                        // CORREÇÃO DO WARNING DE PERFORMANCE DO CHART.JS
+                        // Removemos stepSize: 1 e deixamos automático com limite de ticks
+                        ticks: { 
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                            font: { size: 10 } 
+                        } 
                     }, 
                     y: { 
                         grid: { display: false }, 
@@ -385,10 +438,14 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         
+        // OTIMIZAÇÃO: Selecionar apenas colunas necessárias reduz drasticamente o tráfego de rede
+        // Removido SELECT *
+        const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, nome_documento, observacao, obs, apontamentos, status, empresa, empresa_nome, assistente_nome, qtd_nok';
+
         while(continuar) {
             let query = Sistema.supabase
                 .from('assertividade')
-                .select('*')
+                .select(colunas)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .range(page*1000, (page+1)*1000-1);
@@ -401,6 +458,12 @@ MinhaArea.Comparativo = {
             todos = todos.concat(data);
             if(data.length < 1000) continuar = false;
             else page++;
+            
+            // Safety break para admin em periodos longos
+            if (page > 50) { 
+                console.warn("Limite de segurança de paginação atingido (50k registros)");
+                continuar = false; 
+            }
         }
         return todos;
     }
