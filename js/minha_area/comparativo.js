@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Cards Ajustados + Produtividade Total)
+   DESCRIÇÃO: Engine de Assertividade (Layout: 2 Cards na Lateral)
 */
 
 // ====================================================================
@@ -24,7 +24,7 @@ MinhaArea.Comparativo = {
 
     carregar: async function() {
         console.time("PerformanceTotal");
-        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: Novos Cards + Produtividade)...");
+        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: 2 Cards)...");
         const uid = MinhaArea.getUsuarioAlvo();
         
         if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
@@ -35,8 +35,6 @@ MinhaArea.Comparativo = {
         
         // --- SELETORES DOS CARDS ---
         const elTotalAuditados = document.getElementById('card-total-auditados');
-        const elTotalProdutividade = document.getElementById('card-total-produtividade'); // Novo
-        
         const elTotalAcertos = document.getElementById('card-total-acertos');
         const elTotalErros = document.getElementById('card-total-erros');
 
@@ -50,34 +48,17 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Analisando auditorias...</div>';
 
         try {
-            // 1. BUSCA PARALELA OTIMIZADA (Assertividade + Contagem de Produção)
-            
-            // Promise A: Busca os dados detalhados de assertividade
-            const promiseAssertividade = this.buscarTudoPaginado(uid, inicio, fim);
-            
-            // Promise B: Busca apenas o count da produtividade total (para o Card 1)
-            let queryProd = Sistema.supabase
-                .from('extrato_producao')
-                .select('*', { count: 'exact', head: true })
-                .gte('data', inicio)
-                .lte('data', fim);
-            
-            if (uid) queryProd = queryProd.eq('usuario_id', uid);
-            const promiseProducao = queryProd;
-
-            // Executa em paralelo
-            const [dados, resProducao] = await Promise.all([promiseAssertividade, promiseProducao]);
-            
+            // 1. BUSCA PARALELA OTIMIZADA
+            const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
-            const totalProdutividade = resProducao.count || 0;
 
-            console.log(`📦 Base Assertividade: ${dados.length} | 📦 Base Produção: ${totalProdutividade}`);
+            console.log(`📦 Base Total: ${dados.length} registros auditados.`);
 
             // --- REGRAS DE NEGÓCIO ---
-            let countTotalAuditados = 0; // Universo Auditado
+            let countTotalAuditados = 0; // Universo Total
             let countErrosGupy = 0;      // < 100% e não é NDF
-            let countErrosNdf = 0;       // < 100% e é NDF (inclui 'Outros' - Validação Empresa)
-            let countNdfEmpresa = 0;     // Apenas 'DOC_NDF_OUTROS'
+            let countErrosNdf = 0;       // < 100% e é NDF (Soma total, incluindo empresa valida)
+            let countNdfEmpresa = 0;     // Apenas 'DOC_NDF_OUTROS' (para detalhamento)
 
             const listaErros = []; // Apenas para o Feed e Gráfico
 
@@ -87,7 +68,7 @@ MinhaArea.Comparativo = {
                 // Regra 1: Deve ter auditora
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
-                // Incrementa o universo total auditado
+                // Incrementa o universo total
                 countTotalAuditados++;
 
                 // Regra 2: É erro? (Qtd NOK > 0)
@@ -100,8 +81,8 @@ MinhaArea.Comparativo = {
                     const isNdf = tipoDocUpper.startsWith('DOC_NDF_');
 
                     if (isNdf) {
-                        countErrosNdf++; // Soma em NDF Geral
-                        if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfEmpresa++; // Marca como Validação Empresa
+                        countErrosNdf++; // Soma no total de NDF
+                        if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfEmpresa++; // Contabiliza específico
                     } else {
                         countErrosGupy++;
                     }
@@ -117,26 +98,20 @@ MinhaArea.Comparativo = {
             // 2. Total de Acertos (Restante)
             const totalAcertos = countTotalAuditados - totalErrosReais;
 
-            // 3. Display NDF: O usuário pediu para SOMAR, ou seja, mostrar o valor cheio.
-            // O loop acima já incluiu 'countNdfEmpresa' dentro de 'countErrosNdf'.
-            // Então não precisamos subtrair nada aqui.
-            const displayErrosNdf = countErrosNdf; 
-
             // --- ATUALIZAÇÃO DO DOM (CARDS) ---
             
-            // Card 1: Total Auditados & Produção
+            // Card 1: Visão Geral
             if(elTotalAuditados) elTotalAuditados.innerText = countTotalAuditados.toLocaleString('pt-BR');
-            if(elTotalProdutividade) elTotalProdutividade.innerText = totalProdutividade.toLocaleString('pt-BR');
-            
-            // Card 2: Acertos & Erros
             if(elTotalAcertos) elTotalAcertos.innerText = totalAcertos.toLocaleString('pt-BR');
             if(elTotalErros) elTotalErros.innerText = totalErrosReais.toLocaleString('pt-BR');
             
-            // Card 3: Gupy
+            // Card 2: Detalhamento
             if(elErrosGupy) elErrosGupy.innerText = countErrosGupy.toLocaleString('pt-BR'); 
             
-            // Card 4: NDF & Empresa
-            if(elErrosNdf) elErrosNdf.innerText = displayErrosNdf.toLocaleString('pt-BR'); 
+            // Mostra o Total NDF (que já inclui a empresa valida)
+            if(elErrosNdf) elErrosNdf.innerText = countErrosNdf.toLocaleString('pt-BR'); 
+            
+            // Mostra o detalhe (apenas informativo)
             if(elEmpresaValidar) elEmpresaValidar.innerText = countNdfEmpresa.toLocaleString('pt-BR');
 
             // --- RENDERIZAÇÃO (Gráfico e Feed) ---
