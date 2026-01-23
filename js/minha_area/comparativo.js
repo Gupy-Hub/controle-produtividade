@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Lógica Ajustada: Novos Cards e Layout Horizontal)
+   DESCRIÇÃO: Engine de Assertividade (Lógica Ajustada: Acertos vs Erros com Layout Dia-a-Dia)
 */
 
 // ====================================================================
@@ -33,14 +33,14 @@ MinhaArea.Comparativo = {
         
         const containerFeed = document.getElementById('feed-erros-container');
         
-        // --- SELETORES DOS NOVOS CARDS ---
+        // --- SELETORES DOS CARDS (IDs mantidos no novo HTML) ---
         const elTotalAuditados = document.getElementById('card-total-auditados');
         const elTotalAcertos = document.getElementById('card-total-acertos');
-        const elTotalErros = document.getElementById('card-total-erros');
+        const elTotalErros = document.getElementById('card-total-erros'); // Agora no rodapé do card Acertos
 
         const elErrosGupy = document.getElementById('card-erros-gupy'); 
         const elErrosNdf = document.getElementById('card-erros-ndf'); 
-        const elEmpresaValidar = document.getElementById('card-empresa-validar'); 
+        const elEmpresaValidar = document.getElementById('card-empresa-validar'); // Agora no rodapé do card NDF
 
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
@@ -57,7 +57,7 @@ MinhaArea.Comparativo = {
             // --- REGRAS DE NEGÓCIO ---
             let countTotalAuditados = 0; // Universo Total
             let countErrosGupy = 0;      // < 100% e não é NDF
-            let countErrosNdf = 0;       // < 100% e é NDF (inclui 'Outros' tecnicamente)
+            let countErrosNdf = 0;       // < 100% e é NDF (inclui 'Outros')
             let countNdfEmpresa = 0;     // Apenas 'DOC_NDF_OUTROS'
 
             const listaErros = []; // Apenas para o Feed e Gráfico
@@ -108,9 +108,9 @@ MinhaArea.Comparativo = {
             if(elTotalAcertos) elTotalAcertos.innerText = totalAcertos.toLocaleString('pt-BR');
             if(elTotalErros) elTotalErros.innerText = totalErrosReais.toLocaleString('pt-BR');
             
-            // Card 2: Detalhamento
+            // Card 2 & 3 & 4
             if(elErrosGupy) elErrosGupy.innerText = countErrosGupy.toLocaleString('pt-BR'); 
-            if(elErrosNdf) elErrosNdf.innerText = displayErrosNdf.toLocaleString('pt-BR'); // Exibe NDF - Empresa
+            if(elErrosNdf) elErrosNdf.innerText = displayErrosNdf.toLocaleString('pt-BR'); 
             if(elEmpresaValidar) elEmpresaValidar.innerText = countNdfEmpresa.toLocaleString('pt-BR');
 
             // --- RENDERIZAÇÃO (Gráfico e Feed) ---
