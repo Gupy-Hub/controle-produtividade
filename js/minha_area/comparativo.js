@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade Otimizada (Parallel Fetching + UX + Server-Side Filter)
+   DESCRIÇÃO: Engine de Assertividade (Lógica Ajustada: Separação de Acertos vs Erros)
 */
 
 // ====================================================================
@@ -18,12 +18,13 @@ const FRIENDLY_NAMES_MAP = {
 MinhaArea.Comparativo = {
     chartOfensores: null,
     dadosBrutosCache: [], 
+    listaErrosCache: [], // Cache específico apenas para os erros (Feed/Gráfico)
     visaoAtual: 'doc', 
     mostrarTodos: false,
 
     carregar: async function() {
         console.time("PerformanceTotal");
-        console.log("🚀 UX Dashboard: Iniciando Carga (Modo Turbo)...");
+        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: Auditados vs Erros)...");
         const uid = MinhaArea.getUsuarioAlvo();
         
         if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
@@ -31,58 +32,75 @@ MinhaArea.Comparativo = {
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         
         const containerFeed = document.getElementById('feed-erros-container');
-        const elErrosValidados = document.getElementById('total-nok-detalhe');
+        const elTotalGeral = document.getElementById('total-nok-detalhe'); // Agora representa Total Auditado
         const elErrosGupy = document.getElementById('total-nok-gupy'); 
         const elNdfTotal = document.getElementById('total-ndf-detalhe'); 
         const elNdfAuditados = document.getElementById('total-ndf-auditados'); 
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
-        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Carregando registros...</div>';
+        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Analisando auditorias...</div>';
 
         try {
             // 1. BUSCA PARALELA OTIMIZADA
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
-            console.log(`📦 Processando ${dados.length} registros úteis...`);
+            console.log(`📦 Base Total: ${dados.length} registros auditados.`);
 
-            // --- REGRAS DE NEGÓCIO ---
-            let countValidados = 0;
-            let countGupy = 0;
-            let countNdf = 0;
-            let countNdfOutros = 0;
+            // --- REGRAS DE NEGÓCIO JANEIRO/2026 ---
+            let countTotalAuditados = 0; // Universo Total
+            let countErrosGupy = 0;      // < 100% e não é NDF
+            let countErrosNdf = 0;       // < 100% e é NDF
+            let countNdfEmpresa = 0;     // < 100% e é NDF_OUTROS
 
-            const listaValidados = [];
+            const listaErros = []; // Apenas para o Feed e Gráfico
 
             for (let i = 0; i < dados.length; i++) {
                 const d = dados[i];
                 
-                // Validação redundante (segurança extra)
+                // Regra 1: Deve ter auditora (Já filtrado no banco, mas garantindo)
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
-                listaValidados.push(d); 
-                countValidados++;
+                // Incrementa o universo total (inclui os 100% corretos)
+                countTotalAuditados++;
 
-                const tipoDocUpper = (d.tipo_documento || '').toUpperCase();
-                const isNdf = tipoDocUpper.startsWith('DOC_NDF_');
+                // Regra 2: É erro? (Qtd NOK > 0 implica Assertividade < 100%)
+                // Se qtd_nok for 0 ou nulo, é considerado acerto (100%)
+                const isErro = (d.qtd_nok && Number(d.qtd_nok) > 0);
 
-                if (isNdf) {
-                    countNdf++;
-                    if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfOutros++;
-                } else {
-                    countGupy++;
+                if (isErro) {
+                    listaErros.push(d); // Adiciona na lista visual
+
+                    const tipoDocUpper = (d.tipo_documento || '').toUpperCase();
+                    const isNdf = tipoDocUpper.startsWith('DOC_NDF_');
+
+                    if (isNdf) {
+                        countErrosNdf++;
+                        if (tipoDocUpper === 'DOC_NDF_OUTROS') countNdfEmpresa++;
+                    } else {
+                        countErrosGupy++;
+                    }
                 }
             }
+            
+            this.listaErrosCache = listaErros;
 
-            // --- ATUALIZAÇÃO DOS CONTADORES ---
-            if(elErrosValidados) elErrosValidados.innerText = countValidados.toLocaleString('pt-BR');
-            if(elErrosGupy) elErrosGupy.innerText = countGupy.toLocaleString('pt-BR'); 
-            if(elNdfTotal) elNdfTotal.innerText = countNdf.toLocaleString('pt-BR');
-            if(elNdfAuditados) elNdfAuditados.innerText = countNdfOutros.toLocaleString('pt-BR');
+            // --- ATUALIZAÇÃO DOS CARDS ---
+            // Card 1: Total Geral (Universo Auditado)
+            if(elTotalGeral) elTotalGeral.innerText = countTotalAuditados.toLocaleString('pt-BR');
+            
+            // Card 2: Erros Gupy
+            if(elErrosGupy) elErrosGupy.innerText = countErrosGupy.toLocaleString('pt-BR'); 
+            
+            // Card 3: Erros NDF
+            if(elNdfTotal) elNdfTotal.innerText = countErrosNdf.toLocaleString('pt-BR');
+            
+            // Card 4: Empresa Deveria Validar
+            if(elNdfAuditados) elNdfAuditados.innerText = countNdfEmpresa.toLocaleString('pt-BR');
 
-            // --- RENDERIZAÇÃO ---
-            if (listaValidados.length === 0) {
+            // --- RENDERIZAÇÃO (Focada nos ERROS) ---
+            if (listaErros.length === 0) {
                 this.renderizarVazio(containerFeed);
                 this.renderizarGraficoVazio();
                 console.timeEnd("PerformanceTotal");
@@ -120,12 +138,12 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        const base = this.dadosBrutosCache; 
+        // Busca apenas na lista de erros
+        const base = this.listaErrosCache; 
         
         const filtrados = [];
         let matches = 0;
         
-        // Loop otimizado com break
         for (let i = 0; i < base.length; i++) {
             if (matches >= 100) break;
             
@@ -176,7 +194,8 @@ MinhaArea.Comparativo = {
 
         this.limparFiltro(false);
         
-        const base = this.dadosBrutosCache;
+        // Base agora é apenas a lista de erros
+        const base = this.listaErrosCache;
         let filtrados;
         
         if (novaVisao === 'ndf') {
@@ -190,7 +209,7 @@ MinhaArea.Comparativo = {
     },
 
     filtrarPorSelecao: function(valorAmigavel) {
-        const base = this.dadosBrutosCache;
+        const base = this.listaErrosCache;
         const filtrados = [];
         let limit = 0;
 
@@ -224,7 +243,6 @@ MinhaArea.Comparativo = {
 
         const agrupamento = {};
         
-        // Limita processamento para garantir fluidez da UI (50k amostra)
         const limitProcess = Math.min(dadosParaGrafico.length, 50000);
 
         for (let i = 0; i < limitProcess; i++) {
@@ -271,8 +289,7 @@ MinhaArea.Comparativo = {
     renderizarFeed: function(lista, container) {
         if(!container) return;
         
-        // --- OTIMIZAÇÃO: VIRTUALIZAÇÃO SIMPLES ---
-        // Renderiza apenas os 100 últimos registros
+        // Renderiza apenas os 100 últimos erros
         const LIMITE_RENDER = 100;
         const totalItens = lista.length;
         
@@ -281,7 +298,7 @@ MinhaArea.Comparativo = {
         const itensVisiveis = lista.slice(0, LIMITE_RENDER);
         
         if (totalItens === 0) {
-            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum registro encontrado.</div>';
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum erro encontrado neste filtro.</div>';
             return;
         }
         
@@ -302,25 +319,14 @@ MinhaArea.Comparativo = {
             const obs = doc.observacao || 'Sem observação.';
             const isNdf = this.isNDF(doc);
             
-            let badgeClass = 'bg-slate-100 text-slate-600';
-            let badgeText = 'AUDIT';
-            let borderClass = 'border-l-emerald-500';
+            let badgeClass = 'bg-rose-50 text-rose-600';
+            let badgeText = 'NOK';
+            let borderClass = 'border-l-rose-500';
 
             if (isNdf) {
                 badgeClass = 'bg-amber-100 text-amber-700';
                 badgeText = 'NDF';
                 borderClass = 'border-l-amber-500';
-            } else {
-                const qtd = Number(doc.qtd_nok || 0);
-                const status = (doc.status || '').toUpperCase();
-                if (qtd > 0 || status.includes('NOK')) {
-                    badgeClass = 'bg-rose-50 text-rose-600';
-                    badgeText = 'NOK';
-                    borderClass = 'border-l-rose-500';
-                } else {
-                    badgeClass = 'bg-emerald-50 text-emerald-600';
-                    badgeText = 'OK';
-                }
             }
 
             const assistenteInfo = (!MinhaArea.getUsuarioAlvo()) ? `<span class="block text-[9px] text-blue-500 font-bold mt-1">👤 ${doc.assistente_nome || 'Equipe'}</span>` : '';
@@ -408,7 +414,7 @@ MinhaArea.Comparativo = {
     },
 
     renderizarVazio: function(container) {
-        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Tudo Certo!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado neste período.</p></div>';
+        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Parabéns!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado nos registros auditados.</p></div>';
     },
 
     renderizarGraficoVazio: function() {
@@ -423,7 +429,7 @@ MinhaArea.Comparativo = {
         // 1. Descobre o TOTAL de registros primeiro (Count Rápido)
         let queryCount = Sistema.supabase
             .from('assertividade')
-            .select('*', { count: 'exact', head: true }) // head: true não baixa dados, só conta
+            .select('*', { count: 'exact', head: true }) 
             .gte('data_referencia', inicio)
             .lte('data_referencia', fim)
             .neq('auditora_nome', null);
@@ -435,17 +441,14 @@ MinhaArea.Comparativo = {
         if (errCount) throw errCount;
         if (count === 0) return [];
 
-        console.log(`📊 Estratégia Paralela: Baixando ${count} registros simultaneamente...`);
-
         // 2. Define o tamanho da página e monta as promessas
         const PAGE_SIZE = 1000;
         const totalPages = Math.ceil(count / PAGE_SIZE);
         const promises = [];
         
-        // Colunas verificadas (empresa_nome correto)
+        // Inclui qtd_nok para saber se é erro ou acerto
         const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa_nome, assistente_nome, qtd_nok';
 
-        // Trava de segurança para não explodir o navegador
         const MAX_PAGES = 300; // 300k registros
         const pagesToFetch = Math.min(totalPages, MAX_PAGES);
 
