@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Regras V4: Alinhamento Matemático Estrito)
+   DESCRIÇÃO: Engine de Assertividade (Correção: Coluna tipo_documento)
 */
 
 MinhaArea.Comparativo = {
@@ -7,6 +7,37 @@ MinhaArea.Comparativo = {
     dadosBrutosCache: [], // Cache de todos os dados
     visaoAtual: 'doc', 
     mostrarTodos: false,
+
+    // REGRAS DE NEGÓCIO: Códigos Oficiais NDF
+    codigosNdfOficiais: [
+        'DOC_NDF_100%',
+        'DOC_NDF_CATEGORIA PROFISSIONAL',
+        'DOC_NDF_DEPENDENTE',
+        'DOC_NDF_ESTADO CIVIL',
+        'DOC_NDF_ESTRANGEIRO',
+        'DOC_NDF_LAUDO',
+        'DOC_NDF_OUTROS'
+    ],
+
+    // Fallback para visualização
+    listaNdfConhecidos: [
+        'Comprovante de escolaridade', 'Dados Bancários', 'Contrato de Aprendizagem', 
+        'Laudo Caracterizador de Deficiência', 'Certificados Complementares', 
+        'Registro Órgão de Classe', 'Regularização do Conselho Profissional', 
+        'Certificado de Curso Técnico', 'Foto para Crachá', 'Informações para agendamento do ASO', 
+        'Declaração de Imposto de Renda', 'Passaporte', 'Visto Brasileiro para estrangeiros', 
+        'Contato de Emergência', 'CNH do Cônjuge', 'Visto', 'Formulário Allya', 
+        'Cartão de Vacinação', 'Dados Bancários - Santander', 'Escolaridade', 
+        'Cartão de Transporte', 'Curso ou certificação', 'Vale Transporte - Roteiro',
+        'ASO - Atestado de Saúde Ocupacional', 'Laudo MTE', 'Imposto de Renda', 
+        'Multiplos vínculos', 'Registro de Identificação Civil - RIC', 
+        'Diploma, Declaração ou Histórico Escolar', 'Tamanho de Uniforme', 
+        'Reservista (Acima de 45 anos)', 'Comprovante de Ensino Médio', 
+        'Certidão de Prontuário da CNH', 'Tipo de Conta Bancária', 
+        'Certidão Negativa do Conselho Regional', 'Carteira de vacinação atualizada',
+        'Declaração de Residência', 'Informações Complementares', 'Carta Proposta',
+        'CPF Mãe', 'Registro Administrativo de Nascimento de Indígena'
+    ],
 
     carregar: async function() {
         console.log("🚀 UX Dashboard: Iniciando...");
@@ -36,8 +67,8 @@ MinhaArea.Comparativo = {
             // REGRA BASE: Tem nome de auditora
             const temAuditora = (d) => d.auditora_nome && d.auditora_nome.trim() !== '';
 
-            // REGRA DOCUMENTO: Começa com DOC_NDF_
-            const isDocNdf = (d) => (d.documento || '').toUpperCase().startsWith('DOC_NDF_');
+            // REGRA DOCUMENTO: Começa com DOC_NDF_ (Usando a coluna CORRETA: tipo_documento)
+            const isDocNdf = (d) => (d.tipo_documento || '').toUpperCase().startsWith('DOC_NDF_');
 
             // 1. Total de Erros Validados
             // Lógica: Todos que tem Nome da Auditora
@@ -52,8 +83,8 @@ MinhaArea.Comparativo = {
             const listaNdf = listaValidados.filter(d => isDocNdf(d));
 
             // 4. Erros NDF Auditados (Card Específico)
-            // Lógica: Tem Auditora E apenas os que tem DOC_NDF_OUTROS
-            const listaNdfOutros = listaValidados.filter(d => (d.documento || '').toUpperCase() === 'DOC_NDF_OUTROS');
+            // Lógica: Tem Auditora E apenas os que tem DOC_NDF_OUTROS (Usando tipo_documento)
+            const listaNdfOutros = listaValidados.filter(d => (d.tipo_documento || '').toUpperCase() === 'DOC_NDF_OUTROS');
 
             // --- ATUALIZAÇÃO DOS CARDS ---
             if(elErrosValidados) elErrosValidados.innerText = listaValidados.length;
@@ -80,13 +111,13 @@ MinhaArea.Comparativo = {
 
     // Auxiliar para identificar visualmente no Feed/Gráfico
     isNDF: function(d) {
-        return (d.documento || '').toUpperCase().startsWith('DOC_NDF_');
+        return (d.tipo_documento || '').toUpperCase().startsWith('DOC_NDF_');
     },
 
     getDocType: function(d) {
         if (this.isNDF(d)) {
-            // Se for NDF, retorna o nome técnico (ex: DOC_NDF_LAUDO)
-            return d.documento || "DOC_NDF_GENERICO";
+            // Se for NDF, retorna o nome técnico da coluna tipo_documento
+            return d.tipo_documento || "DOC_NDF_GENERICO";
         }
         // Se for Gupy, retorna o nome amigável do documento
         return d.doc_name || d.nome_documento || 'Documento Gupy';
@@ -106,7 +137,7 @@ MinhaArea.Comparativo = {
             const tipo = (this.getDocType(d) || '').toLowerCase();
             const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
             const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
-            const docOficial = (d.documento || '').toLowerCase();
+            const docOficial = (d.tipo_documento || '').toLowerCase();
             
             return nome.includes(termo) || tipo.includes(termo) || obs.includes(termo) || emp.includes(termo) || docOficial.includes(termo);
         });
@@ -169,7 +200,7 @@ MinhaArea.Comparativo = {
         } else if (this.visaoAtual === 'ndf') {
             filtrados = base.filter(d => {
                 if (!this.isNDF(d)) return false;
-                const identificador = d.documento || d.doc_name || 'Sem Nome';
+                const identificador = d.tipo_documento || d.doc_name || 'Sem Nome';
                 return identificador.includes(valor.replace('...', ''));
             });
         } else {
@@ -193,8 +224,8 @@ MinhaArea.Comparativo = {
             let chave = 'Outros';
             if (this.visaoAtual === 'empresa') chave = item.empresa || item.empresa_nome || 'Desconhecida';
             else if (this.visaoAtual === 'ndf') {
-                // Na visão NDF, usamos o código técnico
-                chave = item.documento || item.doc_name || 'Sem Nome';
+                // Na visão NDF, usamos o código técnico (tipo_documento)
+                chave = item.tipo_documento || item.doc_name || 'Sem Nome';
             }
             else chave = this.getDocType(item);
             
@@ -240,7 +271,7 @@ MinhaArea.Comparativo = {
             const empresa = doc.empresa || doc.empresa_nome || '';
             const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
             const isNdf = this.isNDF(doc);
-            const docOficial = doc.documento || '';
+            const docOficial = doc.tipo_documento || '';
             
             let badgeClass = 'bg-slate-100 text-slate-600';
             let badgeText = 'AUDIT';
