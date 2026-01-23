@@ -1,9 +1,10 @@
-// js/minha_area/comparativo.js
+/* ARQUIVO: js/minha_area/comparativo.js
+   DESCRIÇÃO: Engine de Assertividade com Nomes Amigáveis (UX)
+*/
 
 // ====================================================================
 // MAPEAMENTO DE NOMES AMIGÁVEIS (UX)
 // ====================================================================
-// Traduz os códigos técnicos do banco para termos fáceis para as assistentes.
 const FRIENDLY_NAMES_MAP = {
     'DOC_NDF_100%': 'Empresas 100%',
     'DOC_NDF_CATEGORIA PROFISSIONAL': 'Categoria DIP',
@@ -12,365 +13,395 @@ const FRIENDLY_NAMES_MAP = {
     'DOC_NDF_ESTRANGEIRO': 'Categoria Estrangeiro',
     'DOC_NDF_LAUDO': 'Categoria Laudo',
     'DOC_NDF_OUTROS': 'Empresa deveria Validar'
-    // Se aparecer um novo código não listado aqui, o sistema usará o código original.
 };
 
 MinhaArea.Comparativo = {
-    myChart: null,
-    dadosProcessados: null,
-    visaoAtual: 'doc', // 'doc', 'empresa', 'ndf'
+    chartOfensores: null,
+    dadosBrutosCache: [], 
+    visaoAtual: 'doc', 
     mostrarTodos: false,
-    filtroBusca: '',
 
-    init: function() {
-        // Inicializações se necessário
-    },
-
-    // --- CORREÇÃO DO ERRO CRÍTICO ---
-    // O main.js chama .carregar(), então criamos esta função para redirecionar para a lógica de atualização
     carregar: async function() {
-        console.log("[Comparativo] Iniciando carga...");
-        await this.atualizar();
+        console.log("🚀 UX Dashboard: Iniciando...");
+        const uid = MinhaArea.getUsuarioAlvo();
+        
+        // Se não tiver usuário alvo e não for admin, para.
+        if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
+
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
+        
+        const containerFeed = document.getElementById('feed-erros-container');
+        const elErrosValidados = document.getElementById('total-nok-detalhe');
+        const elErrosGupy = document.getElementById('total-nok-gupy'); 
+        const elNdfTotal = document.getElementById('total-ndf-detalhe'); 
+        const elNdfAuditados = document.getElementById('total-ndf-auditados'); 
+        const btnLimpar = document.getElementById('btn-limpar-filtro');
+        
+        if(btnLimpar) btnLimpar.classList.add('hidden');
+        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-spinner fa-spin text-2xl mb-2"></i><br>Processando métricas...</div>';
+
+        try {
+            // 1. BUSCA DE DADOS (Mantendo a lógica original que funciona)
+            const dados = await this.buscarTudoPaginado(uid, inicio, fim);
+            this.dadosBrutosCache = dados;
+
+            // --- REGRAS DE NEGÓCIO ---
+
+            // REGRA BASE: Tem nome de auditora
+            const temAuditora = (d) => d.auditora_nome && d.auditora_nome.trim() !== '';
+            // REGRA DOCUMENTO: Começa com DOC_NDF_
+            const isDocNdf = (d) => (d.tipo_documento || '').toUpperCase().startsWith('DOC_NDF_');
+
+            // 1. Total Geral (Antigo "Erros Validados")
+            const listaValidados = dados.filter(d => temAuditora(d));
+            
+            // 2. Erros Doc. Gupy (Antigo "Erros Gupy") - Não é NDF
+            const listaGupy = listaValidados.filter(d => !isDocNdf(d));
+
+            // 3. Erros NDF (Antigo "Total NDF")
+            const listaNdf = listaValidados.filter(d => isDocNdf(d));
+
+            // 4. Erros Empresa (Antigo "NDF Auditados")
+            // A regra original considerava DOC_NDF_OUTROS como o item desse card
+            const listaNdfOutros = listaValidados.filter(d => (d.tipo_documento || '').toUpperCase() === 'DOC_NDF_OUTROS');
+
+            // --- ATUALIZAÇÃO DOS CONTADORES (CARDS) ---
+            if(elErrosValidados) elErrosValidados.innerText = listaValidados.length;
+            if(elErrosGupy) elErrosGupy.innerText = listaGupy.length; 
+            if(elNdfTotal) elNdfTotal.innerText = listaNdf.length;
+            if(elNdfAuditados) elNdfAuditados.innerText = listaNdfOutros.length;
+
+            // --- RENDERIZAÇÃO DO FEED E GRÁFICO ---
+            if (listaValidados.length === 0) {
+                this.renderizarVazio(containerFeed);
+                this.renderizarGraficoVazio();
+                return;
+            }
+
+            // Inicializa com a visão padrão
+            this.mudarVisao(this.visaoAtual); 
+
+        } catch (err) {
+            console.error("Erro Comparativo:", err);
+            if(containerFeed) containerFeed.innerHTML = `<div class="text-rose-500 text-center py-8">Erro ao carregar dashboard: ${err.message}</div>`;
+        }
     },
 
-    atualizar: async function() {
-        // O carregamento e processamento dos dados é feito pelo pai (MinhaArea.js)
-        // e passado via 'window.DadosGlobais.dadosBrutos'
-        if (!window.DadosGlobais || !window.DadosGlobais.dadosBrutos) {
-            console.warn("[Comparativo] Sem dados brutos disponíveis.");
-            this.renderizarEstadoVazio();
+    // Retorna o nome amigável se existir, senão o técnico
+    getFriendlyName: function(technicalName) {
+        if (!technicalName) return 'Sem Nome';
+        return FRIENDLY_NAMES_MAP[technicalName] || technicalName;
+    },
+
+    // Auxiliar para identificar visualmente
+    isNDF: function(d) {
+        return (d.tipo_documento || '').toUpperCase().startsWith('DOC_NDF_');
+    },
+
+    getDocType: function(d) {
+        if (this.isNDF(d)) {
+            return d.tipo_documento || "DOC_NDF_GENERICO";
+        }
+        return d.doc_name || d.nome_documento || 'Documento Gupy';
+    },
+
+    filtrarPorBusca: function(texto) {
+        if (!texto || texto.trim() === '') {
+            this.limparFiltro(true);
             return;
         }
+        const termo = texto.toLowerCase();
+        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
         
-        try {
-            this.processarDadosComparativo(window.DadosGlobais.dadosBrutos);
-            this.atualizarInterface();
-        } catch (error) {
-            console.error("[Comparativo] Erro ao processar dados:", error);
-            // Verifica se o módulo de notificação existe antes de chamar
-            if(window.Sistema && Sistema.Notificacao) {
-                Sistema.Notificacao.mostrar("Erro ao processar dados do comparativo.", "erro");
-            }
-        }
-    },
-
-    processarDadosComparativo: function(dados) {
-        // Reseta contadores
-        const stats = {
-            totalGeralNokNdf: 0, // Total Geral (NOK + NDF)
-            totalNokGupy: 0,     // Erros Doc. Gupy (Apenas NOK)
-            totalNdfGeral: 0,    // Erros NDF (Total de NDFs)
-            totalNdfAuditados: 0 // Erros Empresa (NDFs que já passaram por auditoria humana)
-        };
-
-        const ofensoresMap = new Map();
-        const feedErros = [];
-
-        dados.forEach(row => {
-            const status = row.audit_status;
-            const obs = row.audit_obs || '';
-            // Normaliza o ofensor: se for nulo, undefined ou string vazia, define como "Não Identificado"
-            const ofensor = (row.audit_ofensor && row.audit_ofensor.trim() !== '') 
-                ? row.audit_ofensor.trim() 
-                : 'Não Identificado';
+        const filtrados = base.filter(d => {
+            const nome = (d.doc_name || '').toLowerCase();
+            const tipoTecnico = (this.getDocType(d) || '');
+            const tipoAmigavel = this.getFriendlyName(tipoTecnico).toLowerCase(); // Busca pelo nome amigável
+            const obs = (d.observacao || d.obs || d.apontamentos || '').toLowerCase();
+            const emp = (d.empresa || d.empresa_nome || '').toLowerCase();
             
-            const isNDF = status === 'NDF';
-            const isNOK = status === 'NOK';
-
-            // 1. Contagem dos Cards Superiores (Lógica de Negócio)
-            if (isNOK || isNDF) {
-                stats.totalGeralNokNdf++; // Soma tudo que não é OK
-            }
-
-            if (isNOK) {
-                stats.totalNokGupy++; // Apenas NOKs são "Erros Gupy"
-            }
-
-            if (isNDF) {
-                stats.totalNdfGeral++; // Total de NDFs
-                // Se tem observação de auditoria, consideramos "Auditado/Empresa"
-                if (obs.trim().length > 0) {
-                    stats.totalNdfAuditados++;
-                }
-            }
-
-            // 2. Dados para o Gráfico (Top Ofensores) e Feed
-            if (isNOK || isNDF) {
-                 // Agrupamento para o gráfico (usando o nome técnico original para agrupar corretamente)
-                if (ofensoresMap.has(ofensor)) {
-                    ofensoresMap.set(ofensor, ofensoresMap.get(ofensor) + 1);
-                } else {
-                    ofensoresMap.set(ofensor, 1);
-                }
-
-                // Popula feed de erros
-                feedErros.push({
-                    data: row.data_referencia,
-                    status: status,
-                    ofensor: ofensor, // Nome técnico mantido no objeto de dados
-                    obs: obs,
-                    colaborador: row.colaborador_nome // Importante para a busca
-                });
-            }
+            return nome.includes(termo) || 
+                   tipoTecnico.toLowerCase().includes(termo) || 
+                   tipoAmigavel.includes(termo) || 
+                   obs.includes(termo) || 
+                   emp.includes(termo);
         });
 
-        // Converte mapa em array e ordena
-        let topOfensores = Array.from(ofensoresMap, ([ofensor, quantidade]) => ({ ofensor, quantidade }))
-            .sort((a, b) => b.quantidade - a.quantidade);
-
-        // Ordena feed por data (mais recente primeiro)
-        feedErros.sort((a, b) => new Date(b.data.split('/').reverse().join('-')) - new Date(a.data.split('/').reverse().join('-')));
-
-        this.dadosProcessados = {
-            stats,
-            topOfensores,
-            feedErros
-        };
-    },
-
-    atualizarInterface: function() {
-        if (!this.dadosProcessados) return;
-
-        // Atualiza Cards
-        const stats = this.dadosProcessados.stats;
-        
-        const elTotal = document.getElementById('total-nok-detalhe');
-        const elGupy = document.getElementById('total-nok-gupy');
-        const elNdf = document.getElementById('total-ndf-detalhe');
-        const elEmpresa = document.getElementById('total-ndf-auditados');
-
-        if(elTotal) elTotal.textContent = stats.totalGeralNokNdf;
-        if(elGupy) elGupy.textContent = stats.totalNokGupy;
-        if(elNdf) elNdf.textContent = stats.totalNdfGeral;
-        if(elEmpresa) elEmpresa.textContent = stats.totalNdfAuditados;
-
-        // Atualiza Gráfico e Feed com base nos filtros atuais
-        this.aplicarFiltrosVisuais();
-    },
-
-    mudarVisao: function(novaVisao) {
-        this.visaoAtual = novaVisao;
-        
-        // Atualiza estado dos botões
-        ['btn-view-doc', 'btn-view-empresa', 'btn-view-ndf'].forEach(id => {
-            const btn = document.getElementById(id);
-            if(btn) {
-                btn.classList.remove('bg-white', 'text-rose-600', 'shadow-sm');
-                btn.classList.add('text-slate-500', 'hover:bg-white');
-            }
-        });
-
-        const activeBtn = document.getElementById(`btn-view-${novaVisao}`);
-        if(activeBtn) {
-            activeBtn.classList.remove('text-slate-500', 'hover:bg-white');
-            activeBtn.classList.add('bg-white', 'text-rose-600', 'shadow-sm');
-        }
-
-        // Re-renderiza o gráfico com a nova visão
-        this.aplicarFiltrosVisuais();
+        this.renderizarFeed(filtrados, document.getElementById('feed-erros-container'));
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) { btn.classList.remove('hidden'); btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar Busca`; }
     },
 
     toggleMostrarTodos: function() {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
-        if(btn) btn.textContent = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
-        this.aplicarFiltrosVisuais();
+        if(btn) btn.innerText = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
+        // Recarrega o gráfico com a visão atual
+        this.mudarVisao(this.visaoAtual);
     },
 
-    filtrarPorBusca: function(termo) {
-        this.filtroBusca = termo.toLowerCase().trim();
-        const btnLimpar = document.getElementById('btn-limpar-filtro');
+    mudarVisao: function(novaVisao) {
+        this.visaoAtual = novaVisao;
         
-        if(btnLimpar) {
-            if (this.filtroBusca.length > 0) {
-                btnLimpar.classList.remove('hidden');
-            } else {
-                btnLimpar.classList.add('hidden');
-            }
+        const btnDoc = document.getElementById('btn-view-doc');
+        const btnEmpresa = document.getElementById('btn-view-empresa');
+        const btnNdf = document.getElementById('btn-view-ndf');
+        
+        const baseClass = "px-3 py-1 text-[10px] font-bold rounded transition ";
+        const activeClass = "bg-white text-rose-600 shadow-sm";
+        const inactiveClass = "text-slate-500 hover:bg-white";
+
+        if(btnDoc) btnDoc.className = baseClass + (novaVisao === 'doc' ? activeClass : inactiveClass);
+        if(btnEmpresa) btnEmpresa.className = baseClass + (novaVisao === 'empresa' ? activeClass : inactiveClass);
+        if(btnNdf) btnNdf.className = baseClass + (novaVisao === 'ndf' ? activeClass : inactiveClass);
+
+        this.limparFiltro(false);
+        
+        // Base: Apenas auditados
+        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        let filtrados = base;
+        
+        if (novaVisao === 'ndf') {
+            filtrados = base.filter(d => this.isNDF(d));
+        } else if (novaVisao === 'doc') {
+            filtrados = base;
         }
-        this.aplicarFiltrosVisuais();
+        // Visão 'empresa' mantém a base toda, mas agrupa por empresa no gráfico
+        
+        this.atualizarGrafico(filtrados);
+        this.renderizarFeed(filtrados, document.getElementById('feed-erros-container'));
     },
 
-    limparFiltro: function() {
-        this.filtroBusca = '';
-        // Limpa inputs de busca visíveis
-        const inputs = document.querySelectorAll('input[placeholder*="Buscar"]');
-        inputs.forEach(inp => inp.value = '');
+    filtrarPorSelecao: function(valorAmigavel) {
+        // O valor que vem do clique no gráfico já é o "Amigável".
+        // Precisamos filtrar encontrando itens que correspondam a esse nome.
+        
+        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        let filtrados = [];
+        
+        if (this.visaoAtual === 'empresa') {
+            filtrados = base.filter(d => {
+                const emp = d.empresa || d.empresa_nome || 'Desconhecida';
+                return emp === valorAmigavel || emp.includes(valorAmigavel.replace('...', ''));
+            });
+        } else {
+            // Para NDF e DOC, comparamos o tipo traduzido
+            filtrados = base.filter(d => {
+                const tipoTecnico = this.visaoAtual === 'ndf' ? (d.tipo_documento || '') : this.getDocType(d);
+                const nomeAmigavelItem = this.getFriendlyName(tipoTecnico);
+                
+                // Compara com o valor clicado (que pode ter reticências)
+                return nomeAmigavelItem === valorAmigavel || nomeAmigavelItem.includes(valorAmigavel.replace('...', ''));
+            });
+        }
+        
+        this.aplicarFiltroVisual(filtrados, valorAmigavel);
+    },
 
+    atualizarGrafico: function(dadosParaGrafico) {
+        const ctx = document.getElementById('graficoTopOfensores');
+        if (!ctx) return;
+        if (this.chartOfensores) this.chartOfensores.destroy();
+
+        const agrupamento = {};
+        
+        dadosParaGrafico.forEach(item => {
+            let chave = 'Outros';
+            
+            if (this.visaoAtual === 'empresa') {
+                chave = item.empresa || item.empresa_nome || 'Desconhecida';
+            } else if (this.visaoAtual === 'ndf') {
+                // Pega código técnico e traduz
+                const codigoTecnico = item.tipo_documento || item.doc_name || 'Sem Nome';
+                chave = this.getFriendlyName(codigoTecnico);
+            } else {
+                // Visão Geral (Doc)
+                const codigoTecnico = this.getDocType(item);
+                chave = this.getFriendlyName(codigoTecnico);
+            }
+            
+            // Trunca nome longo
+            if(chave.length > 28) chave = chave.substring(0, 26) + '...';
+            
+            if (!agrupamento[chave]) agrupamento[chave] = 0;
+            agrupamento[chave]++;
+        });
+
+        let dadosGrafico = Object.entries(agrupamento).sort((a, b) => b[1] - a[1]);
+        if (!this.mostrarTodos) dadosGrafico = dadosGrafico.slice(0, 5);
+
+        this.renderizarGraficoOfensores(dadosGrafico);
+    },
+
+    aplicarFiltroVisual: function(lista, nomeFiltro) {
+        const container = document.getElementById('feed-erros-container');
+        this.renderizarFeed(lista, container);
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) { btn.classList.remove('hidden'); btn.innerHTML = `<i class="fas fa-times text-rose-500"></i> Limpar: ${nomeFiltro}`; }
+    },
+
+    limparFiltro: function(renderizar = true) {
         const btn = document.getElementById('btn-limpar-filtro');
         if(btn) btn.classList.add('hidden');
         
-        this.aplicarFiltrosVisuais();
+        // Limpa input de busca se existir
+        const inputBusca = document.querySelector('#ma-tab-comparativo input');
+        if(inputBusca) inputBusca.value = '';
+
+        if (renderizar) this.mudarVisao(this.visaoAtual); // Reseta para a visão atual completa
     },
 
-    aplicarFiltrosVisuais: function() {
-        if (!this.dadosProcessados) return;
-
-        // 1. Filtra e Renderiza o Gráfico
-        let dadosGrafico = [...this.dadosProcessados.topOfensores];
-
-        // Filtro por Visão (Doc, Empresa, NDF)
-        if (this.visaoAtual === 'empresa') {
-            dadosGrafico = dadosGrafico.filter(item => item.ofensor.toUpperCase().includes('EMPRESA'));
-        } else if (this.visaoAtual === 'ndf') {
-            dadosGrafico = dadosGrafico.filter(item => item.ofensor.toUpperCase().includes('NDF'));
-        } 
-        
-        // Filtro de Quantidade (Top 5 vs Todos)
-        if (!this.mostrarTodos) {
-            dadosGrafico = dadosGrafico.slice(0, 5);
-        }
-
-        this.renderizarGraficoTopOfensores(dadosGrafico);
-
-        // 2. Filtra e Renderiza o Feed
-        let dadosFeed = [...this.dadosProcessados.feedErros];
-
-        // Filtro de Busca (no feed)
-        if (this.filtroBusca.length > 0) {
-            dadosFeed = dadosFeed.filter(item => {
-                // Aplica o mapa de nomes amigáveis também na busca do feed
-                // Assim, se a usuária buscar "Categoria DIP", o sistema encontra "DOC_NDF_CATEGORIA PROFISSIONAL"
-                const nomeAmigavelOfensor = FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
-                
-                return (item.ofensor && item.ofensor.toLowerCase().includes(this.filtroBusca)) ||
-                       (nomeAmigavelOfensor && nomeAmigavelOfensor.toLowerCase().includes(this.filtroBusca)) ||
-                       (item.obs && item.obs.toLowerCase().includes(this.filtroBusca)) ||
-                       (item.colaborador && item.colaborador.toLowerCase().includes(this.filtroBusca)) ||
-                       (item.data && item.data.includes(this.filtroBusca));
-            });
-        }
-
-        this.renderizarFeedErros(dadosFeed);
-    },
-
-    renderizarGraficoTopOfensores: function(data) {
-        const cvs = document.getElementById('graficoTopOfensores');
-        if(!cvs) return;
-        
-        const ctx = cvs.getContext('2d');
-
-        if (this.myChart) {
-            this.myChart.destroy();
-        }
-
-        if (data.length === 0) {
-            // Opcional: mostrar mensagem de "Sem dados" no canvas
+    renderizarFeed: function(lista, container) {
+        if(!container) return;
+        if (lista.length === 0) {
+            container.innerHTML = '<div class="text-center py-8 text-slate-400">Nenhum registro encontrado.</div>';
             return;
         }
-
-        // =========================================================
-        // APLICAÇÃO DO MAPEAMENTO DE NOMES AMIGÁVEIS (UX)
-        // =========================================================
-        const labels = data.map(item => {
-            return FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
-        });
         
-        const values = data.map(item => item.quantidade);
+        lista.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
+        
+        let html = '';
+        lista.forEach(doc => {
+            const data = doc.data_referencia ? new Date(doc.data_referencia).toLocaleDateString('pt-BR') : '-';
+            const nomeDocumentoOriginal = doc.doc_name || 'Sem Nome';
+            const tipoTecnico = this.getDocType(doc);
+            
+            // Aqui aplicamos o nome amigável para exibição
+            const subtitulo = this.getFriendlyName(tipoTecnico);
+            
+            const empresa = doc.empresa || doc.empresa_nome || '';
+            const obs = doc.observacao || doc.obs || doc.apontamentos || 'Sem observação.';
+            const isNdf = this.isNDF(doc);
+            
+            let badgeClass = 'bg-slate-100 text-slate-600';
+            let badgeText = 'AUDIT';
+            
+            if (isNdf) {
+                badgeClass = 'bg-amber-100 text-amber-700';
+                badgeText = 'NDF';
+            } else {
+                const qtd = Number(doc.qtd_nok || 0);
+                const status = (doc.status || '').toUpperCase();
+                if (qtd > 0 || status.includes('NOK')) {
+                    badgeClass = 'bg-rose-50 text-rose-600';
+                    badgeText = 'NOK';
+                } else {
+                    badgeClass = 'bg-emerald-50 text-emerald-600';
+                    badgeText = 'OK';
+                }
+            }
 
-        this.myChart = new Chart(ctx, {
+            const borderClass = isNdf ? 'border-l-amber-500' : (badgeText === 'NOK' ? 'border-l-rose-500' : 'border-l-emerald-500');
+            const assistenteInfo = (!MinhaArea.getUsuarioAlvo()) ? `<span class="block text-[9px] text-blue-500 font-bold mt-1">👤 ${doc.assistente_nome || 'Equipe'}</span>` : '';
+
+            html += `
+            <div class="bg-white p-4 rounded-lg border-l-4 ${borderClass} shadow-sm hover:shadow-md transition border border-slate-100 group">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">${data} • ${subtitulo} ${empresa ? '• ' + empresa : ''}</span>
+                        <h4 class="font-bold text-slate-700 text-sm leading-tight group-hover:text-rose-600 transition">${nomeDocumentoOriginal}</h4>
+                        ${assistenteInfo}
+                    </div>
+                    <div class="${badgeClass} text-[10px] font-bold px-2 py-1 rounded border border-white shadow-sm">${badgeText}</div>
+                </div>
+                <div class="bg-slate-50 p-3 rounded text-xs text-slate-600 italic border border-slate-100"><i class="fas fa-quote-left text-slate-300 mr-1"></i> ${obs}</div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    },
+
+    renderizarGraficoOfensores: function(dados) {
+        const ctx = document.getElementById('graficoTopOfensores');
+        if (!ctx) return;
+        if (this.chartOfensores) this.chartOfensores.destroy();
+        
+        const labels = dados.map(d => d[0]);
+        const values = dados.map(d => d[1]);
+        const _this = this;
+        
+        let barColor = '#f43f5e'; // Rose (Padrão/Geral)
+        if (this.visaoAtual === 'empresa') barColor = '#3b82f6'; // Blue
+        if (this.visaoAtual === 'ndf') barColor = '#d97706'; // Amber
+
+        this.chartOfensores = new Chart(ctx, {
             type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Quantidade',
-                    data: values,
-                    backgroundColor: data.map(item => item.ofensor.toUpperCase().includes('NDF') ? '#f59e0b' : '#e11d48'),
-                    borderRadius: 6,
+            data: { 
+                labels: labels, 
+                datasets: [{ 
+                    label: 'Ocorrências', 
+                    data: values, 
+                    backgroundColor: barColor, 
+                    borderRadius: 4, 
                     barThickness: 'flex',
-                    maxBarThickness: 40
-                }]
+                    maxBarThickness: 30,
+                    hoverBackgroundColor: '#1e293b' 
+                }] 
             },
             options: {
-                responsive: true,
+                indexAxis: 'y', 
+                responsive: true, 
                 maintainAspectRatio: false,
-                indexAxis: 'y', // Barras horizontais
-                scales: {
-                    x: {
-                        beginAtZero: true,
-                        grid: { display: false, drawBorder: false },
-                        ticks: { font: { family: "'Nunito', sans-serif", size: 10 }, color: '#94a3b8' }
-                    },
-                    y: {
-                        grid: { display: false, drawBorder: false },
-                        ticks: {
-                            font: { family: "'Nunito', sans-serif", size: 11, weight: '600' },
-                            color: '#475569',
-                            callback: function(value) {
-                                const label = this.getLabelForValue(value);
-                                return label.length > 25 ? label.substr(0, 25) + '...' : label;
-                            }
-                        }
-                    }
+                onClick: (e, elements) => { 
+                    if (elements.length > 0) { 
+                        const index = elements[0].index; 
+                        _this.filtrarPorSelecao(labels[index]); 
+                    } 
                 },
-                plugins: {
+                plugins: { 
                     legend: { display: false },
                     tooltip: {
                         backgroundColor: 'rgba(30, 41, 59, 0.9)',
-                        titleFont: { family: "'Nunito', sans-serif", size: 12 },
-                        bodyFont: { family: "'Nunito', sans-serif", size: 12 },
                         padding: 10,
-                        cornerRadius: 8,
-                        displayColors: false,
-                        callbacks: {
-                            title: function(context) { return context[0].label; }
-                        }
+                        titleFont: { family: "'Nunito', sans-serif" },
+                        bodyFont: { family: "'Nunito', sans-serif" }
                     }
+                },
+                scales: { 
+                    x: { 
+                        beginAtZero: true, 
+                        grid: { color: '#f1f5f9' }, 
+                        ticks: { stepSize: 1, font: { size: 10 } } 
+                    }, 
+                    y: { 
+                        grid: { display: false }, 
+                        ticks: { font: { size: 10, weight: 'bold' }, color: '#64748b' } 
+                    } 
                 }
             }
         });
     },
 
-    renderizarFeedErros: function(data) {
-        const container = document.getElementById('feed-erros-container');
-        if(!container) return;
-        
-        container.innerHTML = '';
-
-        if (data.length === 0) {
-            container.innerHTML = `
-                <div class="text-center py-12 text-slate-400">
-                    <i class="fas fa-check-circle text-4xl mb-2 text-emerald-200"></i><br>
-                    Nenhum registro de atenção encontrado.
-                </div>`;
-            return;
-        }
-
-        data.forEach(item => {
-            const isNDF = item.status === 'NDF';
-            const themeColor = isNDF ? 'amber' : 'rose';
-            const icon = isNDF ? 'fa-file-contract' : 'fa-times-circle';
-            
-            // Aplica nome amigável também no feed
-            const nomeOfensorAmigavel = FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
-
-            const card = document.createElement('div');
-            card.className = `bg-white p-3 rounded-lg border border-${themeColor}-100 shadow-sm flex gap-3 hover:shadow-md transition items-start`;
-            card.innerHTML = `
-                <div class="mt-1">
-                    <div class="w-8 h-8 rounded-full bg-${themeColor}-50 flex items-center justify-center text-${themeColor}-500">
-                        <i class="fas ${icon}"></i>
-                    </div>
-                </div>
-                <div class="flex-1 overflow-hidden">
-                    <div class="flex justify-between items-start mb-1">
-                        <h4 class="text-sm font-bold text-slate-700 truncate" title="${nomeOfensorAmigavel}">${nomeOfensorAmigavel}</h4>
-                        <span class="text-[10px] font-bold text-${themeColor}-600 bg-${themeColor}-50 px-1.5 rounded whitespace-nowrap">${item.status}</span>
-                    </div>
-                    <p class="text-xs text-slate-500 line-clamp-2 mb-2" title="${item.obs}">${item.obs || '<span class="italic text-slate-400">Sem observação.</span>'}</p>
-                    <div class="flex justify-between items-center text-[10px] text-slate-400 font-bold">
-                        <span class="truncate pr-2"><i class="far fa-user mr-1"></i>${item.colaborador || 'N/D'}</span>
-                        <span class="whitespace-nowrap"><i class="far fa-calendar-alt mr-1"></i>${item.data}</span>
-                    </div>
-                </div>
-            `;
-            container.appendChild(card);
-        });
+    renderizarVazio: function(container) {
+        container.innerHTML = '<div class="flex flex-col items-center justify-center h-full text-center p-8"><div class="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mb-4 text-emerald-500"><i class="fas fa-trophy text-3xl"></i></div><h3 class="text-lg font-bold text-slate-700">Tudo Certo!</h3><p class="text-sm text-slate-500">Nenhum erro encontrado neste período.</p></div>';
     },
 
-    renderizarEstadoVazio: function() {
-        const cvs = document.getElementById('graficoTopOfensores');
-        const feed = document.getElementById('feed-erros-container');
-        if(feed) feed.innerHTML = '<div class="text-center py-10 text-slate-300">Aguardando dados...</div>';
+    renderizarGraficoVazio: function() {
+        const ctx = document.getElementById('graficoTopOfensores');
+        if (ctx && this.chartOfensores) this.chartOfensores.destroy();
+    },
+
+    buscarTudoPaginado: async function(uid, inicio, fim) {
+        let todos = [];
+        let page = 0;
+        let continuar = true;
+        
+        while(continuar) {
+            let query = Sistema.supabase
+                .from('assertividade')
+                .select('*')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .range(page*1000, (page+1)*1000-1);
+
+            if (uid) query = query.eq('usuario_id', uid);
+
+            const { data, error } = await query;
+            if(error) throw error;
+            
+            todos = todos.concat(data);
+            if(data.length < 1000) continuar = false;
+            else page++;
+        }
+        return todos;
     }
 };
