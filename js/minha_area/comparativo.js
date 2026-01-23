@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade Otimizada (Performance Fix + UX + Colunas Reais)
+   DESCRIÇÃO: Engine de Assertividade Otimizada (Índices + Server-Side Filter)
 */
 
 // ====================================================================
@@ -23,7 +23,7 @@ MinhaArea.Comparativo = {
 
     carregar: async function() {
         console.time("PerformanceTotal");
-        console.log("🚀 UX Dashboard: Iniciando Carga Otimizada...");
+        console.log("🚀 UX Dashboard: Iniciando Carga (Modo Turbo)...");
         const uid = MinhaArea.getUsuarioAlvo();
         
         if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
@@ -38,16 +38,17 @@ MinhaArea.Comparativo = {
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
-        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Baixando dados...</div>';
+        if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Carregando registros...</div>';
 
         try {
-            // 1. BUSCA OTIMIZADA (Colunas Reais Verificadas)
+            // 1. BUSCA OTIMIZADA
+            // O filtro de auditora agora acontece no BANCO, reduzindo o download.
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
-            console.log(`📦 Processando ${dados.length} registros...`);
+            console.log(`📦 Processando ${dados.length} registros úteis...`);
 
-            // --- REGRAS DE NEGÓCIO (Processamento em Lote) ---
+            // --- REGRAS DE NEGÓCIO ---
             let countValidados = 0;
             let countGupy = 0;
             let countNdf = 0;
@@ -55,11 +56,10 @@ MinhaArea.Comparativo = {
 
             const listaValidados = [];
 
-            // Loop único para categorização
             for (let i = 0; i < dados.length; i++) {
                 const d = dados[i];
                 
-                // Regra Base: Tem auditora
+                // Validação redundante (caso venha string vazia não nula)
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
                 listaValidados.push(d); 
@@ -121,8 +121,7 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        
-        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        const base = this.dadosBrutosCache; // Já filtrado no download
         
         const filtrados = [];
         let matches = 0;
@@ -135,7 +134,7 @@ MinhaArea.Comparativo = {
             const tipoTecnico = (this.getDocType(d) || '');
             const tipoAmigavel = this.getFriendlyName(tipoTecnico).toLowerCase();
             const obs = (d.observacao || '').toLowerCase();
-            const emp = (d.empresa_nome || '').toLowerCase(); // CORRIGIDO
+            const emp = (d.empresa_nome || '').toLowerCase();
             
             if (nome.includes(termo) || 
                 tipoTecnico.toLowerCase().includes(termo) || 
@@ -177,7 +176,7 @@ MinhaArea.Comparativo = {
 
         this.limparFiltro(false);
         
-        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        const base = this.dadosBrutosCache;
         let filtrados;
         
         if (novaVisao === 'ndf') {
@@ -191,7 +190,7 @@ MinhaArea.Comparativo = {
     },
 
     filtrarPorSelecao: function(valorAmigavel) {
-        const base = this.dadosBrutosCache.filter(d => d.auditora_nome && d.auditora_nome.trim() !== '');
+        const base = this.dadosBrutosCache;
         const filtrados = [];
         let limit = 0;
 
@@ -201,7 +200,7 @@ MinhaArea.Comparativo = {
             
             let match = false;
             if (this.visaoAtual === 'empresa') {
-                const emp = d.empresa_nome || 'Desconhecida'; // CORRIGIDO
+                const emp = d.empresa_nome || 'Desconhecida';
                 match = (emp === valorAmigavel || emp.includes(valorAmigavel.replace('...', '')));
             } else {
                 const tipoTecnico = this.visaoAtual === 'ndf' ? (d.tipo_documento || '') : this.getDocType(d);
@@ -225,7 +224,6 @@ MinhaArea.Comparativo = {
 
         const agrupamento = {};
         
-        // Limita processamento para não travar a UI
         const limitProcess = Math.min(dadosParaGrafico.length, 50000);
 
         for (let i = 0; i < limitProcess; i++) {
@@ -233,7 +231,7 @@ MinhaArea.Comparativo = {
             let chave = 'Outros';
             
             if (this.visaoAtual === 'empresa') {
-                chave = item.empresa_nome || 'Desconhecida'; // CORRIGIDO
+                chave = item.empresa_nome || 'Desconhecida';
             } else if (this.visaoAtual === 'ndf') {
                 const codigoTecnico = item.tipo_documento || item.doc_name || 'Sem Nome';
                 chave = this.getFriendlyName(codigoTecnico);
@@ -272,7 +270,6 @@ MinhaArea.Comparativo = {
     renderizarFeed: function(lista, container) {
         if(!container) return;
         
-        // --- OTIMIZAÇÃO DE RENDERIZAÇÃO ---
         const LIMITE_RENDER = 100;
         const totalItens = lista.length;
         
@@ -298,7 +295,7 @@ MinhaArea.Comparativo = {
             const nomeDocumentoOriginal = doc.doc_name || 'Sem Nome';
             const tipoTecnico = this.getDocType(doc);
             const subtitulo = this.getFriendlyName(tipoTecnico);
-            const empresa = doc.empresa_nome || ''; // CORRIGIDO
+            const empresa = doc.empresa_nome || ''; 
             const obs = doc.observacao || 'Sem observação.';
             const isNdf = this.isNDF(doc);
             
@@ -421,8 +418,6 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         
-        // CORREÇÃO: Usando 'empresa_nome' ao invés de 'empresa'
-        // 'nome_documento' não existe, removido.
         const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa_nome, assistente_nome, qtd_nok';
 
         while(continuar) {
@@ -431,6 +426,8 @@ MinhaArea.Comparativo = {
                 .select(colunas)
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
+                .neq('auditora_nome', null) // Filtra nulos no banco (Server Side)
+                .neq('auditora_nome', '')   // Filtra vazios no banco (Server Side)
                 .range(page*1000, (page+1)*1000-1);
 
             if (uid) query = query.eq('usuario_id', uid);
@@ -442,8 +439,9 @@ MinhaArea.Comparativo = {
             if(data.length < 1000) continuar = false;
             else page++;
             
-            if (page > 50) { 
-                console.warn("Limite de segurança de paginação atingido (50k registros)");
+            // LIMITE AUMENTADO PARA 300 PÁGINAS (300k Registros)
+            if (page > 300) { 
+                console.warn("Limite de segurança atingido (300k registros)");
                 continuar = false; 
             }
         }
