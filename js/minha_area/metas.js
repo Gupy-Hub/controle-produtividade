@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   CORREÇÃO: Ajuste de colunas da tabela assertividade (Schema V3)
+   ATUALIZAÇÃO: Lógica de Acertos/Erros alinhada com a aba Assertividade
 */
 
 MinhaArea.Metas = {
@@ -37,7 +37,7 @@ MinhaArea.Metas = {
 
             if (prodRes.error) throw prodRes.error;
 
-            // 2. BUSCA ROBUSTA DE AUDITORIA (Paginada e Corrigida)
+            // 2. BUSCA ROBUSTA DE AUDITORIA
             const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
             console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
 
@@ -53,21 +53,19 @@ MinhaArea.Metas = {
 
             const mapAssert = new Map();
             
-            // LISTA DE STATUS QUE NÃO ENTRAM NA MÉDIA (Neutros)
+            // Status que não entram no cálculo da MÉDIA de assertividade
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
             assertData.forEach(a => {
-                // CORREÇÃO: Usar data_referencia
                 const dataKey = a.data_referencia ? a.data_referencia.split('T')[0] : null;
                 if (!dataKey) return;
 
-                // FILTRO DO GRÁFICO: Só adiciona se for status válido
+                // Para o gráfico de evolução da média, mantemos o filtro de status
                 const status = (a.status || '').toUpperCase();
                 if (STATUS_IGNORAR.includes(status)) return; 
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                 
-                // CORREÇÃO: Usar porcentagem_assertividade
                 let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
                 let val = parseFloat(valStr);
                 
@@ -153,7 +151,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            // 5. Renderização
+            // 5. Renderização (Lógica de KPI Ajustada)
             this.atualizarCardsKPI(prodRes.data, assertData, mapMetas, dtInicio, dtFim);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
@@ -162,8 +160,7 @@ MinhaArea.Metas = {
 
         } catch (err) {
             console.error("❌ Erro Metas:", err);
-            // Fallback visual
-            const container = document.getElementById('chart-container-wrapper'); // Se existir
+            const container = document.getElementById('chart-container-wrapper');
             if(container) container.innerHTML = `<div class="text-red-500 text-center py-10">Erro ao carregar gráficos: ${err.message}</div>`;
         }
     },
@@ -175,15 +172,14 @@ MinhaArea.Metas = {
         let continuar = true;
 
         while(continuar) {
-            // CORREÇÃO: Colunas corretas do banco
             const { data, error } = await Sistema.supabase
                 .from('assertividade')
                 .select('*') 
                 .eq('usuario_id', uid)
-                .gte('data_referencia', inicio) // CORRIGIDO
-                .lte('data_referencia', fim)    // CORRIGIDO
-                .neq('auditora_nome', null)     // CORRIGIDO (era auditora)
-                .neq('auditora_nome', '')       // CORRIGIDO
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .neq('auditora_nome', null)
+                .neq('auditora_nome', '')
                 .range(page * size, (page + 1) * size - 1);
 
             if(error) {
@@ -205,17 +201,20 @@ MinhaArea.Metas = {
     atualizarCardsKPI: function(prods, asserts, mapMetas, dtInicio, dtFim) {
         let totalValidados = 0; 
         let totalMeta = 0;
-        let somaAssert = 0, qtdAssert = 0;
         
-        let totalOk = 0;
-        let totalNok = 0;
+        // Variáveis para Média Assertividade (Gráfico/Barra)
+        let somaAssertMedia = 0;
+        let qtdAssertMedia = 0;
+        
+        // Variáveis para Contagem de Erros vs Acertos (Painel Auditoria)
+        let totalErros = 0; 
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
         const mapProd = new Map();
         (prods || []).forEach(p => mapProd.set(p.data_referencia, p));
 
-        // Validados
+        // 1. Cálculo de Produção (Validados)
         for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
@@ -232,41 +231,56 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // Auditoria & Resultados
+        // 2. Loop de Auditoria
         asserts.forEach(a => {
             const status = (a.status || '').toUpperCase();
             
+            // Lógica da Média (Ignora neutros)
             if (!STATUS_IGNORAR.includes(status)) {
-                // CORREÇÃO: usar porcentagem_assertividade
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { 
-                    somaAssert += val; 
-                    qtdAssert++; 
+                    somaAssertMedia += val; 
+                    qtdAssertMedia++; 
                 }
             }
             
-            if (Number(a.qtd_nok) > 0) totalNok++; 
-            if (status === 'OK') totalOk++; 
+            // Lógica de Acertos vs Erros (Igual à aba Assertividade)
+            // Se tiver qualquer quantidade NOK (>0), é considerado ERRO.
+            if (a.qtd_nok && Number(a.qtd_nok) > 0) {
+                totalErros++;
+            }
         });
 
-        const mediaAssert = qtdAssert > 0 ? (somaAssert / qtdAssert) : 0;
+        // 3. Totais Finais
+        const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const totalAuditados = asserts.length; 
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
+        
+        // Acertos é o complemento (Tudo que não é erro)
+        const totalAcertos = totalAuditados - totalErros;
 
+        // --- Atualização do DOM ---
+
+        // Card Validação
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
+        // Card Assertividade (Média)
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
+        // Card Auditoria
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
-        this.setTxt('auditoria-total-ok', totalOk.toLocaleString('pt-BR'));
-        this.setTxt('auditoria-total-nok', totalNok.toLocaleString('pt-BR'));
+        
+        // Novos Campos (Acertos vs Erros)
+        // OBS: Se você alterou os rótulos no HTML para "Acertos" e "Erros", os IDs abaixo receberão os valores corretos.
+        this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); // Antigo OK agora é Acertos
+        this.setTxt('auditoria-total-nok', totalErros.toLocaleString('pt-BR')); // Antigo NOK agora é Erros
     },
 
     renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorReal, isPercent) {
