@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade (Lógica Ajustada: Separação de Acertos vs Erros)
+   DESCRIÇÃO: Engine de Assertividade (Lógica Ajustada: Novos Cards e Layout Horizontal)
 */
 
 // ====================================================================
@@ -24,7 +24,7 @@ MinhaArea.Comparativo = {
 
     carregar: async function() {
         console.time("PerformanceTotal");
-        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: Auditados vs Erros)...");
+        console.log("🚀 UX Dashboard: Iniciando Carga (Lógica: Novos Cards)...");
         const uid = MinhaArea.getUsuarioAlvo();
         
         if (!uid && typeof MinhaArea.isAdmin === 'function' && !MinhaArea.isAdmin()) return;
@@ -32,10 +32,16 @@ MinhaArea.Comparativo = {
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         
         const containerFeed = document.getElementById('feed-erros-container');
-        const elTotalGeral = document.getElementById('total-nok-detalhe'); // Agora representa Total Auditado
-        const elErrosGupy = document.getElementById('total-nok-gupy'); 
-        const elNdfTotal = document.getElementById('total-ndf-detalhe'); 
-        const elNdfAuditados = document.getElementById('total-ndf-auditados'); 
+        
+        // --- SELETORES DOS NOVOS CARDS ---
+        const elTotalAuditados = document.getElementById('card-total-auditados');
+        const elTotalAcertos = document.getElementById('card-total-acertos');
+        const elTotalErros = document.getElementById('card-total-erros');
+
+        const elErrosGupy = document.getElementById('card-erros-gupy'); 
+        const elErrosNdf = document.getElementById('card-erros-ndf'); 
+        const elEmpresaValidar = document.getElementById('card-empresa-validar'); 
+
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
         if(btnLimpar) btnLimpar.classList.add('hidden');
@@ -48,25 +54,24 @@ MinhaArea.Comparativo = {
 
             console.log(`📦 Base Total: ${dados.length} registros auditados.`);
 
-            // --- REGRAS DE NEGÓCIO JANEIRO/2026 ---
+            // --- REGRAS DE NEGÓCIO ---
             let countTotalAuditados = 0; // Universo Total
             let countErrosGupy = 0;      // < 100% e não é NDF
-            let countErrosNdf = 0;       // < 100% e é NDF
-            let countNdfEmpresa = 0;     // < 100% e é NDF_OUTROS
+            let countErrosNdf = 0;       // < 100% e é NDF (inclui 'Outros' tecnicamente)
+            let countNdfEmpresa = 0;     // Apenas 'DOC_NDF_OUTROS'
 
             const listaErros = []; // Apenas para o Feed e Gráfico
 
             for (let i = 0; i < dados.length; i++) {
                 const d = dados[i];
                 
-                // Regra 1: Deve ter auditora (Já filtrado no banco, mas garantindo)
+                // Regra 1: Deve ter auditora
                 if (!d.auditora_nome || d.auditora_nome.trim() === '') continue;
 
-                // Incrementa o universo total (inclui os 100% corretos)
+                // Incrementa o universo total
                 countTotalAuditados++;
 
-                // Regra 2: É erro? (Qtd NOK > 0 implica Assertividade < 100%)
-                // Se qtd_nok for 0 ou nulo, é considerado acerto (100%)
+                // Regra 2: É erro? (Qtd NOK > 0)
                 const isErro = (d.qtd_nok && Number(d.qtd_nok) > 0);
 
                 if (isErro) {
@@ -86,20 +91,29 @@ MinhaArea.Comparativo = {
             
             this.listaErrosCache = listaErros;
 
-            // --- ATUALIZAÇÃO DOS CARDS ---
-            // Card 1: Total Geral (Universo Auditado)
-            if(elTotalGeral) elTotalGeral.innerText = countTotalAuditados.toLocaleString('pt-BR');
+            // --- CÁLCULOS FINAIS PARA OS CARDS ---
+            // 1. Total de Erros (Geral)
+            const totalErrosReais = countErrosGupy + countErrosNdf;
             
-            // Card 2: Erros Gupy
-            if(elErrosGupy) elErrosGupy.innerText = countErrosGupy.toLocaleString('pt-BR'); 
-            
-            // Card 3: Erros NDF
-            if(elNdfTotal) elNdfTotal.innerText = countErrosNdf.toLocaleString('pt-BR');
-            
-            // Card 4: Empresa Deveria Validar
-            if(elNdfAuditados) elNdfAuditados.innerText = countNdfEmpresa.toLocaleString('pt-BR');
+            // 2. Total de Acertos (Restante)
+            const totalAcertos = countTotalAuditados - totalErrosReais;
 
-            // --- RENDERIZAÇÃO (Focada nos ERROS) ---
+            // 3. Separação visual: "Erros NDF" exibido retira o "Empresa Valida"
+            const displayErrosNdf = countErrosNdf - countNdfEmpresa;
+
+            // --- ATUALIZAÇÃO DO DOM (CARDS) ---
+            
+            // Card 1: Visão Geral
+            if(elTotalAuditados) elTotalAuditados.innerText = countTotalAuditados.toLocaleString('pt-BR');
+            if(elTotalAcertos) elTotalAcertos.innerText = totalAcertos.toLocaleString('pt-BR');
+            if(elTotalErros) elTotalErros.innerText = totalErrosReais.toLocaleString('pt-BR');
+            
+            // Card 2: Detalhamento
+            if(elErrosGupy) elErrosGupy.innerText = countErrosGupy.toLocaleString('pt-BR'); 
+            if(elErrosNdf) elErrosNdf.innerText = displayErrosNdf.toLocaleString('pt-BR'); // Exibe NDF - Empresa
+            if(elEmpresaValidar) elEmpresaValidar.innerText = countNdfEmpresa.toLocaleString('pt-BR');
+
+            // --- RENDERIZAÇÃO (Gráfico e Feed) ---
             if (listaErros.length === 0) {
                 this.renderizarVazio(containerFeed);
                 this.renderizarGraficoVazio();
@@ -138,7 +152,6 @@ MinhaArea.Comparativo = {
             return;
         }
         const termo = texto.toLowerCase();
-        // Busca apenas na lista de erros
         const base = this.listaErrosCache; 
         
         const filtrados = [];
@@ -194,7 +207,6 @@ MinhaArea.Comparativo = {
 
         this.limparFiltro(false);
         
-        // Base agora é apenas a lista de erros
         const base = this.listaErrosCache;
         let filtrados;
         
@@ -289,7 +301,6 @@ MinhaArea.Comparativo = {
     renderizarFeed: function(lista, container) {
         if(!container) return;
         
-        // Renderiza apenas os 100 últimos erros
         const LIMITE_RENDER = 100;
         const totalItens = lista.length;
         
@@ -422,11 +433,7 @@ MinhaArea.Comparativo = {
         if (ctx && this.chartOfensores) this.chartOfensores.destroy();
     },
 
-    // =================================================================
-    // ENGINE PARALELA (BURST FETCHING)
-    // =================================================================
     buscarTudoPaginado: async function(uid, inicio, fim) {
-        // 1. Descobre o TOTAL de registros primeiro (Count Rápido)
         let queryCount = Sistema.supabase
             .from('assertividade')
             .select('*', { count: 'exact', head: true }) 
@@ -441,15 +448,11 @@ MinhaArea.Comparativo = {
         if (errCount) throw errCount;
         if (count === 0) return [];
 
-        // 2. Define o tamanho da página e monta as promessas
         const PAGE_SIZE = 1000;
         const totalPages = Math.ceil(count / PAGE_SIZE);
         const promises = [];
-        
-        // Inclui qtd_nok para saber se é erro ou acerto
         const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa_nome, assistente_nome, qtd_nok';
-
-        const MAX_PAGES = 300; // 300k registros
+        const MAX_PAGES = 300; 
         const pagesToFetch = Math.min(totalPages, MAX_PAGES);
 
         for (let i = 0; i < pagesToFetch; i++) {
@@ -462,14 +465,11 @@ MinhaArea.Comparativo = {
                 .range(i * PAGE_SIZE, (i + 1) * PAGE_SIZE - 1);
 
             if (uid) query = query.eq('usuario_id', uid);
-            
             promises.push(query);
         }
 
-        // 3. Dispara todas as requisições AO MESMO TEMPO
         const responses = await Promise.all(promises);
 
-        // 4. Consolida os resultados
         let todos = [];
         responses.forEach(({ data, error }) => {
             if (!error && data) {
