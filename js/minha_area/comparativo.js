@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/comparativo.js
-   DESCRIÇÃO: Engine de Assertividade Otimizada (Performance Fix + UX)
+   DESCRIÇÃO: Engine de Assertividade Otimizada (Performance Fix + UX + Colunas Reais)
 */
 
 // ====================================================================
@@ -41,7 +41,7 @@ MinhaArea.Comparativo = {
         if(containerFeed) containerFeed.innerHTML = '<div class="text-center py-12 text-slate-400"><i class="fas fa-circle-notch fa-spin text-2xl mb-2 text-blue-500"></i><br>Baixando dados...</div>';
 
         try {
-            // 1. BUSCA OTIMIZADA (Colunas Corrigidas)
+            // 1. BUSCA OTIMIZADA (Colunas Reais Verificadas)
             const dados = await this.buscarTudoPaginado(uid, inicio, fim);
             this.dadosBrutosCache = dados;
 
@@ -112,7 +112,6 @@ MinhaArea.Comparativo = {
         if (this.isNDF(d)) {
             return d.tipo_documento || "DOC_NDF_GENERICO";
         }
-        // Fallback seguro usando propriedades que existem no banco ou undefined
         return d.doc_name || d.tipo_documento || 'Documento Gupy';
     },
 
@@ -136,7 +135,7 @@ MinhaArea.Comparativo = {
             const tipoTecnico = (this.getDocType(d) || '');
             const tipoAmigavel = this.getFriendlyName(tipoTecnico).toLowerCase();
             const obs = (d.observacao || '').toLowerCase();
-            const emp = (d.empresa || '').toLowerCase();
+            const emp = (d.empresa_nome || '').toLowerCase(); // CORRIGIDO
             
             if (nome.includes(termo) || 
                 tipoTecnico.toLowerCase().includes(termo) || 
@@ -202,7 +201,7 @@ MinhaArea.Comparativo = {
             
             let match = false;
             if (this.visaoAtual === 'empresa') {
-                const emp = d.empresa || 'Desconhecida';
+                const emp = d.empresa_nome || 'Desconhecida'; // CORRIGIDO
                 match = (emp === valorAmigavel || emp.includes(valorAmigavel.replace('...', '')));
             } else {
                 const tipoTecnico = this.visaoAtual === 'ndf' ? (d.tipo_documento || '') : this.getDocType(d);
@@ -234,7 +233,7 @@ MinhaArea.Comparativo = {
             let chave = 'Outros';
             
             if (this.visaoAtual === 'empresa') {
-                chave = item.empresa || 'Desconhecida';
+                chave = item.empresa_nome || 'Desconhecida'; // CORRIGIDO
             } else if (this.visaoAtual === 'ndf') {
                 const codigoTecnico = item.tipo_documento || item.doc_name || 'Sem Nome';
                 chave = this.getFriendlyName(codigoTecnico);
@@ -274,11 +273,9 @@ MinhaArea.Comparativo = {
         if(!container) return;
         
         // --- OTIMIZAÇÃO DE RENDERIZAÇÃO ---
-        // Renderiza apenas os 100 últimos para não travar o DOM
         const LIMITE_RENDER = 100;
         const totalItens = lista.length;
         
-        // Ordena antes de cortar (Mais recentes primeiro)
         lista.sort((a, b) => new Date(b.data_referencia || 0) - new Date(a.data_referencia || 0));
         
         const itensVisiveis = lista.slice(0, LIMITE_RENDER);
@@ -301,7 +298,7 @@ MinhaArea.Comparativo = {
             const nomeDocumentoOriginal = doc.doc_name || 'Sem Nome';
             const tipoTecnico = this.getDocType(doc);
             const subtitulo = this.getFriendlyName(tipoTecnico);
-            const empresa = doc.empresa || '';
+            const empresa = doc.empresa_nome || ''; // CORRIGIDO
             const obs = doc.observacao || 'Sem observação.';
             const isNdf = this.isNDF(doc);
             
@@ -424,10 +421,9 @@ MinhaArea.Comparativo = {
         let page = 0;
         let continuar = true;
         
-        // CORREÇÃO DE QUERY: Solicitamos apenas colunas que EXISTEM de fato na tabela
-        // Removidos: nome_documento, empresa_nome, obs, apontamentos
-        // Mantidos: doc_name, empresa, observacao, tipo_documento, etc.
-        const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa, assistente_nome, qtd_nok';
+        // CORREÇÃO: Usando 'empresa_nome' ao invés de 'empresa'
+        // 'nome_documento' não existe, removido.
+        const colunas = 'id, data_referencia, auditora_nome, tipo_documento, doc_name, observacao, status, empresa_nome, assistente_nome, qtd_nok';
 
         while(continuar) {
             let query = Sistema.supabase
