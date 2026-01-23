@@ -4,7 +4,6 @@
 // MAPEAMENTO DE NOMES AMIGÁVEIS (UX)
 // ====================================================================
 // Traduz os códigos técnicos do banco para termos fáceis para as assistentes.
-// Usado principalmente no gráfico de ofensores.
 const FRIENDLY_NAMES_MAP = {
     'DOC_NDF_100%': 'Empresas 100%',
     'DOC_NDF_CATEGORIA PROFISSIONAL': 'Categoria DIP',
@@ -13,9 +12,8 @@ const FRIENDLY_NAMES_MAP = {
     'DOC_NDF_ESTRANGEIRO': 'Categoria Estrangeiro',
     'DOC_NDF_LAUDO': 'Categoria Laudo',
     'DOC_NDF_OUTROS': 'Empresa deveria Validar'
-    // Se aparecer um novo código não listado aqui, o sistema usará o código original como fallback.
+    // Se aparecer um novo código não listado aqui, o sistema usará o código original.
 };
-
 
 MinhaArea.Comparativo = {
     myChart: null,
@@ -25,11 +23,18 @@ MinhaArea.Comparativo = {
     filtroBusca: '',
 
     init: function() {
-        // Inicializa listeners se necessário
+        // Inicializações se necessário
+    },
+
+    // --- CORREÇÃO DO ERRO ---
+    // O main.js chama .carregar(), então criamos esta função para redirecionar
+    carregar: async function() {
+        console.log("[Comparativo] Iniciando carga...");
+        await this.atualizar();
     },
 
     atualizar: async function() {
-        // O carregamento e processamento dos dados agora é feito pelo pai (MinhaArea.js)
+        // O carregamento e processamento dos dados é feito pelo pai (MinhaArea.js)
         // e passado via 'window.DadosGlobais.dadosBrutos'
         if (!window.DadosGlobais || !window.DadosGlobais.dadosBrutos) {
             console.warn("[Comparativo] Sem dados brutos disponíveis.");
@@ -42,7 +47,10 @@ MinhaArea.Comparativo = {
             this.atualizarInterface();
         } catch (error) {
             console.error("[Comparativo] Erro ao processar dados:", error);
-            Sistema.Notificacao.mostrar("Erro ao processar dados do comparativo.", "erro");
+            // Sistema.Notificacao é opcional, dependendo se existe no sistema.js
+            if(window.Sistema && Sistema.Notificacao) {
+                Sistema.Notificacao.mostrar("Erro ao processar dados do comparativo.", "erro");
+            }
         }
     },
 
@@ -88,7 +96,7 @@ MinhaArea.Comparativo = {
 
             // 2. Dados para o Gráfico (Top Ofensores) e Feed
             if (isNOK || isNDF) {
-                 // Agrupamento para o gráfico (usando o nome técnico original)
+                 // Agrupamento para o gráfico (usando o nome técnico original para agrupar corretamente)
                 if (ofensoresMap.has(ofensor)) {
                     ofensoresMap.set(ofensor, ofensoresMap.get(ofensor) + 1);
                 } else {
@@ -125,10 +133,16 @@ MinhaArea.Comparativo = {
 
         // Atualiza Cards
         const stats = this.dadosProcessados.stats;
-        document.getElementById('total-nok-detalhe').textContent = stats.totalGeralNokNdf;
-        document.getElementById('total-nok-gupy').textContent = stats.totalNokGupy;
-        document.getElementById('total-ndf-detalhe').textContent = stats.totalNdfGeral;
-        document.getElementById('total-ndf-auditados').textContent = stats.totalNdfAuditados;
+        
+        const elTotal = document.getElementById('total-nok-detalhe');
+        const elGupy = document.getElementById('total-nok-gupy');
+        const elNdf = document.getElementById('total-ndf-detalhe');
+        const elEmpresa = document.getElementById('total-ndf-auditados');
+
+        if(elTotal) elTotal.textContent = stats.totalGeralNokNdf;
+        if(elGupy) elGupy.textContent = stats.totalNokGupy;
+        if(elNdf) elNdf.textContent = stats.totalNdfGeral;
+        if(elEmpresa) elEmpresa.textContent = stats.totalNdfAuditados;
 
         // Atualiza Gráfico e Feed com base nos filtros atuais
         this.aplicarFiltrosVisuais();
@@ -140,13 +154,17 @@ MinhaArea.Comparativo = {
         // Atualiza estado dos botões
         ['btn-view-doc', 'btn-view-empresa', 'btn-view-ndf'].forEach(id => {
             const btn = document.getElementById(id);
-            btn.classList.remove('bg-white', 'text-rose-600', 'shadow-sm');
-            btn.classList.add('text-slate-500', 'hover:bg-white');
+            if(btn) {
+                btn.classList.remove('bg-white', 'text-rose-600', 'shadow-sm');
+                btn.classList.add('text-slate-500', 'hover:bg-white');
+            }
         });
 
         const activeBtn = document.getElementById(`btn-view-${novaVisao}`);
-        activeBtn.classList.remove('text-slate-500', 'hover:bg-white');
-        activeBtn.classList.add('bg-white', 'text-rose-600', 'shadow-sm');
+        if(activeBtn) {
+            activeBtn.classList.remove('text-slate-500', 'hover:bg-white');
+            activeBtn.classList.add('bg-white', 'text-rose-600', 'shadow-sm');
+        }
 
         // Re-renderiza o gráfico com a nova visão
         this.aplicarFiltrosVisuais();
@@ -155,7 +173,7 @@ MinhaArea.Comparativo = {
     toggleMostrarTodos: function() {
         this.mostrarTodos = !this.mostrarTodos;
         const btn = document.getElementById('btn-ver-todos');
-        btn.textContent = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
+        if(btn) btn.textContent = this.mostrarTodos ? 'Ver Top 5' : 'Ver Todos';
         this.aplicarFiltrosVisuais();
     },
 
@@ -163,18 +181,30 @@ MinhaArea.Comparativo = {
         this.filtroBusca = termo.toLowerCase().trim();
         const btnLimpar = document.getElementById('btn-limpar-filtro');
         
-        if (this.filtroBusca.length > 0) {
-            btnLimpar.classList.remove('hidden');
-        } else {
-            btnLimpar.classList.add('hidden');
+        if(btnLimpar) {
+            if (this.filtroBusca.length > 0) {
+                btnLimpar.classList.remove('hidden');
+            } else {
+                btnLimpar.classList.add('hidden');
+            }
         }
         this.aplicarFiltrosVisuais();
     },
 
     limparFiltro: function() {
         this.filtroBusca = '';
-        document.querySelector('#feed-erros-container input').value = '';
-        document.getElementById('btn-limpar-filtro').classList.add('hidden');
+        const input = document.querySelector('#feed-erros-container input'); // fallback se não achar ID especifico fora
+        // Na estrutura HTML atual o input tem onkeyup, vamos tentar limpá-lo se tivermos acesso direto ou via seletor do pai
+        // Como o input está no HTML principal, o ideal é o usuário limpar ou usarmos um ID no input. 
+        // O código anterior assumia um seletor. Vamos manter simples:
+        const inputs = document.getElementsByTagName('input');
+        for(let inp of inputs) {
+            if(inp.placeholder.includes('Buscar')) inp.value = '';
+        }
+
+        const btn = document.getElementById('btn-limpar-filtro');
+        if(btn) btn.classList.add('hidden');
+        
         this.aplicarFiltrosVisuais();
     },
 
@@ -185,16 +215,12 @@ MinhaArea.Comparativo = {
         let dadosGrafico = [...this.dadosProcessados.topOfensores];
 
         // Filtro por Visão (Doc, Empresa, NDF)
-        // NOTA: Esta lógica de filtro é um placeholder. Idealmente, os dados brutos
-        // deveriam ter uma coluna indicando o "tipo" do ofensor para filtrar corretamente.
-        // Por enquanto, vamos assumir uma filtragem simples baseada em strings comuns.
         if (this.visaoAtual === 'empresa') {
             dadosGrafico = dadosGrafico.filter(item => item.ofensor.toUpperCase().includes('EMPRESA'));
         } else if (this.visaoAtual === 'ndf') {
             dadosGrafico = dadosGrafico.filter(item => item.ofensor.toUpperCase().includes('NDF'));
         } 
-        // 'doc' mostra tudo (default) ou implementa lógica específica se houver
-
+        
         // Filtro de Quantidade (Top 5 vs Todos)
         if (!this.mostrarTodos) {
             dadosGrafico = dadosGrafico.slice(0, 5);
@@ -208,7 +234,7 @@ MinhaArea.Comparativo = {
         // Filtro de Busca (no feed)
         if (this.filtroBusca.length > 0) {
             dadosFeed = dadosFeed.filter(item => {
-                // Aplica o mapa de nomes amigáveis também na busca do feed para consistência
+                // Aplica o mapa de nomes amigáveis também na busca do feed
                 const nomeAmigavelOfensor = FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
                 
                 return (item.ofensor && item.ofensor.toLowerCase().includes(this.filtroBusca)) ||
@@ -223,24 +249,22 @@ MinhaArea.Comparativo = {
     },
 
     renderizarGraficoTopOfensores: function(data) {
-        const ctx = document.getElementById('graficoTopOfensores').getContext('2d');
+        const cvs = document.getElementById('graficoTopOfensores');
+        if(!cvs) return;
+        
+        const ctx = cvs.getContext('2d');
 
         if (this.myChart) {
             this.myChart.destroy();
         }
 
         if (data.length === 0) {
-            // Tratar caso sem dados no gráfico se necessário
+            // Opcional: mostrar mensagem de "Sem dados" no canvas
             return;
         }
 
-        // =================================================================
-        // APLICAÇÃO DO MAPEAMENTO DE NOMES AMIGÁVEIS
-        // =================================================================
-        // Aqui interceptamos o nome técnico (item.ofensor) e verificamos se
-        // existe uma tradução no nosso mapa FRIENDLY_NAMES_MAP.
+        // APLICAÇÃO DO MAPEAMENTO DE NOMES AMIGÁVEIS (UX)
         const labels = data.map(item => {
-            // Tenta pegar o nome amigável, se não existir, usa o técnico original (fallback seguro)
             return FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
         });
         
@@ -253,7 +277,7 @@ MinhaArea.Comparativo = {
                 datasets: [{
                     label: 'Quantidade',
                     data: values,
-                    backgroundColor: data.map(item => item.ofensor.toUpperCase().includes('NDF') ? '#f59e0b' : '#e11d48'), // Amber para NDF, Rose para outros
+                    backgroundColor: data.map(item => item.ofensor.toUpperCase().includes('NDF') ? '#f59e0b' : '#e11d48'),
                     borderRadius: 6,
                     barThickness: 'flex',
                     maxBarThickness: 40
@@ -262,72 +286,38 @@ MinhaArea.Comparativo = {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                indexAxis: 'y', // Gráfico de barras horizontais
+                indexAxis: 'y', // Barras horizontais
                 scales: {
                     x: {
                         beginAtZero: true,
-                        grid: {
-                            display: false, // Remove grade vertical
-                            drawBorder: false
-                        },
-                        ticks: {
-                            font: {
-                                family: "'Nunito', sans-serif",
-                                size: 10
-                            },
-                             color: '#94a3b8'
-                        }
+                        grid: { display: false, drawBorder: false },
+                        ticks: { font: { family: "'Nunito', sans-serif", size: 10 }, color: '#94a3b8' }
                     },
                     y: {
-                        grid: {
-                            display: false,
-                            drawBorder: false
-                        },
+                        grid: { display: false, drawBorder: false },
                         ticks: {
-                            font: {
-                                family: "'Nunito', sans-serif",
-                                size: 11,
-                                weight: '600'
-                            },
+                            font: { family: "'Nunito', sans-serif", size: 11, weight: '600' },
                             color: '#475569',
-                            // Lógica para truncar labels muito longas se necessário
                             callback: function(value) {
                                 const label = this.getLabelForValue(value);
-                                if (label.length > 25) {
-                                    return label.substr(0, 25) + '...';
-                                }
-                                return label;
+                                return label.length > 25 ? label.substr(0, 25) + '...' : label;
                             }
                         }
                     }
                 },
                 plugins: {
-                    legend: {
-                        display: false // Oculta legenda padrão
-                    },
+                    legend: { display: false },
                     tooltip: {
                         backgroundColor: 'rgba(30, 41, 59, 0.9)',
                         titleFont: { family: "'Nunito', sans-serif", size: 12 },
                         bodyFont: { family: "'Nunito', sans-serif", size: 12 },
                         padding: 10,
                         cornerRadius: 8,
-                        displayColors: false, // Remove caixinha de cor no tooltip
+                        displayColors: false,
                         callbacks: {
-                            // Garante que o tooltip mostre o nome completo (amigável ou não)
-                            title: function(context) {
-                                return context[0].label;
-                            }
+                            title: function(context) { return context[0].label; }
                         }
                     }
-                },
-                onClick: (e) => {
-                    // Lógica futura para clicar na barra e filtrar o feed
-                    // const points = this.myChart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                    // if (points.length) {
-                    //     const firstPoint = points[0];
-                    //     const label = this.myChart.data.labels[firstPoint.index];
-                    //     this.filtrarPorBusca(label); // Exemplo
-                    // }
                 }
             }
         });
@@ -335,13 +325,15 @@ MinhaArea.Comparativo = {
 
     renderizarFeedErros: function(data) {
         const container = document.getElementById('feed-erros-container');
+        if(!container) return;
+        
         container.innerHTML = '';
 
         if (data.length === 0) {
             container.innerHTML = `
                 <div class="text-center py-12 text-slate-400">
                     <i class="fas fa-check-circle text-4xl mb-2 text-emerald-200"></i><br>
-                    Nenhum registro de atenção encontrado para os filtros atuais.
+                    Nenhum registro de atenção encontrado.
                 </div>`;
             return;
         }
@@ -351,7 +343,7 @@ MinhaArea.Comparativo = {
             const themeColor = isNDF ? 'amber' : 'rose';
             const icon = isNDF ? 'fa-file-contract' : 'fa-times-circle';
             
-            // Também aplicamos o nome amigável no feed para consistência visual
+            // Aplica nome amigável também no feed
             const nomeOfensorAmigavel = FRIENDLY_NAMES_MAP[item.ofensor] || item.ofensor;
 
             const card = document.createElement('div');
@@ -379,6 +371,9 @@ MinhaArea.Comparativo = {
     },
 
     renderizarEstadoVazio: function() {
-        // Implementar estado visual se não houver dados globais
+        // Implementar visual de estado vazio se necessário
+        const cvs = document.getElementById('graficoTopOfensores');
+        const feed = document.getElementById('feed-erros-container');
+        if(feed) feed.innerHTML = '<div class="text-center py-10 text-slate-300">Aguardando dados...</div>';
     }
 };
