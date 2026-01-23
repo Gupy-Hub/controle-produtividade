@@ -243,11 +243,9 @@ MinhaArea.Metas = {
         const totalAcertos = totalAuditados - totalErros;
         
         // FÓRMULA CORRIGIDA: (Total Acertos / Total Auditados) * 100
-        // (Antes estava fazendo média das porcentagens, o que gera divergência)
         const assertividadeGlobal = totalAuditados > 0 ? (totalAcertos / totalAuditados) * 100 : 0;
 
         // Sem auditoria (Validados - Auditados)
-        // Nota: usamos asserts.length brutos ou validos? Geralmente validos para "Fila"
         const semAuditoria = Math.max(0, totalValidados - asserts.length);
 
         // --- Atualização do DOM ---
