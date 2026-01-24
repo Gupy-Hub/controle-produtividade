@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia" (Minha Área)
-   ATUALIZAÇÃO: Suporte a "Visão Geral da Equipe" (Agregação de Dados)
+   ATUALIZAÇÃO: Correção na leitura das Metas (meta_producao)
 */
 
 MinhaArea.Geral = {
@@ -16,8 +16,6 @@ MinhaArea.Geral = {
             alertContainer.innerHTML = '';
             alertContainer.classList.add('hidden');
         }
-        
-        // Removemos o bloqueio antigo if (!uid) ...
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados da equipe...</span></div></td></tr>';
@@ -47,9 +45,9 @@ MinhaArea.Geral = {
                 .limit(5000);
             if (!isGeral) qAssertividade = qAssertividade.eq('usuario_id', uid);
 
-            // 3. Metas
+            // 3. Metas (CORRIGIDO: meta -> meta_producao)
             let qMetas = Sistema.supabase.from('metas')
-                .select('mes, ano, meta, meta_assertividade')
+                .select('mes, ano, meta_producao, meta_assertividade')
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
             if (!isGeral) qMetas = qMetas.eq('usuario_id', uid);
@@ -74,6 +72,7 @@ MinhaArea.Geral = {
 
             if (prodRes.error) console.error("Erro Produção:", prodRes.error);
             if (assertRes.error) console.error("Erro Assertividade:", assertRes.error);
+            if (metasRes.error) console.error("Erro Metas:", metasRes.error);
 
             const dadosProducaoRaw = prodRes.data || [];
             const dadosAssertividadeRaw = assertRes.data || [];
@@ -93,15 +92,15 @@ MinhaArea.Geral = {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assert: 0, count: 0 };
                 
-                // Na visão geral, somamos a meta de produção
-                mapMetas[m.ano][m.mes].prod += Number(m.meta);
+                // Na visão geral, somamos a meta de produção (CORRIGIDO: meta_producao)
+                const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
+                mapMetas[m.ano][m.mes].prod += metaProdVal;
                 
                 // Na visão geral, mantemos a meta de assertividade padrão (ou média, se preferir)
-                // Aqui vamos assumir que a meta de assertividade é padrão 98% se for Geral
                 if (isGeral) {
                      mapMetas[m.ano][m.mes].assert = 98.0; 
                 } else {
-                     mapMetas[m.ano][m.mes].assert = Number(m.meta_assertividade);
+                     mapMetas[m.ano][m.mes].assert = Number(m.meta_assertividade || 98.0);
                 }
             });
 
@@ -198,9 +197,7 @@ MinhaArea.Geral = {
                     if (fator > 0) diasComProducaoReal++;
                 }
 
-                // Ajuste Meta Dia: Se Geral, Fator é média, então Meta deve ser MetaTotal * MédiaFator? 
-                // Simplificação: MetaDia = MetaMensal / DiasUteisRestantes? 
-                // O código original faz: meta_config * fator. Mantendo a lógica.
+                // Cálculo da Meta do Dia baseada no Fator (Presume que metaConfig.prod é a meta diária cheia)
                 const metaDiaCalculada = Math.round(metaConfig.prod * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -289,8 +286,6 @@ MinhaArea.Geral = {
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
             const diasUteisPeriodo = this.calcularDiasUteisMes(inicio, fim);
-            // Na visão geral, "Dias Produtivos" é a média dos dias produtivos da equipe ou apenas a soma de dias que a equipe operou?
-            // Vamos manter somaFatorProdutivo que é a lógica original.
             this.setTxt('kpi-dias', this.fmtDias(somaFatorProdutivo)); 
             this.setTxt('kpi-dias-uteis', diasUteisPeriodo);
             
