@@ -1,47 +1,66 @@
 /* ARQUIVO: js/minha_area/main.js
    DESCRIÇÃO: Controlador Principal da Minha Área
-   ATUALIZAÇÃO: Habilita o seletor de equipe (Admin/Gestor)
+   ATUALIZAÇÃO: Correção de Loop de Redirect + Seletor de Equipe
 */
 
 const MinhaArea = {
-    abaAtual: 'diario', // diario, metas, auditoria, comparativo, feedback
-    usuarioAlvo: null, // ID do usuário sendo visualizado (null = eu mesmo)
+    abaAtual: 'diario', 
+    usuarioAlvo: null, 
     
-    // Cache de datas para evitar releituras desnecessárias
     periodo: {
-        tipo: 'mes', // mes, semana, ano
+        tipo: 'mes', 
         ano: new Date().getFullYear(),
         mes: new Date().getMonth(),
         semana: 1,
-        sub: 'full' // S1, S2, T1...
+        sub: 'full'
     },
 
     init: async function() {
         console.log("🚀 Minha Área: Iniciando...");
         
-        // 1. Verifica Login
-        if (!Sistema || !Sistema.usuario) {
+        // --- CORREÇÃO DO LOOP DE LOGIN ---
+        // Em vez de checar Sistema.usuario direto (que pode estar vazio no load),
+        // perguntamos ao Supabase se existe uma sessão válida.
+        const { data: { session } } = await Sistema.supabase.auth.getSession();
+
+        if (!session) {
+            console.warn("⛔ Sem sessão. Redirecionando...");
             window.location.href = 'index.html';
             return;
         }
 
-        // 2. Define o alvo inicial como o próprio usuário logado
+        // Se o Sistema.usuario ainda não carregou (race condition), carregamos agora manualmente
+        if (!Sistema.usuario) {
+            console.log("⚠️ Sistema.usuario vazio. Recuperando perfil...");
+            const { data: perfil } = await Sistema.supabase
+                .from('usuarios')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+            
+            if (perfil) {
+                Sistema.usuario = perfil;
+            } else {
+                Sistema.usuario = { id: session.user.id, ...session.user };
+            }
+        }
+        // ---------------------------------
+
+        // Define o alvo inicial como o usuário logado
         this.usuarioAlvo = Sistema.usuario.id;
 
-        // 3. Inicializa os seletores de data
         this.renderizarSeletoresData();
 
-        // 4. Tenta carregar o seletor de equipe (Para Gestores/Admins)
-        // DICA: Se quiser restringir, envolva em um if (Sistema.usuario.admin)
+        // Carrega o seletor de equipe (se for admin/gestor)
         await this.carregarSeletorEquipe();
 
-        // 5. Carrega a aba padrão
+        // Inicia a aba padrão
         this.mudarAba('diario');
     },
 
     carregarSeletorEquipe: async function() {
         try {
-            // Busca todos os usuários ativos para o seletor
+            // Busca usuários ativos para o seletor
             const { data: usuarios, error } = await Sistema.supabase
                 .from('usuarios')
                 .select('id, nome, email')
@@ -55,16 +74,15 @@ const MinhaArea = {
                 const container = document.getElementById('admin-selector-container');
                 
                 if (selector && container) {
-                    // Limpa e popula
                     selector.innerHTML = '';
                     
-                    // Opção "Eu mesmo" (ou o primeiro da lista se for admin estrito)
+                    // Opção 1: Minha Visão
                     const optionMe = document.createElement('option');
                     optionMe.value = Sistema.usuario.id;
                     optionMe.text = "Minha Visão (Eu)";
                     selector.appendChild(optionMe);
 
-                    // Adiciona os outros
+                    // Outros Usuários
                     usuarios.forEach(u => {
                         if (u.id !== Sistema.usuario.id) {
                             const opt = document.createElement('option');
@@ -74,23 +92,19 @@ const MinhaArea = {
                         }
                     });
 
-                    // Remove a classe 'hidden' para mostrar o filtro
+                    // Mostra o filtro
                     container.classList.remove('hidden');
                     container.classList.add('flex');
-                    
-                    console.log("👥 Seletor de Equipe Ativado!");
                 }
             }
         } catch (err) {
-            console.error("Erro ao carregar equipe:", err);
-            // Falha silenciosa: apenas não mostra o seletor
+            console.error("Erro seletor equipe:", err);
         }
     },
 
     mudarUsuarioAlvo: function(novoId) {
-        console.log("🔄 Trocando usuário alvo para:", novoId);
+        console.log("🔄 Vendo dados de:", novoId);
         this.usuarioAlvo = novoId;
-        // Recarrega a aba atual com o novo contexto
         this.carregarAbaAtual();
     },
 
@@ -99,10 +113,8 @@ const MinhaArea = {
     },
 
     getDatasFiltro: function() {
-        // Lógica centralizada de datas (usada por todas as abas)
         const ano = parseInt(this.periodo.ano);
         const mes = parseInt(this.periodo.mes);
-        
         let inicio, fim;
 
         if (this.periodo.tipo === 'mes') {
@@ -112,16 +124,11 @@ const MinhaArea = {
             fim = dateFim.toISOString().split('T')[0];
         } 
         else if (this.periodo.tipo === 'semana') {
-            // Lógica simplificada de semana (pode ser refinada)
-            // Assumindo semana do mês (1 a 5)
             const weekNum = parseInt(this.periodo.semana);
             const dateIni = new Date(ano, mes, (weekNum - 1) * 7 + 1);
             const dateFim = new Date(ano, mes, (weekNum - 1) * 7 + 7);
-            
-            // Ajuste para não estourar o mês
             const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate();
-            if (dateFim.getDate() < dateIni.getDate()) dateFim.setDate(ultimoDiaMes); // Virada de mês
-            
+            if (dateFim.getDate() < dateIni.getDate()) dateFim.setDate(ultimoDiaMes);
             inicio = dateIni.toISOString().split('T')[0];
             fim = dateFim.toISOString().split('T')[0];
         }
@@ -134,12 +141,10 @@ const MinhaArea = {
     },
 
     mudarAba: function(abaId) {
-        // Atualiza visual dos botões
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         const btnAtivo = document.getElementById(`btn-ma-${abaId}`);
         if (btnAtivo) btnAtivo.classList.add('active');
 
-        // Esconde todas as views e mostra a selecionada
         document.querySelectorAll('.ma-view').forEach(view => view.classList.add('hidden'));
         const viewAtiva = document.getElementById(`ma-tab-${abaId}`);
         if (viewAtiva) viewAtiva.classList.remove('hidden');
@@ -149,23 +154,14 @@ const MinhaArea = {
     },
 
     carregarAbaAtual: function() {
-        // Roteador de carregamento
+        if (!MinhaArea.getUsuarioAlvo()) return;
+
         switch(this.abaAtual) {
-            case 'diario':
-                if(MinhaArea.Geral) MinhaArea.Geral.carregar();
-                break;
-            case 'metas':
-                if(MinhaArea.Metas) MinhaArea.Metas.carregar();
-                break;
-            case 'auditoria':
-                if(MinhaArea.Auditoria) MinhaArea.Auditoria.carregar();
-                break;
-            case 'comparativo':
-                if(MinhaArea.Comparativo) MinhaArea.Comparativo.carregar();
-                break;
-            case 'feedback':
-                if(MinhaArea.Feedback) MinhaArea.Feedback.carregar();
-                break;
+            case 'diario': if(MinhaArea.Geral) MinhaArea.Geral.carregar(); break;
+            case 'metas': if(MinhaArea.Metas) MinhaArea.Metas.carregar(); break;
+            case 'auditoria': if(MinhaArea.Auditoria) MinhaArea.Auditoria.carregar(); break;
+            case 'comparativo': if(MinhaArea.Comparativo) MinhaArea.Comparativo.carregar(); break;
+            case 'feedback': if(MinhaArea.Feedback) MinhaArea.Feedback.carregar(); break;
         }
     },
 
@@ -178,14 +174,10 @@ const MinhaArea = {
     salvarEAtualizar: function() {
         this.periodo.ano = document.getElementById('sel-ano').value;
         this.periodo.mes = document.getElementById('sel-mes').value;
-        // Outros seletores se necessário
-        
         this.carregarAbaAtual();
     },
 
     renderizarSeletoresData: function() {
-        // Atualiza visibilidade dos combos (Ano, Mes, Semana...)
-        // Simples toggle de classes hidden
         const selMes = document.getElementById('sel-mes');
         const selSemana = document.getElementById('sel-semana');
         const selSub = document.getElementById('sel-subperiodo-ano');
@@ -193,15 +185,8 @@ const MinhaArea = {
         const btnSemana = document.getElementById('btn-periodo-semana');
         const btnAno = document.getElementById('btn-periodo-ano');
 
-        // Reset visual botões
-        [btnMes, btnSemana, btnAno].forEach(b => {
-            b.className = "px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition";
-        });
-
-        // Esconde todos selects secundários
-        selMes.classList.add('hidden');
-        selSemana.classList.add('hidden');
-        selSub.classList.add('hidden');
+        [btnMes, btnSemana, btnAno].forEach(b => b.className = "px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:shadow-sm transition");
+        [selMes, selSemana, selSub].forEach(s => s.classList.add('hidden'));
 
         if (this.periodo.tipo === 'mes') {
             selMes.classList.remove('hidden');
@@ -215,7 +200,6 @@ const MinhaArea = {
             btnAno.className = "px-3 py-1 text-xs font-bold rounded shadow-sm text-blue-600 bg-white transition";
         }
 
-        // Popula Ano se vazio
         const selAno = document.getElementById('sel-ano');
         if (selAno.options.length === 0) {
             const anoAtual = new Date().getFullYear();
@@ -227,12 +211,8 @@ const MinhaArea = {
             }
             selAno.value = this.periodo.ano;
         }
-        
         document.getElementById('sel-mes').value = this.periodo.mes;
     }
 };
 
-// Auto-start
-document.addEventListener('DOMContentLoaded', () => {
-    MinhaArea.init();
-});
+document.addEventListener('DOMContentLoaded', () => { MinhaArea.init(); });
