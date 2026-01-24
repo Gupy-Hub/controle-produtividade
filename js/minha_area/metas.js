@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Suporte a "Visão Geral da Equipe" (Agregação)
+   ATUALIZAÇÃO: Otimização de Query (Select específico) e Remoção de Filtros de Banco para paridade com Produtividade
 */
 
 MinhaArea.Metas = {
@@ -8,7 +8,7 @@ MinhaArea.Metas = {
     chartAssert: null,
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento...");
+        console.log("🚀 Metas: Iniciando carregamento otimizado...");
         const uid = MinhaArea.getUsuarioAlvo(); // ID ou null (Visão Geral)
         const isGeral = (uid === null);
 
@@ -21,39 +21,42 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // --- 1. Buscas Condicionais ---
+            // --- 1. Buscas de Dados (Produção e Metas) ---
             let qProducao = Sistema.supabase.from('producao')
-                .select('*')
+                .select('*') // Produção precisa de todos os campos para cálculo de fator
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim);
+            
             if (!isGeral) qProducao = qProducao.eq('usuario_id', uid);
 
             let qMetas = Sistema.supabase.from('metas')
                 .select('mes, ano, meta, meta_assertividade')
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
+            
             if (!isGeral) qMetas = qMetas.eq('usuario_id', uid);
 
             const [prodRes, metasRes] = await Promise.all([qProducao, qMetas]);
 
             if (prodRes.error) throw prodRes.error;
 
-            // --- 2. Busca Robusta de Auditoria ---
+            // --- 2. Busca OTIMIZADA de Auditoria ---
+            // Baixamos tudo (sem filtrar auditora no banco) para garantir que temos todos os registros
+            // Igualamos a lógica da aba "Produtividade"
             const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
-            console.log(`📦 Metas: Total de auditorias baixadas: ${assertData.length}`);
+            console.log(`📦 Metas: Total de auditorias processadas: ${assertData.length}`);
 
             // --- 3. Processamento e Agregação ---
 
-            // A) Map de Metas (Soma se Geral)
+            // A) Map de Metas
             const mapMetas = {};
             (metasRes.data || []).forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
-                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assert: 0, count: 0 };
+                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assert: 0 };
                 
-                // Soma meta de produção
                 mapMetas[m.ano][m.mes].prod += Number(m.meta);
                 
-                // Assertividade: Se geral, fixa 98% ou mantêm a do registro (simplificação: 98% se geral)
+                // Na visão geral, mantemos 98% fixo como referência, ou média se preferir
                 if (isGeral) {
                     mapMetas[m.ano][m.mes].assert = 98.0;
                 } else {
@@ -61,10 +64,9 @@ MinhaArea.Metas = {
                 }
             });
 
-            // B) Map de Produção (Soma Quantidade, Média Fator se Geral)
+            // B) Map de Produção
             const mapProd = new Map();
             if (isGeral) {
-                // Consolidação por Data
                 (prodRes.data || []).forEach(p => {
                     const data = p.data_referencia;
                     if (!mapProd.has(data)) {
@@ -75,24 +77,25 @@ MinhaArea.Metas = {
                     reg.fator_soma += Number(p.fator || 1);
                     reg.fator_count++;
                 });
-                // Calcula média do fator
                 for (let [key, val] of mapProd) {
                     val.fator = val.fator_count > 0 ? (val.fator_soma / val.fator_count) : 1.0;
                 }
             } else {
-                // Individual
                 (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // C) Map de Assertividade (Array de scores por dia)
+            // C) Map de Assertividade
             const mapAssert = new Map();
-            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
+            // Status que realmente não devem contar (alinhar com Produtividade)
+            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA']; 
 
             assertData.forEach(a => {
-                const dataKey = a.data_referencia ? a.data_referencia.split('T')[0] : null;
+                const dataKey = a.data_referencia; 
                 if (!dataKey) return;
 
                 const status = (a.status || '').toUpperCase();
+                
+                // Filtro aplicado via código (mais seguro que via banco neste caso)
                 if (STATUS_IGNORAR.includes(status)) return; 
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -105,7 +108,7 @@ MinhaArea.Metas = {
                 }
             });
 
-            // --- 4. Construção dos Arrays do Gráfico ---
+            // --- 4. Construção dos Gráficos ---
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -129,14 +132,12 @@ MinhaArea.Metas = {
                 const mes = d.getMonth() + 1;
                 const dia = d.getDate();
 
-                // Pega meta consolidada (ou individual)
                 const metaConfig = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assert: 98.0 };
                 
                 const prodDia = mapProd.get(dataStr);
                 const qtd = prodDia ? Number(prodDia.quantidade || 0) : 0;
                 const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1); 
                 
-                // Meta Dia = Meta Mensal * Fator (Se geral, fator é média da equipe)
                 const metaDia = Math.round(metaConfig.prod * (isNaN(fator) ? 1 : fator));
 
                 const assertsDia = mapAssert.get(dataStr) || [];
@@ -185,7 +186,8 @@ MinhaArea.Metas = {
                 }
             }
 
-            // --- 5. Renderização (Passamos os MAPAS processados) ---
+            // --- 5. Renderização ---
+            // Passamos os dados brutos para o cálculo dos KPIs
             this.atualizarCardsKPI(mapProd, assertData, mapMetas, dtInicio, dtFim, isGeral);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
@@ -194,28 +196,27 @@ MinhaArea.Metas = {
 
         } catch (err) {
             console.error("❌ Erro Metas:", err);
-            const container = document.getElementById('chart-container-wrapper'); // Fallback visual
-            // Tenta alertar no console se container não existir
         }
     },
 
     buscarTodosAuditados: async function(uid, inicio, fim) {
         let todos = [];
         let page = 0;
-        const size = 1000;
+        const size = 1000; // Tamanho do lote
         let continuar = true;
 
+        console.log(`🔄 Iniciando download de auditorias... (Lotes de ${size})`);
+
         while(continuar) {
+            // Selecionamos APENAS as colunas necessárias para ficar leve e rápido
             let query = Sistema.supabase
                 .from('assertividade')
-                .select('*') 
+                .select('data_referencia, porcentagem_assertividade, status, auditora_nome, qtd_nok') 
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
-                .neq('auditora_nome', null)
-                .neq('auditora_nome', '')
                 .range(page * size, (page + 1) * size - 1);
             
-            // Filtra por ID apenas se não for geral (uid presente)
+            // Se for individual, filtra. Se for geral, pega tudo.
             if (uid) {
                 query = query.eq('usuario_id', uid);
             }
@@ -231,14 +232,18 @@ MinhaArea.Metas = {
                 continuar = false;
             } else {
                 todos = todos.concat(data);
-                if(data.length < size) continuar = false;
-                else page++;
+                // console.log(`📥 Página ${page} baixada: ${data.length} registros.`);
+                
+                if(data.length < size) {
+                    continuar = false; // Fim dos dados
+                } else {
+                    page++;
+                }
             }
         }
         return todos;
     },
 
-    // Assinatura alterada para receber mapProd já processado
     atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral) {
         let totalValidados = 0; 
         let totalMeta = 0;
@@ -250,11 +255,8 @@ MinhaArea.Metas = {
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
-        // 1. Cálculo de Produção (Usando o Map já processado)
-        // Precisamos clonar a data para não alterar a original externa (boa prática)
         let tempDate = new Date(dtInicio);
         
-        // Loop pelos dias para somar Produção e calcular Meta Acumulada
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
@@ -272,11 +274,9 @@ MinhaArea.Metas = {
             totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
         }
 
-        // 2. Loop de Auditoria (Para média e contagem de erros)
         asserts.forEach(a => {
             const status = (a.status || '').toUpperCase();
             
-            // Lógica da Média (Ignora neutros)
             if (!STATUS_IGNORAR.includes(status)) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { 
@@ -290,13 +290,13 @@ MinhaArea.Metas = {
             }
         });
 
-        // 3. Totais Finais
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const totalAuditados = asserts.length; 
+        
+        // Ajuste visual para evitar número negativo se a base estiver desincronizada
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
         const totalAcertos = totalAuditados - totalErros;
 
-        // --- Atualização do DOM ---
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
