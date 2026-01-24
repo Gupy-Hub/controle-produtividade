@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Sincronização Lógica com "Dia a Dia" (Remoção de filtros restritivos)
+   ATUALIZAÇÃO: Sincronização Lógica com "Dia a Dia" E "Produtividade" (Filtro de Qualidade)
 */
 
 MinhaArea.Metas = {
@@ -8,7 +8,7 @@ MinhaArea.Metas = {
     chartAssert: null,
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento (Modo Espelho Dia a Dia)...");
+        console.log("🚀 Metas: Iniciando carregamento (Modo Espelho Dia a Dia + Filtro Qualidade)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -22,22 +22,19 @@ MinhaArea.Metas = {
 
         try {
             // --- 1. Buscas ---
-            // Usamos LIMIT 5000 igual ao Dia a Dia para garantir a mesma massa de dados
-            
             let qProducao = Sistema.supabase.from('producao')
                 .select('*')
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
-                .limit(5000); // Igual ao Geral.js
+                .limit(5000);
 
             // Busca de Assertividade SIMPLIFICADA (Igual ao Geral.js)
-            // Sem filtros de status ou auditora aqui
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id') 
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .not('porcentagem_assertividade', 'is', null)
-                .limit(5000); // Igual ao Geral.js
+                .limit(5000);
 
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
@@ -58,13 +55,13 @@ MinhaArea.Metas = {
             ]);
 
             const dadosProducaoRaw = prodRes.data || [];
-            const dadosAssertividadeRaw = assertRes.data || []; // Agora temos os mesmos dados do Dia a Dia
+            const dadosAssertividadeRaw = assertRes.data || []; 
             const dadosMetasRaw = metasRes.data || [];
             const dadosUsuarios = userRes.data || [];
 
             console.log(`📦 Metas: Dados carregados. Prod: ${dadosProducaoRaw.length}, Assert: ${dadosAssertividadeRaw.length}`);
 
-            // --- 2. Mapeamento de Usuários (Para cálculo de Capacidade) ---
+            // --- 2. Mapeamento de Usuários ---
             const mapUser = {};
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
@@ -101,8 +98,9 @@ MinhaArea.Metas = {
                     const termoAdmin = ['ADMIN', 'SISTEMA', 'GUPY'];
                     const isGestao = termoGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t));
                     const isAdmin = termoAdmin.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes(t));
-                    
-                    if (!isGestao && !isAdmin) {
+                    const deveIgnorar = isGestao || isAdmin;
+
+                    if (!deveIgnorar) {
                         let considerar = false;
                         if (uData.status === 'ATIVO') considerar = true;
                         else if (uData.status === 'INATIVO' && usuariosQueProduziram.has(uId)) considerar = true;
@@ -165,10 +163,8 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Assertividade (SEM FILTROS para igualar Dia a Dia)
+            // Assertividade (SEM FILTROS para o gráfico diário, mas filtrado para o KPI)
             const mapAssert = new Map();
-            // REMOVIDO: const STATUS_IGNORAR = ... (Agora aceita tudo, igual ao Dia a Dia)
-
             dadosAssertividadeRaw.forEach(a => {
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
@@ -261,8 +257,8 @@ MinhaArea.Metas = {
                 }
             }
 
-            // --- 6. Renderização ---
-            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral);
+            // --- 6. Renderização (Passa mapUser para filtragem correta) ---
+            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
@@ -295,7 +291,7 @@ MinhaArea.Metas = {
         if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number(media.toFixed(2)), isMedia: true }; }
     },
 
-    atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral) {
+    atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser) {
         let totalValidados = 0; 
         let totalMeta = 0;
         
@@ -303,7 +299,7 @@ MinhaArea.Metas = {
         let qtdAssertMedia = 0;
         let totalErros = 0; 
 
-        // REMOVIDO: const STATUS_IGNORAR = ... (Igual ao Dia a Dia)
+        const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
         let tempDate = new Date(dtInicio);
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
@@ -324,11 +320,29 @@ MinhaArea.Metas = {
         }
 
         asserts.forEach(a => {
-            // Lógica Simplificada: Se tem nota, conta. Igual ao Dia a Dia.
-            let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
-            if(!isNaN(val)) { 
-                somaAssertMedia += val; 
-                qtdAssertMedia++; 
+            // LÓGICA DE EXCLUSÃO DE GESTÃO (Igual a Produtividade e Dia a Dia)
+            if (isGeral && mapUser) {
+                const uId = a.usuario_id;
+                const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
+                const funcao = (uData.funcao || '').toUpperCase();
+                const perfil = (uData.perfil || '').toUpperCase();
+                const nome = (uData.nome || '').toUpperCase();
+
+                const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
+                const isAdminNome = nome.includes('SUPERADMIN') || nome.includes('GUPY');
+                const isGestao = blacklist.some(r => funcao.includes(r) || perfil.includes(r));
+
+                if (isGestao || isAdminNome) return; // IGNORA ESTE REGISTRO
+            }
+
+            const status = (a.status || '').toUpperCase();
+            
+            if (!STATUS_IGNORAR.includes(status)) {
+                let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
+                if(!isNaN(val)) { 
+                    somaAssertMedia += val; 
+                    qtdAssertMedia++; 
+                }
             }
             
             if (a.qtd_nok && Number(a.qtd_nok) > 0) {
