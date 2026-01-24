@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Filtro de Status (Ativos + Inativos com Produção)
+   ATUALIZAÇÃO: Exclusão de Gestoras/Auditoras do Cálculo de Meta (Capacidade)
 */
 
 MinhaArea.Geral = {
@@ -10,8 +10,8 @@ MinhaArea.Geral = {
         const uid = rawUid ? parseInt(rawUid) : null;
         const isGeral = (uid === null); // Se null, é Visão Geral (Equipe)
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - Lógica de Status & Capacidade");
-        console.log("Modo:", isGeral ? "Equipe" : "Individual");
+        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro de Perfis");
+        console.log("Modo:", isGeral ? "Equipe (Operacional)" : "Individual");
 
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -22,7 +22,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Analisando equipe ativa...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando capacidade operacional...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -47,22 +47,20 @@ MinhaArea.Geral = {
                 .not('porcentagem_assertividade', 'is', null)
                 .limit(5000);
 
-            // Query 3: Metas (Diárias)
+            // Query 3: Metas
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
-            // Query 4: Status dos Usuários (Novo Filtro)
-            // Precisamos saber quem está ativo ou inativo hoje para decidir a meta
+            // Query 4: Dados dos Usuários (Status + Perfil)
             let qUsuarios = Sistema.supabase.from('usuarios')
-                .select('id, status, nome');
+                .select('id, status, nome, perfil');
 
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
                 qMetas = qMetas.eq('usuario_id', uid);
-                // Não filtramos qUsuarios aqui pois precisamos do status do alvo de qualquer jeito
             }
 
             // Query 5: Check-ins
@@ -87,13 +85,18 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- 3. MAPEAMENTO DE STATUS & PRODUÇÃO ---
-            
-            // Cria mapa de Status: ID -> 'ATIVO' | 'INATIVO'
+            // --- 3. MAPEAMENTO DE USUÁRIOS ---
             const mapStatusUser = {};
-            dadosUsuarios.forEach(u => mapStatusUser[u.id] = (u.status || 'INATIVO').toUpperCase());
+            const mapPerfilUser = {};
 
-            // Cria Set de quem produziu no período (Para validar inativos que trabalharam)
+            dadosUsuarios.forEach(u => {
+                mapStatusUser[u.id] = (u.status || 'INATIVO').toUpperCase();
+                // Normaliza o perfil para comparação
+                const p = (u.perfil || 'ASSISTENTE').toUpperCase().trim();
+                mapPerfilUser[u.id] = p;
+            });
+
+            // Set para verificar quem produziu (salvar inativos que trabalharam)
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
             // --- 4. CÁLCULO DA CAPACIDADE DIÁRIA (Meta) ---
@@ -121,39 +124,46 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // LÓGICA DE FILTRAGEM (Ativos vs Inativos)
-                    const status = mapStatusUser[uId] || 'INATIVO'; // Default Inativo se não achar
+                    // --- FILTROS DE OPERAÇÃO ---
+                    const status = mapStatusUser[uId] || 'INATIVO';
+                    const perfil = mapPerfilUser[uId] || 'ASSISTENTE';
                     const produziuNoMes = usuariosQueProduziram.has(uId);
 
-                    let considerarMeta = false;
+                    // Regra 1: Gestoras e Auditoras NÃO contam para a Meta/Média
+                    const isOperacional = (perfil !== 'GESTORA' && perfil !== 'AUDITORA');
 
-                    // REGRA 1: Se é ATIVO, considera a meta (mesmo que não tenha produzido ainda)
-                    if (status === 'ATIVO') {
-                        considerarMeta = true;
-                    } 
-                    // REGRA 2: Se é INATIVO, só considera se produziu no período (trabalhou antes de sair)
-                    else if (status === 'INATIVO' && produziuNoMes) {
-                        considerarMeta = true;
-                        // console.log(`⚠️ Considerando Inativo ID ${uId} pois tem produção.`);
-                    }
+                    if (isOperacional) {
+                        let considerarMeta = false;
 
-                    if (considerarMeta && valProd > 0) {
-                        mapMetas[a][ms].somaIndividual += valProd;
-                        mapMetas[a][ms].qtdAssistentesDB++;
-                        mapMetas[a][ms].prodValues.push(valProd); // Guarda para calculo de Moda
+                        // Regra 2: Ativos sempre contam
+                        if (status === 'ATIVO') {
+                            considerarMeta = true;
+                        } 
+                        // Regra 3: Inativos contam APENAS se produziram
+                        else if (status === 'INATIVO' && produziuNoMes) {
+                            considerarMeta = true;
+                        }
+
+                        if (considerarMeta && valProd > 0) {
+                            mapMetas[a][ms].somaIndividual += valProd;
+                            mapMetas[a][ms].qtdAssistentesDB++; // Conta como uma "vaga" preenchida
+                            mapMetas[a][ms].prodValues.push(valProd); // Guarda para média
+                        }
+                    } else {
+                        // console.log(`🚫 Ignorando Meta de ${perfil} (ID: ${uId}) no cálculo da equipe.`);
                     }
                     
-                    // Assertividade sempre acumula para média geral
+                    // Assertividade sempre acumula para média geral de qualidade
                     mapMetas[a][ms].assertValues.push(valAssert);
 
                 } else {
-                    // Visão Individual: Pega direto
+                    // Visão Individual: Pega direto sem filtros
                     mapMetas[a][ms].prodTotalDiario = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // Aplica Projeção para a Equipe (Preencher lacunas até o Target)
+            // Aplica Projeção para a Equipe (Preencher lacunas de Assistentes)
             if (isGeral) {
                 const targetAssistentes = this.getQtdAssistentesConfigurada(); 
                 
@@ -166,30 +176,25 @@ MinhaArea.Geral = {
                         const gap = targetAssistentes - assistentesValidos;
                         
                         if (gap > 0) {
-                            // Se faltam assistentes para chegar no target (ex: target 17, achou 15 válidos)
-                            // Projeta os faltantes usando a MODA ou MÉDIA dos válidos
-                            let valorProjecao = 100; // fallback
+                            // Projeta usando apenas a média dos OPERACIONAIS
+                            let valorProjecao = 100;
 
                             if (d.prodValues.length > 0) {
                                 valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
-                            } else {
-                                // Se não achou ninguém, usa 100
-                                valorProjecao = 100;
                             }
 
                             const projecaoTotal = gap * valorProjecao;
                             capacidadeDiaria += projecaoTotal;
                             
-                            console.log(`ℹ️ [Mês ${ms}/${a}] Ativos/Efetivos: ${assistentesValidos}. Projetando +${gap} x ${valorProjecao}.`);
+                            console.log(`ℹ️ [Mês ${ms}/${a}] Operacionais Encontrados: ${assistentesValidos}. Gap: ${gap}. Projeção: +${projecaoTotal}`);
                         } 
                         else if (assistentesValidos === 0) {
-                            // Fallback extremo
+                            // Fallback se não houver nenhum assistente cadastrado
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
 
                         d.prodTotalDiario = capacidadeDiaria;
                         
-                        // Assertividade (Média)
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -206,6 +211,7 @@ MinhaArea.Geral = {
                     const data = p.data_referencia;
                     if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
                     const reg = mapProd.get(data);
+                    // IMPORTANTE: A produção de Gestoras/Auditoras ENTRA aqui (soma tudo)
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fifo += Number(p.fifo || 0);
                     reg.gradual_total += Number(p.gradual_total || 0);
@@ -251,7 +257,6 @@ MinhaArea.Geral = {
                     configMes = { prodTotalDiario: metaPadrao, assertFinal: 98.0, isMedia: false };
                 }
 
-                // Capacidade Diária (Já calculada com Ativos + Inativos Produtivos + Projeção)
                 const metaDiariaBase = configMes.prodTotalDiario;
 
                 const prodDoDia = mapProd.get(dataStr);
@@ -314,7 +319,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${this.fmtNum(item.qtd)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Meta Ajustada">${item.metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Meta Operacional">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
@@ -402,7 +407,6 @@ MinhaArea.Geral = {
             }
         });
 
-        // Se mais de 30% da amostra tiver o mesmo valor, usa a Moda
         if ((maxFreq / valores.length) >= 0.3) {
             return { valor: moda };
         } else {
