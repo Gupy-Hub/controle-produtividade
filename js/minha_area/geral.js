@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Refatoração com Debug de Metas (Console F12)
+   ATUALIZAÇÃO: Correção Crítica - Meta é DIÁRIA (Não dividir por dias úteis)
 */
 
 MinhaArea.Geral = {
@@ -47,8 +47,7 @@ MinhaArea.Geral = {
                 .not('porcentagem_assertividade', 'is', null)
                 .limit(5000);
 
-            // Query 3: METAS DEFINIDAS (A Chave do Problema)
-            // Buscamos metas do período para garantir que temos os dados
+            // Query 3: METAS DEFINIDAS (Agora tratadas como DIÁRIAS)
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio)
@@ -71,7 +70,6 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim);
             }
 
-            // Executa tudo em paralelo
             const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
                 qProducao, qAssertividade, qMetas, qCheck ? qCheck : Promise.resolve({ data: [] })
             ]);
@@ -81,13 +79,11 @@ MinhaArea.Geral = {
             const dadosMetasRaw = metasRes.data || [];
             const dadosCheckins = checkRes.data || [];
 
-            // --- 3. DEBUG NO CONSOLE: O QUE VEIO DO BANCO? ---
-            console.log("📊 [DEBUG META] Retorno Bruto da Tabela 'metas':", dadosMetasRaw);
+            console.log("📊 [DEBUG META] Dados Brutos da Tabela 'metas':", dadosMetasRaw);
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- 4. MAPEAMENTO DE METAS (Indexação) ---
-            // Estrutura: mapMetas[ANO][MES] = { prod: 5000, ... }
+            // --- 3. MAPEAMENTO DE METAS ---
             const mapMetas = {};
             
             dadosMetasRaw.forEach(m => {
@@ -100,21 +96,22 @@ MinhaArea.Geral = {
                     mapMetas[a][ms] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
                 }
                 
+                // IMPORTANTE: Assumimos que o valor no banco JÁ É A META DIÁRIA
                 const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // Soma metas de todos (Visão Equipe)
+                    // Visão Geral: Soma as metas DIÁRIAS de todos (Capacidade Diária da Equipe)
                     mapMetas[a][ms].prod += valProd;
                     mapMetas[a][ms].assertValues.push(valAssert);
                 } else {
-                    // Visão Individual: Sobrescreve (deve haver apenas 1 registro por usuario/mes/ano)
+                    // Individual: Usa o valor direto
                     mapMetas[a][ms].prod = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            console.log("🗺️ [DEBUG META] Mapa de Metas Processado:", mapMetas);
+            console.log("🗺️ [DEBUG META] Mapa de Metas Processado (Diário):", mapMetas);
 
             // Tratamento estatístico para Visão Geral (Assertividade)
             if (isGeral) {
@@ -130,7 +127,7 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- 5. AGREGAÇÃO DE DADOS REAIS (Produção e Assertividade) ---
+            // --- 4. AGREGAÇÃO DE DADOS REAIS ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -161,46 +158,44 @@ MinhaArea.Geral = {
 
             const mapCheckins = new Set(dadosCheckins.map(c => c.data_referencia));
 
-            // --- 6. RENDERIZAÇÃO DO GRID (Dia a Dia) ---
+            // --- 5. RENDERIZAÇÃO DO GRID (Dia a Dia) ---
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
             const cacheDiasUteis = {}; 
 
-            // Loop dia a dia no intervalo selecionado
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
-                if (d.getDay() === 0 || d.getDay() === 6) continue; // Pula Sábado/Domingo
+                if (d.getDay() === 0 || d.getDay() === 6) continue;
 
                 const dataStr = d.toISOString().split('T')[0];
                 const anoAtual = d.getFullYear();
-                const mesAtual = d.getMonth() + 1; // JS é 0-11, Banco é 1-12
+                const mesAtual = d.getMonth() + 1;
                 const chaveMes = `${anoAtual}-${mesAtual}`;
                 
-                // >>> PONTO CRÍTICO: Identificando a Meta do Mês <<<
+                // BUSCA META DIÁRIA
                 let configMes = null;
                 let origemMeta = "PADRAO";
 
                 if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) {
                     configMes = mapMetas[anoAtual][mesAtual];
-                    origemMeta = "BANCO DE DADOS";
+                    origemMeta = "BANCO (Diária)";
                 } else {
-                    // Fallback se não achou no banco
-                    configMes = { prod: (isGeral ? 6500 : 650), assertFinal: 98.0, isMedia: false };
-                    origemMeta = "FALLBACK (Fixa)";
+                    // Fallback Diário (Valores ajustados para parecerem diários)
+                    configMes = { prod: (isGeral ? 1500 : 100), assertFinal: 98.0, isMedia: false };
+                    origemMeta = "FALLBACK (Diária)";
                 }
                 
-                // Calcula dias úteis (Cache para performance)
+                // Calcula dias úteis (Apenas para estatística/KPI, não afeta a meta diária)
                 if (!cacheDiasUteis[chaveMes]) {
                     cacheDiasUteis[chaveMes] = this.getDiasUteisNoMes(mesAtual, anoAtual);
-                    // Log apenas na primeira vez que calcula pro mês
-                    console.log(`📅 [DEBUG META] Mês ${mesAtual}/${anoAtual}: ${cacheDiasUteis[chaveMes]} dias úteis. Meta Mensal (${origemMeta}): ${configMes.prod}`);
+                    console.log(`📅 [DEBUG META] Mês ${mesAtual}/${anoAtual}: ${cacheDiasUteis[chaveMes]} dias úteis. Meta Base (${origemMeta}): ${configMes.prod}`);
                 }
                 const diasUteisMes = cacheDiasUteis[chaveMes] || 1;
 
-                // CÁLCULO DA META DIÁRIA
-                const metaDiariaBase = configMes.prod / diasUteisMes;
+                // --- CORREÇÃO: META DIÁRIA DIRETA ---
+                // Não dividimos mais pelos dias úteis, pois o valor do banco JÁ É diário.
+                const metaDiariaBase = configMes.prod;
 
-                // Recupera dados reais do dia
                 const prodDoDia = mapProd.get(dataStr);
                 let fator = 1.0, qtdReal = 0, justif = '', temRegistro = false;
 
@@ -215,11 +210,10 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
-                // Aplica Fator (Ex: Meio período = 0.5)
+                // Aplica Fator (Ex: Trabalhou meio dia = 50% da meta diária)
                 const metaDiaCalculada = Math.round(metaDiariaBase * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
-                // Processa Assertividade do Dia
                 const assertDoDia = mapAssert.get(dataStr);
                 let assertDiaDisplay = { val: 0, text: '-', class: 'text-slate-300' };
                 
@@ -248,7 +242,6 @@ MinhaArea.Geral = {
             listaGrid.sort((a, b) => b.data.localeCompare(a.data));
             if(tbody) tbody.innerHTML = listaGrid.length ? '' : '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
-            // Renderiza Linhas
             listaGrid.forEach(item => {
                 const pctProd = item.metaDia > 0 ? (item.qtd / item.metaDia) * 100 : 0;
                 let corProd = item.metaDia > 0 ? (pctProd >= 100 ? 'text-emerald-600 font-bold' : (pctProd >= 80 ? 'text-amber-600 font-bold' : 'text-rose-600 font-bold')) : 'text-slate-400';
@@ -272,7 +265,7 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // --- 7. ATUALIZAÇÃO DE KPIs ---
+            // --- 6. ATUALIZAÇÃO KPIs ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
@@ -294,11 +287,12 @@ MinhaArea.Geral = {
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
-            // KPI VELOCIDADE (Ideal)
+            // KPI VELOCIDADE (Ideal) - Corrigido para usar Meta Diária Direta
             const mesRef = new Date(dtFim).getMonth() + 1;
-            const metaRefObj = mapMetas[anoFim]?.[mesRef] || { prod: (isGeral ? 6500 : 650) };
-            const diasUteisRef = this.getDiasUteisNoMes(mesRef, anoFim);
-            const metaRefDiaria = Math.round(metaRefObj.prod / (diasUteisRef || 1));
+            const metaRefObj = mapMetas[anoFim]?.[mesRef] || { prod: (isGeral ? 1500 : 100) };
+            
+            // Meta diária de referência é o próprio valor configurado (pois é diário)
+            const metaRefDiaria = metaRefObj.prod;
 
             const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
             const mediaDiaria = Math.round(totalProdReal / divisorVelocidade);
@@ -309,7 +303,7 @@ MinhaArea.Geral = {
             if(elMedia) elMedia.innerHTML = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVel >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${this.fmtPct(pctVel)}</span>`;
             this.setTxt('kpi-meta-dia', metaRefDiaria);
 
-            console.groupEnd(); // Fim do Debug Meta
+            console.groupEnd();
 
         } catch (err) {
             console.error("Erro Geral:", err);
