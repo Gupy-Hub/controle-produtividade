@@ -1,7 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Implementação de 'Meta Inteligente' (Moda Ponderada) na Visão Geral.
-   NOTA: Admin inicia na Visão Geral.
+   ATUALIZAÇÃO: Correção de bug de duplicação de metas (Individual vs Geral).
 */
 
 MinhaArea.Geral = {
@@ -78,29 +77,30 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- PROCESSAMENTO INTELIGENTE DE METAS ---
+            // --- PROCESSAMENTO INTELIGENTE DE METAS (CORRIGIDO) ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 if (!mapMetas[m.ano][m.mes]) {
-                    // Inicializa estrutura. 'assertValues' guardará todas as metas para cálculo estatístico
+                    // Inicializa estrutura
                     mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
                 }
                 
-                // Produção: Soma simples (Volume da equipe)
                 const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
-                mapMetas[m.ano][m.mes].prod += metaProdVal;
                 
-                // Assertividade:
+                // Assertividade
                 const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) 
                     ? Number(m.meta_assertividade) 
                     : 98.0;
 
                 if (isGeral) {
-                    // Guarda todos os valores para decidir depois (Moda vs Média)
+                    // Visão Geral: SOMA as metas de todos os usuários
+                    mapMetas[m.ano][m.mes].prod += metaProdVal;
                     mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
                 } else {
-                    // Individual: Valor direto
+                    // Visão Individual: SOBRESCREVE a meta (corrige duplicação no DB)
+                    // Se houver 2 registros iguais no banco, isso garante que pegamos apenas o valor de um, sem somar.
+                    mapMetas[m.ano][m.mes].prod = metaProdVal;
                     mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
                 }
             });
@@ -113,7 +113,7 @@ MinhaArea.Geral = {
                         if (d.assertValues.length > 0) {
                             const resultado = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = resultado.valor;
-                            d.isMedia = resultado.isMedia; // Flag para mudar o texto na interface
+                            d.isMedia = resultado.isMedia; 
                         }
                     }
                 }
@@ -180,6 +180,7 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
+                // Cálculo da Meta do Dia (Diária * Fator)
                 const metaDiaCalculada = Math.round(configMes.prod * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -200,7 +201,7 @@ MinhaArea.Geral = {
                 if (temRegistro) {
                     listaGrid.push({
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
-                        metaConfigAssert: configMes.assertFinal, // Passa a meta limpa (100% ou 95%)
+                        metaConfigAssert: configMes.assertFinal, 
                         assertDisplay: assertDiaDisplay, justificativa: justif,
                         fifo: prodDoDia.fifo, gt: prodDoDia.gradual_total, gp: prodDoDia.gradual_parcial,
                         validado: mapCheckins.has(dataStr)
@@ -247,8 +248,6 @@ MinhaArea.Geral = {
             const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
             const elMetaTag = document.getElementById('kpi-meta-assert-target');
             if (elMetaTag) {
-                // Se o cálculo inteligente detectou que é uma média real (muitas metas diferentes), avisa
-                // Se detectou que a meta é uniforme (ex: todo mundo 100%), mostra apenas "Meta"
                 const label = (isGeral && configFim.isMedia) ? 'Meta (Média)' : 'Meta';
                 elMetaTag.innerText = `${label}: ${configFim.assertFinal}%`;
             }
@@ -301,13 +300,12 @@ MinhaArea.Geral = {
 
         // 3. Regra de Dominância
         // Se a Moda (ex: 100%) representa mais de 70% da equipe, usamos a Moda.
-        // Isso elimina distorções causadas por poucos usuários desatualizados.
         const dominancia = maxFreq / valores.length;
         
         if (dominancia >= 0.70) {
-            return { valor: moda, isMedia: false }; // Retorna o valor "limpo" (ex: 100)
+            return { valor: moda, isMedia: false }; 
         } else {
-            return { valor: Number(media.toFixed(2)), isMedia: true }; // Retorna a média quebrada (ex: 98.45)
+            return { valor: Number(media.toFixed(2)), isMedia: true }; 
         }
     },
 
