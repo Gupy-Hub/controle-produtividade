@@ -1,26 +1,28 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Correção na leitura de Metas (Filtro por ID e Select explícito)
+   ATUALIZAÇÃO: Refatoração com Debug de Metas (Console F12)
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
-        // Garante que o ID seja numérico para bater com o banco (BigInt/Integer)
+        // --- 1. PREPARAÇÃO DE AMBIENTE ---
         const rawUid = MinhaArea.getUsuarioAlvo();
         const uid = rawUid ? parseInt(rawUid) : null;
-        const isGeral = (uid === null); // Se for null, estamos na Visão Geral (Admin/Todos)
+        const isGeral = (uid === null); // Se null, é Visão Geral (Gestor vendo todos)
         
+        console.group("🚀 [DEBUG META] Iniciando Carga do Dia a Dia");
+        console.log("Usuário Alvo ID:", uid, "| Modo Geral:", isGeral);
+
         const tbody = document.getElementById('tabela-extrato');
-        
-        // Limpa alertas antigos
         const alertContainer = document.getElementById('container-checkin-alert');
+        
         if (alertContainer) {
             alertContainer.innerHTML = '';
             alertContainer.classList.add('hidden');
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados da equipe...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Analisando Metas e Produção...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -28,16 +30,16 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // --- QUERIES ---
+            // --- 2. BUSCA DE DADOS (QUERIES) ---
             
-            // 1. Produção
+            // Query 1: Produção Realizada
             let qProducao = Sistema.supabase.from('producao')
                 .select('*')
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .limit(5000);
 
-            // 2. Assertividade
+            // Query 2: Assertividade (Qualidade)
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, usuario_id')
                 .gte('data_referencia', inicio)
@@ -45,20 +47,21 @@ MinhaArea.Geral = {
                 .not('porcentagem_assertividade', 'is', null)
                 .limit(5000);
 
-            // 3. Metas - IMPORTANTE: Selecionando usuario_id explicitamente
+            // Query 3: METAS DEFINIDAS (A Chave do Problema)
+            // Buscamos metas do período para garantir que temos os dados
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
-            // Filtros de Usuário (se não for visão geral)
+            // Filtros Individuais (se não for visão geral)
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
                 qMetas = qMetas.eq('usuario_id', uid);
             }
 
-            // 4. Checking (Só carrega se for individual)
+            // Query 4: Check-ins Diários
             let qCheck = null;
             if (!isGeral) {
                 qCheck = Sistema.supabase.from('checking_diario')
@@ -68,6 +71,7 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim);
             }
 
+            // Executa tudo em paralelo
             const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
                 qProducao, qAssertividade, qMetas, qCheck ? qCheck : Promise.resolve({ data: [] })
             ]);
@@ -77,55 +81,56 @@ MinhaArea.Geral = {
             const dadosMetasRaw = metasRes.data || [];
             const dadosCheckins = checkRes.data || [];
 
-            console.log("Metas Carregadas:", dadosMetasRaw.length, dadosMetasRaw); // Debug para F12
+            // --- 3. DEBUG NO CONSOLE: O QUE VEIO DO BANCO? ---
+            console.log("📊 [DEBUG META] Retorno Bruto da Tabela 'metas':", dadosMetasRaw);
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- PROCESSAMENTO DE METAS ---
+            // --- 4. MAPEAMENTO DE METAS (Indexação) ---
+            // Estrutura: mapMetas[ANO][MES] = { prod: 5000, ... }
             const mapMetas = {};
             
-            // Populando o mapa de metas
             dadosMetasRaw.forEach(m => {
-                if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
-                if (!mapMetas[m.ano][m.mes]) {
-                    // Inicializa estrutura
-                    mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
+                const a = parseInt(m.ano);
+                const ms = parseInt(m.mes);
+                
+                if (!mapMetas[a]) mapMetas[a] = {};
+                
+                if (!mapMetas[a][ms]) {
+                    mapMetas[a][ms] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
                 }
                 
-                const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
-                const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) 
-                    ? Number(m.meta_assertividade) 
-                    : 98.0;
+                const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
+                const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: SOMA as metas de todos os usuários encontrados
-                    mapMetas[m.ano][m.mes].prod += metaProdVal;
-                    mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
+                    // Soma metas de todos (Visão Equipe)
+                    mapMetas[a][ms].prod += valProd;
+                    mapMetas[a][ms].assertValues.push(valAssert);
                 } else {
-                    // Individual: Se vieram linhas duplicadas por erro, sobrescreve. 
-                    // Como filtramos por UID na query, deve vir apenas 1 linha por mês.
-                    mapMetas[m.ano][m.mes].prod = metaProdVal;
-                    mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
+                    // Visão Individual: Sobrescreve (deve haver apenas 1 registro por usuario/mes/ano)
+                    mapMetas[a][ms].prod = valProd;
+                    mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // Lógica Estatística para Visão Geral (Assertividade)
+            console.log("🗺️ [DEBUG META] Mapa de Metas Processado:", mapMetas);
+
+            // Tratamento estatístico para Visão Geral (Assertividade)
             if (isGeral) {
-                for (const ano in mapMetas) {
-                    for (const mes in mapMetas[ano]) {
-                        const d = mapMetas[ano][mes];
+                for (const a in mapMetas) {
+                    for (const ms in mapMetas[a]) {
+                        const d = mapMetas[a][ms];
                         if (d.assertValues.length > 0) {
-                            const resultado = this.calcularMetaInteligente(d.assertValues);
-                            d.assertFinal = resultado.valor;
-                            d.isMedia = resultado.isMedia;
+                            const res = this.calcularMetaInteligente(d.assertValues);
+                            d.assertFinal = res.valor;
+                            d.isMedia = res.isMedia;
                         }
                     }
                 }
             }
 
-            // --- AGREGAÇÃO DE DADOS REAIS ---
-            
-            // Produção
+            // --- 5. AGREGAÇÃO DE DADOS REAIS (Produção e Assertividade) ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -144,7 +149,6 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Assertividade
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const key = a.data_referencia;
@@ -157,33 +161,46 @@ MinhaArea.Geral = {
 
             const mapCheckins = new Set(dadosCheckins.map(c => c.data_referencia));
 
-            // --- GRID RENDER ---
+            // --- 6. RENDERIZAÇÃO DO GRID (Dia a Dia) ---
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
-            
             const cacheDiasUteis = {}; 
 
+            // Loop dia a dia no intervalo selecionado
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
-                if (d.getDay() === 0 || d.getDay() === 6) continue;
+                if (d.getDay() === 0 || d.getDay() === 6) continue; // Pula Sábado/Domingo
+
                 const dataStr = d.toISOString().split('T')[0];
-                const ano = d.getFullYear();
-                const mes = d.getMonth() + 1;
-                const chaveMes = `${ano}-${mes}`;
+                const anoAtual = d.getFullYear();
+                const mesAtual = d.getMonth() + 1; // JS é 0-11, Banco é 1-12
+                const chaveMes = `${anoAtual}-${mesAtual}`;
                 
-                // 1. Busca Configuração Mensal
-                // Se não houver meta definida no DB, fallback para padrão (6500 Geral / 650 Individual)
-                const configMes = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assertFinal: 98.0, isMedia: false };
+                // >>> PONTO CRÍTICO: Identificando a Meta do Mês <<<
+                let configMes = null;
+                let origemMeta = "PADRAO";
+
+                if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) {
+                    configMes = mapMetas[anoAtual][mesAtual];
+                    origemMeta = "BANCO DE DADOS";
+                } else {
+                    // Fallback se não achou no banco
+                    configMes = { prod: (isGeral ? 6500 : 650), assertFinal: 98.0, isMedia: false };
+                    origemMeta = "FALLBACK (Fixa)";
+                }
                 
-                // 2. Calcula Dias Úteis do Mês
+                // Calcula dias úteis (Cache para performance)
                 if (!cacheDiasUteis[chaveMes]) {
-                    cacheDiasUteis[chaveMes] = this.getDiasUteisNoMes(mes, ano);
+                    cacheDiasUteis[chaveMes] = this.getDiasUteisNoMes(mesAtual, anoAtual);
+                    // Log apenas na primeira vez que calcula pro mês
+                    console.log(`📅 [DEBUG META] Mês ${mesAtual}/${anoAtual}: ${cacheDiasUteis[chaveMes]} dias úteis. Meta Mensal (${origemMeta}): ${configMes.prod}`);
                 }
                 const diasUteisMes = cacheDiasUteis[chaveMes] || 1;
 
-                // 3. Define Meta Diária (Meta Mensal / Dias Úteis)
+                // CÁLCULO DA META DIÁRIA
                 const metaDiariaBase = configMes.prod / diasUteisMes;
 
+                // Recupera dados reais do dia
                 const prodDoDia = mapProd.get(dataStr);
                 let fator = 1.0, qtdReal = 0, justif = '', temRegistro = false;
 
@@ -198,9 +215,11 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
+                // Aplica Fator (Ex: Meio período = 0.5)
                 const metaDiaCalculada = Math.round(metaDiariaBase * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
+                // Processa Assertividade do Dia
                 const assertDoDia = mapAssert.get(dataStr);
                 let assertDiaDisplay = { val: 0, text: '-', class: 'text-slate-300' };
                 
@@ -229,6 +248,7 @@ MinhaArea.Geral = {
             listaGrid.sort((a, b) => b.data.localeCompare(a.data));
             if(tbody) tbody.innerHTML = listaGrid.length ? '' : '<tr><td colspan="11" class="text-center py-12 text-slate-400 italic">Nenhum registro encontrado.</td></tr>';
 
+            // Renderiza Linhas
             listaGrid.forEach(item => {
                 const pctProd = item.metaDia > 0 ? (item.qtd / item.metaDia) * 100 : 0;
                 let corProd = item.metaDia > 0 ? (pctProd >= 100 ? 'text-emerald-600 font-bold' : (pctProd >= 80 ? 'text-amber-600 font-bold' : 'text-rose-600 font-bold')) : 'text-slate-400';
@@ -244,7 +264,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${this.fmtNum(item.qtd)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400">${item.metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400" title="Meta Diária">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
@@ -252,7 +272,7 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // --- ATUALIZAÇÃO KPIS ---
+            // --- 7. ATUALIZAÇÃO DE KPIs ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
@@ -289,8 +309,11 @@ MinhaArea.Geral = {
             if(elMedia) elMedia.innerHTML = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVel >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${this.fmtPct(pctVel)}</span>`;
             this.setTxt('kpi-meta-dia', metaRefDiaria);
 
+            console.groupEnd(); // Fim do Debug Meta
+
         } catch (err) {
             console.error("Erro Geral:", err);
+            console.groupEnd();
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
