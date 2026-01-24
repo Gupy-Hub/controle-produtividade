@@ -1,14 +1,17 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Lógica de 'Smart Meta' (Moda > Média) para evitar médias quebradas
+   ATUALIZAÇÃO: Implementação de 'Meta Inteligente' (Moda Ponderada) na Visão Geral.
+   NOTA: Admin inicia na Visão Geral.
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
         const uid = MinhaArea.getUsuarioAlvo(); 
-        const isGeral = (uid === null); 
+        const isGeral = (uid === null); // Se for null, estamos na Visão Geral (Admin)
         
         const tbody = document.getElementById('tabela-extrato');
+        
+        // Limpa alertas antigos
         const alertContainer = document.getElementById('container-checkin-alert');
         if (alertContainer) {
             alertContainer.innerHTML = '';
@@ -16,7 +19,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados da equipe...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -24,20 +27,44 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // Queries Condicionais
-            let qProducao = Sistema.supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
-            let qAssertividade = Sistema.supabase.from('assertividade').select('data_referencia, porcentagem_assertividade').gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
-            let qMetas = Sistema.supabase.from('metas').select('mes, ano, meta_producao, meta_assertividade').gte('ano', anoInicio).lte('ano', anoFim);
+            // --- QUERIES ---
             
+            // 1. Produção
+            let qProducao = Sistema.supabase.from('producao')
+                .select('*')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .limit(5000);
+
+            // 2. Assertividade
+            let qAssertividade = Sistema.supabase.from('assertividade')
+                .select('data_referencia, porcentagem_assertividade')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .not('porcentagem_assertividade', 'is', null)
+                .limit(5000);
+
+            // 3. Metas
+            let qMetas = Sistema.supabase.from('metas')
+                .select('mes, ano, meta_producao, meta_assertividade')
+                .gte('ano', anoInicio)
+                .lte('ano', anoFim);
+
+            // Filtros de Usuário (se não for geral)
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
                 qMetas = qMetas.eq('usuario_id', uid);
             }
 
+            // 4. Checking (Só carrega se for individual)
             let qCheck = null;
             if (!isGeral) {
-                qCheck = Sistema.supabase.from('checking_diario').select('data_referencia, status').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim);
+                qCheck = Sistema.supabase.from('checking_diario')
+                    .select('data_referencia, status')
+                    .eq('usuario_id', uid)
+                    .gte('data_referencia', inicio)
+                    .lte('data_referencia', fim);
             }
 
             const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
@@ -51,39 +78,50 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- AGREGAÇÃO INTELIGENTE DE METAS ---
+            // --- PROCESSAMENTO INTELIGENTE DE METAS ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
-                // Inicializa objeto com array de valores para análise estatística
-                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0 };
+                if (!mapMetas[m.ano][m.mes]) {
+                    // Inicializa estrutura. 'assertValues' guardará todas as metas para cálculo estatístico
+                    mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
+                }
                 
+                // Produção: Soma simples (Volume da equipe)
                 const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
                 mapMetas[m.ano][m.mes].prod += metaProdVal;
                 
-                const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) ? Number(m.meta_assertividade) : 98.0;
+                // Assertividade:
+                const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) 
+                    ? Number(m.meta_assertividade) 
+                    : 98.0;
 
                 if (isGeral) {
-                    // Na visão geral, guardamos TODOS os valores para analisar depois
+                    // Guarda todos os valores para decidir depois (Moda vs Média)
                     mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
                 } else {
+                    // Individual: Valor direto
                     mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
                 }
             });
 
-            // Lógica de Consolidação (Moda vs Média)
+            // Lógica Estatística para Visão Geral
             if (isGeral) {
                 for (const ano in mapMetas) {
                     for (const mes in mapMetas[ano]) {
                         const d = mapMetas[ano][mes];
                         if (d.assertValues.length > 0) {
-                            d.assertFinal = this.calcularMetaInteligente(d.assertValues);
+                            const resultado = this.calcularMetaInteligente(d.assertValues);
+                            d.assertFinal = resultado.valor;
+                            d.isMedia = resultado.isMedia; // Flag para mudar o texto na interface
                         }
                     }
                 }
             }
 
-            // --- AGREGAÇÃO PRODUÇÃO & ASSERTIVIDADE REAL ---
+            // --- AGREGAÇÃO DE DADOS REAIS ---
+            
+            // Produção
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -102,6 +140,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
+            // Assertividade
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const key = a.data_referencia;
@@ -114,7 +153,7 @@ MinhaArea.Geral = {
 
             const mapCheckins = new Set(dadosCheckins.map(c => c.data_referencia));
 
-            // --- GRID RENDER LOOP ---
+            // --- GRID RENDER ---
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
@@ -125,8 +164,7 @@ MinhaArea.Geral = {
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
                 
-                const configMes = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assertFinal: 98.0 };
-                const metaAssertDoMes = configMes.assertFinal;
+                const configMes = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assertFinal: 98.0, isMedia: false };
                 
                 const prodDoDia = mapProd.get(dataStr);
                 let fator = 1.0, qtdReal = 0, justif = '', temRegistro = false;
@@ -154,7 +192,7 @@ MinhaArea.Geral = {
                     totalAssertQtd += assertDoDia.qtd;
                     assertDiaDisplay.val = mediaDia;
                     assertDiaDisplay.text = this.fmtPct(mediaDia);
-                    assertDiaDisplay.class = mediaDia >= metaAssertDoMes ? 
+                    assertDiaDisplay.class = mediaDia >= configMes.assertFinal ? 
                         'text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 rounded px-1' : 
                         'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
                 }
@@ -162,7 +200,7 @@ MinhaArea.Geral = {
                 if (temRegistro) {
                     listaGrid.push({
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
-                        metaConfigAssert: metaAssertDoMes, 
+                        metaConfigAssert: configMes.assertFinal, // Passa a meta limpa (100% ou 95%)
                         assertDisplay: assertDiaDisplay, justificativa: justif,
                         fifo: prodDoDia.fifo, gt: prodDoDia.gradual_total, gp: prodDoDia.gradual_parcial,
                         validado: mapCheckins.has(dataStr)
@@ -205,12 +243,14 @@ MinhaArea.Geral = {
             this.setTxt('kpi-assertividade-val', this.fmtPct(totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0));
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
             
-            // ATUALIZAÇÃO DA TAG META
-            const metaFinalKPI = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1]?.assertFinal || 98.0;
+            // ATUALIZAÇÃO INTELIGENTE DA TAG META
+            const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
             const elMetaTag = document.getElementById('kpi-meta-assert-target');
             if (elMetaTag) {
-                const label = isGeral ? 'Meta Geral' : 'Meta';
-                elMetaTag.innerText = `${label}: ${metaFinalKPI}%`;
+                // Se o cálculo inteligente detectou que é uma média real (muitas metas diferentes), avisa
+                // Se detectou que a meta é uniforme (ex: todo mundo 100%), mostra apenas "Meta"
+                const label = (isGeral && configFim.isMedia) ? 'Meta (Média)' : 'Meta';
+                elMetaTag.innerText = `${label}: ${configFim.assertFinal}%`;
             }
 
             const diasUteis = this.calcularDiasUteisMes(inicio, fim);
@@ -234,11 +274,15 @@ MinhaArea.Geral = {
         }
     },
 
-    // --- NOVA FUNÇÃO: CALCULA META INTELIGENTE (MODA PONDERADA) ---
+    /**
+     * FUNÇÃO DE INTELIGÊNCIA DE DADOS
+     * Calcula a meta representativa da equipe.
+     * Retorna { valor: number, isMedia: boolean }
+     */
     calcularMetaInteligente: function(valores) {
-        if (!valores || valores.length === 0) return 98.0;
+        if (!valores || valores.length === 0) return { valor: 98.0, isMedia: false };
         
-        // 1. Calcula a Média Aritmética Simples
+        // 1. Calcula a Média Aritmética (Plano B)
         const soma = valores.reduce((a, b) => a + b, 0);
         const media = soma / valores.length;
 
@@ -255,16 +299,15 @@ MinhaArea.Geral = {
             }
         });
 
-        // 3. Regra de Decisão: Dominância
-        // Se a Moda representa mais de 80% da equipe, usamos a Moda (ignora inativos/outliers)
-        // Ex: 28 pessoas com 100% e 1 com 98% -> Moda 100% tem 96% de dominância -> Retorna 100%
+        // 3. Regra de Dominância
+        // Se a Moda (ex: 100%) representa mais de 70% da equipe, usamos a Moda.
+        // Isso elimina distorções causadas por poucos usuários desatualizados.
         const dominancia = maxFreq / valores.length;
         
-        if (dominancia >= 0.8) {
-            return moda;
+        if (dominancia >= 0.70) {
+            return { valor: moda, isMedia: false }; // Retorna o valor "limpo" (ex: 100)
         } else {
-            // Se for muito misturado (ex: 50% com meta X, 50% com meta Y), usa a média com 2 casas
-            return Number(media.toFixed(2));
+            return { valor: Number(media.toFixed(2)), isMedia: true }; // Retorna a média quebrada (ex: 98.45)
         }
     },
 
