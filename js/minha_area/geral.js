@@ -1,7 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Correção definitiva da duplicação de Metas (Lógica Híbrida Soma/Overwrite)
-   NOTA: Admin inicia na Visão Geral.
+   ATUALIZAÇÃO: Correção do cálculo de Meta Diária (Mensal / Dias Úteis)
 */
 
 MinhaArea.Geral = {
@@ -78,34 +77,32 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- PROCESSAMENTO INTELIGENTE DE METAS (CORRIGIDO) ---
+            // --- PROCESSAMENTO INTELIGENTE DE METAS ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 if (!mapMetas[m.ano][m.mes]) {
-                    // Inicializa estrutura. 'assertValues' guardará todas as metas para cálculo estatístico
+                    // Inicializa estrutura.
                     mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
                 }
                 
-                // Conversão segura de valores
                 const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
                 const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) 
                     ? Number(m.meta_assertividade) 
                     : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: SOMA as metas de todos os usuários (Comportamento de Equipe)
+                    // Visão Geral: SOMA as metas de todos (Meta da Equipe)
                     mapMetas[m.ano][m.mes].prod += metaProdVal;
                     mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
                 } else {
-                    // Individual: SOBRESCREVE a meta (Correção de Duplicação)
-                    // Se houver registros duplicados no banco, usamos o último valor lido, sem somar.
+                    // Individual: Usa a meta do usuário
                     mapMetas[m.ano][m.mes].prod = metaProdVal;
                     mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
                 }
             });
 
-            // Lógica Estatística para Visão Geral (Define Meta da Equipe)
+            // Lógica Estatística para Visão Geral (Assertividade)
             if (isGeral) {
                 for (const ano in mapMetas) {
                     for (const mes in mapMetas[ano]) {
@@ -113,7 +110,7 @@ MinhaArea.Geral = {
                         if (d.assertValues.length > 0) {
                             const resultado = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = resultado.valor;
-                            d.isMedia = resultado.isMedia; // Flag para mudar o texto na interface
+                            d.isMedia = resultado.isMedia;
                         }
                     }
                 }
@@ -158,14 +155,29 @@ MinhaArea.Geral = {
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
             
+            // Cache para dias úteis (Performance)
+            const cacheDiasUteis = {}; 
+
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 if (d.getDay() === 0 || d.getDay() === 6) continue;
                 const dataStr = d.toISOString().split('T')[0];
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
+                const chaveMes = `${ano}-${mes}`;
                 
+                // 1. Busca Configuração Mensal
+                // Se não houver meta, fallback para 6500 (Geral) ou 650 (Indiv) como META MENSAL BASE (Aprox 30/dia se não configurado)
                 const configMes = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assertFinal: 98.0, isMedia: false };
                 
+                // 2. Calcula Dias Úteis do Mês (Para distribuição da meta)
+                if (!cacheDiasUteis[chaveMes]) {
+                    cacheDiasUteis[chaveMes] = this.getDiasUteisNoMes(mes, ano);
+                }
+                const diasUteisMes = cacheDiasUteis[chaveMes] || 1;
+
+                // 3. Define Meta Diária Base (Distribuição da Meta Mensal pelos Dias Úteis)
+                const metaDiariaBase = configMes.prod / diasUteisMes;
+
                 const prodDoDia = mapProd.get(dataStr);
                 let fator = 1.0, qtdReal = 0, justif = '', temRegistro = false;
 
@@ -180,7 +192,8 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
-                const metaDiaCalculada = Math.round(configMes.prod * fator);
+                // 4. Aplica Fator do Dia (Se o usuário trabalhou meio dia, a meta é cortada proporcionalmente)
+                const metaDiaCalculada = Math.round(metaDiariaBase * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
                 const assertDoDia = mapAssert.get(dataStr);
@@ -200,7 +213,7 @@ MinhaArea.Geral = {
                 if (temRegistro) {
                     listaGrid.push({
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
-                        metaConfigAssert: configMes.assertFinal, // Passa a meta limpa (100% ou 95%)
+                        metaConfigAssert: configMes.assertFinal,
                         assertDisplay: assertDiaDisplay, justificativa: justif,
                         fifo: prodDoDia.fifo, gt: prodDoDia.gradual_total, gp: prodDoDia.gradual_parcial,
                         validado: mapCheckins.has(dataStr)
@@ -243,12 +256,9 @@ MinhaArea.Geral = {
             this.setTxt('kpi-assertividade-val', this.fmtPct(totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0));
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
             
-            // ATUALIZAÇÃO INTELIGENTE DA TAG META
             const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
             const elMetaTag = document.getElementById('kpi-meta-assert-target');
             if (elMetaTag) {
-                // Se o cálculo inteligente detectou que é uma média real (muitas metas diferentes), avisa
-                // Se detectou que a meta é uniforme (ex: todo mundo 100%), mostra apenas "Meta"
                 const label = (isGeral && configFim.isMedia) ? 'Meta (Média)' : 'Meta';
                 elMetaTag.innerText = `${label}: ${configFim.assertFinal}%`;
             }
@@ -259,14 +269,20 @@ MinhaArea.Geral = {
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
+            // KPI VELOCIDADE (Ideal) - Corrigido para calcular média diária baseada na Meta Mensal
+            const mesRef = new Date(dtFim).getMonth() + 1;
+            const metaRefObj = mapMetas[anoFim]?.[mesRef] || { prod: (isGeral ? 6500 : 650) };
+            const diasUteisRef = this.getDiasUteisNoMes(mesRef, anoFim);
+            const metaRefDiaria = Math.round(metaRefObj.prod / (diasUteisRef || 1));
+
             const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
             const mediaDiaria = Math.round(totalProdReal / divisorVelocidade);
-            const metaRefProd = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1]?.prod || (isGeral ? 6500 : 650);
-            const pctVel = metaRefProd > 0 ? (mediaDiaria / metaRefProd) * 100 : 0;
+            
+            const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
             
             const elMedia = document.getElementById('kpi-media');
             if(elMedia) elMedia.innerHTML = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVel >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${this.fmtPct(pctVel)}</span>`;
-            this.setTxt('kpi-meta-dia', metaRefProd);
+            this.setTxt('kpi-meta-dia', metaRefDiaria);
 
         } catch (err) {
             console.error("Erro Geral:", err);
@@ -275,18 +291,22 @@ MinhaArea.Geral = {
     },
 
     /**
-     * FUNÇÃO DE INTELIGÊNCIA DE DADOS
-     * Calcula a meta representativa da equipe.
-     * Retorna { valor: number, isMedia: boolean }
+     * Calcula quantos dias úteis (seg-sex) existem num mês específico
      */
+    getDiasUteisNoMes: function(mes, ano) {
+        const ultimoDia = new Date(ano, mes, 0).getDate();
+        let uteis = 0;
+        for (let i = 1; i <= ultimoDia; i++) {
+            const dia = new Date(ano, mes - 1, i).getDay();
+            if (dia !== 0 && dia !== 6) uteis++;
+        }
+        return uteis;
+    },
+
     calcularMetaInteligente: function(valores) {
         if (!valores || valores.length === 0) return { valor: 98.0, isMedia: false };
-        
-        // 1. Calcula a Média Aritmética (Plano B)
         const soma = valores.reduce((a, b) => a + b, 0);
         const media = soma / valores.length;
-
-        // 2. Calcula a Moda (Valor que mais se repete)
         const frequencia = {};
         let maxFreq = 0;
         let moda = valores[0];
@@ -299,15 +319,11 @@ MinhaArea.Geral = {
             }
         });
 
-        // 3. Regra de Dominância
-        // Se a Moda (ex: 100%) representa mais de 70% da equipe, usamos a Moda.
-        // Isso elimina distorções causadas por poucos usuários desatualizados.
         const dominancia = maxFreq / valores.length;
-        
         if (dominancia >= 0.70) {
-            return { valor: moda, isMedia: false }; // Retorna o valor "limpo" (ex: 100)
+            return { valor: moda, isMedia: false };
         } else {
-            return { valor: Number(media.toFixed(2)), isMedia: true }; // Retorna a média quebrada (ex: 98.45)
+            return { valor: Number(media.toFixed(2)), isMedia: true };
         }
     },
 
