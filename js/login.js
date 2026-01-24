@@ -1,112 +1,111 @@
 /* ARQUIVO: js/login.js
-   DESCRIÇÃO: Módulo de Autenticação (Com Redirecionamento Robusto)
+   DESCRIÇÃO: Gerenciamento de Login e Redirecionamento Inteligente
 */
 
 const Login = {
-    init: function() {
-        // Verifica se o Sistema foi carregado corretamente
-        if (typeof Sistema === 'undefined') {
-            console.error("Sistema não carregado. Verifique a ordem dos scripts no index.html.");
-            return;
-        }
+    init: async function() {
+        console.log("🔒 Login: Verificando sessão...");
         
-        // Se já estiver logado, redireciona
-        const sessao = Sistema.lerSessao();
-        if (sessao) {
-            this.redirecionar(sessao);
+        // Verifica se já existe sessão ativa
+        const { data: { session } } = await Sistema.supabase.auth.getSession();
+
+        if (session) {
+            console.log("✅ Sessão ativa detectada.");
+            await this.redirecionarUsuario(session.user);
+        } else {
+            // Se não tiver sessão, ativa o formulário
+            this.bindEvents();
+            document.getElementById('form-login').classList.remove('hidden');
+            document.getElementById('loading-screen').classList.add('hidden');
         }
     },
 
-    entrar: async function() {
-        const idInput = document.getElementById('login-id');
-        const senhaInput = document.getElementById('login-senha');
-        const btn = document.querySelector('button');
+    bindEvents: function() {
+        const btnEntrar = document.getElementById('btn-entrar');
+        const inputEmail = document.getElementById('email');
+        const inputSenha = document.getElementById('senha');
+
+        btnEntrar.addEventListener('click', () => this.fazerLogin());
+        
+        // Login com Enter
+        inputSenha.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.fazerLogin();
+        });
+    },
+
+    fazerLogin: async function() {
+        const email = document.getElementById('email').value;
+        const senha = document.getElementById('senha').value;
+        const btn = document.getElementById('btn-entrar');
         const msgErro = document.getElementById('msg-erro');
 
-        const id = idInput.value.trim();
-        const senha = senhaInput.value.trim();
-
-        if (!id || !senha) {
-            this.mostrarErro('Preencha todos os campos.');
+        if (!email || !senha) {
+            this.mostrarErro("Preencha todos os campos.");
             return;
         }
 
-        // Feedback Visual (Loading)
-        const textoOriginal = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
+        // Feedback visual
         btn.disabled = true;
-        if(msgErro) msgErro.classList.add('hidden');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Entrando...';
+        msgErro.classList.add('hidden');
 
         try {
-            // Chamada segura ao banco (RPC verifica o hash)
-            const { data, error } = await Sistema.supabase.rpc('api_login', { 
-                p_id: parseInt(id), 
-                p_senha: senha 
+            const { data, error } = await Sistema.supabase.auth.signInWithPassword({
+                email: email,
+                password: senha
             });
 
             if (error) throw error;
 
-            // --- SUCESSO ---
-            Sistema.salvarSessao(data);
+            console.log("🚀 Login realizado com sucesso!");
+            this.redirecionarUsuario(data.user);
 
-            // 1. Verificação de Troca de Senha
-            if (data.trocar_senha === true) {
-                alert("⚠️ AVISO DE SEGURANÇA:\n\nSua senha foi resetada pelo administrador.\nPor favor, defina uma nova senha assim que acessar o sistema.");
-            }
-            
-            // 2. Redirecionamento
-            this.redirecionar(data);
-
-        } catch (error) {
-            console.error("Erro Login:", error);
-            
-            if (error.code === 'P0001') {
-                this.mostrarErro('Senha incorreta.');
-            } else if (error.code === 'P0002') {
-                this.mostrarErro('Usuário não encontrado.');
-            } else if (error.code === 'P0003') {
-                this.mostrarErro('Acesso negado. Usuário inativo.');
-            } else {
-                this.mostrarErro('Erro ao conectar: ' + (error.message || 'Erro desconhecido'));
-            }
-        } finally {
-            if (btn) {
-                btn.innerHTML = textoOriginal;
-                btn.disabled = false;
-            }
+        } catch (err) {
+            console.error("Erro Login:", err);
+            this.mostrarErro("E-mail ou senha incorretos.");
+            btn.disabled = false;
+            btn.innerText = 'Entrar';
         }
     },
 
-    redirecionar: function(usuario) {
-        // Normaliza o perfil para evitar erros de Maiúscula/Minúscula
-        const perfil = (usuario.perfil || '').toLowerCase().trim();
-        const funcao = (usuario.funcao || '').toLowerCase().trim();
+    redirecionarUsuario: async function(user) {
+        // Busca perfil para saber se é admin
+        const { data: perfil } = await Sistema.supabase
+            .from('usuarios')
+            .select('admin, gestor')
+            .eq('id', user.id)
+            .single();
 
-        // Lista de perfis permitidos na Gestão
-        const perfisGestao = ['admin', 'administrador', 'gestor', 'gestora'];
+        const isAdmin = perfil && (perfil.admin || perfil.gestor);
 
-        // Verifica se o perfil OU a função dão acesso à gestão
-        if (perfisGestao.includes(perfil) || perfisGestao.includes(funcao)) {
-            console.log("🔒 Acesso concedido: Painel de Gestão");
-            window.location.href = 'gestao.html';
+        console.log("🔀 Redirecionando...", isAdmin ? "(Admin)" : "(User)");
+
+        // LÓGICA DE OURO: Verifica se veio de algum lugar específico
+        // Ex: se a URL for index.html?redirect=minha_area.html
+        const urlParams = new URLSearchParams(window.location.search);
+        const destino = urlParams.get('redirect');
+
+        if (destino) {
+            window.location.href = destino;
         } else {
-            console.log("👤 Acesso concedido: Minha Área");
-            window.location.href = 'minha_area.html';
+            // Se não tiver destino, aí sim usa o padrão
+            if (isAdmin) {
+                // OBS: Mudei para minha_area.html para você testar. 
+                // Depois você pode voltar para gestao.html se preferir.
+                window.location.href = 'minha_area.html'; 
+            } else {
+                window.location.href = 'minha_area.html';
+            }
         }
     },
 
     mostrarErro: function(msg) {
         const el = document.getElementById('msg-erro');
-        if(el) {
-            el.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${msg}`;
-            el.classList.remove('hidden');
-        } else {
-            alert(msg);
-        }
+        el.innerText = msg;
+        el.classList.remove('hidden');
     }
 };
 
-// Inicializa o módulo
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => Login.init(), 100);
+    Login.init();
 });
