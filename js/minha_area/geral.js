@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Exclusão de Gestoras/Auditoras do Cálculo de Meta (Capacidade)
+   ATUALIZAÇÃO: Exclusão rigorosa de Gestão e Admin (SuperAdmin Gupy) da Meta
 */
 
 MinhaArea.Geral = {
@@ -10,7 +10,7 @@ MinhaArea.Geral = {
         const uid = rawUid ? parseInt(rawUid) : null;
         const isGeral = (uid === null); // Se null, é Visão Geral (Equipe)
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro de Perfis");
+        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro de Perfis (Gestão/Admin)");
         console.log("Modo:", isGeral ? "Equipe (Operacional)" : "Individual");
 
         const tbody = document.getElementById('tabela-extrato');
@@ -22,7 +22,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando capacidade operacional...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando capacidade líquida...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -53,7 +53,7 @@ MinhaArea.Geral = {
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
-            // Query 4: Dados dos Usuários (Status + Perfil)
+            // Query 4: Dados dos Usuários (Status, Perfil e Nome para filtro do Admin)
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, status, nome, perfil');
 
@@ -61,6 +61,7 @@ MinhaArea.Geral = {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
                 qMetas = qMetas.eq('usuario_id', uid);
+                // Não filtramos qUsuarios aqui pois precisamos do status do alvo
             }
 
             // Query 5: Check-ins
@@ -88,12 +89,12 @@ MinhaArea.Geral = {
             // --- 3. MAPEAMENTO DE USUÁRIOS ---
             const mapStatusUser = {};
             const mapPerfilUser = {};
+            const mapNomeUser = {};
 
             dadosUsuarios.forEach(u => {
                 mapStatusUser[u.id] = (u.status || 'INATIVO').toUpperCase();
-                // Normaliza o perfil para comparação
-                const p = (u.perfil || 'ASSISTENTE').toUpperCase().trim();
-                mapPerfilUser[u.id] = p;
+                mapPerfilUser[u.id] = (u.perfil || 'ASSISTENTE').toUpperCase().trim();
+                mapNomeUser[u.id] = (u.nome || '').toUpperCase().trim();
             });
 
             // Set para verificar quem produziu (salvar inativos que trabalharam)
@@ -124,40 +125,45 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // --- FILTROS DE OPERAÇÃO ---
+                    // --- FILTROS DE EXCLUSÃO (Blacklist) ---
                     const status = mapStatusUser[uId] || 'INATIVO';
                     const perfil = mapPerfilUser[uId] || 'ASSISTENTE';
+                    const nome = mapNomeUser[uId] || '';
                     const produziuNoMes = usuariosQueProduziram.has(uId);
 
-                    // Regra 1: Gestoras e Auditoras NÃO contam para a Meta/Média
-                    const isOperacional = (perfil !== 'GESTORA' && perfil !== 'AUDITORA');
+                    // Verifica se é um perfil que deve ser IGNORADO na meta
+                    const isGestao = perfil.includes('GESTORA') || perfil.includes('AUDITORA');
+                    const isAdmin = perfil.includes('ADMIN') || nome.includes('SUPERADMIN') || nome.includes('GUPY');
+                    
+                    const deveIgnorarMeta = isGestao || isAdmin;
 
-                    if (isOperacional) {
+                    if (!deveIgnorarMeta) {
+                        // É Operacional. Agora aplica regras de Ativo/Inativo.
                         let considerarMeta = false;
 
-                        // Regra 2: Ativos sempre contam
+                        // Regra 1: Ativos sempre contam
                         if (status === 'ATIVO') {
                             considerarMeta = true;
                         } 
-                        // Regra 3: Inativos contam APENAS se produziram
+                        // Regra 2: Inativos contam APENAS se produziram
                         else if (status === 'INATIVO' && produziuNoMes) {
                             considerarMeta = true;
                         }
 
                         if (considerarMeta && valProd > 0) {
                             mapMetas[a][ms].somaIndividual += valProd;
-                            mapMetas[a][ms].qtdAssistentesDB++; // Conta como uma "vaga" preenchida
-                            mapMetas[a][ms].prodValues.push(valProd); // Guarda para média
+                            mapMetas[a][ms].qtdAssistentesDB++; 
+                            mapMetas[a][ms].prodValues.push(valProd);
                         }
                     } else {
-                        // console.log(`🚫 Ignorando Meta de ${perfil} (ID: ${uId}) no cálculo da equipe.`);
+                        // console.log(`🚫 Ignorando Meta de ${nome} (${perfil}) - ID: ${uId}`);
                     }
                     
-                    // Assertividade sempre acumula para média geral de qualidade
+                    // Assertividade sempre acumula para média geral (Qualidade Global)
                     mapMetas[a][ms].assertValues.push(valAssert);
 
                 } else {
-                    // Visão Individual: Pega direto sem filtros
+                    // Visão Individual: Pega direto
                     mapMetas[a][ms].prodTotalDiario = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
@@ -176,7 +182,7 @@ MinhaArea.Geral = {
                         const gap = targetAssistentes - assistentesValidos;
                         
                         if (gap > 0) {
-                            // Projeta usando apenas a média dos OPERACIONAIS
+                            // Projeta usando apenas a média dos OPERACIONAIS VÁLIDOS
                             let valorProjecao = 100;
 
                             if (d.prodValues.length > 0) {
@@ -186,7 +192,7 @@ MinhaArea.Geral = {
                             const projecaoTotal = gap * valorProjecao;
                             capacidadeDiaria += projecaoTotal;
                             
-                            console.log(`ℹ️ [Mês ${ms}/${a}] Operacionais Encontrados: ${assistentesValidos}. Gap: ${gap}. Projeção: +${projecaoTotal}`);
+                            console.log(`ℹ️ [Mês ${ms}/${a}] Operacionais: ${assistentesValidos}. Gap: ${gap}. Projetando: +${projecaoTotal}`);
                         } 
                         else if (assistentesValidos === 0) {
                             // Fallback se não houver nenhum assistente cadastrado
@@ -211,7 +217,8 @@ MinhaArea.Geral = {
                     const data = p.data_referencia;
                     if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
                     const reg = mapProd.get(data);
-                    // IMPORTANTE: A produção de Gestoras/Auditoras ENTRA aqui (soma tudo)
+                    
+                    // A produção de TODOS (inclusive Gestoras/Admins) entra aqui como Realizado.
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fifo += Number(p.fifo || 0);
                     reg.gradual_total += Number(p.gradual_total || 0);
@@ -319,7 +326,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${this.fmtNum(item.qtd)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Meta Operacional">${item.metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Capacidade Operacional">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
