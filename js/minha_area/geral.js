@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Lógica de Capacidade Total Diária (Soma Ponderada)
+   ATUALIZAÇÃO: Filtro de Status (Ativos + Inativos com Produção)
 */
 
 MinhaArea.Geral = {
@@ -10,8 +10,8 @@ MinhaArea.Geral = {
         const uid = rawUid ? parseInt(rawUid) : null;
         const isGeral = (uid === null); // Se null, é Visão Geral (Equipe)
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - Lógica de Capacidade Diária");
-        console.log("Modo:", isGeral ? "Equipe (Soma das Capacidades)" : "Individual");
+        console.group("🚀 [DEBUG META] Iniciando Carga - Lógica de Status & Capacidade");
+        console.log("Modo:", isGeral ? "Equipe" : "Individual");
 
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -22,7 +22,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando capacidade da equipe...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Analisando equipe ativa...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -53,13 +53,19 @@ MinhaArea.Geral = {
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
+            // Query 4: Status dos Usuários (Novo Filtro)
+            // Precisamos saber quem está ativo ou inativo hoje para decidir a meta
+            let qUsuarios = Sistema.supabase.from('usuarios')
+                .select('id, status, nome');
+
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
                 qMetas = qMetas.eq('usuario_id', uid);
+                // Não filtramos qUsuarios aqui pois precisamos do status do alvo de qualquer jeito
             }
 
-            // Query 4: Check-ins
+            // Query 5: Check-ins
             let qCheck = null;
             if (!isGeral) {
                 qCheck = Sistema.supabase.from('checking_diario')
@@ -69,31 +75,42 @@ MinhaArea.Geral = {
                     .lte('data_referencia', fim);
             }
 
-            const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
-                qProducao, qAssertividade, qMetas, qCheck ? qCheck : Promise.resolve({ data: [] })
+            const [prodRes, assertRes, metasRes, userRes, checkRes] = await Promise.all([
+                qProducao, qAssertividade, qMetas, qUsuarios, qCheck ? qCheck : Promise.resolve({ data: [] })
             ]);
 
             const dadosProducaoRaw = prodRes.data || [];
             const dadosAssertividadeRaw = assertRes.data || [];
             const dadosMetasRaw = metasRes.data || [];
+            const dadosUsuarios = userRes.data || [];
             const dadosCheckins = checkRes.data || [];
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- 3. CÁLCULO DA CAPACIDADE DIÁRIA (Meta) ---
+            // --- 3. MAPEAMENTO DE STATUS & PRODUÇÃO ---
+            
+            // Cria mapa de Status: ID -> 'ATIVO' | 'INATIVO'
+            const mapStatusUser = {};
+            dadosUsuarios.forEach(u => mapStatusUser[u.id] = (u.status || 'INATIVO').toUpperCase());
+
+            // Cria Set de quem produziu no período (Para validar inativos que trabalharam)
+            const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
+
+            // --- 4. CÁLCULO DA CAPACIDADE DIÁRIA (Meta) ---
             const mapMetas = {};
             
-            // Agrupa metas por Ano/Mês
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
                 const ms = parseInt(m.mes);
+                const uId = m.usuario_id;
                 
                 if (!mapMetas[a]) mapMetas[a] = {};
                 if (!mapMetas[a][ms]) {
                     mapMetas[a][ms] = { 
-                        prodTotalDiario: 0,    // Meta Final do Dia (Soma)
-                        somaIndividual: 0,     // Acumulador
-                        qtdAssistentesDB: 0,   // Quantos achamos no banco
+                        prodTotalDiario: 0,    
+                        somaIndividual: 0,     
+                        qtdAssistentesDB: 0,
+                        prodValues: [],   
                         assertValues: [], 
                         assertFinal: 98.0, 
                         isMedia: false 
@@ -104,49 +121,74 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: Soma as capacidades individuais
-                    if (valProd > 0) {
+                    // LÓGICA DE FILTRAGEM (Ativos vs Inativos)
+                    const status = mapStatusUser[uId] || 'INATIVO'; // Default Inativo se não achar
+                    const produziuNoMes = usuariosQueProduziram.has(uId);
+
+                    let considerarMeta = false;
+
+                    // REGRA 1: Se é ATIVO, considera a meta (mesmo que não tenha produzido ainda)
+                    if (status === 'ATIVO') {
+                        considerarMeta = true;
+                    } 
+                    // REGRA 2: Se é INATIVO, só considera se produziu no período (trabalhou antes de sair)
+                    else if (status === 'INATIVO' && produziuNoMes) {
+                        considerarMeta = true;
+                        // console.log(`⚠️ Considerando Inativo ID ${uId} pois tem produção.`);
+                    }
+
+                    if (considerarMeta && valProd > 0) {
                         mapMetas[a][ms].somaIndividual += valProd;
                         mapMetas[a][ms].qtdAssistentesDB++;
+                        mapMetas[a][ms].prodValues.push(valProd); // Guarda para calculo de Moda
                     }
+                    
+                    // Assertividade sempre acumula para média geral
                     mapMetas[a][ms].assertValues.push(valAssert);
+
                 } else {
-                    // Individual: Valor direto
+                    // Visão Individual: Pega direto
                     mapMetas[a][ms].prodTotalDiario = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // Aplica a Lógica de Projeção para a Equipe (Visão Geral)
+            // Aplica Projeção para a Equipe (Preencher lacunas até o Target)
             if (isGeral) {
-                const targetAssistentes = this.getQtdAssistentesConfigurada(); // Padrão 17
+                const targetAssistentes = this.getQtdAssistentesConfigurada(); 
                 
                 for (const a in mapMetas) {
                     for (const ms in mapMetas[a]) {
                         const d = mapMetas[a][ms];
                         
-                        // SUA LÓGICA AQUI:
-                        // 1. Soma das Metas Reais (Ex: 15 * 650 + 2 * 450 = 10650)
                         let capacidadeDiaria = d.somaIndividual;
+                        const assistentesValidos = d.qtdAssistentesDB;
+                        const gap = targetAssistentes - assistentesValidos;
                         
-                        // 2. Tratamento de Lacunas (Se achou menos gente que o target)
-                        // Ex: Configurado 17, achou 15 no banco.
-                        // Calculamos a média dos 15 e projetamos nos 2 faltantes.
-                        const gap = targetAssistentes - d.qtdAssistentesDB;
-                        
-                        if (gap > 0 && d.qtdAssistentesDB > 0) {
-                            const mediaPorAssistente = Math.round(d.somaIndividual / d.qtdAssistentesDB);
-                            const projecao = gap * mediaPorAssistente;
-                            capacidadeDiaria += projecao;
-                            console.log(`ℹ️ [Mês ${ms}/${a}] Projetando ${gap} assistentes usando média ${mediaPorAssistente}. (+${projecao})`);
-                        } else if (d.qtdAssistentesDB === 0) {
-                            // Fallback total se não achou ninguém (100 * 17)
+                        if (gap > 0) {
+                            // Se faltam assistentes para chegar no target (ex: target 17, achou 15 válidos)
+                            // Projeta os faltantes usando a MODA ou MÉDIA dos válidos
+                            let valorProjecao = 100; // fallback
+
+                            if (d.prodValues.length > 0) {
+                                valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
+                            } else {
+                                // Se não achou ninguém, usa 100
+                                valorProjecao = 100;
+                            }
+
+                            const projecaoTotal = gap * valorProjecao;
+                            capacidadeDiaria += projecaoTotal;
+                            
+                            console.log(`ℹ️ [Mês ${ms}/${a}] Ativos/Efetivos: ${assistentesValidos}. Projetando +${gap} x ${valorProjecao}.`);
+                        } 
+                        else if (assistentesValidos === 0) {
+                            // Fallback extremo
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
 
                         d.prodTotalDiario = capacidadeDiaria;
-                        console.log(`✅ [Mês ${ms}/${a}] Capacidade Total Diária: ${d.prodTotalDiario} (Base: ${d.qtdAssistentesDB} assistentes)`);
-
+                        
                         // Assertividade (Média)
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
@@ -157,7 +199,7 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- 4. AGREGAÇÃO DE DADOS REAIS ---
+            // --- 5. AGREGAÇÃO DE DADOS REAIS ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -188,7 +230,7 @@ MinhaArea.Geral = {
 
             const mapCheckins = new Set(dadosCheckins.map(c => c.data_referencia));
 
-            // --- 5. RENDERIZAÇÃO DO GRID ---
+            // --- 6. RENDERIZAÇÃO DO GRID ---
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
@@ -205,13 +247,11 @@ MinhaArea.Geral = {
                 if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) {
                     configMes = mapMetas[anoAtual][mesAtual];
                 } else {
-                    // Fallback se não houver dados
                     const metaPadrao = isGeral ? (100 * qtdTarget) : 100;
                     configMes = { prodTotalDiario: metaPadrao, assertFinal: 98.0, isMedia: false };
                 }
 
-                // AQUI ESTÁ A CHAVE DA SUA LÓGICA:
-                // Usamos a Capacidade Total Diária (ex: 10650) como base.
+                // Capacidade Diária (Já calculada com Ativos + Inativos Produtivos + Projeção)
                 const metaDiariaBase = configMes.prodTotalDiario;
 
                 const prodDoDia = mapProd.get(dataStr);
@@ -228,7 +268,6 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
-                // Ajusta a meta do dia pelo Fator (ex: Feriado local = fator 0.5 -> Meta cai pela metade)
                 const metaDiaCalculada = Math.round(metaDiariaBase * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -275,7 +314,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${this.fmtNum(item.qtd)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Capacidade Diária">${item.metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Meta Ajustada">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
@@ -283,7 +322,7 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // --- 6. ATUALIZAÇÃO KPIS ---
+            // --- 7. ATUALIZAÇÃO KPIS ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
@@ -305,7 +344,7 @@ MinhaArea.Geral = {
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
-            // KPI VELOCIDADE (Média Diária Realizada vs Meta Diária Total)
+            // KPI VELOCIDADE
             const mesRef = new Date(dtFim).getMonth() + 1;
             const metaRefObj = mapMetas[anoFim]?.[mesRef];
             const metaRefDiaria = metaRefObj ? metaRefObj.prodTotalDiario : (isGeral ? 100 * qtdTarget : 100);
@@ -344,6 +383,31 @@ MinhaArea.Geral = {
             if (dia !== 0 && dia !== 6) uteis++;
         }
         return uteis;
+    },
+
+    calcularModaOuMedia: function(valores) {
+        if (!valores || valores.length === 0) return { valor: 100 };
+        
+        const frequencia = {};
+        let maxFreq = 0;
+        let moda = valores[0];
+        let soma = 0;
+
+        valores.forEach(v => {
+            soma += v;
+            frequencia[v] = (frequencia[v] || 0) + 1;
+            if (frequencia[v] > maxFreq) {
+                maxFreq = frequencia[v];
+                moda = v;
+            }
+        });
+
+        // Se mais de 30% da amostra tiver o mesmo valor, usa a Moda
+        if ((maxFreq / valores.length) >= 0.3) {
+            return { valor: moda };
+        } else {
+            return { valor: Math.round(soma / valores.length) };
+        }
     },
 
     calcularMetaInteligente: function(valores) {
