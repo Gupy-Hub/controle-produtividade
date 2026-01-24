@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Bloqueio TOTAL de Assertividade para Gestão/Auditoria (Lei Seca)
+   ATUALIZAÇÃO: Gestão/Admin conta na Produção, mas NUNCA na Assertividade
 */
 
 MinhaArea.Geral = {
@@ -18,7 +18,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Aplicando Lei Seca na Gestão...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Aplicando regra de exclusão...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -102,6 +102,7 @@ MinhaArea.Geral = {
                     const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
                     const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
                     
+                    // Gestão nunca entra na contagem de "cabeças" da meta da equipe
                     if (!isGestao) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
@@ -147,7 +148,7 @@ MinhaArea.Geral = {
 
             // --- AGREGAÇÃO DE DADOS ---
             
-            // Produção (Continua somando Gestão)
+            // Produção (AQUI SIM: Gestão ENTRA se produzir)
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -166,7 +167,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Assertividade (COM BLOQUEIO TOTAL DE GESTÃO)
+            // Assertividade (AQUI NÃO: Gestão NUNCA ENTRA)
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
@@ -176,7 +177,7 @@ MinhaArea.Geral = {
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
                     
-                    // LEI SECA: Se é Gestão, TCHAU! (Não importa se produziu)
+                    // REGRA DE OURO: Se é Gestão, IGNORA. Não importa se produziu.
                     if (isGestao) return; 
                 }
 
