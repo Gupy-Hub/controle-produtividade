@@ -1,12 +1,12 @@
 /* ARQUIVO: js/minha_area/geral.js
-   DESCRIÇÃO: Engine do Painel "Dia a Dia" (Minha Área)
-   ATUALIZAÇÃO: Cálculo dinâmico de Meta Geral e uso de ID seguro para KPI
+   DESCRIÇÃO: Engine do Painel "Dia a Dia"
+   ATUALIZAÇÃO: Lógica de 'Smart Meta' (Moda > Média) para evitar médias quebradas
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
-        const uid = MinhaArea.getUsuarioAlvo(); // Retorna ID ou null (Visão Geral)
-        const isGeral = (uid === null); // Flag para identificar modo Visão Geral
+        const uid = MinhaArea.getUsuarioAlvo(); 
+        const isGeral = (uid === null); 
         
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -16,7 +16,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados da equipe...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -25,18 +25,15 @@ MinhaArea.Geral = {
             const anoFim = dtFim.getFullYear();
 
             // Queries Condicionais
-            let qProducao = Sistema.supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
-            if (!isGeral) qProducao = qProducao.eq('usuario_id', uid);
-
-            let qAssertividade = Sistema.supabase.from('assertividade')
-                .select('data_referencia, porcentagem_assertividade').gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
-            if (!isGeral) qAssertividade = qAssertividade.eq('usuario_id', uid);
-
-            // Busca Metas (meta_producao e meta_assertividade)
-            let qMetas = Sistema.supabase.from('metas')
-                .select('mes, ano, meta_producao, meta_assertividade').gte('ano', anoInicio).lte('ano', anoFim);
-            if (!isGeral) qMetas = qMetas.eq('usuario_id', uid);
+            let qProducao = Sistema.supabase.from('producao').select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
+            let qAssertividade = Sistema.supabase.from('assertividade').select('data_referencia, porcentagem_assertividade').gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
+            let qMetas = Sistema.supabase.from('metas').select('mes, ano, meta_producao, meta_assertividade').gte('ano', anoInicio).lte('ano', anoFim);
+            
+            if (!isGeral) {
+                qProducao = qProducao.eq('usuario_id', uid);
+                qAssertividade = qAssertividade.eq('usuario_id', uid);
+                qMetas = qMetas.eq('usuario_id', uid);
+            }
 
             let qCheck = null;
             if (!isGeral) {
@@ -54,51 +51,44 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- AGREGAÇÃO DE METAS ---
+            // --- AGREGAÇÃO INTELIGENTE DE METAS ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
-                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assertSoma: 0, assertCount: 0, assertFinal: 98.0 };
+                // Inicializa objeto com array de valores para análise estatística
+                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0 };
                 
-                // Produção: Sempre soma
                 const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
                 mapMetas[m.ano][m.mes].prod += metaProdVal;
                 
-                // Assertividade
                 const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) ? Number(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: Acumula para média
-                    mapMetas[m.ano][m.mes].assertSoma += metaAssertVal;
-                    mapMetas[m.ano][m.mes].assertCount++;
+                    // Na visão geral, guardamos TODOS os valores para analisar depois
+                    mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
                 } else {
-                    // Individual: Usa o valor direto
                     mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
                 }
             });
 
-            // Finaliza média de Assertividade para Visão Geral
+            // Lógica de Consolidação (Moda vs Média)
             if (isGeral) {
                 for (const ano in mapMetas) {
                     for (const mes in mapMetas[ano]) {
                         const d = mapMetas[ano][mes];
-                        if (d.assertCount > 0) {
-                            d.assertFinal = Number((d.assertSoma / d.assertCount).toFixed(2)); // Média simples das metas da equipe
-                        } else {
-                            d.assertFinal = 98.0; // Fallback se não houver metas cadastradas
+                        if (d.assertValues.length > 0) {
+                            d.assertFinal = this.calcularMetaInteligente(d.assertValues);
                         }
                     }
                 }
             }
 
-            // --- AGREGAÇÃO DE PRODUÇÃO ---
+            // --- AGREGAÇÃO PRODUÇÃO & ASSERTIVIDADE REAL ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
                     const data = p.data_referencia;
-                    if (!mapProd.has(data)) {
-                        mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
-                    }
+                    if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
                     const reg = mapProd.get(data);
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fifo += Number(p.fifo || 0);
@@ -112,14 +102,12 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- AGREGAÇÃO DE ASSERTIVIDADE REALIZADA ---
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const key = a.data_referencia;
                 if(!mapAssert.has(key)) mapAssert.set(key, { soma: 0, qtd: 0 });
-                const valRaw = a.porcentagem_assertividade;
-                if (valRaw !== null && valRaw !== undefined) {
-                    mapAssert.get(key).soma += this.parseValorPorcentagem(valRaw);
+                if (a.porcentagem_assertividade !== null) {
+                    mapAssert.get(key).soma += this.parseValorPorcentagem(a.porcentagem_assertividade);
                     mapAssert.get(key).qtd++;
                 }
             });
@@ -137,7 +125,6 @@ MinhaArea.Geral = {
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
                 
-                // Recupera a meta calculada (Individual ou Média Geral)
                 const configMes = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assertFinal: 98.0 };
                 const metaAssertDoMes = configMes.assertFinal;
                 
@@ -175,7 +162,7 @@ MinhaArea.Geral = {
                 if (temRegistro) {
                     listaGrid.push({
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
-                        metaConfigAssert: metaAssertDoMes, // Passa a meta correta para a grid
+                        metaConfigAssert: metaAssertDoMes, 
                         assertDisplay: assertDiaDisplay, justificativa: justif,
                         fifo: prodDoDia.fifo, gt: prodDoDia.gradual_total, gp: prodDoDia.gradual_parcial,
                         validado: mapCheckins.has(dataStr)
@@ -218,11 +205,12 @@ MinhaArea.Geral = {
             this.setTxt('kpi-assertividade-val', this.fmtPct(totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0));
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
             
-            // ATUALIZAÇÃO DA TAG META (Usando ID Seguro e Valor Correto)
+            // ATUALIZAÇÃO DA TAG META
             const metaFinalKPI = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1]?.assertFinal || 98.0;
             const elMetaTag = document.getElementById('kpi-meta-assert-target');
             if (elMetaTag) {
-                elMetaTag.innerText = `Meta: ${metaFinalKPI}%`;
+                const label = isGeral ? 'Meta Geral' : 'Meta';
+                elMetaTag.innerText = `${label}: ${metaFinalKPI}%`;
             }
 
             const diasUteis = this.calcularDiasUteisMes(inicio, fim);
@@ -246,13 +234,46 @@ MinhaArea.Geral = {
         }
     },
 
+    // --- NOVA FUNÇÃO: CALCULA META INTELIGENTE (MODA PONDERADA) ---
+    calcularMetaInteligente: function(valores) {
+        if (!valores || valores.length === 0) return 98.0;
+        
+        // 1. Calcula a Média Aritmética Simples
+        const soma = valores.reduce((a, b) => a + b, 0);
+        const media = soma / valores.length;
+
+        // 2. Calcula a Moda (Valor que mais se repete)
+        const frequencia = {};
+        let maxFreq = 0;
+        let moda = valores[0];
+
+        valores.forEach(v => {
+            frequencia[v] = (frequencia[v] || 0) + 1;
+            if (frequencia[v] > maxFreq) {
+                maxFreq = frequencia[v];
+                moda = v;
+            }
+        });
+
+        // 3. Regra de Decisão: Dominância
+        // Se a Moda representa mais de 80% da equipe, usamos a Moda (ignora inativos/outliers)
+        // Ex: 28 pessoas com 100% e 1 com 98% -> Moda 100% tem 96% de dominância -> Retorna 100%
+        const dominancia = maxFreq / valores.length;
+        
+        if (dominancia >= 0.8) {
+            return moda;
+        } else {
+            // Se for muito misturado (ex: 50% com meta X, 50% com meta Y), usa a média com 2 casas
+            return Number(media.toFixed(2));
+        }
+    },
+
     processarCheckingInterface: async function(uid, checkins) {
         if (!uid || MinhaArea.usuario.id !== parseInt(uid)) return;
-        const ontemStr = '2025-12-16'; // DATA TESTE
+        const ontemStr = '2025-12-16'; 
         const jaValidou = checkins.some(c => c.data_referencia === ontemStr);
         const container = document.getElementById('container-checkin-alert');
         if (!container) return;
-
         if (!jaValidou) {
             container.innerHTML = `<div class="bg-white border-l-4 border-blue-500 shadow-md rounded-r-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in"><div class="flex items-center gap-3"><div class="bg-blue-50 p-3 rounded-full text-blue-600"><i class="fas fa-clipboard-check text-xl"></i></div><div><h4 class="font-bold text-slate-700 text-sm">Checking Diário Pendente (TESTE)</h4><p class="text-xs text-slate-500">Confirme a conferência dos dados do dia 16/12/2025.</p></div></div><button onclick="MinhaArea.Geral.realizarCheckin('${ontemStr}')" class="group bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:shadow-md active:scale-95 whitespace-nowrap"><span>Validar Dados</span><i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i></button></div>`;
             container.classList.remove('hidden');
