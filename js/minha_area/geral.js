@@ -1,15 +1,16 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Filtro Reforçado (Perfil + Função) e Correção de Campo 'Ativo'
+   ATUALIZAÇÃO: Ajuste de KPIs (Produtividade e Assertividade) + Lógica de Capacidade
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
+        // --- 1. PREPARAÇÃO DE AMBIENTE ---
         const rawUid = MinhaArea.getUsuarioAlvo();
         const uid = rawUid ? parseInt(rawUid) : null;
-        const isGeral = (uid === null); // Se null, é Visão Geral (Equipe)
+        const isGeral = (uid === null); 
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro Função/Cargo");
+        console.group("🚀 [DEBUG META] Iniciando Carga - KPIs Atualizados");
 
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -20,7 +21,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando capacidade líquida...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Atualizando KPIs...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -29,29 +30,17 @@ MinhaArea.Geral = {
             const anoFim = dtFim.getFullYear();
 
             // --- QUERIES ---
-            
-            // 1. Produção
             let qProducao = Sistema.supabase.from('producao')
-                .select('*')
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim)
-                .limit(5000);
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
 
-            // 2. Assertividade
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, usuario_id')
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim)
-                .not('porcentagem_assertividade', 'is', null)
-                .limit(5000);
+                .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
 
-            // 3. Metas
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
-                .gte('ano', anoInicio)
-                .lte('ano', anoFim);
+                .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // 4. Usuários (Buscando 'funcao' e 'ativo' corretamente)
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao');
 
@@ -61,14 +50,11 @@ MinhaArea.Geral = {
                 qMetas = qMetas.eq('usuario_id', uid);
             }
 
-            // 5. Check-ins
             let qCheck = null;
             if (!isGeral) {
                 qCheck = Sistema.supabase.from('checking_diario')
-                    .select('data_referencia, status')
-                    .eq('usuario_id', uid)
-                    .gte('data_referencia', inicio)
-                    .lte('data_referencia', fim);
+                    .select('data_referencia, status').eq('usuario_id', uid)
+                    .gte('data_referencia', inicio).lte('data_referencia', fim);
             }
 
             const [prodRes, assertRes, metasRes, userRes, checkRes] = await Promise.all([
@@ -85,22 +71,18 @@ MinhaArea.Geral = {
 
             // --- MAPEAMENTO DE USUÁRIOS ---
             const mapUser = {};
-
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
-                    status: (u.ativo === true ? 'ATIVO' : 'INATIVO'), // Converte Boolean para String
+                    status: (u.ativo === true ? 'ATIVO' : 'INATIVO'),
                     perfil: (u.perfil || 'ASSISTENTE').toUpperCase().trim(),
                     funcao: (u.funcao || '').toUpperCase().trim(),
                     nome: (u.nome || '').toUpperCase().trim()
                 };
             });
-
-            // Quem produziu no período (para salvar inativos)
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // --- CÁLCULO DA CAPACIDADE ---
+            // --- CÁLCULO DA CAPACIDADE (META) ---
             const mapMetas = {};
-            
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
                 const ms = parseInt(m.mes);
@@ -120,21 +102,15 @@ MinhaArea.Geral = {
                 if (isGeral) {
                     const uData = mapUser[uId] || { status: 'INATIVO', perfil: '', funcao: '', nome: '' };
                     
-                    // --- FILTRO AVANÇADO (PERFIL + FUNÇÃO) ---
-                    // Ignora se qualquer um dos campos indicar gestão/admin
                     const termoGestao = ['GESTOR', 'COORDENADOR', 'AUDITOR', 'LIDER', 'SUPERVISOR'];
                     const termoAdmin = ['ADMIN', 'SISTEMA', 'GUPY'];
-
                     const isGestao = termoGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t));
                     const isAdmin = termoAdmin.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes(t));
-                    
                     const deveIgnorar = isGestao || isAdmin;
 
                     if (!deveIgnorar) {
-                        // É Operacional. Verifica Atividade.
                         let considerar = false;
                         const produziu = usuariosQueProduziram.has(uId);
-
                         if (uData.status === 'ATIVO') considerar = true;
                         else if (uData.status === 'INATIVO' && produziu) considerar = true;
 
@@ -144,40 +120,29 @@ MinhaArea.Geral = {
                             mapMetas[a][ms].prodValues.push(valProd);
                         }
                     }
-                    
                     mapMetas[a][ms].assertValues.push(valAssert);
-
                 } else {
                     mapMetas[a][ms].prodTotalDiario = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // Projeção da Equipe
             if (isGeral) {
                 const targetAssistentes = this.getQtdAssistentesConfigurada(); 
-                
                 for (const a in mapMetas) {
                     for (const ms in mapMetas[a]) {
                         const d = mapMetas[a][ms];
-                        
                         let capacidadeDiaria = d.somaIndividual;
                         const validos = d.qtdAssistentesDB;
                         const gap = targetAssistentes - validos;
                         
                         if (gap > 0) {
                             let valorProjecao = 100;
-                            if (d.prodValues.length > 0) {
-                                valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
-                            }
-                            const projecao = gap * valorProjecao;
-                            capacidadeDiaria += projecao;
-                            console.log(`ℹ️ [Mês ${ms}] Validos: ${validos}. Gap: ${gap}. Projetado: +${projecao}`);
-                        } 
-                        else if (validos === 0) {
+                            if (d.prodValues.length > 0) valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
+                            capacidadeDiaria += (gap * valorProjecao);
+                        } else if (validos === 0) {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
-
                         d.prodTotalDiario = capacidadeDiaria;
                         
                         if (d.assertValues.length > 0) {
@@ -189,14 +154,13 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- RENDERIZAÇÃO E DADOS REAIS ---
+            // --- RENDERIZAÇÃO ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
                     const data = p.data_referencia;
                     if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
                     const reg = mapProd.get(data);
-                    // Produção de TODAS (incluindo Gestoras) entra na soma realizada
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fifo += Number(p.fifo || 0);
                     reg.gradual_total += Number(p.gradual_total || 0);
@@ -227,18 +191,13 @@ MinhaArea.Geral = {
 
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 if (d.getDay() === 0 || d.getDay() === 6) continue;
-
                 const dataStr = d.toISOString().split('T')[0];
                 const anoAtual = d.getFullYear();
                 const mesAtual = d.getMonth() + 1;
                 
                 let configMes = null;
-                if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) {
-                    configMes = mapMetas[anoAtual][mesAtual];
-                } else {
-                    const metaPadrao = isGeral ? (100 * qtdTarget) : 100;
-                    configMes = { prodTotalDiario: metaPadrao, assertFinal: 98.0, isMedia: false };
-                }
+                if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) configMes = mapMetas[anoAtual][mesAtual];
+                else configMes = { prodTotalDiario: (isGeral ? 100 * qtdTarget : 100), assertFinal: 98.0, isMedia: false };
 
                 const metaDiariaBase = configMes.prodTotalDiario;
                 const prodDoDia = mapProd.get(dataStr);
@@ -250,7 +209,6 @@ MinhaArea.Geral = {
                     qtdReal = Number(prodDoDia.quantidade || 0);
                     justif = (prodDoDia.justificativa_abono || prodDoDia.justificativa || prodDoDia.justificativas || '').trim();
                     if (isGeral) justif = ''; 
-
                     totalProdReal += qtdReal;
                     somaFatorProdutivo += fator;
                 }
@@ -300,7 +258,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${this.fmtNum(item.qtd)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Capacidade Operacional">${item.metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
@@ -308,21 +266,30 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
+            // --- ATUALIZAÇÃO KPIS (Cards) ---
+            
+            // CARD 1: PRODUTIVIDADE
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
-            this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
+            this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR')); // Meta ao lado
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
             if(document.getElementById('bar-volume')) document.getElementById('bar-volume').style.width = `${Math.min(pctVol, 100)}%`;
-            
-            this.setTxt('kpi-assertividade-val', this.fmtPct(totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0));
-            this.setTxt('kpi-pct', this.fmtPct(pctVol));
-            
-            const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
-            const elMetaTag = document.getElementById('kpi-meta-assert-target');
-            if (elMetaTag) {
-                const label = (isGeral && configFim.isMedia) ? 'Meta (Média)' : 'Meta';
-                elMetaTag.innerText = `${label}: ${configFim.assertFinal}%`;
-            }
+            this.setTxt('kpi-pct', this.fmtPct(pctVol)); // Performance em baixo
 
+            // CARD 2: ASSERTIVIDADE
+            const assertReal = totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0;
+            this.setTxt('kpi-assertividade-val', this.fmtPct(assertReal));
+            
+            // Meta de Assertividade (Pega a do último mês selecionado ou média geral se for equipe)
+            const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
+            const metaAssertVal = configFim.assertFinal;
+            this.setTxt('kpi-meta-assert-target', `${metaAssertVal}%`); // Meta ao lado
+            
+            // Cálculo da Aderência (Real / Meta)
+            const assertAderencia = metaAssertVal > 0 ? (assertReal / metaAssertVal) * 100 : 0;
+            this.setTxt('kpi-assert-performance', this.fmtPct(assertAderencia)); // Aderência em baixo
+            if(document.getElementById('bar-assert')) document.getElementById('bar-assert').style.width = `${Math.min(assertAderencia, 100)}%`; // Barra nova
+
+            // CARD 3 e 4
             const diasUteis = this.calcularDiasUteisMes(inicio, fim);
             this.setTxt('kpi-dias', this.fmtDias(somaFatorProdutivo));
             this.setTxt('kpi-dias-uteis', diasUteis);
@@ -354,44 +321,20 @@ MinhaArea.Geral = {
         return qtd > 0 ? qtd : 17;
     },
 
-    getDiasUteisNoMes: function(mes, ano) {
-        const ultimoDia = new Date(ano, mes, 0).getDate();
-        let uteis = 0;
-        for (let i = 1; i <= ultimoDia; i++) {
-            const dia = new Date(ano, mes - 1, i).getDay();
-            if (dia !== 0 && dia !== 6) uteis++;
-        }
-        return uteis;
-    },
-
     calcularModaOuMedia: function(valores) {
         if (!valores || valores.length === 0) return { valor: 100 };
-        const frequencia = {};
-        let maxFreq = 0;
-        let moda = valores[0];
-        let soma = 0;
-        valores.forEach(v => {
-            soma += v;
-            frequencia[v] = (frequencia[v] || 0) + 1;
-            if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; }
-        });
-        if ((maxFreq / valores.length) >= 0.3) { return { valor: moda }; } 
-        else { return { valor: Math.round(soma / valores.length) }; }
+        const frequencia = {}; let maxFreq = 0; let moda = valores[0]; let soma = 0;
+        valores.forEach(v => { soma += v; frequencia[v] = (frequencia[v] || 0) + 1; if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; } });
+        if ((maxFreq / valores.length) >= 0.3) { return { valor: moda }; } else { return { valor: Math.round(soma / valores.length) }; }
     },
 
     calcularMetaInteligente: function(valores) {
         if (!valores || valores.length === 0) return { valor: 98.0, isMedia: false };
         const soma = valores.reduce((a, b) => a + b, 0);
         const media = soma / valores.length;
-        const frequencia = {};
-        let maxFreq = 0;
-        let moda = valores[0];
-        valores.forEach(v => {
-            frequencia[v] = (frequencia[v] || 0) + 1;
-            if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; }
-        });
-        if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } 
-        else { return { valor: Number(media.toFixed(2)), isMedia: true }; }
+        const frequencia = {}; let maxFreq = 0; let moda = valores[0];
+        valores.forEach(v => { frequencia[v] = (frequencia[v] || 0) + 1; if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; } });
+        if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number(media.toFixed(2)), isMedia: true }; }
     },
 
     processarCheckingInterface: async function(uid, checkins) {
