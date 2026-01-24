@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia" (Minha Área)
-   ATUALIZAÇÃO: Correção na leitura das Metas (meta_producao)
+   ATUALIZAÇÃO: Correção na leitura das Metas (meta_producao e meta_assertividade)
 */
 
 MinhaArea.Geral = {
@@ -46,6 +46,7 @@ MinhaArea.Geral = {
             if (!isGeral) qAssertividade = qAssertividade.eq('usuario_id', uid);
 
             // 3. Metas (CORRIGIDO: meta -> meta_producao)
+            // Agora busca as colunas corretas conforme definido em js/gestao/metas.js
             let qMetas = Sistema.supabase.from('metas')
                 .select('mes, ano, meta_producao, meta_assertividade')
                 .gte('ano', anoInicio)
@@ -92,15 +93,20 @@ MinhaArea.Geral = {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assert: 0, count: 0 };
                 
-                // Na visão geral, somamos a meta de produção (CORRIGIDO: meta_producao)
+                // Na visão geral, somamos a meta de produção
+                // CORRIGIDO: Usa meta_producao ao invés de meta
                 const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
                 mapMetas[m.ano][m.mes].prod += metaProdVal;
                 
-                // Na visão geral, mantemos a meta de assertividade padrão (ou média, se preferir)
+                // Na visão geral, mantemos a meta de assertividade padrão (98%)
+                // Se for individual, usa a meta_assertividade do banco
                 if (isGeral) {
                      mapMetas[m.ano][m.mes].assert = 98.0; 
                 } else {
-                     mapMetas[m.ano][m.mes].assert = Number(m.meta_assertividade || 98.0);
+                     // CORRIGIDO: Garante uso do valor do banco ou fallback seguro
+                     mapMetas[m.ano][m.mes].assert = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) 
+                        ? Number(m.meta_assertividade) 
+                        : 98.0;
                 }
             });
 
@@ -197,7 +203,7 @@ MinhaArea.Geral = {
                     if (fator > 0) diasComProducaoReal++;
                 }
 
-                // Cálculo da Meta do Dia baseada no Fator (Presume que metaConfig.prod é a meta diária cheia)
+                // Cálculo da Meta do Dia baseada no Fator
                 const metaDiaCalculada = Math.round(metaConfig.prod * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -210,7 +216,11 @@ MinhaArea.Geral = {
                     totalAssertQtd += assertDoDia.qtd;
                     assertDiaDisplay.val = mediaDia;
                     assertDiaDisplay.text = this.fmtPct(mediaDia);
-                    assertDiaDisplay.class = mediaDia >= metaConfig.assert ? 'text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 rounded px-1' : 'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
+                    
+                    // Comparativo com a Meta de Assertividade Configurada
+                    assertDiaDisplay.class = mediaDia >= metaConfig.assert ? 
+                        'text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 rounded px-1' : 
+                        'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
                 }
 
                 if (temRegistro) {
@@ -282,7 +292,15 @@ MinhaArea.Geral = {
             if(barVolume) barVolume.style.width = `${Math.min(pctVol, 100)}%`;
 
             const mediaAssertGlobal = totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0;
+            
+            // Aqui atualizamos o KPI de Assertividade com a meta
+            const metaAssertAtual = isGeral ? 98.0 : (mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1]?.assert || 98.0);
+            
             this.setTxt('kpi-assertividade-val', this.fmtPct(mediaAssertGlobal));
+            // Atualiza visualmente a meta no card de KPI também, se possível
+            const elMetaAssert = document.querySelector('#kpi-assertividade-val + span');
+            if(elMetaAssert) elMetaAssert.innerText = `Meta: ${metaAssertAtual}%`;
+
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
             const diasUteisPeriodo = this.calcularDiasUteisMes(inicio, fim);
