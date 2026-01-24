@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/main.js
    DESCRIÇÃO: Controlador Principal da Minha Área
-   ATUALIZAÇÃO: Correção de Loop de Redirect + Seletor de Equipe
+   ATUALIZAÇÃO: Correção Definitiva do Loop de Login (Wait Logic)
 */
 
 const MinhaArea = {
@@ -18,33 +18,39 @@ const MinhaArea = {
     init: async function() {
         console.log("🚀 Minha Área: Iniciando...");
         
-        // --- CORREÇÃO DO LOOP DE LOGIN ---
-        // Em vez de checar Sistema.usuario direto (que pode estar vazio no load),
-        // perguntamos ao Supabase se existe uma sessão válida.
-        const { data: { session } } = await Sistema.supabase.auth.getSession();
-
-        if (!session) {
-            console.warn("⛔ Sem sessão. Redirecionando...");
-            window.location.href = 'index.html';
-            return;
+        // --- LÓGICA DE ESPERA (ANTI-LOOP) ---
+        // Espera até 2 segundos pelo carregamento do usuário no Sistema.js
+        let tentativas = 0;
+        while (!Sistema.usuario && tentativas < 20) {
+            await new Promise(r => setTimeout(r, 100)); // Espera 100ms
+            tentativas++;
         }
 
-        // Se o Sistema.usuario ainda não carregou (race condition), carregamos agora manualmente
+        // Se mesmo após esperar, não tiver usuário, tentamos recuperar manualmente
         if (!Sistema.usuario) {
-            console.log("⚠️ Sistema.usuario vazio. Recuperando perfil...");
+            console.warn("⚠️ Usuário não detectado automaticamente. Tentando recuperação forçada...");
+            const { data } = await Sistema.supabase.auth.getUser();
+            
+            if (!data || !data.user) {
+                console.error("⛔ Sem sessão válida. Redirecionando para login.");
+                window.location.href = 'index.html';
+                return;
+            }
+            
+            // Reconstrói o objeto usuário se achou a sessão
+            Sistema.usuario = data.user;
+            // Tenta buscar dados extras do perfil se possível
             const { data: perfil } = await Sistema.supabase
                 .from('usuarios')
                 .select('*')
-                .eq('id', session.user.id)
+                .eq('id', data.user.id)
                 .single();
-            
-            if (perfil) {
-                Sistema.usuario = perfil;
-            } else {
-                Sistema.usuario = { id: session.user.id, ...session.user };
-            }
+                
+            if (perfil) Sistema.usuario = perfil;
         }
-        // ---------------------------------
+        // -------------------------------------
+
+        console.log("✅ Usuário Identificado:", Sistema.usuario.email);
 
         // Define o alvo inicial como o usuário logado
         this.usuarioAlvo = Sistema.usuario.id;
@@ -109,7 +115,7 @@ const MinhaArea = {
     },
 
     getUsuarioAlvo: function() {
-        return this.usuarioAlvo || Sistema.usuario.id;
+        return this.usuarioAlvo || Sistema.usuario?.id;
     },
 
     getDatasFiltro: function() {
