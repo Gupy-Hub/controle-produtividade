@@ -1,6 +1,7 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Correção de bug de duplicação de metas (Individual vs Geral).
+   ATUALIZAÇÃO: Correção definitiva da duplicação de Metas (Lógica Híbrida Soma/Overwrite)
+   NOTA: Admin inicia na Visão Geral.
 */
 
 MinhaArea.Geral = {
@@ -82,30 +83,29 @@ MinhaArea.Geral = {
             dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 if (!mapMetas[m.ano][m.mes]) {
-                    // Inicializa estrutura
+                    // Inicializa estrutura. 'assertValues' guardará todas as metas para cálculo estatístico
                     mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
                 }
                 
+                // Conversão segura de valores
                 const metaProdVal = m.meta_producao ? Number(m.meta_producao) : 0;
-                
-                // Assertividade
                 const metaAssertVal = (m.meta_assertividade !== null && m.meta_assertividade !== undefined) 
                     ? Number(m.meta_assertividade) 
                     : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: SOMA as metas de todos os usuários
+                    // Visão Geral: SOMA as metas de todos os usuários (Comportamento de Equipe)
                     mapMetas[m.ano][m.mes].prod += metaProdVal;
                     mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
                 } else {
-                    // Visão Individual: SOBRESCREVE a meta (corrige duplicação no DB)
-                    // Se houver 2 registros iguais no banco, isso garante que pegamos apenas o valor de um, sem somar.
+                    // Individual: SOBRESCREVE a meta (Correção de Duplicação)
+                    // Se houver registros duplicados no banco, usamos o último valor lido, sem somar.
                     mapMetas[m.ano][m.mes].prod = metaProdVal;
                     mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
                 }
             });
 
-            // Lógica Estatística para Visão Geral
+            // Lógica Estatística para Visão Geral (Define Meta da Equipe)
             if (isGeral) {
                 for (const ano in mapMetas) {
                     for (const mes in mapMetas[ano]) {
@@ -113,7 +113,7 @@ MinhaArea.Geral = {
                         if (d.assertValues.length > 0) {
                             const resultado = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = resultado.valor;
-                            d.isMedia = resultado.isMedia; 
+                            d.isMedia = resultado.isMedia; // Flag para mudar o texto na interface
                         }
                     }
                 }
@@ -180,7 +180,6 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
-                // Cálculo da Meta do Dia (Diária * Fator)
                 const metaDiaCalculada = Math.round(configMes.prod * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -201,7 +200,7 @@ MinhaArea.Geral = {
                 if (temRegistro) {
                     listaGrid.push({
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
-                        metaConfigAssert: configMes.assertFinal, 
+                        metaConfigAssert: configMes.assertFinal, // Passa a meta limpa (100% ou 95%)
                         assertDisplay: assertDiaDisplay, justificativa: justif,
                         fifo: prodDoDia.fifo, gt: prodDoDia.gradual_total, gp: prodDoDia.gradual_parcial,
                         validado: mapCheckins.has(dataStr)
@@ -248,6 +247,8 @@ MinhaArea.Geral = {
             const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
             const elMetaTag = document.getElementById('kpi-meta-assert-target');
             if (elMetaTag) {
+                // Se o cálculo inteligente detectou que é uma média real (muitas metas diferentes), avisa
+                // Se detectou que a meta é uniforme (ex: todo mundo 100%), mostra apenas "Meta"
                 const label = (isGeral && configFim.isMedia) ? 'Meta (Média)' : 'Meta';
                 elMetaTag.innerText = `${label}: ${configFim.assertFinal}%`;
             }
@@ -300,12 +301,13 @@ MinhaArea.Geral = {
 
         // 3. Regra de Dominância
         // Se a Moda (ex: 100%) representa mais de 70% da equipe, usamos a Moda.
+        // Isso elimina distorções causadas por poucos usuários desatualizados.
         const dominancia = maxFreq / valores.length;
         
         if (dominancia >= 0.70) {
-            return { valor: moda, isMedia: false }; 
+            return { valor: moda, isMedia: false }; // Retorna o valor "limpo" (ex: 100)
         } else {
-            return { valor: Number(media.toFixed(2)), isMedia: true }; 
+            return { valor: Number(media.toFixed(2)), isMedia: true }; // Retorna a média quebrada (ex: 98.45)
         }
     },
 
