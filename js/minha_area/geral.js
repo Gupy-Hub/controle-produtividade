@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   CORREÇÃO CRÍTICA: Aumento do limite de usuários para garantir leitura da Função da Vanessa
+   CORREÇÃO FINAL: Limite 10k Usuários + Ignora Desconhecidos + Filtro Status
 */
 
 MinhaArea.Geral = {
@@ -18,7 +18,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Processando exclusões...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Sincronizando dados...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -26,24 +26,23 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // 1. Produção
+            // 1. Buscas
             let qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
 
-            // 2. Assertividade
+            // Trazendo status para filtrar REV/DUPL igual à Produtividade
             let qAssertividade = Sistema.supabase.from('assertividade')
-                .select('data_referencia, porcentagem_assertividade, usuario_id')
+                .select('data_referencia, porcentagem_assertividade, usuario_id, status')
                 .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
 
-            // 3. Metas
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // 4. Usuários (AQUI ESTAVA O PROBLEMA: ADICIONADO LIMIT ALTO)
+            // CORREÇÃO CRÍTICA: LIMIT 10000 PARA PEGAR A VANESSA
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao')
-                .limit(10000); // Garante que traga a Vanessa mesmo se tiver muitos usuários
+                .limit(10000); 
 
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
@@ -99,19 +98,22 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
-                    const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
-                    const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
-                    
-                    if (!isGestao) {
-                        let considerar = false;
-                        if (uData.ativo) considerar = true;
-                        else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
+                    const uData = mapUser[uId];
+                    // Se não achou usuário, ignora na meta
+                    if (uData) {
+                        const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
+                        const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
+                        
+                        if (!isGestao) {
+                            let considerar = false;
+                            if (uData.ativo) considerar = true;
+                            else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
 
-                        if (considerar && valProd > 0) {
-                            mapMetas[a][ms].somaIndividual += valProd;
-                            mapMetas[a][ms].qtdAssistentesDB++; 
-                            mapMetas[a][ms].prodValues.push(valProd);
+                            if (considerar && valProd > 0) {
+                                mapMetas[a][ms].somaIndividual += valProd;
+                                mapMetas[a][ms].qtdAssistentesDB++; 
+                                mapMetas[a][ms].prodValues.push(valProd);
+                            }
                         }
                     }
                     mapMetas[a][ms].assertValues.push(valAssert);
@@ -146,7 +148,7 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- AGREGAÇÃO ---
+            // --- AGREGAÇÃO DADOS REAIS ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -165,24 +167,26 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- ASSERTIVIDADE (COM BLOQUEIO TOTAL E ROBUSTO) ---
+            // --- ASSERTIVIDADE (COM LEI SECA E FILTRO DE STATUS) ---
+            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
             const mapAssert = new Map();
+            
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
+                const status = (a.status || '').toUpperCase();
                 
+                // 1. Filtro de Status
+                if (STATUS_IGNORAR.includes(status)) return;
+
+                // 2. Filtro de Gestão (Lei Seca)
                 if (isGeral) {
-                    // Se o usuário não foi carregado (o que não deve acontecer mais com limit 10000), 
-                    // o objeto default é vazio. Mas por segurança, vamos assumir que se não achou, NÃO é gestão.
-                    // Porém, para Vanessa ser bloqueada, ELA PRECISA SER ACHADA.
                     const uData = mapUser[uId];
+                    if (!uData) return; // CORREÇÃO: Se não achou usuário, IGNORA (Evita incluir Vanessa se ela não vier)
+
+                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
+                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
                     
-                    if (uData) {
-                        const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                        const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                        
-                        // LEI SECA: Se é Gestão, TCHAU!
-                        if (isGestao) return; 
-                    }
+                    if (isGestao) return; // Bloqueia Gestão
                 }
 
                 const key = a.data_referencia;

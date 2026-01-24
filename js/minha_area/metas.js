@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Aumento do limite de usuários para garantir leitura correta da Função
+   CORREÇÃO FINAL: Limite 10k Usuários
 */
 
 MinhaArea.Metas = {
@@ -33,7 +33,7 @@ MinhaArea.Metas = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // AQUI ESTAVA O ERRO: Adicionado LIMIT 10000
+            // CORREÇÃO: Aumentado limite para garantir que traga Vanessa (ID alto)
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao')
                 .limit(10000); 
@@ -81,19 +81,21 @@ MinhaArea.Metas = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
-                    const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
-                    const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
-                    
-                    if (!isGestao) {
-                        let considerar = false;
-                        if (uData.ativo) considerar = true;
-                        else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
+                    const uData = mapUser[uId];
+                    if (uData) {
+                        const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
+                        const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
+                        
+                        if (!isGestao) {
+                            let considerar = false;
+                            if (uData.ativo) considerar = true;
+                            else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
 
-                        if (considerar && valProd > 0) {
-                            mapMetas[a][ms].somaIndividual += valProd;
-                            mapMetas[a][ms].qtdAssistentesDB++; 
-                            mapMetas[a][ms].prodValues.push(valProd);
+                            if (considerar && valProd > 0) {
+                                mapMetas[a][ms].somaIndividual += valProd;
+                                mapMetas[a][ms].qtdAssistentesDB++; 
+                                mapMetas[a][ms].prodValues.push(valProd);
+                            }
                         }
                     }
                     mapMetas[a][ms].assertValues.push(valAssert);
@@ -146,18 +148,24 @@ MinhaArea.Metas = {
             }
 
             const mapAssert = new Map();
+            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
+
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
+                
+                const status = (a.status || '').toUpperCase();
+                if (STATUS_IGNORAR.includes(status)) return;
 
                 if (isGeral) {
                     const uData = mapUser[uId];
-                    if (uData) { // Só aplica filtro se achou o usuário
-                        const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                        const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                        if (isGestao) return; 
-                    }
+                    // CORREÇÃO: Se não achou usuário (uData nulo), ignora para evitar fantasma.
+                    if (!uData) return;
+
+                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
+                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
+                    if (isGestao) return; 
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -278,10 +286,9 @@ MinhaArea.Metas = {
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
-            // --- FILTRO KPI: GESTÃO NUNCA ENTRA NA MÉDIA ---
             if (isGeral && mapUser) {
                 const uData = mapUser[uId];
-                if (uData) { // Garante que usuário foi achado
+                if (uData) { // Garante que foi achado
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
                     if (isGestao) return;
