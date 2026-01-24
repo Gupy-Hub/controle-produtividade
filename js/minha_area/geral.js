@@ -1,17 +1,15 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Exclusão rigorosa de Gestão e Admin (SuperAdmin Gupy) da Meta
+   ATUALIZAÇÃO: Filtro Reforçado (Perfil + Função) e Correção de Campo 'Ativo'
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
-        // --- 1. PREPARAÇÃO DE AMBIENTE ---
         const rawUid = MinhaArea.getUsuarioAlvo();
         const uid = rawUid ? parseInt(rawUid) : null;
         const isGeral = (uid === null); // Se null, é Visão Geral (Equipe)
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro de Perfis (Gestão/Admin)");
-        console.log("Modo:", isGeral ? "Equipe (Operacional)" : "Individual");
+        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro Função/Cargo");
 
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -30,16 +28,16 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // --- 2. BUSCA DE DADOS ---
+            // --- QUERIES ---
             
-            // Query 1: Produção
+            // 1. Produção
             let qProducao = Sistema.supabase.from('producao')
                 .select('*')
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .limit(5000);
 
-            // Query 2: Assertividade
+            // 2. Assertividade
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, usuario_id')
                 .gte('data_referencia', inicio)
@@ -47,24 +45,23 @@ MinhaArea.Geral = {
                 .not('porcentagem_assertividade', 'is', null)
                 .limit(5000);
 
-            // Query 3: Metas
+            // 3. Metas
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
-            // Query 4: Dados dos Usuários (Status, Perfil e Nome para filtro do Admin)
+            // 4. Usuários (Buscando 'funcao' e 'ativo' corretamente)
             let qUsuarios = Sistema.supabase.from('usuarios')
-                .select('id, status, nome, perfil');
+                .select('id, ativo, nome, perfil, funcao');
 
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
                 qMetas = qMetas.eq('usuario_id', uid);
-                // Não filtramos qUsuarios aqui pois precisamos do status do alvo
             }
 
-            // Query 5: Check-ins
+            // 5. Check-ins
             let qCheck = null;
             if (!isGeral) {
                 qCheck = Sistema.supabase.from('checking_diario')
@@ -86,21 +83,22 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- 3. MAPEAMENTO DE USUÁRIOS ---
-            const mapStatusUser = {};
-            const mapPerfilUser = {};
-            const mapNomeUser = {};
+            // --- MAPEAMENTO DE USUÁRIOS ---
+            const mapUser = {};
 
             dadosUsuarios.forEach(u => {
-                mapStatusUser[u.id] = (u.status || 'INATIVO').toUpperCase();
-                mapPerfilUser[u.id] = (u.perfil || 'ASSISTENTE').toUpperCase().trim();
-                mapNomeUser[u.id] = (u.nome || '').toUpperCase().trim();
+                mapUser[u.id] = {
+                    status: (u.ativo === true ? 'ATIVO' : 'INATIVO'), // Converte Boolean para String
+                    perfil: (u.perfil || 'ASSISTENTE').toUpperCase().trim(),
+                    funcao: (u.funcao || '').toUpperCase().trim(),
+                    nome: (u.nome || '').toUpperCase().trim()
+                };
             });
 
-            // Set para verificar quem produziu (salvar inativos que trabalharam)
+            // Quem produziu no período (para salvar inativos)
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // --- 4. CÁLCULO DA CAPACIDADE DIÁRIA (Meta) ---
+            // --- CÁLCULO DA CAPACIDADE ---
             const mapMetas = {};
             
             dadosMetasRaw.forEach(m => {
@@ -111,13 +109,8 @@ MinhaArea.Geral = {
                 if (!mapMetas[a]) mapMetas[a] = {};
                 if (!mapMetas[a][ms]) {
                     mapMetas[a][ms] = { 
-                        prodTotalDiario: 0,    
-                        somaIndividual: 0,     
-                        qtdAssistentesDB: 0,
-                        prodValues: [],   
-                        assertValues: [], 
-                        assertFinal: 98.0, 
-                        isMedia: false 
+                        prodTotalDiario: 0, somaIndividual: 0, qtdAssistentesDB: 0,
+                        prodValues: [], assertValues: [], assertFinal: 98.0, isMedia: false 
                     };
                 }
                 
@@ -125,51 +118,42 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // --- FILTROS DE EXCLUSÃO (Blacklist) ---
-                    const status = mapStatusUser[uId] || 'INATIVO';
-                    const perfil = mapPerfilUser[uId] || 'ASSISTENTE';
-                    const nome = mapNomeUser[uId] || '';
-                    const produziuNoMes = usuariosQueProduziram.has(uId);
-
-                    // Verifica se é um perfil que deve ser IGNORADO na meta
-                    const isGestao = perfil.includes('GESTORA') || perfil.includes('AUDITORA');
-                    const isAdmin = perfil.includes('ADMIN') || nome.includes('SUPERADMIN') || nome.includes('GUPY');
+                    const uData = mapUser[uId] || { status: 'INATIVO', perfil: '', funcao: '', nome: '' };
                     
-                    const deveIgnorarMeta = isGestao || isAdmin;
+                    // --- FILTRO AVANÇADO (PERFIL + FUNÇÃO) ---
+                    // Ignora se qualquer um dos campos indicar gestão/admin
+                    const termoGestao = ['GESTOR', 'COORDENADOR', 'AUDITOR', 'LIDER', 'SUPERVISOR'];
+                    const termoAdmin = ['ADMIN', 'SISTEMA', 'GUPY'];
 
-                    if (!deveIgnorarMeta) {
-                        // É Operacional. Agora aplica regras de Ativo/Inativo.
-                        let considerarMeta = false;
+                    const isGestao = termoGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t));
+                    const isAdmin = termoAdmin.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes(t));
+                    
+                    const deveIgnorar = isGestao || isAdmin;
 
-                        // Regra 1: Ativos sempre contam
-                        if (status === 'ATIVO') {
-                            considerarMeta = true;
-                        } 
-                        // Regra 2: Inativos contam APENAS se produziram
-                        else if (status === 'INATIVO' && produziuNoMes) {
-                            considerarMeta = true;
-                        }
+                    if (!deveIgnorar) {
+                        // É Operacional. Verifica Atividade.
+                        let considerar = false;
+                        const produziu = usuariosQueProduziram.has(uId);
 
-                        if (considerarMeta && valProd > 0) {
+                        if (uData.status === 'ATIVO') considerar = true;
+                        else if (uData.status === 'INATIVO' && produziu) considerar = true;
+
+                        if (considerar && valProd > 0) {
                             mapMetas[a][ms].somaIndividual += valProd;
                             mapMetas[a][ms].qtdAssistentesDB++; 
                             mapMetas[a][ms].prodValues.push(valProd);
                         }
-                    } else {
-                        // console.log(`🚫 Ignorando Meta de ${nome} (${perfil}) - ID: ${uId}`);
                     }
                     
-                    // Assertividade sempre acumula para média geral (Qualidade Global)
                     mapMetas[a][ms].assertValues.push(valAssert);
 
                 } else {
-                    // Visão Individual: Pega direto
                     mapMetas[a][ms].prodTotalDiario = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // Aplica Projeção para a Equipe (Preencher lacunas de Assistentes)
+            // Projeção da Equipe
             if (isGeral) {
                 const targetAssistentes = this.getQtdAssistentesConfigurada(); 
                 
@@ -178,24 +162,19 @@ MinhaArea.Geral = {
                         const d = mapMetas[a][ms];
                         
                         let capacidadeDiaria = d.somaIndividual;
-                        const assistentesValidos = d.qtdAssistentesDB;
-                        const gap = targetAssistentes - assistentesValidos;
+                        const validos = d.qtdAssistentesDB;
+                        const gap = targetAssistentes - validos;
                         
                         if (gap > 0) {
-                            // Projeta usando apenas a média dos OPERACIONAIS VÁLIDOS
                             let valorProjecao = 100;
-
                             if (d.prodValues.length > 0) {
                                 valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
                             }
-
-                            const projecaoTotal = gap * valorProjecao;
-                            capacidadeDiaria += projecaoTotal;
-                            
-                            console.log(`ℹ️ [Mês ${ms}/${a}] Operacionais: ${assistentesValidos}. Gap: ${gap}. Projetando: +${projecaoTotal}`);
+                            const projecao = gap * valorProjecao;
+                            capacidadeDiaria += projecao;
+                            console.log(`ℹ️ [Mês ${ms}] Validos: ${validos}. Gap: ${gap}. Projetado: +${projecao}`);
                         } 
-                        else if (assistentesValidos === 0) {
-                            // Fallback se não houver nenhum assistente cadastrado
+                        else if (validos === 0) {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
 
@@ -210,15 +189,14 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- 5. AGREGAÇÃO DE DADOS REAIS ---
+            // --- RENDERIZAÇÃO E DADOS REAIS ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
                     const data = p.data_referencia;
                     if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
                     const reg = mapProd.get(data);
-                    
-                    // A produção de TODOS (inclusive Gestoras/Admins) entra aqui como Realizado.
+                    // Produção de TODAS (incluindo Gestoras) entra na soma realizada
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fifo += Number(p.fifo || 0);
                     reg.gradual_total += Number(p.gradual_total || 0);
@@ -242,8 +220,6 @@ MinhaArea.Geral = {
             });
 
             const mapCheckins = new Set(dadosCheckins.map(c => c.data_referencia));
-
-            // --- 6. RENDERIZAÇÃO DO GRID ---
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
@@ -265,7 +241,6 @@ MinhaArea.Geral = {
                 }
 
                 const metaDiariaBase = configMes.prodTotalDiario;
-
                 const prodDoDia = mapProd.get(dataStr);
                 let fator = 1.0, qtdReal = 0, justif = '', temRegistro = false;
 
@@ -285,7 +260,6 @@ MinhaArea.Geral = {
 
                 const assertDoDia = mapAssert.get(dataStr);
                 let assertDiaDisplay = { val: 0, text: '-', class: 'text-slate-300' };
-                
                 if (assertDoDia && assertDoDia.qtd > 0) {
                     const mediaDia = assertDoDia.soma / assertDoDia.qtd;
                     totalAssertSoma += assertDoDia.soma;
@@ -334,7 +308,6 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // --- 7. ATUALIZAÇÃO KPIS ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
@@ -356,16 +329,12 @@ MinhaArea.Geral = {
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
-            // KPI VELOCIDADE
             const mesRef = new Date(dtFim).getMonth() + 1;
             const metaRefObj = mapMetas[anoFim]?.[mesRef];
             const metaRefDiaria = metaRefObj ? metaRefObj.prodTotalDiario : (isGeral ? 100 * qtdTarget : 100);
-
             const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
             const mediaDiaria = Math.round(totalProdReal / divisorVelocidade);
-            
             const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
-            
             const elMedia = document.getElementById('kpi-media');
             if(elMedia) elMedia.innerHTML = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVel >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${this.fmtPct(pctVel)}</span>`;
             this.setTxt('kpi-meta-dia', metaRefDiaria);
@@ -378,8 +347,6 @@ MinhaArea.Geral = {
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
-
-    // --- FUNÇÕES AUXILIARES ---
 
     getQtdAssistentesConfigurada: function() {
         const manual = localStorage.getItem('gupy_config_qtd_assistentes');
@@ -399,26 +366,17 @@ MinhaArea.Geral = {
 
     calcularModaOuMedia: function(valores) {
         if (!valores || valores.length === 0) return { valor: 100 };
-        
         const frequencia = {};
         let maxFreq = 0;
         let moda = valores[0];
         let soma = 0;
-
         valores.forEach(v => {
             soma += v;
             frequencia[v] = (frequencia[v] || 0) + 1;
-            if (frequencia[v] > maxFreq) {
-                maxFreq = frequencia[v];
-                moda = v;
-            }
+            if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; }
         });
-
-        if ((maxFreq / valores.length) >= 0.3) {
-            return { valor: moda };
-        } else {
-            return { valor: Math.round(soma / valores.length) };
-        }
+        if ((maxFreq / valores.length) >= 0.3) { return { valor: moda }; } 
+        else { return { valor: Math.round(soma / valores.length) }; }
     },
 
     calcularMetaInteligente: function(valores) {
@@ -428,20 +386,12 @@ MinhaArea.Geral = {
         const frequencia = {};
         let maxFreq = 0;
         let moda = valores[0];
-
         valores.forEach(v => {
             frequencia[v] = (frequencia[v] || 0) + 1;
-            if (frequencia[v] > maxFreq) {
-                maxFreq = frequencia[v];
-                moda = v;
-            }
+            if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; }
         });
-
-        if ((maxFreq / valores.length) >= 0.70) {
-            return { valor: moda, isMedia: false };
-        } else {
-            return { valor: Number(media.toFixed(2)), isMedia: true };
-        }
+        if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } 
+        else { return { valor: Number(media.toFixed(2)), isMedia: true }; }
     },
 
     processarCheckingInterface: async function(uid, checkins) {
