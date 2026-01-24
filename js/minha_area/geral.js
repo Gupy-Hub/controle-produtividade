@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Filtro de Assertividade idêntico à Produtividade (Exclui Gestão sem produção)
+   ATUALIZAÇÃO: Bloqueio TOTAL de Assertividade para Gestão/Auditoria (Lei Seca)
 */
 
 MinhaArea.Geral = {
@@ -18,7 +18,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Sincronizando regras...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Aplicando Lei Seca na Gestão...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -40,7 +40,7 @@ MinhaArea.Geral = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // 4. Usuários (Necessário para filtrar Gestão)
+            // 4. Usuários
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao');
 
@@ -69,7 +69,7 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- MAPEAMENTO DE USUÁRIOS E PRODUÇÃO ---
+            // --- MAPEAMENTO ---
             const mapUser = {};
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
@@ -80,7 +80,6 @@ MinhaArea.Geral = {
                 };
             });
             
-            // Set de quem produziu (para salvar gestor que trabalhou)
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
             // --- CÁLCULO DA META (CAPACIDADE) ---
@@ -103,8 +102,6 @@ MinhaArea.Geral = {
                     const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
                     const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
                     
-                    // Só conta para meta se for Operacional OU (Gestão que produziu)
-                    // Na prática, meta de gestão costuma ser ignorada na soma da equipe
                     if (!isGestao) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
@@ -123,7 +120,7 @@ MinhaArea.Geral = {
                 }
             });
 
-            // Projeção da Equipe
+            // Projeção
             if (isGeral) {
                 const targetAssistentes = this.getQtdAssistentesConfigurada(); 
                 for (const a in mapMetas) {
@@ -132,7 +129,6 @@ MinhaArea.Geral = {
                         let capacidadeDiaria = d.somaIndividual;
                         const validos = d.qtdAssistentesDB;
                         const gap = targetAssistentes - validos;
-                        
                         if (gap > 0) {
                             let valorProjecao = 100;
                             if (d.prodValues.length > 0) valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
@@ -141,7 +137,6 @@ MinhaArea.Geral = {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
                         d.prodTotalDiario = capacidadeDiaria;
-                        
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -150,9 +145,9 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- AGREGAÇÃO DE DADOS REAIS ---
+            // --- AGREGAÇÃO DE DADOS ---
             
-            // Produção
+            // Produção (Continua somando Gestão)
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -171,20 +166,18 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Assertividade (COM FILTRO IGUAL À PRODUTIVIDADE)
+            // Assertividade (COM BLOQUEIO TOTAL DE GESTÃO)
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
                 
-                // FILTRO DE EXCLUSÃO (Para igualar a Produtividade 98.31%)
                 if (isGeral) {
                     const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    const produziu = usuariosQueProduziram.has(uId);
-
-                    // Se for Gestão E NÃO produziu, ignora a assertividade.
-                    if (isGestao && !produziu) return; 
+                    
+                    // LEI SECA: Se é Gestão, TCHAU! (Não importa se produziu)
+                    if (isGestao) return; 
                 }
 
                 const key = a.data_referencia;
@@ -279,7 +272,6 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // --- KPIS ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
@@ -305,10 +297,8 @@ MinhaArea.Geral = {
             const mesRef = new Date(dtFim).getMonth() + 1;
             const metaRefDiaria = mapMetas[anoFim]?.[mesRef]?.prodTotalDiario || (isGeral ? 100 * qtdTarget : 100);
             const mediaDiaria = Math.round(totalProdReal / (somaFatorProdutivo > 0 ? somaFatorProdutivo : 1));
-            
             this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-dia', metaRefDiaria);
-            
             const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
             this.setTxt('kpi-velocidade-pct', this.fmtPct(pctVel));
             if(document.getElementById('bar-velocidade')) document.getElementById('bar-velocidade').style.width = `${Math.min(pctVel, 100)}%`;

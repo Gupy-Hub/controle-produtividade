@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Sincronização Perfeita com "Produtividade" (Filtro de Qualidade)
+   ATUALIZAÇÃO: Bloqueio TOTAL de Assertividade para Gestão/Auditoria (Lei Seca)
 */
 
 MinhaArea.Metas = {
@@ -8,7 +8,7 @@ MinhaArea.Metas = {
     chartAssert: null,
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento (Filtro Qualidade Ativo)...");
+        console.log("🚀 Metas: Iniciando carregamento (Lei Seca Gestão)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -25,7 +25,6 @@ MinhaArea.Metas = {
             let qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
 
-            // Assertividade Simplificada (para não pesar)
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
@@ -110,7 +109,6 @@ MinhaArea.Metas = {
                         let capacidadeDiaria = d.somaIndividual;
                         const validos = d.qtdAssistentesDB;
                         const gap = targetAssistentes - validos;
-                        
                         if (gap > 0) {
                             let valorProjecao = 100;
                             if (d.prodValues.length > 0) valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
@@ -119,7 +117,6 @@ MinhaArea.Metas = {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
                         d.prodTotalDiario = capacidadeDiaria;
-                        
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -150,16 +147,13 @@ MinhaArea.Metas = {
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
 
-                // --- FILTRO DE GESTÃO (CRÍTICO) ---
+                // --- FILTRO DE GESTÃO (LEI SECA) ---
                 if (isGeral) {
                     const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    const produziu = usuariosQueProduziram.has(uId);
-
-                    // Só considera assertividade de Gestão se tiver Produção.
-                    // Caso contrário, ignora para não subir a média artificialmente.
-                    if (isGestao && !produziu) return; 
+                    
+                    if (isGestao) return; // BLOQUEIO TOTAL
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -280,15 +274,13 @@ MinhaArea.Metas = {
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
-            // FILTRO DE KPI (Igual Produtividade)
             if (isGeral && mapUser) {
                 const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
                 const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                 const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                const produziu = usuariosQueProduziram.has(uId);
                 
-                // Ignora Gestão SEM Produção
-                if (isGestao && !produziu) return;
+                // LEI SECA: Se é Gestão, TCHAU!
+                if (isGestao) return;
             }
 
             const status = (a.status || '').toUpperCase();
