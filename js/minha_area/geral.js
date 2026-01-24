@@ -1,11 +1,13 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia" (Minha Área)
-   CORREÇÃO: Ajuste de colunas da tabela assertividade (data_referencia, porcentagem_assertividade)
+   ATUALIZAÇÃO: Suporte a "Visão Geral da Equipe" (Agregação de Dados)
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
-        const uid = MinhaArea.getUsuarioAlvo();
+        const uid = MinhaArea.getUsuarioAlvo(); // Retorna ID ou null (Visão Geral)
+        const isGeral = (uid === null); // Flag para identificar modo Visão Geral
+        
         const tbody = document.getElementById('tabela-extrato');
         
         // Limpa estado anterior do alerta
@@ -15,14 +17,10 @@ MinhaArea.Geral = {
             alertContainer.classList.add('hidden');
         }
         
-        if (!uid) {
-            if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><i class="fas fa-user-friends text-4xl mb-3 text-blue-200"></i><p class="font-bold text-slate-500">Selecione uma colaboradora no topo</p></td></tr>';
-            this.zerarKPIs();
-            return;
-        }
+        // Removemos o bloqueio antigo if (!uid) ...
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Processando dados e validações...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Consolidando dados da equipe...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -30,79 +28,138 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // 1. Buscas Otimizadas (Correção de Colunas Aqui)
-            const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
-                // Produção
-                Sistema.supabase.from('producao')
-                    .select('*')
-                    .eq('usuario_id', uid)
-                    .gte('data_referencia', inicio)
-                    .lte('data_referencia', fim)
-                    .limit(2000), 
-                
-                // Assertividade (Nomes Corrigidos)
-                Sistema.supabase.from('assertividade')
-                    .select('data_referencia, porcentagem_assertividade') // CORRIGIDO
-                    .eq('usuario_id', uid)
-                    .gte('data_referencia', inicio) // CORRIGIDO
-                    .lte('data_referencia', fim) // CORRIGIDO
-                    .not('porcentagem_assertividade', 'is', null) // CORRIGIDO
-                    .limit(5000), 
-                
-                // Metas
-                Sistema.supabase.from('metas')
-                    .select('mes, ano, meta, meta_assertividade')
-                    .eq('usuario_id', uid)
-                    .gte('ano', anoInicio)
-                    .lte('ano', anoFim),
-                
-                // Histórico Checking
-                Sistema.supabase.from('checking_diario')
+            // --- CONSTRUÇÃO DAS QUERIES CONDICIONAIS ---
+            
+            // 1. Produção
+            let qProducao = Sistema.supabase.from('producao')
+                .select('*')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .limit(5000);
+            if (!isGeral) qProducao = qProducao.eq('usuario_id', uid);
+
+            // 2. Assertividade
+            let qAssertividade = Sistema.supabase.from('assertividade')
+                .select('data_referencia, porcentagem_assertividade')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .not('porcentagem_assertividade', 'is', null)
+                .limit(5000);
+            if (!isGeral) qAssertividade = qAssertividade.eq('usuario_id', uid);
+
+            // 3. Metas
+            let qMetas = Sistema.supabase.from('metas')
+                .select('mes, ano, meta, meta_assertividade')
+                .gte('ano', anoInicio)
+                .lte('ano', anoFim);
+            if (!isGeral) qMetas = qMetas.eq('usuario_id', uid);
+
+            // 4. Histórico Checking (Apenas se for usuário único)
+            let qCheck = null;
+            if (!isGeral) {
+                qCheck = Sistema.supabase.from('checking_diario')
                     .select('data_referencia, status')
                     .eq('usuario_id', uid)
                     .gte('data_referencia', inicio)
-                    .lte('data_referencia', fim)
+                    .lte('data_referencia', fim);
+            }
+
+            // --- EXECUÇÃO PARALELA ---
+            const [prodRes, assertRes, metasRes, checkRes] = await Promise.all([
+                qProducao,
+                qAssertividade,
+                qMetas,
+                qCheck ? qCheck : Promise.resolve({ data: [] })
             ]);
 
-            // Tratamento de erro silencioso (Logs no console, mas não trava UI)
             if (prodRes.error) console.error("Erro Produção:", prodRes.error);
             if (assertRes.error) console.error("Erro Assertividade:", assertRes.error);
 
-            // Dados Seguros (Evita o TypeError 'forEach of null')
-            const dadosProducao = prodRes.data || [];
-            const dadosAssertividade = assertRes.data || [];
-            const dadosMetas = metasRes.data || [];
+            const dadosProducaoRaw = prodRes.data || [];
+            const dadosAssertividadeRaw = assertRes.data || [];
+            const dadosMetasRaw = metasRes.data || [];
             const dadosCheckins = checkRes.data || [];
 
-            // --- PROCESSA A INTERFACE DE CHECKING (Topo da Tela) ---
-            await this.processarCheckingInterface(uid, dadosCheckins);
+            // --- LOGICA DE CHECKING (Apenas Individual) ---
+            if (!isGeral) {
+                await this.processarCheckingInterface(uid, dadosCheckins);
+            }
 
-            // 2. Mapas de Dados
+            // --- PROCESSAMENTO E AGREGAÇÃO DE DADOS ---
+
+            // 1. Agregação de Metas (Soma das metas de todos os usuários ativos no mês)
             const mapMetas = {};
-            dadosMetas.forEach(m => {
+            dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
-                mapMetas[m.ano][m.mes] = { prod: Number(m.meta), assert: Number(m.meta_assertividade) };
+                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assert: 0, count: 0 };
+                
+                // Na visão geral, somamos a meta de produção
+                mapMetas[m.ano][m.mes].prod += Number(m.meta);
+                
+                // Na visão geral, mantemos a meta de assertividade padrão (ou média, se preferir)
+                // Aqui vamos assumir que a meta de assertividade é padrão 98% se for Geral
+                if (isGeral) {
+                     mapMetas[m.ano][m.mes].assert = 98.0; 
+                } else {
+                     mapMetas[m.ano][m.mes].assert = Number(m.meta_assertividade);
+                }
             });
 
+            // 2. Agregação de Produção
             const mapProd = new Map();
-            dadosProducao.forEach(p => mapProd.set(p.data_referencia, p));
+            
+            if (isGeral) {
+                // Modo Visão Geral: Agrupa tudo por Data
+                dadosProducaoRaw.forEach(p => {
+                    const data = p.data_referencia;
+                    if (!mapProd.has(data)) {
+                        mapProd.set(data, {
+                            quantidade: 0,
+                            fifo: 0,
+                            gradual_total: 0,
+                            gradual_parcial: 0,
+                            fator_soma: 0,
+                            fator_count: 0,
+                            justificativa: 'Visão Consolidada' // Texto padrão
+                        });
+                    }
+                    const reg = mapProd.get(data);
+                    reg.quantidade += Number(p.quantidade || 0);
+                    reg.fifo += Number(p.fifo || 0);
+                    reg.gradual_total += Number(p.gradual_total || 0);
+                    reg.gradual_parcial += Number(p.gradual_parcial || 0);
+                    reg.fator_soma += Number(p.fator || 1);
+                    reg.fator_count++;
+                });
 
+                // Calcula média do fator para a visão geral
+                for (let [key, val] of mapProd) {
+                    val.fator = val.fator_count > 0 ? (val.fator_soma / val.fator_count).toFixed(2) : 1.0;
+                }
+
+            } else {
+                // Modo Individual: Mapeamento direto
+                dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
+            }
+
+            // 3. Agregação de Assertividade
             const mapAssert = new Map();
-            dadosAssertividade.forEach(a => {
-                const key = a.data_referencia; // CORRIGIDO
+            dadosAssertividadeRaw.forEach(a => {
+                const key = a.data_referencia;
                 if(!mapAssert.has(key)) mapAssert.set(key, { soma: 0, qtd: 0 });
                 
-                const valRaw = a.porcentagem_assertividade; // CORRIGIDO
+                const valRaw = a.porcentagem_assertividade;
                 if (valRaw !== null && valRaw !== undefined && String(valRaw).trim() !== '') {
                     mapAssert.get(key).soma += this.parseValorPorcentagem(valRaw);
                     mapAssert.get(key).qtd++;
                 }
             });
 
+            // 4. Mapeamento de Checkins
             const mapCheckins = new Set();
             dadosCheckins.forEach(c => mapCheckins.add(c.data_referencia));
 
-            // 5. Cálculo do Calendário
+            // --- GERAÇÃO DA GRID (CALENDÁRIO) ---
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0, diasComProducaoReal = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
@@ -113,7 +170,9 @@ MinhaArea.Geral = {
                 const dataStr = d.toISOString().split('T')[0];
                 const anoAtual = d.getFullYear();
                 const mesAtual = d.getMonth() + 1;
-                const metaConfig = mapMetas[anoAtual]?.[mesAtual] || { prod: 650, assert: 98.0 };
+                
+                // Pega meta do mapa (Se for Geral, é a soma. Se for Individual, é a do usuário)
+                const metaConfig = mapMetas[anoAtual]?.[mesAtual] || { prod: (isGeral ? 6500 : 650), assert: 98.0 };
                 
                 const prodDoDia = mapProd.get(dataStr);
                 
@@ -128,15 +187,20 @@ MinhaArea.Geral = {
                     if (isNaN(fator)) fator = 1.0;
                     qtdReal = Number(prodDoDia.quantidade || 0);
                     
+                    // Recupera justificativa (se for geral, vem 'Visão Consolidada')
                     justif = (prodDoDia.justificativa_abono || '').trim();
                     if (!justif) justif = (prodDoDia.justificativa || '').trim();
                     if (!justif) justif = (prodDoDia.justificativas || '').trim();
+                    if (isGeral) justif = ''; // Limpa visualmente na geral
 
                     totalProdReal += qtdReal;
-                    somaFatorProdutivo += fator;
+                    somaFatorProdutivo += fator; // Na geral, soma a média dos fatores diários
                     if (fator > 0) diasComProducaoReal++;
                 }
 
+                // Ajuste Meta Dia: Se Geral, Fator é média, então Meta deve ser MetaTotal * MédiaFator? 
+                // Simplificação: MetaDia = MetaMensal / DiasUteisRestantes? 
+                // O código original faz: meta_config * fator. Mantendo a lógica.
                 const metaDiaCalculada = Math.round(metaConfig.prod * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -171,7 +235,7 @@ MinhaArea.Geral = {
 
             listaGrid.sort((a, b) => b.data.localeCompare(a.data));
 
-            // 6. Renderização Grid
+            // --- RENDERIZAÇÃO ---
             if(tbody) tbody.innerHTML = '';
             
             if (listaGrid.length === 0) {
@@ -190,7 +254,6 @@ MinhaArea.Geral = {
                 const temJust = item.justificativa && item.justificativa.length > 0;
                 const classJust = temJust ? "text-slate-700 font-medium bg-amber-50 px-2 py-1 rounded border border-amber-100 inline-block truncate w-full" : "text-slate-200 text-center block";
 
-                // ÍCONE DE VALIDAÇÃO (CHECK)
                 const iconValidado = item.validado 
                     ? `<i class="fas fa-check-circle text-emerald-500 ml-1" title="Validado (Checking Diário)"></i>` 
                     : `<i class="far fa-circle text-slate-200 ml-1 text-[8px]" title="Pendente de checking"></i>`;
@@ -198,9 +261,9 @@ MinhaArea.Geral = {
                 tbody.innerHTML += `
                     <tr class="hover:bg-blue-50/30 transition border-b border-slate-200 text-xs text-slate-600 ${item.validado ? 'bg-emerald-50/5' : ''}">
                         <td class="px-3 py-2 border-r border-slate-100 last:border-0 truncate font-bold text-slate-700 bg-slate-50/30">
-                            <span class="text-[9px] text-slate-400 font-normal mr-1 w-6 inline-block">${diaSemana}</span>${dia}/${mes}/${ano} ${iconValidado}
+                            <span class="text-[9px] text-slate-400 font-normal mr-1 w-6 inline-block">${diaSemana}</span>${dia}/${mes}/${ano} ${!isGeral ? iconValidado : ''}
                         </td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center">${item.fator}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">${Number(item.fator).toFixed(2)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.fifo}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp}</td>
@@ -213,9 +276,10 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // 7. KPIs Atualizados
+            // --- ATUALIZAÇÃO DOS KPIS DE TOPO ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
+            
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
             const barVolume = document.getElementById('bar-volume');
             if(barVolume) barVolume.style.width = `${Math.min(pctVol, 100)}%`;
@@ -225,17 +289,22 @@ MinhaArea.Geral = {
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
             const diasUteisPeriodo = this.calcularDiasUteisMes(inicio, fim);
-            const diasProdutivos = somaFatorProdutivo;
-            this.setTxt('kpi-dias', this.fmtDias(diasProdutivos)); 
+            // Na visão geral, "Dias Produtivos" é a média dos dias produtivos da equipe ou apenas a soma de dias que a equipe operou?
+            // Vamos manter somaFatorProdutivo que é a lógica original.
+            this.setTxt('kpi-dias', this.fmtDias(somaFatorProdutivo)); 
             this.setTxt('kpi-dias-uteis', diasUteisPeriodo);
             
-            const pctDias = diasUteisPeriodo > 0 ? (diasProdutivos / diasUteisPeriodo) * 100 : 0;
+            const pctDias = diasUteisPeriodo > 0 ? (somaFatorProdutivo / diasUteisPeriodo) * 100 : 0;
             const barDias = document.getElementById('bar-dias');
             if(barDias) barDias.style.width = `${Math.min(pctDias, 100)}%`;
 
+            // Velocidade (Docs/Dia)
             const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
             const mediaDiariaReal = Math.round(totalProdReal / divisorVelocidade);
-            const metaReferencia = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1]?.prod || 650;
+            
+            // Meta Referência (Último mês disponível)
+            const metaReferencia = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1]?.prod || (isGeral ? 6500 : 650);
+            
             const pctVelocidade = metaReferencia > 0 ? (mediaDiariaReal / metaReferencia) * 100 : 0;
             
             const elMedia = document.getElementById('kpi-media');
@@ -244,13 +313,14 @@ MinhaArea.Geral = {
 
         } catch (err) {
             console.error("Erro Crítico Geral:", err);
-            if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
+            if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados consolidados.</td></tr>';
         }
     },
 
     // --- LÓGICA DE CHECKING ---
     processarCheckingInterface: async function(uid, checkins) {
-        if (MinhaArea.usuario.id !== parseInt(uid)) return;
+        // Se uid for nulo (Visão Geral) ou se não for o próprio usuário logado, aborta.
+        if (!uid || MinhaArea.usuario.id !== parseInt(uid)) return;
 
         // DATA DE TESTE FIXA (Conforme solicitado)
         const ontemStr = '2025-12-16'; 
