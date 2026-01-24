@@ -1,11 +1,35 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Filtro SNIPER (Nomes + Cargos)
+   CORREÇÃO: Paginação Automática (Pega TUDO) + Filtro Vanessa
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
+
+    // Função Auxiliar para baixar tudo (fura o bloqueio de 1000 linhas)
+    fetchAll: async function(table, queryBuilder) {
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const { data, error } = await queryBuilder
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+            if (error) throw error;
+            
+            if (data.length > 0) {
+                allData = allData.concat(data);
+                page++;
+                if (data.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+        }
+        return allData;
+    },
 
     carregar: async function() {
         console.log("🚀 Metas: Iniciando carregamento...");
@@ -22,39 +46,53 @@ MinhaArea.Metas = {
 
         try {
             // 1. Buscas
-            let qProducao = Sistema.supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
+            const qProducao = Sistema.supabase.from('producao')
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            let qAssertividade = Sistema.supabase.from('assertividade')
+            const qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id') 
-                .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
+                .gte('data_referencia', inicio).lte('data_referencia', fim)
+                .not('porcentagem_assertividade', 'is', null);
 
-            let qMetas = Sistema.supabase.from('metas')
+            const qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            let qUsuarios = Sistema.supabase.from('usuarios')
-                .select('id, ativo, nome, perfil, funcao')
-                .limit(10000); 
+            const qUsuarios = Sistema.supabase.from('usuarios')
+                .select('id, ativo, nome, perfil, funcao');
+
+            let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
             if (!isGeral) {
-                qProducao = qProducao.eq('usuario_id', uid);
-                qAssertividade = qAssertividade.eq('usuario_id', uid);
-                qMetas = qMetas.eq('usuario_id', uid);
+                const [p, a, m, u] = await Promise.all([
+                    qProducao.eq('usuario_id', uid),
+                    qAssertividade.eq('usuario_id', uid),
+                    qMetas.eq('usuario_id', uid),
+                    qUsuarios
+                ]);
+                dadosProducaoRaw = p.data || [];
+                dadosAssertividadeRaw = a.data || [];
+                dadosMetasRaw = m.data || [];
+                dadosUsuarios = u.data || [];
+            } else {
+                // PAGINAÇÃO AQUI TAMBÉM
+                const [p, a, m, u] = await Promise.all([
+                    this.fetchAll('producao', qProducao),
+                    this.fetchAll('assertividade', qAssertividade),
+                    qMetas,
+                    this.fetchAll('usuarios', qUsuarios)
+                ]);
+                dadosProducaoRaw = p;
+                dadosAssertividadeRaw = a;
+                dadosMetasRaw = m.data || m;
+                dadosUsuarios = u;
             }
 
-            const [prodRes, assertRes, metasRes, userRes] = await Promise.all([
-                qProducao, qAssertividade, qMetas, qUsuarios
-            ]);
-
-            const dadosProducaoRaw = prodRes.data || [];
-            const dadosAssertividadeRaw = assertRes.data || []; 
-            const dadosMetasRaw = metasRes.data || [];
-            const dadosUsuarios = userRes.data || [];
-
-            // --- CRIAÇÃO DA LISTA NEGRA (IDS PROIBIDOS) ---
-            const idsProibidosNaAssertividade = new Set();
+            // --- CRIAÇÃO DA LISTA DE BLOQUEIO ---
+            const idsBloqueados = new Set();
             const mapUser = {};
+            const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
+            const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
 
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
@@ -68,17 +106,11 @@ MinhaArea.Metas = {
                 const funcaoUpper = mapUser[u.id].funcao;
                 const perfilUpper = mapUser[u.id].perfil;
 
-                // 1. Pelo Cargo/Perfil
-                const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
-                let isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
+                const isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
+                const isNomeProibido = nomesBloqueados.some(n => nomeUpper.includes(n));
 
-                // 2. Pelo NOME (Filtro Nominal)
-                const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
-                const isNomeBloqueado = nomesBloqueados.some(n => nomeUpper.includes(n));
-
-                if (isGestao || isNomeBloqueado) {
-                    idsProibidosNaAssertividade.add(u.id);
-                    idsProibidosNaAssertividade.add(String(u.id));
+                if (isGestao || isNomeProibido) {
+                    idsBloqueados.add(u.id);
                 }
             });
 
@@ -100,10 +132,9 @@ MinhaArea.Metas = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    const isBloqueado = idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId));
+                    const isBloqueado = idsBloqueados.has(uId);
                     const uData = mapUser[uId];
 
-                    // Ignora Meta se estiver na lista negra
                     if (!isBloqueado && uData) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
@@ -176,11 +207,8 @@ MinhaArea.Metas = {
                 if (STATUS_IGNORAR.includes(status)) return;
 
                 if (isGeral) {
-                    // SNIPER CHECK:
-                    if (idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId))) {
-                        return; // Ignora se for Vanessa, Keila, etc.
-                    }
-                    if (!mapUser[uId]) return; // Ignora desconhecidos
+                    if (idsBloqueados.has(uId)) return; // BLOQUEIO!
+                    if (!mapUser[uId]) return; // IGNORA FANTASMAS!
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -242,7 +270,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsProibidosNaAssertividade);
+            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsBloqueados);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
@@ -274,7 +302,7 @@ MinhaArea.Metas = {
         if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number((soma/valores.length).toFixed(2)), isMedia: true }; }
     },
 
-    atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsProibidosNaAssertividade) {
+    atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsBloqueados) {
         let totalValidados = 0; 
         let totalMeta = 0;
         let somaAssertMedia = 0;
@@ -302,11 +330,8 @@ MinhaArea.Metas = {
             const uId = a.usuario_id;
             
             if (isGeral) {
-                // SNIPER CHECK KPI:
-                if (idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId))) {
-                    return; 
-                }
-                if (!mapUser[uId]) return;
+                if (idsBloqueados.has(uId)) return; // BLOQUEIO!
+                if (!mapUser[uId]) return; // FANTASMA!
             }
 
             const status = (a.status || '').toUpperCase();

@@ -1,9 +1,34 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Filtro SNIPER por Nome (Vanessa/Keila/Brenda/Patrícia) + Gestão
+   CORREÇÃO: Paginação Automática (Pega TUDO, mesmo > 1000 linhas) + Filtro Vanessa
 */
 
 MinhaArea.Geral = {
+    // Função Auxiliar para baixar tudo (fura o bloqueio de 1000 linhas)
+    fetchAll: async function(table, queryBuilder) {
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const { data, error } = await queryBuilder
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+            
+            if (error) throw error;
+            
+            if (data.length > 0) {
+                allData = allData.concat(data);
+                page++;
+                // Se veio menos que o tamanho da página, acabou
+                if (data.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+        }
+        return allData;
+    },
+
     carregar: async function() {
         const rawUid = MinhaArea.getUsuarioAlvo();
         const uid = rawUid ? parseInt(rawUid) : null;
@@ -18,7 +43,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Aplicando filtro nominal...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Baixando base completa...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -26,50 +51,69 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // 1. Buscas
-            let qProducao = Sistema.supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
+            // 1. Definição das Queries (Sem limit, usaremos Range no fetchAll)
+            const qProducao = Sistema.supabase.from('producao')
+                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            let qAssertividade = Sistema.supabase.from('assertividade')
+            const qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, usuario_id, status')
-                .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
+                .gte('data_referencia', inicio).lte('data_referencia', fim)
+                .not('porcentagem_assertividade', 'is', null);
 
-            let qMetas = Sistema.supabase.from('metas')
+            const qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            let qUsuarios = Sistema.supabase.from('usuarios')
-                .select('id, ativo, nome, perfil, funcao')
-                .limit(10000); // Garante trazer todos
+            const qUsuarios = Sistema.supabase.from('usuarios')
+                .select('id, ativo, nome, perfil, funcao');
+
+            // 2. Execução com Paginação (Aqui está o segredo!)
+            // Se for visão individual, não precisa paginar tanto, mas mantemos o padrão
+            let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
             if (!isGeral) {
-                qProducao = qProducao.eq('usuario_id', uid);
-                qAssertividade = qAssertividade.eq('usuario_id', uid);
-                qMetas = qMetas.eq('usuario_id', uid);
+                // Individual: carrega direto (poucos dados)
+                const [p, a, m, u] = await Promise.all([
+                    qProducao.eq('usuario_id', uid),
+                    qAssertividade.eq('usuario_id', uid),
+                    qMetas.eq('usuario_id', uid),
+                    qUsuarios // Usuários sempre carrega todos para mapear nomes se precisar
+                ]);
+                dadosProducaoRaw = p.data || [];
+                dadosAssertividadeRaw = a.data || [];
+                dadosMetasRaw = m.data || [];
+                dadosUsuarios = u.data || [];
+            } else {
+                // Geral: Carrega em Lotes (Loop)
+                const [p, a, m, u] = await Promise.all([
+                    this.fetchAll('producao', qProducao),
+                    this.fetchAll('assertividade', qAssertividade), // <--- AQUI VAI VIR TUDO ( > 1000)
+                    qMetas, // Metas geralmente são poucas
+                    this.fetchAll('usuarios', qUsuarios) // <--- PEGA TODOS OS USUÁRIOS
+                ]);
+                dadosProducaoRaw = p;
+                dadosAssertividadeRaw = a;
+                dadosMetasRaw = m.data || m; // fetchAll retorna array direto, query normal retorna {data}
+                dadosUsuarios = u;
             }
 
-            let qCheck = null;
+            // Checkins (Individual)
+            let dadosCheckins = [];
             if (!isGeral) {
-                qCheck = Sistema.supabase.from('checking_diario')
+                 const { data } = await Sistema.supabase.from('checking_diario')
                     .select('data_referencia, status').eq('usuario_id', uid)
                     .gte('data_referencia', inicio).lte('data_referencia', fim);
+                 dadosCheckins = data || [];
+                 await this.processarCheckingInterface(uid, dadosCheckins);
             }
 
-            const [prodRes, assertRes, metasRes, userRes, checkRes] = await Promise.all([
-                qProducao, qAssertividade, qMetas, qUsuarios, qCheck ? qCheck : Promise.resolve({ data: [] })
-            ]);
-
-            const dadosProducaoRaw = prodRes.data || [];
-            const dadosAssertividadeRaw = assertRes.data || [];
-            const dadosMetasRaw = metasRes.data || [];
-            const dadosUsuarios = userRes.data || [];
-            const dadosCheckins = checkRes.data || [];
-
-            if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
-
-            // --- CRIAÇÃO DA LISTA NEGRA (IDS PROIBIDOS) ---
-            const idsProibidosNaAssertividade = new Set();
+            // --- MAPEAMENTO ---
+            // Agora sim teremos a Vanessa e as Auditoras carregadas corretamente
             const mapUser = {};
+            // Filtros de Bloqueio (Sniper)
+            const idsBloqueados = new Set();
+            const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
+            const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
 
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
@@ -79,22 +123,15 @@ MinhaArea.Geral = {
                     ativo: u.ativo
                 };
 
-                // Lógica SNIPER: Identifica quem deve ser ignorado na assertividade
                 const nomeUpper = mapUser[u.id].nome;
                 const funcaoUpper = mapUser[u.id].funcao;
                 const perfilUpper = mapUser[u.id].perfil;
 
-                // 1. Pelo Cargo/Perfil
-                const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
-                let isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
+                const isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
+                const isNomeProibido = nomesBloqueados.some(n => nomeUpper.includes(n));
 
-                // 2. Pelo NOME (Filtro Nominal Explicito para garantir)
-                const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
-                const isNomeBloqueado = nomesBloqueados.some(n => nomeUpper.includes(n));
-
-                if (isGestao || isNomeBloqueado) {
-                    idsProibidosNaAssertividade.add(u.id); // Adiciona ID numérico
-                    idsProibidosNaAssertividade.add(String(u.id)); // Adiciona ID string (segurança)
+                if (isGestao || isNomeProibido) {
+                    idsBloqueados.add(u.id);
                 }
             });
             
@@ -116,11 +153,11 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // Verifica se está na lista negra
-                    const isBloqueado = idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId));
-                    const uData = mapUser[uId] || { ativo: false }; // Fallback
+                    const uData = mapUser[uId];
+                    const isBloqueado = idsBloqueados.has(uId);
 
-                    if (!isBloqueado) {
+                    // Ignora na Meta se for Bloqueado (Vanessa, Gestão)
+                    if (uData && !isBloqueado) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
                         else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
@@ -182,7 +219,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- ASSERTIVIDADE (COM FILTRO SNIPER) ---
+            // --- ASSERTIVIDADE (AGORA SIM, COMPLETA E FILTRADA) ---
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
             const mapAssert = new Map();
             
@@ -193,12 +230,10 @@ MinhaArea.Geral = {
                 if (STATUS_IGNORAR.includes(status)) return;
 
                 if (isGeral) {
-                    // VERIFICAÇÃO FINAL: Se o ID está na Lista Negra, TCHAU!
-                    if (idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId))) {
-                        return; // Ignora Vanessa, Keila, Gestoras, Admins
-                    }
+                    // Filtro 1: Bloqueio Nominal/Cargo (Vanessa, Keila, Gestão)
+                    if (idsBloqueados.has(uId)) return;
                     
-                    // Se não temos o usuário mapeado (fantasma), também ignoramos por segurança
+                    // Filtro 2: Fantasmas (Usuários não encontrados no banco)
                     if (!mapUser[uId]) return;
                 }
 
