@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Gestão/Admin NUNCA entra na média de Assertividade
+   ATUALIZAÇÃO: Aumento do limite de usuários para garantir leitura correta da Função
 */
 
 MinhaArea.Metas = {
@@ -8,7 +8,7 @@ MinhaArea.Metas = {
     chartAssert: null,
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento (Regra Exclusão Gestão)...");
+        console.log("🚀 Metas: Iniciando carregamento...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -25,7 +25,6 @@ MinhaArea.Metas = {
             let qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
 
-            // Assertividade Simplificada
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
@@ -34,8 +33,10 @@ MinhaArea.Metas = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
+            // AQUI ESTAVA O ERRO: Adicionado LIMIT 10000
             let qUsuarios = Sistema.supabase.from('usuarios')
-                .select('id, ativo, nome, perfil, funcao');
+                .select('id, ativo, nome, perfil, funcao')
+                .limit(10000); 
 
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
@@ -144,7 +145,6 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- ASSERTIVIDADE (COM BLOQUEIO TOTAL DE GESTÃO) ---
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
@@ -152,12 +152,12 @@ MinhaArea.Metas = {
                 if (!dataKey) return;
 
                 if (isGeral) {
-                    const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
-                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    
-                    // LEI SECA: Gestão nunca entra na assertividade
-                    if (isGestao) return; 
+                    const uData = mapUser[uId];
+                    if (uData) { // Só aplica filtro se achou o usuário
+                        const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
+                        const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
+                        if (isGestao) return; 
+                    }
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -280,12 +280,12 @@ MinhaArea.Metas = {
             
             // --- FILTRO KPI: GESTÃO NUNCA ENTRA NA MÉDIA ---
             if (isGeral && mapUser) {
-                const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
-                const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                
-                // Se é Gestão, não conta pro KPI de Assertividade
-                if (isGestao) return;
+                const uData = mapUser[uId];
+                if (uData) { // Garante que usuário foi achado
+                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
+                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
+                    if (isGestao) return;
+                }
             }
 
             const status = (a.status || '').toUpperCase();
