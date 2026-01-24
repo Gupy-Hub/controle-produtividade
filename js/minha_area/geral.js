@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Meta Geral baseada em 17 Assistentes (ou configuração manual)
+   ATUALIZAÇÃO: Lógica de Capacidade Total Diária (Soma Ponderada)
 */
 
 MinhaArea.Geral = {
@@ -8,10 +8,10 @@ MinhaArea.Geral = {
         // --- 1. PREPARAÇÃO DE AMBIENTE ---
         const rawUid = MinhaArea.getUsuarioAlvo();
         const uid = rawUid ? parseInt(rawUid) : null;
-        const isGeral = (uid === null); // Se null, é Visão Geral (Gestor vendo todos)
+        const isGeral = (uid === null); // Se null, é Visão Geral (Equipe)
         
-        console.group("🚀 [DEBUG META] Iniciando Carga do Dia a Dia");
-        console.log("Usuário Alvo ID:", uid, "| Modo Geral:", isGeral);
+        console.group("🚀 [DEBUG META] Iniciando Carga - Lógica de Capacidade Diária");
+        console.log("Modo:", isGeral ? "Equipe (Soma das Capacidades)" : "Individual");
 
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -22,7 +22,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando Metas da Equipe...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando capacidade da equipe...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -30,7 +30,7 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // --- 2. BUSCA DE DADOS (QUERIES) ---
+            // --- 2. BUSCA DE DADOS ---
             
             // Query 1: Produção
             let qProducao = Sistema.supabase.from('producao')
@@ -53,7 +53,6 @@ MinhaArea.Geral = {
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
-            // Filtros Individuais
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
@@ -79,59 +78,76 @@ MinhaArea.Geral = {
             const dadosMetasRaw = metasRes.data || [];
             const dadosCheckins = checkRes.data || [];
 
-            console.log("📊 [DEBUG META] Dados Brutos:", dadosMetasRaw.length, "registros.");
-
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- 3. MAPEAMENTO DE METAS ---
+            // --- 3. CÁLCULO DA CAPACIDADE DIÁRIA (Meta) ---
             const mapMetas = {};
             
+            // Agrupa metas por Ano/Mês
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
                 const ms = parseInt(m.mes);
                 
                 if (!mapMetas[a]) mapMetas[a] = {};
                 if (!mapMetas[a][ms]) {
-                    mapMetas[a][ms] = { prod: 0, assertValues: [], assertFinal: 98.0, prodValues: [], isMedia: false };
+                    mapMetas[a][ms] = { 
+                        prodTotalDiario: 0,    // Meta Final do Dia (Soma)
+                        somaIndividual: 0,     // Acumulador
+                        qtdAssistentesDB: 0,   // Quantos achamos no banco
+                        assertValues: [], 
+                        assertFinal: 98.0, 
+                        isMedia: false 
+                    };
                 }
                 
                 const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: Coleta valores individuais para cálculo estatístico posterior
-                    if (valProd > 0) mapMetas[a][ms].prodValues.push(valProd);
+                    // Visão Geral: Soma as capacidades individuais
+                    if (valProd > 0) {
+                        mapMetas[a][ms].somaIndividual += valProd;
+                        mapMetas[a][ms].qtdAssistentesDB++;
+                    }
                     mapMetas[a][ms].assertValues.push(valAssert);
                 } else {
                     // Individual: Valor direto
-                    mapMetas[a][ms].prod = valProd;
+                    mapMetas[a][ms].prodTotalDiario = valProd;
                     mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // Lógica Estatística para Visão Geral (Regra dos 17 Assistentes)
+            // Aplica a Lógica de Projeção para a Equipe (Visão Geral)
             if (isGeral) {
-                const qtdAssistentesPadrao = this.getQtdAssistentesConfigurada(); // Padrão 17 ou manual
-                console.log(`👥 [DEBUG EQUIPE] Calculando metas para ${qtdAssistentesPadrao} assistentes.`);
-
+                const targetAssistentes = this.getQtdAssistentesConfigurada(); // Padrão 17
+                
                 for (const a in mapMetas) {
                     for (const ms in mapMetas[a]) {
                         const d = mapMetas[a][ms];
                         
-                        // 1. Define Meta Diária BASE (Por Assistente)
-                        // Usa a MODA (valor mais comum) das metas cadastradas. Se não houver, usa média.
-                        let metaBaseIndividual = 100; // Fallback seguro
-                        if (d.prodValues.length > 0) {
-                            const est = this.calcularModaOuMedia(d.prodValues);
-                            metaBaseIndividual = est.valor;
+                        // SUA LÓGICA AQUI:
+                        // 1. Soma das Metas Reais (Ex: 15 * 650 + 2 * 450 = 10650)
+                        let capacidadeDiaria = d.somaIndividual;
+                        
+                        // 2. Tratamento de Lacunas (Se achou menos gente que o target)
+                        // Ex: Configurado 17, achou 15 no banco.
+                        // Calculamos a média dos 15 e projetamos nos 2 faltantes.
+                        const gap = targetAssistentes - d.qtdAssistentesDB;
+                        
+                        if (gap > 0 && d.qtdAssistentesDB > 0) {
+                            const mediaPorAssistente = Math.round(d.somaIndividual / d.qtdAssistentesDB);
+                            const projecao = gap * mediaPorAssistente;
+                            capacidadeDiaria += projecao;
+                            console.log(`ℹ️ [Mês ${ms}/${a}] Projetando ${gap} assistentes usando média ${mediaPorAssistente}. (+${projecao})`);
+                        } else if (d.qtdAssistentesDB === 0) {
+                            // Fallback total se não achou ninguém (100 * 17)
+                            capacidadeDiaria = 100 * targetAssistentes;
                         }
 
-                        // 2. Calcula Meta da Equipe = Meta Individual * Qtd Assistentes
-                        d.prod = metaBaseIndividual * qtdAssistentesPadrao;
-                        
-                        console.log(`📅 [Mês ${ms}/${a}] Meta Base Individual: ${metaBaseIndividual} x ${qtdAssistentesPadrao} Assistentes = Meta Equipe: ${d.prod}`);
+                        d.prodTotalDiario = capacidadeDiaria;
+                        console.log(`✅ [Mês ${ms}/${a}] Capacidade Total Diária: ${d.prodTotalDiario} (Base: ${d.qtdAssistentesDB} assistentes)`);
 
-                        // 3. Assertividade (Média da Equipe)
+                        // Assertividade (Média)
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -176,9 +192,7 @@ MinhaArea.Geral = {
             const listaGrid = [];
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
-
-            // Busca configuração para fallback, caso não ache meta no banco
-            const qtdAssistentesFallback = this.getQtdAssistentesConfigurada();
+            const qtdTarget = this.getQtdAssistentesConfigurada();
 
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 if (d.getDay() === 0 || d.getDay() === 6) continue;
@@ -187,19 +201,18 @@ MinhaArea.Geral = {
                 const anoAtual = d.getFullYear();
                 const mesAtual = d.getMonth() + 1;
                 
-                // Define Meta do Mês
                 let configMes = null;
                 if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) {
                     configMes = mapMetas[anoAtual][mesAtual];
                 } else {
-                    // Fallback se não houver registro no banco
-                    // Geral: 100 * 17 = 1700 / Individual: 100
-                    const metaPadrao = isGeral ? (100 * qtdAssistentesFallback) : 100;
-                    configMes = { prod: metaPadrao, assertFinal: 98.0, isMedia: false };
+                    // Fallback se não houver dados
+                    const metaPadrao = isGeral ? (100 * qtdTarget) : 100;
+                    configMes = { prodTotalDiario: metaPadrao, assertFinal: 98.0, isMedia: false };
                 }
 
-                // A meta no banco/config já é DIÁRIA.
-                const metaDiariaBase = configMes.prod;
+                // AQUI ESTÁ A CHAVE DA SUA LÓGICA:
+                // Usamos a Capacidade Total Diária (ex: 10650) como base.
+                const metaDiariaBase = configMes.prodTotalDiario;
 
                 const prodDoDia = mapProd.get(dataStr);
                 let fator = 1.0, qtdReal = 0, justif = '', temRegistro = false;
@@ -215,7 +228,7 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
-                // Aplica Fator (Ex: Meio período)
+                // Ajusta a meta do dia pelo Fator (ex: Feriado local = fator 0.5 -> Meta cai pela metade)
                 const metaDiaCalculada = Math.round(metaDiariaBase * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -262,7 +275,7 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gt||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-500">${item.gp||0}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center font-black text-blue-700 bg-blue-50/20 border-x border-blue-100">${this.fmtNum(item.qtd)}</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400" title="Meta da Equipe">${item.metaDia}</td>
+                        <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold" title="Capacidade Diária">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
@@ -292,18 +305,10 @@ MinhaArea.Geral = {
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
-            // KPI VELOCIDADE (Ideal) - Corrigido para refletir meta da EQUIPE
+            // KPI VELOCIDADE (Média Diária Realizada vs Meta Diária Total)
             const mesRef = new Date(dtFim).getMonth() + 1;
             const metaRefObj = mapMetas[anoFim]?.[mesRef];
-            let metaRefDiaria = 0;
-
-            if (metaRefObj) {
-                metaRefDiaria = metaRefObj.prod;
-            } else {
-                 // Fallback
-                 const fallbackAssistentes = this.getQtdAssistentesConfigurada();
-                 metaRefDiaria = (isGeral ? (100 * fallbackAssistentes) : 100);
-            }
+            const metaRefDiaria = metaRefObj ? metaRefObj.prodTotalDiario : (isGeral ? 100 * qtdTarget : 100);
 
             const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
             const mediaDiaria = Math.round(totalProdReal / divisorVelocidade);
@@ -326,10 +331,8 @@ MinhaArea.Geral = {
     // --- FUNÇÕES AUXILIARES ---
 
     getQtdAssistentesConfigurada: function() {
-        // Tenta buscar a configuração manual salva na aba Produtividade > Consolidado
-        // Nome da chave sugerido: 'gupy_config_qtd_assistentes'
         const manual = localStorage.getItem('gupy_config_qtd_assistentes');
-        const qtd = manual ? parseInt(manual) : 17; // Padrão: 17
+        const qtd = manual ? parseInt(manual) : 17; 
         return qtd > 0 ? qtd : 17;
     },
 
@@ -341,36 +344,6 @@ MinhaArea.Geral = {
             if (dia !== 0 && dia !== 6) uteis++;
         }
         return uteis;
-    },
-
-    // Encontra o valor mais comum (Moda). Se tudo for diferente, usa Média.
-    calcularModaOuMedia: function(valores) {
-        if (!valores || valores.length === 0) return { valor: 100 };
-        
-        const frequencia = {};
-        let maxFreq = 0;
-        let moda = valores[0];
-        let soma = 0;
-
-        valores.forEach(v => {
-            soma += v;
-            frequencia[v] = (frequencia[v] || 0) + 1;
-            if (frequencia[v] > maxFreq) {
-                maxFreq = frequencia[v];
-                moda = v;
-            }
-        });
-
-        const media = Math.round(soma / valores.length);
-        const dominancia = maxFreq / valores.length;
-
-        // Se mais de 50% da equipe tem a mesma meta, usa a Moda (ignora exceções).
-        // Caso contrário, usa a Média.
-        if (dominancia >= 0.5) {
-            return { valor: moda };
-        } else {
-            return { valor: media };
-        }
     },
 
     calcularMetaInteligente: function(valores) {
@@ -389,8 +362,7 @@ MinhaArea.Geral = {
             }
         });
 
-        const dominancia = maxFreq / valores.length;
-        if (dominancia >= 0.70) {
+        if ((maxFreq / valores.length) >= 0.70) {
             return { valor: moda, isMedia: false };
         } else {
             return { valor: Number(media.toFixed(2)), isMedia: true };
