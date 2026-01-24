@@ -94,7 +94,6 @@
                         <div class="kpi-title text-blue-600">Produtividade</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-slate-800" id="kpi-total">--</span>
-                            
                             <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100" title="Meta Esperada">
                                 Meta: <span id="kpi-meta-acumulada">--</span>
                             </span>
@@ -115,7 +114,6 @@
                         <div class="kpi-title text-emerald-600">Assertividade</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-emerald-700" id="kpi-assertividade-val">--%</span>
-                            
                             <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100">
                                 Meta: <span id="kpi-meta-assert-target">--</span>
                             </span>
@@ -125,7 +123,7 @@
                         <div id="bar-assert" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div>
                     </div>
                     <div class="kpi-sub-row text-slate-500 mt-1">
-                        <span>Aderência:</span>
+                        <span>Performance:</span>
                         <span id="kpi-assert-performance" class="font-bold text-emerald-600">--%</span>
                     </div>
                 </div>
@@ -150,14 +148,20 @@
                 <div class="kpi-card border-l-4 border-l-amber-500">
                     <i class="fas fa-bolt kpi-icon-bg text-amber-500"></i>
                     <div>
-                        <div class="kpi-title text-amber-600">Velocidade</div>
-                        <div class="flex items-end gap-1">
+                        <div class="kpi-title text-amber-600">Produção Diária</div>
+                        <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-slate-800" id="kpi-media">--</span>
-                            <span class="text-[10px] text-slate-400 font-bold mb-1">docs/dia</span>
+                            <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100">
+                                Meta: <span id="kpi-meta-dia">--</span>
+                            </span>
                         </div>
                     </div>
-                    <div class="kpi-sub-row text-slate-500">
-                        <span>Meta Ideal:</span><span id="kpi-meta-dia" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--</span>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div id="bar-velocidade" class="h-full bg-amber-500 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500 mt-1">
+                        <span>Performance:</span>
+                        <span id="kpi-velocidade-pct" class="font-bold text-amber-600">--%</span>
                     </div>
                 </div>
             </div>

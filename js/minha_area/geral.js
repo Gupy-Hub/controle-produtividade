@@ -1,16 +1,15 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Ajuste de KPIs (Produtividade e Assertividade) + Lógica de Capacidade
+   ATUALIZAÇÃO: Padronização Visual dos 4 Cards (Layout Unificado)
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
-        // --- 1. PREPARAÇÃO DE AMBIENTE ---
         const rawUid = MinhaArea.getUsuarioAlvo();
         const uid = rawUid ? parseInt(rawUid) : null;
         const isGeral = (uid === null); 
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - KPIs Atualizados");
+        console.group("🚀 [DEBUG META] Iniciando Carga - Cards Padronizados");
 
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
@@ -21,7 +20,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Atualizando KPIs...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Atualizando Dashboard...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -69,7 +68,7 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- MAPEAMENTO DE USUÁRIOS ---
+            // --- MAPEAMENTO ---
             const mapUser = {};
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
@@ -81,7 +80,7 @@ MinhaArea.Geral = {
             });
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // --- CÁLCULO DA CAPACIDADE (META) ---
+            // --- CÁLCULO DA META (LÓGICA BLACKLIST) ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -154,7 +153,7 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- RENDERIZAÇÃO ---
+            // --- DADOS REAIS ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -270,41 +269,46 @@ MinhaArea.Geral = {
             
             // CARD 1: PRODUTIVIDADE
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
-            this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR')); // Meta ao lado
+            this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR')); // Meta
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
             if(document.getElementById('bar-volume')) document.getElementById('bar-volume').style.width = `${Math.min(pctVol, 100)}%`;
-            this.setTxt('kpi-pct', this.fmtPct(pctVol)); // Performance em baixo
+            this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
             // CARD 2: ASSERTIVIDADE
             const assertReal = totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0;
             this.setTxt('kpi-assertividade-val', this.fmtPct(assertReal));
             
-            // Meta de Assertividade (Pega a do último mês selecionado ou média geral se for equipe)
             const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
             const metaAssertVal = configFim.assertFinal;
-            this.setTxt('kpi-meta-assert-target', `${metaAssertVal}%`); // Meta ao lado
+            this.setTxt('kpi-meta-assert-target', `${metaAssertVal}%`); // Meta
             
-            // Cálculo da Aderência (Real / Meta)
             const assertAderencia = metaAssertVal > 0 ? (assertReal / metaAssertVal) * 100 : 0;
-            this.setTxt('kpi-assert-performance', this.fmtPct(assertAderencia)); // Aderência em baixo
-            if(document.getElementById('bar-assert')) document.getElementById('bar-assert').style.width = `${Math.min(assertAderencia, 100)}%`; // Barra nova
+            this.setTxt('kpi-assert-performance', this.fmtPct(assertAderencia)); // Performance/Aderência
+            if(document.getElementById('bar-assert')) document.getElementById('bar-assert').style.width = `${Math.min(assertAderencia, 100)}%`;
 
-            // CARD 3 e 4
+            // CARD 3: DIAS
             const diasUteis = this.calcularDiasUteisMes(inicio, fim);
             this.setTxt('kpi-dias', this.fmtDias(somaFatorProdutivo));
             this.setTxt('kpi-dias-uteis', diasUteis);
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
+            // CARD 4: PRODUÇÃO DIÁRIA (Padronizado)
             const mesRef = new Date(dtFim).getMonth() + 1;
             const metaRefObj = mapMetas[anoFim]?.[mesRef];
             const metaRefDiaria = metaRefObj ? metaRefObj.prodTotalDiario : (isGeral ? 100 * qtdTarget : 100);
+            
             const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
             const mediaDiaria = Math.round(totalProdReal / divisorVelocidade);
-            const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
+            
+            // Atualiza Card
             const elMedia = document.getElementById('kpi-media');
-            if(elMedia) elMedia.innerHTML = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVel >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${this.fmtPct(pctVel)}</span>`;
-            this.setTxt('kpi-meta-dia', metaRefDiaria);
+            if(elMedia) elMedia.innerText = mediaDiaria; // Valor Principal
+            this.setTxt('kpi-meta-dia', metaRefDiaria); // Meta Lateral
+            
+            const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
+            this.setTxt('kpi-velocidade-pct', this.fmtPct(pctVel)); // Porcentagem Performance
+            if(document.getElementById('bar-velocidade')) document.getElementById('bar-velocidade').style.width = `${Math.min(pctVel, 100)}%`; // Barra
 
             console.groupEnd();
 
