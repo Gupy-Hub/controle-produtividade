@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   CORREÇÃO FINAL: Limite 10k Usuários
+   REGRA: Gestão conta Produção, mas Assertividade é NULA (Ignorada na média)
 */
 
 MinhaArea.Metas = {
@@ -33,7 +33,7 @@ MinhaArea.Metas = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // CORREÇÃO: Aumentado limite para garantir que traga Vanessa (ID alto)
+            // IMPORTANTE: Limit alto
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao')
                 .limit(10000); 
@@ -160,12 +160,12 @@ MinhaArea.Metas = {
 
                 if (isGeral) {
                     const uData = mapUser[uId];
-                    // CORREÇÃO: Se não achou usuário (uData nulo), ignora para evitar fantasma.
-                    if (!uData) return;
+                    if (!uData) return; // Ignora fantasma
 
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    if (isGestao) return; 
+                    
+                    if (isGestao) return; // REGRA: GESTÃO É NULA NA ASSERTIVIDADE
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -288,10 +288,10 @@ MinhaArea.Metas = {
             
             if (isGeral && mapUser) {
                 const uData = mapUser[uId];
-                if (uData) { // Garante que foi achado
+                if (uData) {
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    if (isGestao) return;
+                    if (isGestao) return; // BLOQUEIO KPI
                 }
             }
 

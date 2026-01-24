@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   CORREÇÃO FINAL: Limite 10k Usuários + Ignora Desconhecidos + Filtro Status
+   REGRA: Gestão conta Produção, mas Assertividade é NULA (Ignorada na média)
 */
 
 MinhaArea.Geral = {
@@ -18,7 +18,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Sincronizando dados...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando média operacional...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -30,7 +30,6 @@ MinhaArea.Geral = {
             let qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
 
-            // Trazendo status para filtrar REV/DUPL igual à Produtividade
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, usuario_id, status')
                 .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
@@ -39,7 +38,7 @@ MinhaArea.Geral = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // CORREÇÃO CRÍTICA: LIMIT 10000 PARA PEGAR A VANESSA
+            // IMPORTANTE: Limit alto para garantir leitura do cargo da Vanessa
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao')
                 .limit(10000); 
@@ -99,7 +98,6 @@ MinhaArea.Geral = {
 
                 if (isGeral) {
                     const uData = mapUser[uId];
-                    // Se não achou usuário, ignora na meta
                     if (uData) {
                         const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
                         const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
@@ -148,7 +146,7 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- AGREGAÇÃO DADOS REAIS ---
+            // --- AGREGAÇÃO DE DADOS ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -167,7 +165,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- ASSERTIVIDADE (COM LEI SECA E FILTRO DE STATUS) ---
+            // --- ASSERTIVIDADE (AQUI APLICAMOS A REGRA "IGINORAR") ---
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
             const mapAssert = new Map();
             
@@ -175,18 +173,20 @@ MinhaArea.Geral = {
                 const uId = a.usuario_id;
                 const status = (a.status || '').toUpperCase();
                 
-                // 1. Filtro de Status
                 if (STATUS_IGNORAR.includes(status)) return;
 
-                // 2. Filtro de Gestão (Lei Seca)
                 if (isGeral) {
                     const uData = mapUser[uId];
-                    if (!uData) return; // CORREÇÃO: Se não achou usuário, IGNORA (Evita incluir Vanessa se ela não vier)
+                    // 1. Se não achamos o usuário, IGNORA por segurança.
+                    if (!uData) return;
 
+                    // 2. Verifica se é Gestão
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
                     const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
                     
-                    if (isGestao) return; // Bloqueia Gestão
+                    // 3. REGRA DE OURO: Se é Gestão, IGNORA O REGISTRO.
+                    // O sistema "finge" que esse dado é nulo/vazio e não soma.
+                    if (isGestao) return; 
                 }
 
                 const key = a.data_referencia;
