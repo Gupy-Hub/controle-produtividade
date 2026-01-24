@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   REGRA: Gestão conta Produção, mas Assertividade é NULA (Ignorada na média)
+   ATUALIZAÇÃO: Filtro SNIPER (Nomes + Cargos)
 */
 
 MinhaArea.Metas = {
@@ -33,7 +33,6 @@ MinhaArea.Metas = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // IMPORTANTE: Limit alto
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao')
                 .limit(10000); 
@@ -53,8 +52,10 @@ MinhaArea.Metas = {
             const dadosMetasRaw = metasRes.data || [];
             const dadosUsuarios = userRes.data || [];
 
-            // --- MAPEAMENTO ---
+            // --- CRIAÇÃO DA LISTA NEGRA (IDS PROIBIDOS) ---
+            const idsProibidosNaAssertividade = new Set();
             const mapUser = {};
+
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
                     perfil: (u.perfil || 'ASSISTENTE').toUpperCase().trim(),
@@ -62,10 +63,28 @@ MinhaArea.Metas = {
                     nome: (u.nome || '').toUpperCase().trim(),
                     ativo: u.ativo
                 };
+
+                const nomeUpper = mapUser[u.id].nome;
+                const funcaoUpper = mapUser[u.id].funcao;
+                const perfilUpper = mapUser[u.id].perfil;
+
+                // 1. Pelo Cargo/Perfil
+                const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
+                let isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
+
+                // 2. Pelo NOME (Filtro Nominal)
+                const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
+                const isNomeBloqueado = nomesBloqueados.some(n => nomeUpper.includes(n));
+
+                if (isGestao || isNomeBloqueado) {
+                    idsProibidosNaAssertividade.add(u.id);
+                    idsProibidosNaAssertividade.add(String(u.id));
+                }
             });
+
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // --- CÁLCULO DA META (CAPACIDADE) ---
+            // --- CÁLCULO DA META ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -81,21 +100,19 @@ MinhaArea.Metas = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
+                    const isBloqueado = idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId));
                     const uData = mapUser[uId];
-                    if (uData) {
-                        const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
-                        const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
-                        
-                        if (!isGestao) {
-                            let considerar = false;
-                            if (uData.ativo) considerar = true;
-                            else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
 
-                            if (considerar && valProd > 0) {
-                                mapMetas[a][ms].somaIndividual += valProd;
-                                mapMetas[a][ms].qtdAssistentesDB++; 
-                                mapMetas[a][ms].prodValues.push(valProd);
-                            }
+                    // Ignora Meta se estiver na lista negra
+                    if (!isBloqueado && uData) {
+                        let considerar = false;
+                        if (uData.ativo) considerar = true;
+                        else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
+
+                        if (considerar && valProd > 0) {
+                            mapMetas[a][ms].somaIndividual += valProd;
+                            mapMetas[a][ms].qtdAssistentesDB++; 
+                            mapMetas[a][ms].prodValues.push(valProd);
                         }
                     }
                     mapMetas[a][ms].assertValues.push(valAssert);
@@ -159,13 +176,11 @@ MinhaArea.Metas = {
                 if (STATUS_IGNORAR.includes(status)) return;
 
                 if (isGeral) {
-                    const uData = mapUser[uId];
-                    if (!uData) return; // Ignora fantasma
-
-                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    
-                    if (isGestao) return; // REGRA: GESTÃO É NULA NA ASSERTIVIDADE
+                    // SNIPER CHECK:
+                    if (idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId))) {
+                        return; // Ignora se for Vanessa, Keila, etc.
+                    }
+                    if (!mapUser[uId]) return; // Ignora desconhecidos
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -227,7 +242,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram);
+            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsProibidosNaAssertividade);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
@@ -259,7 +274,7 @@ MinhaArea.Metas = {
         if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number((soma/valores.length).toFixed(2)), isMedia: true }; }
     },
 
-    atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram) {
+    atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsProibidosNaAssertividade) {
         let totalValidados = 0; 
         let totalMeta = 0;
         let somaAssertMedia = 0;
@@ -286,13 +301,12 @@ MinhaArea.Metas = {
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
-            if (isGeral && mapUser) {
-                const uData = mapUser[uId];
-                if (uData) {
-                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
-                    if (isGestao) return; // BLOQUEIO KPI
+            if (isGeral) {
+                // SNIPER CHECK KPI:
+                if (idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId))) {
+                    return; 
                 }
+                if (!mapUser[uId]) return;
             }
 
             const status = (a.status || '').toUpperCase();

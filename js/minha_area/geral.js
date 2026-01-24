@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   REGRA: Gestão conta Produção, mas Assertividade é NULA (Ignorada na média)
+   ATUALIZAÇÃO: Filtro SNIPER por Nome (Vanessa/Keila/Brenda/Patrícia) + Gestão
 */
 
 MinhaArea.Geral = {
@@ -18,7 +18,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando média operacional...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Aplicando filtro nominal...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -38,10 +38,9 @@ MinhaArea.Geral = {
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            // IMPORTANTE: Limit alto para garantir leitura do cargo da Vanessa
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao')
-                .limit(10000); 
+                .limit(10000); // Garante trazer todos
 
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
@@ -68,8 +67,10 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- MAPEAMENTO ---
+            // --- CRIAÇÃO DA LISTA NEGRA (IDS PROIBIDOS) ---
+            const idsProibidosNaAssertividade = new Set();
             const mapUser = {};
+
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
                     perfil: (u.perfil || 'ASSISTENTE').toUpperCase().trim(),
@@ -77,6 +78,24 @@ MinhaArea.Geral = {
                     nome: (u.nome || '').toUpperCase().trim(),
                     ativo: u.ativo
                 };
+
+                // Lógica SNIPER: Identifica quem deve ser ignorado na assertividade
+                const nomeUpper = mapUser[u.id].nome;
+                const funcaoUpper = mapUser[u.id].funcao;
+                const perfilUpper = mapUser[u.id].perfil;
+
+                // 1. Pelo Cargo/Perfil
+                const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
+                let isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
+
+                // 2. Pelo NOME (Filtro Nominal Explicito para garantir)
+                const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
+                const isNomeBloqueado = nomesBloqueados.some(n => nomeUpper.includes(n));
+
+                if (isGestao || isNomeBloqueado) {
+                    idsProibidosNaAssertividade.add(u.id); // Adiciona ID numérico
+                    idsProibidosNaAssertividade.add(String(u.id)); // Adiciona ID string (segurança)
+                }
             });
             
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
@@ -97,21 +116,19 @@ MinhaArea.Geral = {
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    const uData = mapUser[uId];
-                    if (uData) {
-                        const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
-                        const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
-                        
-                        if (!isGestao) {
-                            let considerar = false;
-                            if (uData.ativo) considerar = true;
-                            else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
+                    // Verifica se está na lista negra
+                    const isBloqueado = idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId));
+                    const uData = mapUser[uId] || { ativo: false }; // Fallback
 
-                            if (considerar && valProd > 0) {
-                                mapMetas[a][ms].somaIndividual += valProd;
-                                mapMetas[a][ms].qtdAssistentesDB++; 
-                                mapMetas[a][ms].prodValues.push(valProd);
-                            }
+                    if (!isBloqueado) {
+                        let considerar = false;
+                        if (uData.ativo) considerar = true;
+                        else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
+
+                        if (considerar && valProd > 0) {
+                            mapMetas[a][ms].somaIndividual += valProd;
+                            mapMetas[a][ms].qtdAssistentesDB++; 
+                            mapMetas[a][ms].prodValues.push(valProd);
                         }
                     }
                     mapMetas[a][ms].assertValues.push(valAssert);
@@ -165,7 +182,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- ASSERTIVIDADE (AQUI APLICAMOS A REGRA "IGINORAR") ---
+            // --- ASSERTIVIDADE (COM FILTRO SNIPER) ---
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
             const mapAssert = new Map();
             
@@ -176,17 +193,13 @@ MinhaArea.Geral = {
                 if (STATUS_IGNORAR.includes(status)) return;
 
                 if (isGeral) {
-                    const uData = mapUser[uId];
-                    // 1. Se não achamos o usuário, IGNORA por segurança.
-                    if (!uData) return;
-
-                    // 2. Verifica se é Gestão
-                    const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
+                    // VERIFICAÇÃO FINAL: Se o ID está na Lista Negra, TCHAU!
+                    if (idsProibidosNaAssertividade.has(uId) || idsProibidosNaAssertividade.has(String(uId))) {
+                        return; // Ignora Vanessa, Keila, Gestoras, Admins
+                    }
                     
-                    // 3. REGRA DE OURO: Se é Gestão, IGNORA O REGISTRO.
-                    // O sistema "finge" que esse dado é nulo/vazio e não soma.
-                    if (isGestao) return; 
+                    // Se não temos o usuário mapeado (fantasma), também ignoramos por segurança
+                    if (!mapUser[uId]) return;
                 }
 
                 const key = a.data_referencia;
