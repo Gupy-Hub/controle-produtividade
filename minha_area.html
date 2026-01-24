@@ -53,8 +53,12 @@
                 <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-chart-pie"></i> Assertividade</button>
                 <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 whitespace-nowrap"><i class="fas fa-comments"></i> Feedback</button>
             </div>
+            
             <div class="flex items-center gap-4">
-                <div id="admin-selector-container" class="hidden flex items-center gap-2 border-r border-slate-200 pr-4 mr-2"><select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg block p-1.5 outline-none cursor-pointer w-40 truncate"></select></div>
+                <div id="admin-selector-container" class="hidden flex items-center gap-2 border-r border-slate-200 pr-4 mr-2">
+                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-lg block p-1.5 outline-none cursor-pointer w-40 truncate"></select>
+                </div>
+                
                 <div class="flex items-center gap-2">
                     <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
                         <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
@@ -82,12 +86,68 @@
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
             <div id="container-checkin-alert" class="hidden mb-4"></div>
+            
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div class="kpi-card border-l-4 border-l-blue-500"><i class="fas fa-cubes kpi-icon-bg text-blue-500"></i><div><div class="kpi-title text-blue-600">Volume Produzido</div><div class="kpi-main-val text-slate-800" id="kpi-total">--</div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-volume" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Meta Esperada:</span><span id="kpi-meta-acumulada" class="font-bold text-blue-600">--</span></div></div>
-                <div class="kpi-card border-l-4 border-l-emerald-500"><i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i><div><div class="kpi-title text-emerald-600">Qualidade</div><div class="flex items-baseline gap-2"><span class="kpi-main-val text-emerald-700" id="kpi-assertividade-val">--%</span><span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span></div></div><div class="kpi-sub-row text-slate-500"><span>Atingimento:</span><span id="kpi-pct" class="font-bold text-emerald-600">--%</span></div></div>
-                <div class="kpi-card border-l-4 border-l-purple-500"><i class="fas fa-calendar-check kpi-icon-bg text-purple-500"></i><div><div class="kpi-title text-purple-600">Dias Produtivos</div><div class="flex items-baseline gap-2 mt-1"><span class="kpi-main-val text-purple-700" id="kpi-dias">--</span><span class="text-[9px] font-bold text-slate-400">dias</span></div></div><div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden"><div id="bar-dias" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div></div><div class="kpi-sub-row text-slate-500 mt-1"><span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-purple-600">--</span></div></div>
-                <div class="kpi-card border-l-4 border-l-amber-500"><i class="fas fa-bolt kpi-icon-bg text-amber-500"></i><div><div class="kpi-title text-amber-600">Velocidade</div><div class="flex items-end gap-1"><span class="kpi-main-val text-slate-800" id="kpi-media">--</span><span class="text-[10px] text-slate-400 font-bold mb-1">docs/dia</span></div></div><div class="kpi-sub-row text-slate-500"><span>Meta Ideal:</span><span id="kpi-meta-dia" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--</span></div></div>
+                <div class="kpi-card border-l-4 border-l-blue-500">
+                    <i class="fas fa-cubes kpi-icon-bg text-blue-500"></i>
+                    <div>
+                        <div class="kpi-title text-blue-600">Volume Produzido</div>
+                        <div class="kpi-main-val text-slate-800" id="kpi-total">--</div>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div id="bar-volume" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500 mt-1">
+                        <span>Meta Esperada:</span><span id="kpi-meta-acumulada" class="font-bold text-blue-600">--</span>
+                    </div>
+                </div>
+                
+                <div class="kpi-card border-l-4 border-l-emerald-500">
+                    <i class="fas fa-shield-alt kpi-icon-bg text-emerald-500"></i>
+                    <div>
+                        <div class="kpi-title text-emerald-600">Qualidade</div>
+                        <div class="flex items-baseline gap-2">
+                            <span class="kpi-main-val text-emerald-700" id="kpi-assertividade-val">--%</span>
+                            <span id="kpi-meta-assert-target" class="text-[9px] font-bold bg-emerald-50 text-emerald-700 px-1.5 rounded">Meta: 98%</span>
+                        </div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500">
+                        <span>Atingimento:</span><span id="kpi-pct" class="font-bold text-emerald-600">--%</span>
+                    </div>
+                </div>
+                
+                <div class="kpi-card border-l-4 border-l-purple-500">
+                    <i class="fas fa-calendar-check kpi-icon-bg text-purple-500"></i>
+                    <div>
+                        <div class="kpi-title text-purple-600">Dias Produtivos</div>
+                        <div class="flex items-baseline gap-2 mt-1">
+                            <span class="kpi-main-val text-purple-700" id="kpi-dias">--</span>
+                            <span class="text-[9px] font-bold text-slate-400">dias</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div id="bar-dias" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500 mt-1">
+                        <span>Dias Úteis:</span><span id="kpi-dias-uteis" class="font-bold text-purple-600">--</span>
+                    </div>
+                </div>
+                
+                <div class="kpi-card border-l-4 border-l-amber-500">
+                    <i class="fas fa-bolt kpi-icon-bg text-amber-500"></i>
+                    <div>
+                        <div class="kpi-title text-amber-600">Velocidade</div>
+                        <div class="flex items-end gap-1">
+                            <span class="kpi-main-val text-slate-800" id="kpi-media">--</span>
+                            <span class="text-[10px] text-slate-400 font-bold mb-1">docs/dia</span>
+                        </div>
+                    </div>
+                    <div class="kpi-sub-row text-slate-500">
+                        <span>Meta Ideal:</span><span id="kpi-meta-dia" class="font-bold text-amber-600 bg-amber-50 px-1.5 rounded">--</span>
+                    </div>
+                </div>
             </div>
+
             <div class="bg-white rounded-xl shadow-sm border border-slate-300 overflow-hidden flex flex-col h-[calc(100vh-320px)]">
                 <div class="overflow-auto custom-scrollbar flex-1">
                     <table class="w-full text-sm text-left border-collapse">
