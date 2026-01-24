@@ -1,12 +1,14 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Correção do cálculo de Meta Diária (Mensal / Dias Úteis)
+   ATUALIZAÇÃO: Correção na leitura de Metas (Filtro por ID e Select explícito)
 */
 
 MinhaArea.Geral = {
     carregar: async function() {
-        const uid = MinhaArea.getUsuarioAlvo(); 
-        const isGeral = (uid === null); // Se for null, estamos na Visão Geral (Admin)
+        // Garante que o ID seja numérico para bater com o banco (BigInt/Integer)
+        const rawUid = MinhaArea.getUsuarioAlvo();
+        const uid = rawUid ? parseInt(rawUid) : null;
+        const isGeral = (uid === null); // Se for null, estamos na Visão Geral (Admin/Todos)
         
         const tbody = document.getElementById('tabela-extrato');
         
@@ -37,19 +39,19 @@ MinhaArea.Geral = {
 
             // 2. Assertividade
             let qAssertividade = Sistema.supabase.from('assertividade')
-                .select('data_referencia, porcentagem_assertividade')
+                .select('data_referencia, porcentagem_assertividade, usuario_id')
                 .gte('data_referencia', inicio)
                 .lte('data_referencia', fim)
                 .not('porcentagem_assertividade', 'is', null)
                 .limit(5000);
 
-            // 3. Metas
+            // 3. Metas - IMPORTANTE: Selecionando usuario_id explicitamente
             let qMetas = Sistema.supabase.from('metas')
-                .select('mes, ano, meta_producao, meta_assertividade')
+                .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
 
-            // Filtros de Usuário (se não for geral)
+            // Filtros de Usuário (se não for visão geral)
             if (!isGeral) {
                 qProducao = qProducao.eq('usuario_id', uid);
                 qAssertividade = qAssertividade.eq('usuario_id', uid);
@@ -75,14 +77,18 @@ MinhaArea.Geral = {
             const dadosMetasRaw = metasRes.data || [];
             const dadosCheckins = checkRes.data || [];
 
+            console.log("Metas Carregadas:", dadosMetasRaw.length, dadosMetasRaw); // Debug para F12
+
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- PROCESSAMENTO INTELIGENTE DE METAS ---
+            // --- PROCESSAMENTO DE METAS ---
             const mapMetas = {};
+            
+            // Populando o mapa de metas
             dadosMetasRaw.forEach(m => {
                 if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
                 if (!mapMetas[m.ano][m.mes]) {
-                    // Inicializa estrutura.
+                    // Inicializa estrutura
                     mapMetas[m.ano][m.mes] = { prod: 0, assertValues: [], assertFinal: 98.0, isMedia: false };
                 }
                 
@@ -92,11 +98,12 @@ MinhaArea.Geral = {
                     : 98.0;
 
                 if (isGeral) {
-                    // Visão Geral: SOMA as metas de todos (Meta da Equipe)
+                    // Visão Geral: SOMA as metas de todos os usuários encontrados
                     mapMetas[m.ano][m.mes].prod += metaProdVal;
                     mapMetas[m.ano][m.mes].assertValues.push(metaAssertVal);
                 } else {
-                    // Individual: Usa a meta do usuário
+                    // Individual: Se vieram linhas duplicadas por erro, sobrescreve. 
+                    // Como filtramos por UID na query, deve vir apenas 1 linha por mês.
                     mapMetas[m.ano][m.mes].prod = metaProdVal;
                     mapMetas[m.ano][m.mes].assertFinal = metaAssertVal;
                 }
@@ -155,7 +162,6 @@ MinhaArea.Geral = {
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
             
-            // Cache para dias úteis (Performance)
             const cacheDiasUteis = {}; 
 
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
@@ -166,16 +172,16 @@ MinhaArea.Geral = {
                 const chaveMes = `${ano}-${mes}`;
                 
                 // 1. Busca Configuração Mensal
-                // Se não houver meta, fallback para 6500 (Geral) ou 650 (Indiv) como META MENSAL BASE (Aprox 30/dia se não configurado)
+                // Se não houver meta definida no DB, fallback para padrão (6500 Geral / 650 Individual)
                 const configMes = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assertFinal: 98.0, isMedia: false };
                 
-                // 2. Calcula Dias Úteis do Mês (Para distribuição da meta)
+                // 2. Calcula Dias Úteis do Mês
                 if (!cacheDiasUteis[chaveMes]) {
                     cacheDiasUteis[chaveMes] = this.getDiasUteisNoMes(mes, ano);
                 }
                 const diasUteisMes = cacheDiasUteis[chaveMes] || 1;
 
-                // 3. Define Meta Diária Base (Distribuição da Meta Mensal pelos Dias Úteis)
+                // 3. Define Meta Diária (Meta Mensal / Dias Úteis)
                 const metaDiariaBase = configMes.prod / diasUteisMes;
 
                 const prodDoDia = mapProd.get(dataStr);
@@ -192,7 +198,6 @@ MinhaArea.Geral = {
                     somaFatorProdutivo += fator;
                 }
 
-                // 4. Aplica Fator do Dia (Se o usuário trabalhou meio dia, a meta é cortada proporcionalmente)
                 const metaDiaCalculada = Math.round(metaDiariaBase * fator);
                 totalMetaEsperada += metaDiaCalculada;
 
@@ -269,7 +274,7 @@ MinhaArea.Geral = {
             const pctDias = diasUteis > 0 ? (somaFatorProdutivo / diasUteis) * 100 : 0;
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
-            // KPI VELOCIDADE (Ideal) - Corrigido para calcular média diária baseada na Meta Mensal
+            // KPI VELOCIDADE (Ideal)
             const mesRef = new Date(dtFim).getMonth() + 1;
             const metaRefObj = mapMetas[anoFim]?.[mesRef] || { prod: (isGeral ? 6500 : 650) };
             const diasUteisRef = this.getDiasUteisNoMes(mesRef, anoFim);
@@ -290,9 +295,6 @@ MinhaArea.Geral = {
         }
     },
 
-    /**
-     * Calcula quantos dias úteis (seg-sex) existem num mês específico
-     */
     getDiasUteisNoMes: function(mes, ano) {
         const ultimoDia = new Date(ano, mes, 0).getDate();
         let uteis = 0;
