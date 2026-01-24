@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/geral.js
    DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   ATUALIZAÇÃO: Filtro de Assertividade (Excluir Gestão/Admin) para bater com Produtividade
+   ATUALIZAÇÃO: Filtro de Assertividade idêntico à Produtividade (Exclui Gestão sem produção)
 */
 
 MinhaArea.Geral = {
@@ -9,8 +9,6 @@ MinhaArea.Geral = {
         const uid = rawUid ? parseInt(rawUid) : null;
         const isGeral = (uid === null); 
         
-        console.group("🚀 [DEBUG META] Iniciando Carga - Filtro de Qualidade");
-
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
         
@@ -20,7 +18,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Atualizando Dashboard...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Sincronizando regras...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -28,18 +26,21 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // --- QUERIES ---
+            // 1. Produção
             let qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim).limit(5000);
 
+            // 2. Assertividade
             let qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, usuario_id')
                 .gte('data_referencia', inicio).lte('data_referencia', fim).not('porcentagem_assertividade', 'is', null).limit(5000);
 
+            // 3. Metas
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
+            // 4. Usuários (Necessário para filtrar Gestão)
             let qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao');
 
@@ -68,16 +69,18 @@ MinhaArea.Geral = {
 
             if (!isGeral) await this.processarCheckingInterface(uid, dadosCheckins);
 
-            // --- MAPEAMENTO DE USUÁRIOS ---
+            // --- MAPEAMENTO DE USUÁRIOS E PRODUÇÃO ---
             const mapUser = {};
             dadosUsuarios.forEach(u => {
                 mapUser[u.id] = {
-                    status: (u.ativo === true ? 'ATIVO' : 'INATIVO'),
                     perfil: (u.perfil || 'ASSISTENTE').toUpperCase().trim(),
                     funcao: (u.funcao || '').toUpperCase().trim(),
-                    nome: (u.nome || '').toUpperCase().trim()
+                    nome: (u.nome || '').toUpperCase().trim(),
+                    ativo: u.ativo
                 };
             });
+            
+            // Set de quem produziu (para salvar gestor que trabalhou)
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
             // --- CÁLCULO DA META (CAPACIDADE) ---
@@ -89,29 +92,23 @@ MinhaArea.Geral = {
                 
                 if (!mapMetas[a]) mapMetas[a] = {};
                 if (!mapMetas[a][ms]) {
-                    mapMetas[a][ms] = { 
-                        prodTotalDiario: 0, somaIndividual: 0, qtdAssistentesDB: 0,
-                        prodValues: [], assertValues: [], assertFinal: 98.0, isMedia: false 
-                    };
+                    mapMetas[a][ms] = { prodTotalDiario: 0, somaIndividual: 0, qtdAssistentesDB: 0, prodValues: [], assertValues: [], assertFinal: 98.0 };
                 }
                 
                 const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
-                    const uData = mapUser[uId] || { status: 'INATIVO', perfil: '', funcao: '', nome: '' };
+                    const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
+                    const termosGestao = ['GESTOR', 'AUDITOR', 'COORD', 'SUPERVIS', 'ADMIN'];
+                    const isGestao = termosGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes('GUPY'));
                     
-                    const termoGestao = ['GESTOR', 'COORDENADOR', 'AUDITOR', 'LIDER', 'SUPERVISOR'];
-                    const termoAdmin = ['ADMIN', 'SISTEMA', 'GUPY'];
-                    const isGestao = termoGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t));
-                    const isAdmin = termoAdmin.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes(t));
-                    const deveIgnorar = isGestao || isAdmin;
-
-                    if (!deveIgnorar) {
+                    // Só conta para meta se for Operacional OU (Gestão que produziu)
+                    // Na prática, meta de gestão costuma ser ignorada na soma da equipe
+                    if (!isGestao) {
                         let considerar = false;
-                        const produziu = usuariosQueProduziram.has(uId);
-                        if (uData.status === 'ATIVO') considerar = true;
-                        else if (uData.status === 'INATIVO' && produziu) considerar = true;
+                        if (uData.ativo) considerar = true;
+                        else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
 
                         if (considerar && valProd > 0) {
                             mapMetas[a][ms].somaIndividual += valProd;
@@ -126,6 +123,7 @@ MinhaArea.Geral = {
                 }
             });
 
+            // Projeção da Equipe
             if (isGeral) {
                 const targetAssistentes = this.getQtdAssistentesConfigurada(); 
                 for (const a in mapMetas) {
@@ -147,25 +145,24 @@ MinhaArea.Geral = {
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
-                            d.isMedia = res.isMedia;
                         }
                     }
                 }
             }
 
-            // --- DADOS REAIS (AGREGAÇÃO) ---
+            // --- AGREGAÇÃO DE DADOS REAIS ---
             
-            // Produção (Soma Tudo, inclusive Gestão)
+            // Produção
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
                     const data = p.data_referencia;
-                    if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gradual_total: 0, gradual_parcial: 0, fator_soma: 0, fator_count: 0, justificativa: 'Visão Consolidada' });
+                    if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fifo: 0, gt: 0, gp: 0, fator_soma: 0, fator_count: 0 });
                     const reg = mapProd.get(data);
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fifo += Number(p.fifo || 0);
-                    reg.gradual_total += Number(p.gradual_total || 0);
-                    reg.gradual_parcial += Number(p.gradual_parcial || 0);
+                    reg.gt += Number(p.gradual_total || 0);
+                    reg.gp += Number(p.gradual_parcial || 0);
                     reg.fator_soma += Number(p.fator || 1);
                     reg.fator_count++;
                 });
@@ -174,24 +171,20 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Assertividade (COM FILTRO DE GESTÃO)
+            // Assertividade (COM FILTRO IGUAL À PRODUTIVIDADE)
             const mapAssert = new Map();
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
                 
-                // Se for Visão Geral, aplica o filtro de exclusão de gestão
+                // FILTRO DE EXCLUSÃO (Para igualar a Produtividade 98.31%)
                 if (isGeral) {
                     const uData = mapUser[uId] || { perfil: '', funcao: '', nome: '' };
-                    const funcao = (uData.funcao || '').toUpperCase();
-                    const perfil = (uData.perfil || '').toUpperCase();
-                    const nome = (uData.nome || '').toUpperCase();
-
-                    // Lista de bloqueio para Assertividade (Qualidade)
                     const blacklist = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN', 'COORDENADOR', 'SUPERVISOR'];
-                    const isAdminNome = nome.includes('SUPERADMIN') || nome.includes('GUPY');
-                    const isGestao = blacklist.some(r => funcao.includes(r) || perfil.includes(r));
+                    const isGestao = blacklist.some(r => uData.funcao.includes(r) || uData.perfil.includes(r) || uData.nome.includes('GUPY') || uData.nome.includes('SUPERADMIN'));
+                    const produziu = usuariosQueProduziram.has(uId);
 
-                    if (isGestao || isAdminNome) return; // Pula este registro (não soma na média)
+                    // Se for Gestão E NÃO produziu, ignora a assertividade.
+                    if (isGestao && !produziu) return; 
                 }
 
                 const key = a.data_referencia;
@@ -216,7 +209,7 @@ MinhaArea.Geral = {
                 
                 let configMes = null;
                 if (mapMetas[anoAtual] && mapMetas[anoAtual][mesAtual]) configMes = mapMetas[anoAtual][mesAtual];
-                else configMes = { prodTotalDiario: (isGeral ? 100 * qtdTarget : 100), assertFinal: 98.0, isMedia: false };
+                else configMes = { prodTotalDiario: (isGeral ? 100 * qtdTarget : 100), assertFinal: 98.0 };
 
                 const metaDiariaBase = configMes.prodTotalDiario;
                 const prodDoDia = mapProd.get(dataStr);
@@ -254,7 +247,7 @@ MinhaArea.Geral = {
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
                         metaConfigAssert: configMes.assertFinal,
                         assertDisplay: assertDiaDisplay, justificativa: justif,
-                        fifo: prodDoDia.fifo, gt: prodDoDia.gradual_total, gp: prodDoDia.gradual_parcial,
+                        fifo: prodDoDia.fifo, gt: prodDoDia.gt, gp: prodDoDia.gp,
                         validado: mapCheckins.has(dataStr)
                     });
                 }
@@ -286,28 +279,23 @@ MinhaArea.Geral = {
                     </tr>`;
             });
 
-            // --- ATUALIZAÇÃO KPIS (Cards) ---
-            
-            // CARD 1: PRODUTIVIDADE
+            // --- KPIS ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
             if(document.getElementById('bar-volume')) document.getElementById('bar-volume').style.width = `${Math.min(pctVol, 100)}%`;
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
-            // CARD 2: ASSERTIVIDADE (Agora com filtro correto)
             const assertReal = totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0;
             this.setTxt('kpi-assertividade-val', this.fmtPct(assertReal));
             
-            const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0, isMedia: false };
-            const metaAssertVal = configFim.assertFinal;
-            this.setTxt('kpi-meta-assert-target', `${metaAssertVal}%`); 
+            const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0 };
+            this.setTxt('kpi-meta-assert-target', `${configFim.assertFinal}%`);
             
-            const assertAderencia = metaAssertVal > 0 ? (assertReal / metaAssertVal) * 100 : 0;
+            const assertAderencia = configFim.assertFinal > 0 ? (assertReal / configFim.assertFinal) * 100 : 0;
             this.setTxt('kpi-assert-performance', this.fmtPct(assertAderencia)); 
             if(document.getElementById('bar-assert')) document.getElementById('bar-assert').style.width = `${Math.min(assertAderencia, 100)}%`;
 
-            // CARD 3 & 4
             const diasUteis = this.calcularDiasUteisMes(inicio, fim);
             this.setTxt('kpi-dias', this.fmtDias(somaFatorProdutivo));
             this.setTxt('kpi-dias-uteis', diasUteis);
@@ -315,22 +303,18 @@ MinhaArea.Geral = {
             if(document.getElementById('bar-dias')) document.getElementById('bar-dias').style.width = `${Math.min(pctDias, 100)}%`;
 
             const mesRef = new Date(dtFim).getMonth() + 1;
-            const metaRefObj = mapMetas[anoFim]?.[mesRef];
-            const metaRefDiaria = metaRefObj ? metaRefObj.prodTotalDiario : (isGeral ? 100 * qtdTarget : 100);
-            const divisorVelocidade = somaFatorProdutivo > 0 ? somaFatorProdutivo : 1;
-            const mediaDiaria = Math.round(totalProdReal / divisorVelocidade);
-            const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
-            const elMedia = document.getElementById('kpi-media');
-            if(elMedia) elMedia.innerHTML = `${mediaDiaria} <span class="text-slate-300 mx-1">/</span> <span class="${pctVel >= 100 ? 'text-emerald-500' : 'text-amber-500'}">${this.fmtPct(pctVel)}</span>`;
+            const metaRefDiaria = mapMetas[anoFim]?.[mesRef]?.prodTotalDiario || (isGeral ? 100 * qtdTarget : 100);
+            const mediaDiaria = Math.round(totalProdReal / (somaFatorProdutivo > 0 ? somaFatorProdutivo : 1));
+            
+            this.setTxt('kpi-media', mediaDiaria);
             this.setTxt('kpi-meta-dia', metaRefDiaria);
+            
+            const pctVel = metaRefDiaria > 0 ? (mediaDiaria / metaRefDiaria) * 100 : 0;
             this.setTxt('kpi-velocidade-pct', this.fmtPct(pctVel));
             if(document.getElementById('bar-velocidade')) document.getElementById('bar-velocidade').style.width = `${Math.min(pctVel, 100)}%`;
 
-            console.groupEnd();
-
         } catch (err) {
             console.error("Erro Geral:", err);
-            console.groupEnd();
             if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-4 text-rose-500">Erro ao carregar dados.</td></tr>';
         }
     },
@@ -351,10 +335,9 @@ MinhaArea.Geral = {
     calcularMetaInteligente: function(valores) {
         if (!valores || valores.length === 0) return { valor: 98.0, isMedia: false };
         const soma = valores.reduce((a, b) => a + b, 0);
-        const media = soma / valores.length;
         const frequencia = {}; let maxFreq = 0; let moda = valores[0];
         valores.forEach(v => { frequencia[v] = (frequencia[v] || 0) + 1; if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; } });
-        if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number(media.toFixed(2)), isMedia: true }; }
+        if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number((soma/valores.length).toFixed(2)), isMedia: true }; }
     },
 
     processarCheckingInterface: async function(uid, checkins) {
