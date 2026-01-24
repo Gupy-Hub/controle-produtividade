@@ -86,14 +86,7 @@
         document.addEventListener('keypress', function(e) {
             if(e.key === 'Enter') {
                 const btn = document.querySelector('button');
-                if(btn && !btn.disabled) {
-                    // Pequena verificação de segurança antes de chamar
-                    if (typeof Login !== 'undefined' && Login.entrar) {
-                        Login.entrar(); // Chama o método renomeado
-                    } else if (typeof Login !== 'undefined' && Login.fazerLogin) {
-                        Login.fazerLogin(); // Ou o nome antigo se não atualizou o HTML
-                    }
-                }
+                if(btn && !btn.disabled) Login.entrar();
             }
         });
     </script>
