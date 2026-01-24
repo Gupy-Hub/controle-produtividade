@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Otimização de Query (Select específico) e Remoção de Filtros de Banco para paridade com Produtividade
+   ATUALIZAÇÃO: Sincronização Lógica com "Dia a Dia" (Remoção de filtros restritivos)
 */
 
 MinhaArea.Metas = {
@@ -8,8 +8,8 @@ MinhaArea.Metas = {
     chartAssert: null,
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento otimizado...");
-        const uid = MinhaArea.getUsuarioAlvo(); // ID ou null (Visão Geral)
+        console.log("🚀 Metas: Iniciando carregamento (Modo Espelho Dia a Dia)...");
+        const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
@@ -21,82 +21,157 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // --- 1. Buscas de Dados (Produção e Metas) ---
-            let qProducao = Sistema.supabase.from('producao')
-                .select('*') // Produção precisa de todos os campos para cálculo de fator
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim);
+            // --- 1. Buscas ---
+            // Usamos LIMIT 5000 igual ao Dia a Dia para garantir a mesma massa de dados
             
-            if (!isGeral) qProducao = qProducao.eq('usuario_id', uid);
+            let qProducao = Sistema.supabase.from('producao')
+                .select('*')
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .limit(5000); // Igual ao Geral.js
+
+            // Busca de Assertividade SIMPLIFICADA (Igual ao Geral.js)
+            // Sem filtros de status ou auditora aqui
+            let qAssertividade = Sistema.supabase.from('assertividade')
+                .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id') 
+                .gte('data_referencia', inicio)
+                .lte('data_referencia', fim)
+                .not('porcentagem_assertividade', 'is', null)
+                .limit(5000); // Igual ao Geral.js
 
             let qMetas = Sistema.supabase.from('metas')
-                .select('mes, ano, meta, meta_assertividade')
+                .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio)
                 .lte('ano', anoFim);
-            
-            if (!isGeral) qMetas = qMetas.eq('usuario_id', uid);
 
-            const [prodRes, metasRes] = await Promise.all([qProducao, qMetas]);
+            let qUsuarios = Sistema.supabase.from('usuarios')
+                .select('id, ativo, nome, perfil, funcao');
 
-            if (prodRes.error) throw prodRes.error;
+            if (!isGeral) {
+                qProducao = qProducao.eq('usuario_id', uid);
+                qAssertividade = qAssertividade.eq('usuario_id', uid);
+                qMetas = qMetas.eq('usuario_id', uid);
+            }
 
-            // --- 2. Busca OTIMIZADA de Auditoria ---
-            // Baixamos tudo (sem filtrar auditora no banco) para garantir que temos todos os registros
-            // Igualamos a lógica da aba "Produtividade"
-            const assertData = await this.buscarTodosAuditados(uid, inicio, fim);
-            console.log(`📦 Metas: Total de auditorias processadas: ${assertData.length}`);
+            const [prodRes, assertRes, metasRes, userRes] = await Promise.all([
+                qProducao, qAssertividade, qMetas, qUsuarios
+            ]);
 
-            // --- 3. Processamento e Agregação ---
+            const dadosProducaoRaw = prodRes.data || [];
+            const dadosAssertividadeRaw = assertRes.data || []; // Agora temos os mesmos dados do Dia a Dia
+            const dadosMetasRaw = metasRes.data || [];
+            const dadosUsuarios = userRes.data || [];
 
-            // A) Map de Metas
+            console.log(`📦 Metas: Dados carregados. Prod: ${dadosProducaoRaw.length}, Assert: ${dadosAssertividadeRaw.length}`);
+
+            // --- 2. Mapeamento de Usuários (Para cálculo de Capacidade) ---
+            const mapUser = {};
+            dadosUsuarios.forEach(u => {
+                mapUser[u.id] = {
+                    status: (u.ativo === true ? 'ATIVO' : 'INATIVO'),
+                    perfil: (u.perfil || 'ASSISTENTE').toUpperCase().trim(),
+                    funcao: (u.funcao || '').toUpperCase().trim(),
+                    nome: (u.nome || '').toUpperCase().trim()
+                };
+            });
+            const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
+
+            // --- 3. Cálculo da Meta (Capacidade) ---
             const mapMetas = {};
-            (metasRes.data || []).forEach(m => {
-                if (!mapMetas[m.ano]) mapMetas[m.ano] = {};
-                if (!mapMetas[m.ano][m.mes]) mapMetas[m.ano][m.mes] = { prod: 0, assert: 0 };
+            dadosMetasRaw.forEach(m => {
+                const a = parseInt(m.ano);
+                const ms = parseInt(m.mes);
+                const uId = m.usuario_id;
                 
-                mapMetas[m.ano][m.mes].prod += Number(m.meta);
+                if (!mapMetas[a]) mapMetas[a] = {};
+                if (!mapMetas[a][ms]) {
+                    mapMetas[a][ms] = { 
+                        prodTotalDiario: 0, somaIndividual: 0, qtdAssistentesDB: 0,
+                        prodValues: [], assertValues: [], assertFinal: 98.0
+                    };
+                }
                 
-                // Na visão geral, mantemos 98% fixo como referência, ou média se preferir
+                const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
+                const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
+
                 if (isGeral) {
-                    mapMetas[m.ano][m.mes].assert = 98.0;
+                    const uData = mapUser[uId] || { status: 'INATIVO', perfil: '', funcao: '', nome: '' };
+                    
+                    const termoGestao = ['GESTOR', 'COORDENADOR', 'AUDITOR', 'LIDER', 'SUPERVISOR'];
+                    const termoAdmin = ['ADMIN', 'SISTEMA', 'GUPY'];
+                    const isGestao = termoGestao.some(t => uData.perfil.includes(t) || uData.funcao.includes(t));
+                    const isAdmin = termoAdmin.some(t => uData.perfil.includes(t) || uData.funcao.includes(t) || uData.nome.includes(t));
+                    
+                    if (!isGestao && !isAdmin) {
+                        let considerar = false;
+                        if (uData.status === 'ATIVO') considerar = true;
+                        else if (uData.status === 'INATIVO' && usuariosQueProduziram.has(uId)) considerar = true;
+
+                        if (considerar && valProd > 0) {
+                            mapMetas[a][ms].somaIndividual += valProd;
+                            mapMetas[a][ms].qtdAssistentesDB++; 
+                            mapMetas[a][ms].prodValues.push(valProd);
+                        }
+                    }
+                    mapMetas[a][ms].assertValues.push(valAssert);
                 } else {
-                    mapMetas[m.ano][m.mes].assert = Number(m.meta_assertividade);
+                    mapMetas[a][ms].prodTotalDiario = valProd;
+                    mapMetas[a][ms].assertFinal = valAssert;
                 }
             });
 
-            // B) Map de Produção
+            // Projeção da Equipe (Se Geral)
+            if (isGeral) {
+                const targetAssistentes = this.getQtdAssistentesConfigurada(); 
+                for (const a in mapMetas) {
+                    for (const ms in mapMetas[a]) {
+                        const d = mapMetas[a][ms];
+                        let capacidadeDiaria = d.somaIndividual;
+                        const validos = d.qtdAssistentesDB;
+                        const gap = targetAssistentes - validos;
+                        
+                        if (gap > 0) {
+                            let valorProjecao = 100;
+                            if (d.prodValues.length > 0) valorProjecao = this.calcularModaOuMedia(d.prodValues).valor;
+                            capacidadeDiaria += (gap * valorProjecao);
+                        } else if (validos === 0) {
+                            capacidadeDiaria = 100 * targetAssistentes;
+                        }
+                        d.prodTotalDiario = capacidadeDiaria;
+                        
+                        if (d.assertValues.length > 0) {
+                            const res = this.calcularMetaInteligente(d.assertValues);
+                            d.assertFinal = res.valor;
+                        }
+                    }
+                }
+            }
+
+            // --- 4. Processamento de Dados Reais ---
+            
+            // Produção
             const mapProd = new Map();
             if (isGeral) {
-                (prodRes.data || []).forEach(p => {
+                dadosProducaoRaw.forEach(p => {
                     const data = p.data_referencia;
-                    if (!mapProd.has(data)) {
-                        mapProd.set(data, { quantidade: 0, fator_soma: 0, fator_count: 0, fator: 0 });
-                    }
+                    if (!mapProd.has(data)) mapProd.set(data, { quantidade: 0, fator_soma: 0, fator_count: 0, fator: 0 });
                     const reg = mapProd.get(data);
                     reg.quantidade += Number(p.quantidade || 0);
                     reg.fator_soma += Number(p.fator || 1);
                     reg.fator_count++;
                 });
-                for (let [key, val] of mapProd) {
-                    val.fator = val.fator_count > 0 ? (val.fator_soma / val.fator_count) : 1.0;
-                }
+                for (let [key, val] of mapProd) val.fator = val.fator_count > 0 ? (val.fator_soma / val.fator_count) : 1.0;
             } else {
-                (prodRes.data || []).forEach(p => mapProd.set(p.data_referencia, p));
+                dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // C) Map de Assertividade
+            // Assertividade (SEM FILTROS para igualar Dia a Dia)
             const mapAssert = new Map();
-            // Status que realmente não devem contar (alinhar com Produtividade)
-            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA']; 
+            // REMOVIDO: const STATUS_IGNORAR = ... (Agora aceita tudo, igual ao Dia a Dia)
 
-            assertData.forEach(a => {
-                const dataKey = a.data_referencia; 
+            dadosAssertividadeRaw.forEach(a => {
+                const dataKey = a.data_referencia;
                 if (!dataKey) return;
-
-                const status = (a.status || '').toUpperCase();
-                
-                // Filtro aplicado via código (mais seguro que via banco neste caso)
-                if (STATUS_IGNORAR.includes(status)) return; 
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                 
@@ -108,7 +183,7 @@ MinhaArea.Metas = {
                 }
             });
 
-            // --- 4. Construção dos Gráficos ---
+            // --- 5. Construção dos Gráficos ---
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -132,13 +207,13 @@ MinhaArea.Metas = {
                 const mes = d.getMonth() + 1;
                 const dia = d.getDate();
 
-                const metaConfig = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assert: 98.0 };
+                const metaConfig = mapMetas[ano]?.[mes] || { prodTotalDiario: (isGeral ? 100 * this.getQtdAssistentesConfigurada() : 100), assertFinal: 98.0 };
                 
                 const prodDia = mapProd.get(dataStr);
                 const qtd = prodDia ? Number(prodDia.quantidade || 0) : 0;
                 const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1); 
                 
-                const metaDia = Math.round(metaConfig.prod * (isNaN(fator) ? 1 : fator));
+                const metaDia = Math.round(metaConfig.prodTotalDiario * (isNaN(fator) ? 1 : fator));
 
                 const assertsDia = mapAssert.get(dataStr) || [];
                 
@@ -158,7 +233,7 @@ MinhaArea.Metas = {
                     if (assertsDia.length > 0) {
                         assertsDia.forEach(v => { slot.assertSoma += v; slot.assertQtd++; });
                     }
-                    slot.assertMetaSoma = metaConfig.assert; 
+                    slot.assertMetaSoma = metaConfig.assertFinal; 
                 } else {
                     labels.push(`${String(dia).padStart(2,'0')}/${String(mes).padStart(2,'0')}`);
                     dataProdReal.push(qtd);
@@ -171,7 +246,7 @@ MinhaArea.Metas = {
                     } else {
                         dataAssertReal.push(null);
                     }
-                    dataAssertMeta.push(Number(metaConfig.assert));
+                    dataAssertMeta.push(Number(metaConfig.assertFinal));
                 }
             }
 
@@ -186,9 +261,8 @@ MinhaArea.Metas = {
                 }
             }
 
-            // --- 5. Renderização ---
-            // Passamos os dados brutos para o cálculo dos KPIs
-            this.atualizarCardsKPI(mapProd, assertData, mapMetas, dtInicio, dtFim, isGeral);
+            // --- 6. Renderização ---
+            this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
@@ -199,49 +273,26 @@ MinhaArea.Metas = {
         }
     },
 
-    buscarTodosAuditados: async function(uid, inicio, fim) {
-        let todos = [];
-        let page = 0;
-        const size = 1000; // Tamanho do lote
-        let continuar = true;
+    getQtdAssistentesConfigurada: function() {
+        const manual = localStorage.getItem('gupy_config_qtd_assistentes');
+        const qtd = manual ? parseInt(manual) : 17; 
+        return qtd > 0 ? qtd : 17;
+    },
 
-        console.log(`🔄 Iniciando download de auditorias... (Lotes de ${size})`);
+    calcularModaOuMedia: function(valores) {
+        if (!valores || valores.length === 0) return { valor: 100 };
+        const frequencia = {}; let maxFreq = 0; let moda = valores[0]; let soma = 0;
+        valores.forEach(v => { soma += v; frequencia[v] = (frequencia[v] || 0) + 1; if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; } });
+        if ((maxFreq / valores.length) >= 0.3) { return { valor: moda }; } else { return { valor: Math.round(soma / valores.length) }; }
+    },
 
-        while(continuar) {
-            // Selecionamos APENAS as colunas necessárias para ficar leve e rápido
-            let query = Sistema.supabase
-                .from('assertividade')
-                .select('data_referencia, porcentagem_assertividade, status, auditora_nome, qtd_nok') 
-                .gte('data_referencia', inicio)
-                .lte('data_referencia', fim)
-                .range(page * size, (page + 1) * size - 1);
-            
-            // Se for individual, filtra. Se for geral, pega tudo.
-            if (uid) {
-                query = query.eq('usuario_id', uid);
-            }
-
-            const { data, error } = await query;
-
-            if(error) {
-                console.error("Erro paginação:", error);
-                throw error;
-            }
-
-            if (!data || data.length === 0) {
-                continuar = false;
-            } else {
-                todos = todos.concat(data);
-                // console.log(`📥 Página ${page} baixada: ${data.length} registros.`);
-                
-                if(data.length < size) {
-                    continuar = false; // Fim dos dados
-                } else {
-                    page++;
-                }
-            }
-        }
-        return todos;
+    calcularMetaInteligente: function(valores) {
+        if (!valores || valores.length === 0) return { valor: 98.0, isMedia: false };
+        const soma = valores.reduce((a, b) => a + b, 0);
+        const media = soma / valores.length;
+        const frequencia = {}; let maxFreq = 0; let moda = valores[0];
+        valores.forEach(v => { frequencia[v] = (frequencia[v] || 0) + 1; if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; } });
+        if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number(media.toFixed(2)), isMedia: true }; }
     },
 
     atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral) {
@@ -250,20 +301,18 @@ MinhaArea.Metas = {
         
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
-        
         let totalErros = 0; 
 
-        const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
+        // REMOVIDO: const STATUS_IGNORAR = ... (Igual ao Dia a Dia)
 
         let tempDate = new Date(dtInicio);
-        
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
             const dataStr = d.toISOString().split('T')[0];
             const ano = d.getFullYear();
             const mes = d.getMonth() + 1;
             
-            const metaConfig = mapMetas[ano]?.[mes] || { prod: (isGeral ? 6500 : 650), assert: 98.0 };
+            const metaConfig = mapMetas[ano]?.[mes] || { prodTotalDiario: (isGeral ? 100 * this.getQtdAssistentesConfigurada() : 100), assertFinal: 98.0 };
 
             const prodDia = mapProd.get(dataStr);
             const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1);
@@ -271,18 +320,15 @@ MinhaArea.Metas = {
             if (prodDia) {
                 totalValidados += Number(prodDia.quantidade || 0);
             }
-            totalMeta += Math.round(metaConfig.prod * (isNaN(fator)?1:fator));
+            totalMeta += Math.round(metaConfig.prodTotalDiario * (isNaN(fator)?1:fator));
         }
 
         asserts.forEach(a => {
-            const status = (a.status || '').toUpperCase();
-            
-            if (!STATUS_IGNORAR.includes(status)) {
-                let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
-                if(!isNaN(val)) { 
-                    somaAssertMedia += val; 
-                    qtdAssertMedia++; 
-                }
+            // Lógica Simplificada: Se tem nota, conta. Igual ao Dia a Dia.
+            let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
+            if(!isNaN(val)) { 
+                somaAssertMedia += val; 
+                qtdAssertMedia++; 
             }
             
             if (a.qtd_nok && Number(a.qtd_nok) > 0) {
@@ -292,8 +338,6 @@ MinhaArea.Metas = {
 
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const totalAuditados = asserts.length; 
-        
-        // Ajuste visual para evitar número negativo se a base estiver desincronizada
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
         const totalAcertos = totalAuditados - totalErros;
 
@@ -360,11 +404,6 @@ MinhaArea.Metas = {
                 plugins: {
                     legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8 } },
                     tooltip: {
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        titleColor: '#1e293b',
-                        bodyColor: '#475569',
-                        borderColor: '#e2e8f0',
-                        borderWidth: 1,
                         callbacks: {
                             label: function(ctx) {
                                 let val = ctx.raw;
@@ -379,12 +418,9 @@ MinhaArea.Metas = {
                     y: { 
                         beginAtZero: true, 
                         grid: { color: '#f1f5f9' }, 
-                        ticks: { 
-                            font: { size: 10 },
-                            callback: function(val) { return isPercent ? val + '%' : val; }
-                        } 
+                        ticks: { callback: function(val) { return isPercent ? val + '%' : val; } } 
                     },
-                    x: { grid: { display: false }, ticks: { font: { size: 10 } } }
+                    x: { grid: { display: false } }
                 }
             }
         };
