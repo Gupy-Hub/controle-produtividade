@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Refinamento de Tipagem em qtd_nok (Correção da divergência de 6 erros)
+   ATUALIZAÇÃO: Sincronia Fina de Erros (Igualando validação estrita do Comparativo.js)
 */
 
 MinhaArea.Metas = {
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando dados (Versão Ajuste Fino Erros)...");
+        console.log("🚀 Metas: Carregando dados (Versão Final Sincronizada)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -47,7 +47,7 @@ MinhaArea.Metas = {
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            // Seleciona colunas necessárias. NÃO filtra por auditora aqui para permitir lógica de KPI
+            // Trazemos tudo para filtrar no JS
             const qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim);
@@ -85,7 +85,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // Filtros de Usuário
+            // Filtros de Usuário (Para KPI)
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -185,7 +185,7 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Gráficos
+            // Gráficos (Evolução)
             const mapAssert = new Map();
             const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; 
 
@@ -208,9 +208,10 @@ MinhaArea.Metas = {
                 }
             });
 
-            // Geração Labels Gráfico
+            // Geração de Labels e Dados para Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
+            
             const labels = [], dataProdReal = [], dataProdMeta = [], dataAssertReal = [], dataAssertMeta = [];
             const aggMensal = new Map(); 
             const mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -319,33 +320,34 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Dados Assertividade
+        // 2. Loop Unificado
         asserts.forEach(a => {
             const uId = a.usuario_id;
+            const status = (a.status || '').toUpperCase();
             
             // A) KPI (%)
             let isKpiEligible = true;
             if (isGeral) {
                 if (idsBloqueados.has(uId) || !mapUser[uId]) isKpiEligible = false;
             }
-            const status = (a.status || '').toUpperCase();
             if (isKpiEligible && !STATUS_IGNORAR.includes(status) && a.porcentagem_assertividade !== null) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
 
-            // B) VOLUMETRIA AUDITORIA (Lógica Estrita)
+            // B) VOLUMETRIA AUDITORIA
+            // Regra: Tem auditora? Entra na contagem.
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
-                // CORREÇÃO: Força conversão para inteiro para garantir que '0.0' ou '0' seja tratado como 0
-                const valNok = parseInt(a.qtd_nok || 0, 10);
-                if (valNok > 0) {
+                
+                // CORREÇÃO DEFINITIVA DE ERROS
+                // Usa Number() para evitar que strings sujas (ex: "1 (revisar)") sejam contadas como erro pelo parseInt
+                if (a.qtd_nok && Number(a.qtd_nok) > 0) {
                     countErros++;
                 }
             }
         });
 
-        // Totais e Médias
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const metaAssertRef = diasParaMediaMeta > 0 ? (somaMetaAssertConfigurada / diasParaMediaMeta) : 98.0;
 
@@ -353,7 +355,7 @@ MinhaArea.Metas = {
         const pctCobertura = totalValidados > 0 ? ((countTotalAuditados / totalValidados) * 100) : 0;
         const pctResultado = countTotalAuditados > 0 ? ((totalAcertos / countTotalAuditados) * 100) : 100;
 
-        // Updates DOM
+        // Updates
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
@@ -362,7 +364,6 @@ MinhaArea.Metas = {
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Cards Auditoria
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', countTotalAuditados.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-pct-cobertura', pctCobertura.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
