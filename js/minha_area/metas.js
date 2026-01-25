@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Correção Crítica - Cálculo de Cobertura e Resultado por Volume (não por registros)
+   ATUALIZAÇÃO: Sincronização da Lógica de Auditoria com aba Assertividade (Comparativo.js)
 */
 
 MinhaArea.Metas = {
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando dados (Volume Real)...");
+        console.log("🚀 Metas: Carregando dados (Sincronizado com Assertividade)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -47,9 +47,9 @@ MinhaArea.Metas = {
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            // CORREÇÃO 1: Adicionado 'qtd_ok' na busca para calcular volume total
+            // CORREÇÃO: Adicionado 'auditora_nome' para replicar lógica do Comparativo.js
             const qAssertividade = Sistema.supabase.from('assertividade')
-                .select('data_referencia, porcentagem_assertividade, status, qtd_nok, qtd_ok, usuario_id') 
+                .select('data_referencia, porcentagem_assertividade, status, qtd_nok, qtd_ok, usuario_id, auditora_nome') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim)
                 .not('porcentagem_assertividade', 'is', null);
 
@@ -170,7 +170,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            // Processamento Dados Reais
+            // Processamento Dados Reais (Produção)
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -186,26 +186,31 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
+            // Mapeamento Assertividade para Gráficos
             const mapAssert = new Map();
-            const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
+            const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; // Mantido apenas para o Gráfico e KPI de %
 
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
                 const status = (a.status || '').toUpperCase();
-                if (STATUS_IGNORAR.includes(status)) return;
+                
                 if (isGeral) {
                     if (idsBloqueados.has(uId)) return;
                     if (!mapUser[uId]) return;
                 }
-                if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
-                let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
-                let val = parseFloat(valStr);
-                if (!isNaN(val)) mapAssert.get(dataKey).push(val);
+                
+                // Para o Gráfico e o KPI de %, mantemos o filtro de status original
+                if (!STATUS_IGNORAR_GRAFICO.includes(status)) {
+                    if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
+                    let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
+                    let val = parseFloat(valStr);
+                    if (!isNaN(val)) mapAssert.get(dataKey).push(val);
+                }
             });
 
-            // Gráficos
+            // Gráficos (Evolução)
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -293,20 +298,20 @@ MinhaArea.Metas = {
     atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsBloqueados) {
         let totalValidados = 0; 
         let totalMeta = 0;
+        
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
         
-        // CORREÇÃO 2: Variáveis para contagem de VOLUME
-        let totalAuditadosVolume = 0;
-        let totalAcertosVolume = 0;
-        let totalErrosVolume = 0;
+        // --- VARIAVEIS AUDITORIA (Lógica do Comparativo.js) ---
+        let countTotalAuditados = 0;
+        let countErros = 0;
 
         let somaMetaAssertConfigurada = 0;
         let diasParaMediaMeta = 0;
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
-        // Cálculo Volume Produção e Meta de Assertividade
+        // Cálculo Volume Produção
         let tempDate = new Date(dtInicio);
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
@@ -325,53 +330,66 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // Loop Assertividade
+        // Loop Unificado nos dados de Assertividade
         asserts.forEach(a => {
             const uId = a.usuario_id;
             if (isGeral) {
                 if (idsBloqueados.has(uId)) return;
                 if (!mapUser[uId]) return;
             }
+
+            // --- LÓGICA 1: KPI Percentual de Assertividade (Mantendo compatibilidade com gráfico) ---
             const status = (a.status || '').toUpperCase();
             if (!STATUS_IGNORAR.includes(status)) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
+            }
+
+            // --- LÓGICA 2: Resultados de Auditoria (Réplica EXATA do comparativo.js) ---
+            // Regra: Deve ter auditora nome preenchido
+            if (a.auditora_nome && a.auditora_nome.trim() !== '') {
+                countTotalAuditados++; // Conta a linha (registro auditado)
                 
-                // CORREÇÃO 3: Somar volumes reais (qtd_ok e qtd_nok)
-                const qtdOk = a.qtd_ok ? parseInt(a.qtd_ok) : 0;
-                const qtdNok = a.qtd_nok ? parseInt(a.qtd_nok) : 0;
-                
-                totalAcertosVolume += qtdOk;
-                totalErrosVolume += qtdNok;
-                totalAuditadosVolume += (qtdOk + qtdNok);
+                // Regra de Erro: Se qtd_nok > 0
+                if (a.qtd_nok && Number(a.qtd_nok) > 0) {
+                    countErros++;
+                }
             }
         });
 
-        // Médias
+        // Médias e Totais Finais
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const metaAssertRef = diasParaMediaMeta > 0 ? (somaMetaAssertConfigurada / diasParaMediaMeta) : 98.0;
 
-        // Cálculos de Cobertura Baseado em Volume
-        const pctAuditado = totalValidados > 0 ? ((totalAuditadosVolume / totalValidados) * 100) : 0;
-        const pctResultado = totalAuditadosVolume > 0 ? ((totalAcertosVolume / totalAuditadosVolume) * 100) : 100;
+        // Resultados Auditoria (Baseado na contagem de registros)
+        const totalAcertos = countTotalAuditados - countErros;
+        
+        // Cobertura: Agora compara o número de auditorias realizadas (countTotalAuditados) com o total produzido
+        const pctAuditado = totalValidados > 0 ? ((countTotalAuditados / totalValidados) * 100) : 0;
+        
+        // Resultado Audit: Taxa de Acerto baseada nos registros auditados
+        const pctResultado = countTotalAuditados > 0 ? ((totalAcertos / countTotalAuditados) * 100) : 100;
 
-        // Updates no DOM
+        // --- ATUALIZAÇÃO DOM ---
+        
+        // 1. Produção
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
+        // 2. Assertividade (Percentual KPI)
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Cards Corrigidos (Cobertura e Resultado)
+        // 3. Auditoria (Valores sincronizados com Visão Geral)
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
-        this.setTxt('auditoria-total-auditados', totalAuditadosVolume.toLocaleString('pt-BR')); // Agora mostra volume real
+        this.setTxt('auditoria-total-auditados', countTotalAuditados.toLocaleString('pt-BR')); // Agora reflete contagem de registros auditados
         this.setTxt('auditoria-pct-cobertura', pctAuditado.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
         this.setBar('bar-auditoria-cov', pctAuditado, 'bg-purple-500');
 
-        this.setTxt('auditoria-total-ok', totalAcertosVolume.toLocaleString('pt-BR')); 
-        this.setTxt('auditoria-total-nok', totalErrosVolume.toLocaleString('pt-BR')); 
+        this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); 
+        this.setTxt('auditoria-total-nok', countErros.toLocaleString('pt-BR')); 
         
         this.setBar('bar-auditoria-res', pctResultado, pctResultado >= 95 ? 'bg-emerald-500' : 'bg-rose-500');
     },
