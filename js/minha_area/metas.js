@@ -1,57 +1,89 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v4.0 - ESPELHO FIEL (Sem deduplicação, Lógica Bruta)
-   MOTIVO: Reunião de Emergência - Alinhamento Total com Auditoria DB
+   ATUALIZAÇÃO: v4.1 - STABLE FETCH (Controle de Concorrência + Retry)
+   MOTIVO: Correção de Erro 500 (Supabase) e Divergência de Dados (-300 records)
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (PARALELO BRUTO) ---
+    // --- MANIPULAÇÃO DE DADOS (TURBO COM SEGURANÇA) ---
     fetchParalelo: async function(tabela, colunas, filtrosFn) {
-        // 1. Count
+        // 1. Count Inicial
         let qCount = Sistema.supabase.from(tabela).select('*', { count: 'exact', head: true });
         qCount = filtrosFn(qCount);
         const { count, error } = await qCount;
         
-        if (error) { console.error(`Erro count ${tabela}:`, error); return []; }
+        if (error) { 
+            console.error(`❌ Erro count ${tabela}:`, error); 
+            return []; 
+        }
         if (!count || count === 0) return [];
 
         const pageSize = 1000;
         const totalPages = Math.ceil(count / pageSize);
-        const promises = [];
-
-        console.log(`🚀 [TURBO] ${tabela}: Baixando ${count} registros brutos...`);
-
-        // 2. Dispara requisições (Mantemos order para estabilidade, mas aceitamos tudo)
-        for (let i = 0; i < totalPages; i++) {
-            let q = Sistema.supabase.from(tabela)
-                .select(colunas)
-                .order('id', { ascending: true }) 
-                .range(i * pageSize, (i + 1) * pageSize - 1);
-            
-            q = filtrosFn(q);
-            promises.push(q);
-        }
-
-        const responses = await Promise.all(promises);
-        
-        // 3. Junta TUDO (REMOVIDA A LÓGICA DE DEDUPLICAÇÃO)
-        // Se o banco mandar duplicado, a gente mostra duplicado. A meta é bater o número.
         let allData = [];
-        responses.forEach(r => {
-            if (r.data) {
-                allData = allData.concat(r.data);
+
+        console.log(`🚀 [TURBO v4.1] ${tabela}: Iniciando download de ${count} registros (${totalPages} páginas)...`);
+
+        // Helper: Tenta baixar uma página com até 3 tentativas (Retry Strategy)
+        const fetchPageSafe = async (pageIndex) => {
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    let q = Sistema.supabase.from(tabela)
+                        .select(colunas)
+                        .order('id', { ascending: true }) // Mantém consistência
+                        .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1);
+                    
+                    q = filtrosFn(q);
+                    
+                    const { data, error } = await q;
+                    if (error) throw error;
+                    return data || [];
+                } catch (err) {
+                    console.warn(`⚠️ [RETRY] ${tabela} Pág ${pageIndex}: Tentativa ${attempt}/${maxRetries} falhou.`);
+                    if (attempt === maxRetries) throw err; // Lança erro na última tentativa
+                    await new Promise(r => setTimeout(r, 1000 * attempt)); // Backoff: 1s, 2s, 3s...
+                }
             }
-        });
+        };
+
+        // 2. Processamento em Lotes (Throttling)
+        // Reduzimos a concorrência para evitar Error 500 no Supabase
+        const BATCH_SIZE = 5; 
         
-        console.log(`✅ [TURBO] ${tabela}: ${allData.length} registros baixados.`);
+        for (let i = 0; i < totalPages; i += BATCH_SIZE) {
+            const batchPromises = [];
+            // Prepara o lote atual
+            for (let j = i; j < i + BATCH_SIZE && j < totalPages; j++) {
+                batchPromises.push(fetchPageSafe(j));
+            }
+
+            try {
+                // Aguarda o lote atual terminar antes de pedir o próximo
+                const batchResults = await Promise.all(batchPromises);
+                batchResults.forEach(data => {
+                    if (data) allData = allData.concat(data);
+                });
+                
+                // Feedback visual no console para acompanhar progresso
+                const progresso = Math.min(((i + BATCH_SIZE) / totalPages) * 100, 100).toFixed(0);
+                console.log(`⏳ [TURBO] ${tabela}: ${progresso}% carregado (${allData.length} registros)...`);
+                
+            } catch (err) {
+                console.error(`❌ [CRÍTICO] Falha ao baixar lote iniciando em pág ${i} da tabela ${tabela}.`, err);
+                // Continua para tentar baixar o resto, mas avisa erro
+            }
+        }
+        
+        console.log(`✅ [TURBO] ${tabela}: Download concluído. Total: ${allData.length}/${count} (Divergência: ${count - allData.length})`);
         return allData;
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando Modo Espelho (v4.0)...");
+        console.log("🚀 Metas: Iniciando Modo Espelho (v4.1 - Stable)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -77,7 +109,7 @@ MinhaArea.Metas = {
             };
             const applyFiltersUser = (q) => q;
 
-            // Query Metas
+            // Query Metas (Leve, sem necessidade de chunking pesado)
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
@@ -85,22 +117,24 @@ MinhaArea.Metas = {
 
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
-            // DOWNLOAD TURBO
-            console.time("⏱️ Tempo Download");
-            const [p, a, m, u] = await Promise.all([
-                this.fetchParalelo('producao', '*', applyFiltersProd),
-                this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert),
-                qMetas,
-                this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser)
-            ]);
-            console.timeEnd("⏱️ Tempo Download");
+            // DOWNLOAD SEQUENCIAL DOS GRANDES BLOCOS
+            // Para garantir que a Assertividade (pesada) tenha banda total
+            console.time("⏱️ Tempo Download Total");
+            
+            // 1. Leves primeiro
+            dadosUsuarios = await this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser);
+            const resMetas = await qMetas;
+            dadosMetasRaw = resMetas.data || [];
 
-            dadosProducaoRaw = p;
-            dadosAssertividadeRaw = a;
-            dadosMetasRaw = m.data || m;
-            dadosUsuarios = u;
+            // 2. Médios
+            dadosProducaoRaw = await this.fetchParalelo('producao', '*', applyFiltersProd);
 
-            // --- LÓGICA DE NEGÓCIO ---
+            // 3. Pesados (Assertividade) - Sozinho para evitar gargalo
+            dadosAssertividadeRaw = await this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert);
+            
+            console.timeEnd("⏱️ Tempo Download Total");
+
+            // --- LÓGICA DE NEGÓCIO (Mantida v4.0) ---
 
             const idsBloqueados = new Set();
             const mapUser = {};
