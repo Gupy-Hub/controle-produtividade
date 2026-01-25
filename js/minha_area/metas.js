@@ -1,36 +1,89 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Correção Final (Uso de Number() em vez de parseInt para alinhar erros com DB)
+   ATUALIZAÇÃO: TURBO MODE (Download Paralelo de Dados)
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS ---
-    fetchAll: async function(table, queryBuilder) {
-        let allData = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
+    // --- MANIPULAÇÃO DE DADOS (AGORA COM PARALELISMO) ---
+    fetchAll: async function(table, baseQuery) {
+        // 1. Descobre o total de registros primeiro (Count Rápido)
+        const { count, error: countError } = await baseQuery
+            .select('*', { count: 'exact', head: true }); // Head=true não baixa dados, só conta.
         
-        while (hasMore) {
-            const { data, error } = await queryBuilder
-                .range(page * pageSize, (page + 1) * pageSize - 1);
-            if (error) throw error;
-            if (data.length > 0) {
-                allData = allData.concat(data);
-                page++;
-                if (data.length < pageSize) hasMore = false;
-            } else {
-                hasMore = false;
-            }
+        if (countError) {
+            console.error("Erro ao contar registros:", countError);
+            return [];
         }
+
+        if (!count || count === 0) return [];
+
+        // 2. Calcula quantas páginas de 1000 precisamos
+        const pageSize = 1000;
+        const totalPages = Math.ceil(count / pageSize);
+        const promises = [];
+
+        console.log(`🚀 [TURBO] Baixando ${count} registros em ${totalPages} lotes simultâneos...`);
+
+        // 3. Dispara TODAS as requisições ao mesmo tempo
+        for (let i = 0; i < totalPages; i++) {
+            const rangeStart = i * pageSize;
+            const rangeEnd = (i + 1) * pageSize - 1;
+            
+            // Clona a query base para não afetar as outras
+            // Importante: Precisamos refazer o select pois o 'head:true' limpou
+            const pageQuery = Sistema.supabase
+                .from(table)
+                .select('*') // Garante que traga as colunas
+                .range(rangeStart, rangeEnd);
+            
+            // Reaplica os filtros da query original (gambiarra técnica necessária no Supabase JS)
+            // Nota: O jeito mais seguro é passar a query "crua" e remontar, mas aqui vamos simplificar:
+            // Se a query original já tinha filtros, eles são preservados se clonarmos.
+            // Mas o supabase-js é chato com clones. Vamos usar a estratégia de promessas na chamada principal.
+        }
+        
+        // CORREÇÃO: O supabase não clona query facilmente. 
+        // Estratégia Segura: Loop sequencial OTIMIZADO (Batch maior) ou recriar query.
+        // Vamos usar a estratégia de "Promise.all" recriando a lógica no loop principal 'carregar'.
+        return []; 
+    },
+
+    // Nova função auxiliar para buscar paralelo "na unha" (Mais robusto)
+    fetchParalelo: async function(tabela, colunas, filtrosFn) {
+        // 1. Count
+        let qCount = Sistema.supabase.from(tabela).select(colunas, { count: 'exact', head: true });
+        qCount = filtrosFn(qCount);
+        const { count } = await qCount;
+        
+        if (!count) return [];
+
+        const pageSize = 1000;
+        const totalPages = Math.ceil(count / pageSize);
+        const promises = [];
+
+        for (let i = 0; i < totalPages; i++) {
+            let q = Sistema.supabase.from(tabela).select(colunas).range(i * pageSize, (i + 1) * pageSize - 1);
+            q = filtrosFn(q); // Reaplica filtros
+            promises.push(q);
+        }
+
+        // 2. Aguarda tudo junto
+        const responses = await Promise.all(promises);
+        
+        // 3. Junta os pedaços
+        let allData = [];
+        responses.forEach(r => {
+            if (r.data) allData = allData.concat(r.data);
+        });
+        
         return allData;
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando dados (Correção Divergência Erros)...");
+        console.log("🚀 Metas: Iniciando Carregamento TURBO...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -43,49 +96,51 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // Buscas
-            const qProducao = Sistema.supabase.from('producao')
-                .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
+            // Definição dos filtros para reaplicar no loop paralelo
+            const applyFiltersProd = (q) => q.gte('data_referencia', inicio).lte('data_referencia', fim);
+            const applyFiltersAssert = (q) => q.gte('data_referencia', inicio).lte('data_referencia', fim); // Sem filtro de NULL
+            const applyFiltersUser = (q) => q; // Sem filtro extra
 
-            // Sem filtro de % nula para bater volumetria total
-            const qAssertividade = Sistema.supabase.from('assertividade')
-                .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome') 
-                .gte('data_referencia', inicio).lte('data_referencia', fim);
-
+            // Query Metas (Leve, não precisa de paralelo)
             const qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
 
-            const qUsuarios = Sistema.supabase.from('usuarios')
-                .select('id, ativo, nome, perfil, funcao');
-
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
             if (!isGeral) {
+                // Modo Individual (Já é rápido, mantém simples)
                 const [p, a, m, u] = await Promise.all([
-                    qProducao.eq('usuario_id', uid),
-                    qAssertividade.eq('usuario_id', uid),
+                    Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
+                    Sistema.supabase.from('assertividade').select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
                     qMetas.eq('usuario_id', uid),
-                    qUsuarios
+                    Sistema.supabase.from('usuarios').select('id, ativo, nome, perfil, funcao')
                 ]);
                 dadosProducaoRaw = p.data || [];
                 dadosAssertividadeRaw = a.data || [];
                 dadosMetasRaw = m.data || [];
                 dadosUsuarios = u.data || [];
             } else {
+                // Modo Geral (TURBO PARALELO)
+                console.time("DownloadParalelo");
+                
                 const [p, a, m, u] = await Promise.all([
-                    this.fetchAll('producao', qProducao),
-                    this.fetchAll('assertividade', qAssertividade),
+                    this.fetchParalelo('producao', '*', applyFiltersProd),
+                    this.fetchParalelo('assertividade', 'data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert),
                     qMetas,
-                    this.fetchAll('usuarios', qUsuarios)
+                    this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser)
                 ]);
+
+                console.timeEnd("DownloadParalelo"); // Veja no console F12 o tempo insano!
+                
                 dadosProducaoRaw = p;
                 dadosAssertividadeRaw = a;
                 dadosMetasRaw = m.data || m;
                 dadosUsuarios = u;
             }
 
-            // Filtros de Usuário (Para KPI)
+            // --- LÓGICA DE NEGÓCIO (Mantida Idêntica) ---
+
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -336,11 +391,8 @@ MinhaArea.Metas = {
             }
 
             // B) VOLUMETRIA AUDITORIA
-            // Regra: Tem auditora? Entra na contagem.
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
-                
-                // CORREÇÃO: Usar Number() para evitar contar "1 (revisar)" como erro via parseInt.
                 if (a.qtd_nok && Number(a.qtd_nok) > 0) {
                     countErros++;
                 }
