@@ -1,89 +1,69 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: TURBO MODE (Download Paralelo de Dados)
+   ATUALIZAÇÃO: v3.0 - Turbo Paralelo com Anti-Duplicidade e Ordenação
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (AGORA COM PARALELISMO) ---
-    fetchAll: async function(table, baseQuery) {
-        // 1. Descobre o total de registros primeiro (Count Rápido)
-        const { count, error: countError } = await baseQuery
-            .select('*', { count: 'exact', head: true }); // Head=true não baixa dados, só conta.
+    // --- MANIPULAÇÃO DE DADOS (PARALELO + ORDENADO) ---
+    fetchParalelo: async function(tabela, colunas, filtrosFn) {
+        // 1. Count Rápido
+        let qCount = Sistema.supabase.from(tabela).select('*', { count: 'exact', head: true });
+        qCount = filtrosFn(qCount);
+        const { count, error } = await qCount;
         
-        if (countError) {
-            console.error("Erro ao contar registros:", countError);
-            return [];
-        }
-
+        if (error) { console.error(`Erro count ${tabela}:`, error); return []; }
         if (!count || count === 0) return [];
 
-        // 2. Calcula quantas páginas de 1000 precisamos
         const pageSize = 1000;
         const totalPages = Math.ceil(count / pageSize);
         const promises = [];
 
-        console.log(`🚀 [TURBO] Baixando ${count} registros em ${totalPages} lotes simultâneos...`);
+        console.log(`🚀 [TURBO] ${tabela}: Baixando ${count} linhas em ${totalPages} conexões...`);
 
-        // 3. Dispara TODAS as requisições ao mesmo tempo
+        // 2. Dispara requisições com ORDENAÇÃO (Essencial para não vir duplicado)
         for (let i = 0; i < totalPages; i++) {
-            const rangeStart = i * pageSize;
-            const rangeEnd = (i + 1) * pageSize - 1;
+            // Importante: .order('id') garante estabilidade na paginação
+            let q = Sistema.supabase.from(tabela)
+                .select(colunas)
+                .order('id', { ascending: true }) 
+                .range(i * pageSize, (i + 1) * pageSize - 1);
             
-            // Clona a query base para não afetar as outras
-            // Importante: Precisamos refazer o select pois o 'head:true' limpou
-            const pageQuery = Sistema.supabase
-                .from(table)
-                .select('*') // Garante que traga as colunas
-                .range(rangeStart, rangeEnd);
-            
-            // Reaplica os filtros da query original (gambiarra técnica necessária no Supabase JS)
-            // Nota: O jeito mais seguro é passar a query "crua" e remontar, mas aqui vamos simplificar:
-            // Se a query original já tinha filtros, eles são preservados se clonarmos.
-            // Mas o supabase-js é chato com clones. Vamos usar a estratégia de promessas na chamada principal.
-        }
-        
-        // CORREÇÃO: O supabase não clona query facilmente. 
-        // Estratégia Segura: Loop sequencial OTIMIZADO (Batch maior) ou recriar query.
-        // Vamos usar a estratégia de "Promise.all" recriando a lógica no loop principal 'carregar'.
-        return []; 
-    },
-
-    // Nova função auxiliar para buscar paralelo "na unha" (Mais robusto)
-    fetchParalelo: async function(tabela, colunas, filtrosFn) {
-        // 1. Count
-        let qCount = Sistema.supabase.from(tabela).select(colunas, { count: 'exact', head: true });
-        qCount = filtrosFn(qCount);
-        const { count } = await qCount;
-        
-        if (!count) return [];
-
-        const pageSize = 1000;
-        const totalPages = Math.ceil(count / pageSize);
-        const promises = [];
-
-        for (let i = 0; i < totalPages; i++) {
-            let q = Sistema.supabase.from(tabela).select(colunas).range(i * pageSize, (i + 1) * pageSize - 1);
-            q = filtrosFn(q); // Reaplica filtros
+            q = filtrosFn(q); // Reaplica filtros de data/usuário
             promises.push(q);
         }
 
-        // 2. Aguarda tudo junto
+        // 3. Aguarda todas as conexões
         const responses = await Promise.all(promises);
         
-        // 3. Junta os pedaços
+        // 4. Junta e Remove Duplicatas (Safety check)
         let allData = [];
+        const idsVistos = new Set();
+
         responses.forEach(r => {
-            if (r.data) allData = allData.concat(r.data);
+            if (r.data) {
+                r.data.forEach(item => {
+                    // Se o item tiver ID, garantimos unicidade. Se não, aceitamos (ex: views sem PK)
+                    if (item.id) {
+                        if (!idsVistos.has(item.id)) {
+                            idsVistos.add(item.id);
+                            allData.push(item);
+                        }
+                    } else {
+                        allData.push(item);
+                    }
+                });
+            }
         });
         
+        console.log(`✅ [TURBO] ${tabela}: ${allData.length} registros únicos processados.`);
         return allData;
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando Carregamento TURBO...");
+        console.log("🚀 Metas: Iniciando Carga Blindada (v3.0)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -96,51 +76,48 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // Definição dos filtros para reaplicar no loop paralelo
-            const applyFiltersProd = (q) => q.gte('data_referencia', inicio).lte('data_referencia', fim);
-            const applyFiltersAssert = (q) => q.gte('data_referencia', inicio).lte('data_referencia', fim); // Sem filtro de NULL
-            const applyFiltersUser = (q) => q; // Sem filtro extra
+            // Filtros Base
+            const applyFiltersProd = (q) => {
+                let qq = q.gte('data_referencia', inicio).lte('data_referencia', fim);
+                if (uid) qq = qq.eq('usuario_id', uid);
+                return qq;
+            };
+            const applyFiltersAssert = (q) => {
+                let qq = q.gte('data_referencia', inicio).lte('data_referencia', fim);
+                if (uid) qq = qq.eq('usuario_id', uid);
+                return qq;
+            };
+            const applyFiltersUser = (q) => q; // Traz todos para mapear nomes
 
-            // Query Metas (Leve, não precisa de paralelo)
-            const qMetas = Sistema.supabase.from('metas')
+            // Query Metas (Leve)
+            let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
+            if (uid) qMetas = qMetas.eq('usuario_id', uid);
 
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
-            if (!isGeral) {
-                // Modo Individual (Já é rápido, mantém simples)
-                const [p, a, m, u] = await Promise.all([
-                    Sistema.supabase.from('producao').select('*').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
-                    Sistema.supabase.from('assertividade').select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome').eq('usuario_id', uid).gte('data_referencia', inicio).lte('data_referencia', fim),
-                    qMetas.eq('usuario_id', uid),
-                    Sistema.supabase.from('usuarios').select('id, ativo, nome, perfil, funcao')
-                ]);
-                dadosProducaoRaw = p.data || [];
-                dadosAssertividadeRaw = a.data || [];
-                dadosMetasRaw = m.data || [];
-                dadosUsuarios = u.data || [];
-            } else {
-                // Modo Geral (TURBO PARALELO)
-                console.time("DownloadParalelo");
+            // EXECUÇÃO PARALELA TOTAL
+            console.time("⏱️ Tempo Download");
+            const [p, a, m, u] = await Promise.all([
+                this.fetchParalelo('producao', '*', applyFiltersProd),
                 
-                const [p, a, m, u] = await Promise.all([
-                    this.fetchParalelo('producao', '*', applyFiltersProd),
-                    this.fetchParalelo('assertividade', 'data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert),
-                    qMetas,
-                    this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser)
-                ]);
-
-                console.timeEnd("DownloadParalelo"); // Veja no console F12 o tempo insano!
+                // Trazemos ID para poder deduplicar corretamente
+                this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert),
                 
-                dadosProducaoRaw = p;
-                dadosAssertividadeRaw = a;
-                dadosMetasRaw = m.data || m;
-                dadosUsuarios = u;
-            }
+                qMetas,
+                this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser)
+            ]);
+            console.timeEnd("⏱️ Tempo Download");
 
-            // --- LÓGICA DE NEGÓCIO (Mantida Idêntica) ---
+            dadosProducaoRaw = p;
+            dadosAssertividadeRaw = a;
+            dadosMetasRaw = m.data || m;
+            dadosUsuarios = u;
 
+            // --- LÓGICA DE NEGÓCIO ---
+
+            // Mapeamento de Usuários
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -163,7 +140,7 @@ MinhaArea.Metas = {
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // Metas
+            // Metas Config
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -240,7 +217,7 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Gráficos (Evolução)
+            // Preparação Gráficos
             const mapAssert = new Map();
             const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; 
 
@@ -263,10 +240,9 @@ MinhaArea.Metas = {
                 }
             });
 
-            // Geração de Labels e Dados para Gráficos
+            // Geração Labels Gráfico
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
-            
             const labels = [], dataProdReal = [], dataProdMeta = [], dataAssertReal = [], dataAssertMeta = [];
             const aggMensal = new Map(); 
             const mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
@@ -375,16 +351,16 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Unificado
+        // 2. Loop Dados Assertividade (Já deduplicado)
         asserts.forEach(a => {
             const uId = a.usuario_id;
-            const status = (a.status || '').toUpperCase();
             
             // A) KPI (%)
             let isKpiEligible = true;
             if (isGeral) {
                 if (idsBloqueados.has(uId) || !mapUser[uId]) isKpiEligible = false;
             }
+            const status = (a.status || '').toUpperCase();
             if (isKpiEligible && !STATUS_IGNORAR.includes(status) && a.porcentagem_assertividade !== null) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
