@@ -1,14 +1,15 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v4.1 - STABLE FETCH (Controle de Concorrência + Retry)
-   MOTIVO: Correção de Erro 500 (Supabase) e Divergência de Dados (-300 records)
+   ATUALIZAÇÃO: v4.2 - ULTRA SAFE (Locking + Low Concurrency)
+   MOTIVO: Correção de Race Condition e Timeouts 57014/500
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
+    isLocked: false, // Trava de segurança contra cliques duplos
 
-    // --- MANIPULAÇÃO DE DADOS (TURBO COM SEGURANÇA) ---
+    // --- MANIPULAÇÃO DE DADOS (SEQUENCIAL OTIMIZADO) ---
     fetchParalelo: async function(tabela, colunas, filtrosFn) {
         // 1. Count Inicial
         let qCount = Sistema.supabase.from(tabela).select('*', { count: 'exact', head: true });
@@ -25,16 +26,16 @@ MinhaArea.Metas = {
         const totalPages = Math.ceil(count / pageSize);
         let allData = [];
 
-        console.log(`🚀 [TURBO v4.1] ${tabela}: Iniciando download de ${count} registros (${totalPages} páginas)...`);
+        console.log(`🛡️ [SAFE MODE] ${tabela}: Baixando ${count} registros (${totalPages} pgs) em lotes reduzidos...`);
 
-        // Helper: Tenta baixar uma página com até 3 tentativas (Retry Strategy)
+        // Helper: Retry Strategy com Backoff Exponencial
         const fetchPageSafe = async (pageIndex) => {
-            const maxRetries = 3;
+            const maxRetries = 4; // Aumentado para 4 tentativas
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     let q = Sistema.supabase.from(tabela)
                         .select(colunas)
-                        .order('id', { ascending: true }) // Mantém consistência
+                        .order('id', { ascending: true })
                         .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1);
                     
                     q = filtrosFn(q);
@@ -43,47 +44,58 @@ MinhaArea.Metas = {
                     if (error) throw error;
                     return data || [];
                 } catch (err) {
-                    console.warn(`⚠️ [RETRY] ${tabela} Pág ${pageIndex}: Tentativa ${attempt}/${maxRetries} falhou.`);
-                    if (attempt === maxRetries) throw err; // Lança erro na última tentativa
-                    await new Promise(r => setTimeout(r, 1000 * attempt)); // Backoff: 1s, 2s, 3s...
+                    const delay = 2000 * attempt; // 2s, 4s, 6s, 8s
+                    console.warn(`⚠️ [RETRY] ${tabela} Pág ${pageIndex}: Tentativa ${attempt}/${maxRetries} falhou. Aguardando ${delay}ms...`);
+                    if (attempt === maxRetries) throw err;
+                    await new Promise(r => setTimeout(r, delay));
                 }
             }
         };
 
-        // 2. Processamento em Lotes (Throttling)
-        // Reduzimos a concorrência para evitar Error 500 no Supabase
-        const BATCH_SIZE = 5; 
+        // 2. Processamento em Lotes Conservadores (BATCH_SIZE = 2)
+        // Reduzido para 2 para garantir estabilidade máxima em conexões instáveis
+        const BATCH_SIZE = 2; 
         
         for (let i = 0; i < totalPages; i += BATCH_SIZE) {
             const batchPromises = [];
-            // Prepara o lote atual
             for (let j = i; j < i + BATCH_SIZE && j < totalPages; j++) {
                 batchPromises.push(fetchPageSafe(j));
             }
 
             try {
-                // Aguarda o lote atual terminar antes de pedir o próximo
                 const batchResults = await Promise.all(batchPromises);
                 batchResults.forEach(data => {
                     if (data) allData = allData.concat(data);
                 });
                 
-                // Feedback visual no console para acompanhar progresso
                 const progresso = Math.min(((i + BATCH_SIZE) / totalPages) * 100, 100).toFixed(0);
-                console.log(`⏳ [TURBO] ${tabela}: ${progresso}% carregado (${allData.length} registros)...`);
+                // Log menos frequente para não poluir o console
+                if (i % (BATCH_SIZE * 5) === 0 || progresso == '100') {
+                    console.log(`⏳ [SAFE] ${tabela}: ${progresso}% (${allData.length} recs)...`);
+                }
                 
             } catch (err) {
-                console.error(`❌ [CRÍTICO] Falha ao baixar lote iniciando em pág ${i} da tabela ${tabela}.`, err);
-                // Continua para tentar baixar o resto, mas avisa erro
+                console.error(`❌ [FALHA] Lote ${i} da tabela ${tabela} falhou definitivamente.`, err);
             }
         }
         
-        console.log(`✅ [TURBO] ${tabela}: Download concluído. Total: ${allData.length}/${count} (Divergência: ${count - allData.length})`);
+        console.log(`✅ [SAFE] ${tabela}: Concluído. ${allData.length}/${count} (Gap: ${count - allData.length})`);
         return allData;
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando Modo Espelho (v4.1 - Stable)...");
+        // 1. Trava de Execução (Evita duplo clique/execução paralela)
+        if (this.isLocked) {
+            console.warn("⛔ Metas: Carregamento já em andamento. Ignorando nova solicitação.");
+            return;
+        }
+        this.isLocked = true;
+
+        console.log("🚀 Metas: Iniciando Modo Espelho (v4.2 - Ultra Safe)...");
+        
+        // Limpeza segura de timers anteriores
+        try { console.timeEnd("⏱️ Tempo Download Total"); } catch(e) {}
+
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -96,6 +108,8 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
+            console.time("⏱️ Tempo Download Total");
+
             // Filtros Base
             const applyFiltersProd = (q) => {
                 let qq = q.gte('data_referencia', inicio).lte('data_referencia', fim);
@@ -109,7 +123,7 @@ MinhaArea.Metas = {
             };
             const applyFiltersUser = (q) => q;
 
-            // Query Metas (Leve, sem necessidade de chunking pesado)
+            // Query Metas (Leve)
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
@@ -117,24 +131,21 @@ MinhaArea.Metas = {
 
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
-            // DOWNLOAD SEQUENCIAL DOS GRANDES BLOCOS
-            // Para garantir que a Assertividade (pesada) tenha banda total
-            console.time("⏱️ Tempo Download Total");
-            
-            // 1. Leves primeiro
+            // DOWNLOAD EM CASCATA (SERIAL) PARA EVITAR OVERLOAD
+            // Passo 1: Metadados Leves
             dadosUsuarios = await this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser);
             const resMetas = await qMetas;
             dadosMetasRaw = resMetas.data || [];
 
-            // 2. Médios
+            // Passo 2: Produção (Médio)
             dadosProducaoRaw = await this.fetchParalelo('producao', '*', applyFiltersProd);
 
-            // 3. Pesados (Assertividade) - Sozinho para evitar gargalo
+            // Passo 3: Assertividade (Pesado) - Isolado
             dadosAssertividadeRaw = await this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert);
             
             console.timeEnd("⏱️ Tempo Download Total");
 
-            // --- LÓGICA DE NEGÓCIO (Mantida v4.0) ---
+            // --- LÓGICA DE NEGÓCIO ---
 
             const idsBloqueados = new Set();
             const mapUser = {};
@@ -235,7 +246,7 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Gráficos
+            // Gráficos e KPIs
             const mapAssert = new Map();
             const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; 
 
@@ -316,6 +327,8 @@ MinhaArea.Metas = {
 
         } catch (err) {
             console.error("❌ Erro Metas:", err);
+        } finally {
+            this.isLocked = false; // Libera a trava SEMPRE, mesmo com erro
         }
     },
 
