@@ -1,13 +1,13 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   CORREÇÃO: Paginação Automática + Design Clean + Configuração de Gráficos Otimizada
+   ATUALIZAÇÃO 2026: Gráficos High-End (Gradientes, Smooth Curves) + Bento Layout Support
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (Inalterada para garantir integridade) ---
+    // --- MANIPULAÇÃO DE DADOS (Core Inalterado) ---
     fetchAll: async function(table, queryBuilder) {
         let allData = [];
         let page = 0;
@@ -17,9 +17,7 @@ MinhaArea.Metas = {
         while (hasMore) {
             const { data, error } = await queryBuilder
                 .range(page * pageSize, (page + 1) * pageSize - 1);
-            
             if (error) throw error;
-            
             if (data.length > 0) {
                 allData = allData.concat(data);
                 page++;
@@ -32,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento (Clean Layout)...");
+        console.log("🚀 Metas: Iniciando renderização High-Fidelity...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -45,7 +43,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // Buscas no Supabase
+            // Buscas (Otimizadas)
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
@@ -87,7 +85,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // --- FILTRO E CÁLCULOS (Lógica mantida integralmente) ---
+            // --- LÓGICA DE NEGÓCIO (Mantida) ---
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -110,7 +108,7 @@ MinhaArea.Metas = {
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // --- CÁLCULO DA META ---
+            // Cálculo Meta
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -162,7 +160,6 @@ MinhaArea.Metas = {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
                         d.prodTotalDiario = capacidadeDiaria;
-                        
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -171,7 +168,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            // --- PROCESSAMENTO DADOS REAIS ---
+            // Dados Reais
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -206,7 +203,7 @@ MinhaArea.Metas = {
                 if (!isNaN(val)) mapAssert.get(dataKey).push(val);
             });
 
-            // --- PREPARAÇÃO GRÁFICOS ---
+            // Preparação Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -263,7 +260,7 @@ MinhaArea.Metas = {
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
             
-            // Renderização com estilo mais clean
+            // --- RENDERIZAÇÃO 2026: Gráficos com Gradientes e Curvas ---
             this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação', '#3b82f6', false);
             this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade', '#10b981', true);
 
@@ -308,9 +305,7 @@ MinhaArea.Metas = {
             const dataStr = d.toISOString().split('T')[0];
             const ano = d.getFullYear();
             const mes = d.getMonth() + 1;
-            
             const metaConfig = mapMetas[ano]?.[mes] || { prodTotalDiario: (isGeral ? 100 * this.getQtdAssistentesConfigurada() : 100), assertFinal: 98.0 };
-
             const prodDia = mapProd.get(dataStr);
             const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1);
             if (prodDia) totalValidados += Number(prodDia.quantidade || 0);
@@ -323,14 +318,10 @@ MinhaArea.Metas = {
                 if (idsBloqueados.has(uId)) return;
                 if (!mapUser[uId]) return;
             }
-
             const status = (a.status || '').toUpperCase();
             if (!STATUS_IGNORAR.includes(status)) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
-                if(!isNaN(val)) { 
-                    somaAssertMedia += val; 
-                    qtdAssertMedia++; 
-                }
+                if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
             if (a.qtd_nok && Number(a.qtd_nok) > 0) totalErros++;
         });
@@ -341,30 +332,40 @@ MinhaArea.Metas = {
         const totalAcertos = totalAuditados - totalErros;
         const pctAuditado = totalValidados > 0 ? ((totalAuditados / totalValidados) * 100) : 0;
 
-        // Atualização dos elementos do DOM (IDs mantidos para consistência)
+        // Atualização DOM
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-500');
+        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-gradient-to-r from-blue-500 to-blue-400'); // Gradiente via classe Tailwind
 
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
+        this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' : 'bg-gradient-to-r from-rose-500 to-rose-400');
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
-        
-        // Novo elemento: Percentual Auditado
         this.setTxt('auditoria-pct-cobertura', pctAuditado.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
-        
         this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-total-nok', totalErros.toLocaleString('pt-BR')); 
+        
+        // Indicador Visual de Fluxo (Barra de Auditoria)
+        const elAuditBar = document.getElementById('bar-auditoria-flow');
+        if (elAuditBar) {
+             elAuditBar.style.width = Math.min(pctAuditado, 100) + '%';
+        }
     },
 
-    renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorReal, isPercent) {
+    renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorHex, isPercent) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
+        const ctx2d = ctx.getContext('2d');
+
+        // --- TENDÊNCIA 2026: Gradient Fills ---
+        // Cria um gradiente vertical suave para o preenchimento da linha
+        let gradient = ctx2d.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, colorHex + '66'); // 40% opacidade no topo
+        gradient.addColorStop(1, colorHex + '00'); // 0% opacidade na base (fade out)
 
         if (canvasId === 'graficoEvolucaoProducao') {
             if (this.chartProd) this.chartProd.destroy();
@@ -373,17 +374,23 @@ MinhaArea.Metas = {
         }
 
         const config = {
-            type: 'bar',
+            type: 'line', // Mudança para Line Chart preenchido (Area Chart)
             data: {
                 labels: labels,
                 datasets: [
                     {
                         label: labelReal,
                         data: dataReal,
-                        backgroundColor: colorReal,
-                        borderRadius: 4,
-                        barPercentage: 0.6,
-                        maxBarThickness: 40,
+                        backgroundColor: gradient,
+                        borderColor: colorHex,
+                        borderWidth: 3,
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: colorHex,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        pointBorderWidth: 2,
+                        fill: true, // Preenchimento ativado
+                        tension: 0.4, // Curva suave (Bézier)
                         order: 2
                     },
                     {
@@ -392,14 +399,11 @@ MinhaArea.Metas = {
                         type: 'line',
                         borderColor: '#94a3b8',
                         borderWidth: 2,
-                        pointBackgroundColor: '#fff',
-                        pointBorderColor: '#94a3b8',
-                        pointRadius: 0, 
-                        pointHoverRadius: 4,
-                        borderDash: [4, 4],
-                        tension: 0.3,
-                        order: 1,
-                        spanGaps: true
+                        pointRadius: 0,
+                        borderDash: [6, 6],
+                        tension: 0.4,
+                        fill: false,
+                        order: 1
                     }
                 ]
             },
@@ -408,14 +412,13 @@ MinhaArea.Metas = {
                 maintainAspectRatio: false,
                 interaction: { intersect: false, mode: 'index' },
                 plugins: {
-                    legend: { display: false }, // Legenda removida para visual mais clean
+                    legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        titleColor: '#1e293b',
-                        bodyColor: '#475569',
-                        borderColor: '#e2e8f0',
-                        borderWidth: 1,
-                        padding: 10,
+                        backgroundColor: 'rgba(30, 41, 59, 0.9)', // Tooltip escura (contraste)
+                        titleColor: '#f1f5f9',
+                        bodyColor: '#e2e8f0',
+                        padding: 12,
+                        cornerRadius: 8,
                         displayColors: true,
                         callbacks: {
                             label: function(ctx) {
@@ -431,16 +434,17 @@ MinhaArea.Metas = {
                     y: { 
                         beginAtZero: true, 
                         border: { display: false },
-                        grid: { color: '#f8fafc', drawBorder: false }, // Grade muito sutil
+                        grid: { color: '#f1f5f9', tickLength: 0 }, 
                         ticks: { 
-                            font: { size: 10 },
+                            font: { family: "'Nunito', sans-serif", size: 11, weight: '600' },
                             color: '#94a3b8',
+                            padding: 10,
                             callback: function(val) { return isPercent ? val + '%' : val; } 
                         } 
                     },
                     x: { 
-                        grid: { display: false, drawBorder: false },
-                        ticks: { font: { size: 10 }, color: '#94a3b8' }
+                        grid: { display: false },
+                        ticks: { font: { family: "'Nunito', sans-serif", size: 10 }, color: '#94a3b8' }
                     }
                 }
             }
@@ -458,7 +462,7 @@ MinhaArea.Metas = {
          'auditoria-total-ok','auditoria-total-nok','auditoria-pct-cobertura']
          .forEach(id => this.setTxt(id, '--'));
         
-        ['bar-meta-assert','bar-meta-prod'].forEach(id => { 
+        ['bar-meta-assert','bar-meta-prod','bar-auditoria-flow'].forEach(id => { 
             const el = document.getElementById(id); 
             if(el) el.style.width = '0%'; 
         });
