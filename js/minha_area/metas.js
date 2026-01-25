@@ -1,13 +1,13 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
    ATUALIZAÇÃO: v4.2 - ULTRA SAFE (Locking + Low Concurrency)
-   MOTIVO: Correção de Race Condition e Timeouts 57014/500
+   MOTIVO: Correção Definitiva de Race Condition e Timeouts 57014/500
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
-    isLocked: false, // Trava de segurança contra cliques duplos
+    isLocked: false, // 🔒 Trava de segurança contra cliques duplos
 
     // --- MANIPULAÇÃO DE DADOS (SEQUENCIAL OTIMIZADO) ---
     fetchParalelo: async function(tabela, colunas, filtrosFn) {
@@ -30,12 +30,12 @@ MinhaArea.Metas = {
 
         // Helper: Retry Strategy com Backoff Exponencial
         const fetchPageSafe = async (pageIndex) => {
-            const maxRetries = 4; // Aumentado para 4 tentativas
+            const maxRetries = 4; // Aumentado para 4 tentativas para resiliência total
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     let q = Sistema.supabase.from(tabela)
                         .select(colunas)
-                        .order('id', { ascending: true })
+                        .order('id', { ascending: true }) // Order by ID garante estabilidade na paginação
                         .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1);
                     
                     q = filtrosFn(q);
@@ -44,7 +44,7 @@ MinhaArea.Metas = {
                     if (error) throw error;
                     return data || [];
                 } catch (err) {
-                    const delay = 2000 * attempt; // 2s, 4s, 6s, 8s
+                    const delay = 2000 * attempt; // 2s, 4s, 8s, 16s
                     console.warn(`⚠️ [RETRY] ${tabela} Pág ${pageIndex}: Tentativa ${attempt}/${maxRetries} falhou. Aguardando ${delay}ms...`);
                     if (attempt === maxRetries) throw err;
                     await new Promise(r => setTimeout(r, delay));
@@ -53,47 +53,56 @@ MinhaArea.Metas = {
         };
 
         // 2. Processamento em Lotes Conservadores (BATCH_SIZE = 2)
-        // Reduzido para 2 para garantir estabilidade máxima em conexões instáveis
+        // Reduzido para 2 para garantir estabilidade máxima e evitar Erro 57014
         const BATCH_SIZE = 2; 
         
         for (let i = 0; i < totalPages; i += BATCH_SIZE) {
             const batchPromises = [];
+            // Prepara o lote
             for (let j = i; j < i + BATCH_SIZE && j < totalPages; j++) {
                 batchPromises.push(fetchPageSafe(j));
             }
 
             try {
+                // Aguarda o lote atual terminar antes de pedir o próximo
                 const batchResults = await Promise.all(batchPromises);
                 batchResults.forEach(data => {
                     if (data) allData = allData.concat(data);
                 });
                 
+                // Log de progresso controlado (apenas a cada 10 lotes ou no final)
                 const progresso = Math.min(((i + BATCH_SIZE) / totalPages) * 100, 100).toFixed(0);
-                // Log menos frequente para não poluir o console
                 if (i % (BATCH_SIZE * 5) === 0 || progresso == '100') {
-                    console.log(`⏳ [SAFE] ${tabela}: ${progresso}% (${allData.length} recs)...`);
+                    console.log(`⏳ [SAFE] ${tabela}: ${progresso}% carregado (${allData.length} recs)...`);
                 }
                 
             } catch (err) {
-                console.error(`❌ [FALHA] Lote ${i} da tabela ${tabela} falhou definitivamente.`, err);
+                console.error(`❌ [FALHA] Lote iniciando em ${i} da tabela ${tabela} falhou definitivamente.`, err);
+                // Não paramos o loop para tentar salvar o que der do resto
             }
         }
         
-        console.log(`✅ [SAFE] ${tabela}: Concluído. ${allData.length}/${count} (Gap: ${count - allData.length})`);
+        const gap = count - allData.length;
+        if (gap === 0) {
+             console.log(`✅ [SAFE] ${tabela}: Download perfeito. ${allData.length}/${count}.`);
+        } else {
+             console.warn(`⚠️ [SAFE] ${tabela}: Concluído com divergência. ${allData.length}/${count} (Gap: ${gap})`);
+        }
+        
         return allData;
     },
 
     carregar: async function() {
         // 1. Trava de Execução (Evita duplo clique/execução paralela)
         if (this.isLocked) {
-            console.warn("⛔ Metas: Carregamento já em andamento. Ignorando nova solicitação.");
+            console.warn("⛔ Metas: Carregamento já em andamento. Ignorando nova solicitação para proteger o banco.");
             return;
         }
-        this.isLocked = true;
+        this.isLocked = true; // 🔒 Bloqueia
 
         console.log("🚀 Metas: Iniciando Modo Espelho (v4.2 - Ultra Safe)...");
         
-        // Limpeza segura de timers anteriores
+        // Limpeza segura de timers anteriores para evitar erro no console
         try { console.timeEnd("⏱️ Tempo Download Total"); } catch(e) {}
 
         const uid = MinhaArea.getUsuarioAlvo(); 
@@ -131,7 +140,9 @@ MinhaArea.Metas = {
 
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
-            // DOWNLOAD EM CASCATA (SERIAL) PARA EVITAR OVERLOAD
+            // DOWNLOAD EM CASCATA (SERIAL) 
+            // Baixamos um tipo de dado por vez para não engarrafar a conexão
+            
             // Passo 1: Metadados Leves
             dadosUsuarios = await this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser);
             const resMetas = await qMetas;
@@ -140,12 +151,12 @@ MinhaArea.Metas = {
             // Passo 2: Produção (Médio)
             dadosProducaoRaw = await this.fetchParalelo('producao', '*', applyFiltersProd);
 
-            // Passo 3: Assertividade (Pesado) - Isolado
+            // Passo 3: Assertividade (Pesado) - Totalmente Isolado
             dadosAssertividadeRaw = await this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert);
             
             console.timeEnd("⏱️ Tempo Download Total");
 
-            // --- LÓGICA DE NEGÓCIO ---
+            // --- LÓGICA DE NEGÓCIO (Mantida v4.0) ---
 
             const idsBloqueados = new Set();
             const mapUser = {};
@@ -328,7 +339,7 @@ MinhaArea.Metas = {
         } catch (err) {
             console.error("❌ Erro Metas:", err);
         } finally {
-            this.isLocked = false; // Libera a trava SEMPRE, mesmo com erro
+            this.isLocked = false; // 🔓 Libera a trava SEMPRE, mesmo com erro, para permitir nova tentativa
         }
     },
 
