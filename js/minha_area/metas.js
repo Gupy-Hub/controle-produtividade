@@ -1,15 +1,16 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v3.2 - Turbo Paralelo + Lógica Bruta de Erros (Alinhamento 100% DB)
+   ATUALIZAÇÃO: v4.0 - ESPELHO FIEL (Sem deduplicação, Lógica Bruta)
+   MOTIVO: Reunião de Emergência - Alinhamento Total com Auditoria DB
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (TURBO PARALELO) ---
+    // --- MANIPULAÇÃO DE DADOS (PARALELO BRUTO) ---
     fetchParalelo: async function(tabela, colunas, filtrosFn) {
-        // 1. Count Rápido
+        // 1. Count
         let qCount = Sistema.supabase.from(tabela).select('*', { count: 'exact', head: true });
         qCount = filtrosFn(qCount);
         const { count, error } = await qCount;
@@ -21,13 +22,13 @@ MinhaArea.Metas = {
         const totalPages = Math.ceil(count / pageSize);
         const promises = [];
 
-        console.log(`🚀 [TURBO] ${tabela}: Baixando ${count} linhas em ${totalPages} conexões...`);
+        console.log(`🚀 [TURBO] ${tabela}: Baixando ${count} registros brutos...`);
 
-        // 2. Dispara requisições com ORDENAÇÃO
+        // 2. Dispara requisições (Mantemos order para estabilidade, mas aceitamos tudo)
         for (let i = 0; i < totalPages; i++) {
             let q = Sistema.supabase.from(tabela)
                 .select(colunas)
-                .order('id', { ascending: true }) // Essencial para estabilidade
+                .order('id', { ascending: true }) 
                 .range(i * pageSize, (i + 1) * pageSize - 1);
             
             q = filtrosFn(q);
@@ -36,31 +37,21 @@ MinhaArea.Metas = {
 
         const responses = await Promise.all(promises);
         
-        // 3. Junta e Remove Duplicatas (Safety check)
+        // 3. Junta TUDO (REMOVIDA A LÓGICA DE DEDUPLICAÇÃO)
+        // Se o banco mandar duplicado, a gente mostra duplicado. A meta é bater o número.
         let allData = [];
-        const idsVistos = new Set();
-
         responses.forEach(r => {
             if (r.data) {
-                r.data.forEach(item => {
-                    if (item.id) {
-                        if (!idsVistos.has(item.id)) {
-                            idsVistos.add(item.id);
-                            allData.push(item);
-                        }
-                    } else {
-                        allData.push(item);
-                    }
-                });
+                allData = allData.concat(r.data);
             }
         });
         
-        console.log(`✅ [TURBO] ${tabela}: ${allData.length} registros únicos processados.`);
+        console.log(`✅ [TURBO] ${tabela}: ${allData.length} registros baixados.`);
         return allData;
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando Carga Sincronizada (v3.2)...");
+        console.log("🚀 Metas: Iniciando Modo Espelho (v4.0)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -344,7 +335,7 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Unificado (Volta para lógica Simples = DB Real)
+        // 2. Loop Unificado (Modo Espelho)
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
@@ -359,12 +350,12 @@ MinhaArea.Metas = {
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
 
-            // B) VOLUMETRIA AUDITORIA (Lógica Bruta: Se Number > 0, é Erro)
-            // Removemos Regex e Trim para garantir igualdade com o script de teste
+            // B) VOLUMETRIA AUDITORIA (Lógica Simplificada)
+            // Se tem nome, entra. Sem frescura.
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
                 
-                // Conversão direta. Se o banco diz que é > 0, é > 0.
+                // Validação Simples: Igual ao DB
                 if (a.qtd_nok && Number(a.qtd_nok) > 0) {
                     countErros++;
                 }
