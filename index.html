@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Gupy Mesa</title>
+    <link rel="shortcut icon" href="img/favicon.png" type="image/x-icon">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Nunito', sans-serif; }
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+        }
+        .bg-pattern {
+            background-color: #f8fafc;
+            background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23e2e8f0' fill-opacity='0.4'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+    </style>
+</head>
+<body class="bg-pattern h-screen flex items-center justify-center p-4">
+
+    <div class="max-w-md w-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100">
+        
+        <div class="relative h-56 w-full overflow-hidden bg-slate-200 group">
+            <img src="img/logo_login.png" 
+                 alt="Capa Gupy Mesa" 
+                 class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105">
+            
+            <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-80"></div>
+        </div>
+        <div class="p-8">
+            <div class="space-y-5">
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">ID do Usuário</label>
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-slate-400 group-focus-within:text-indigo-500 transition"></i>
+                        </div>
+                        <input type="number" id="login-id" class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all sm:text-sm font-bold text-slate-700" placeholder="Ex: 1185327">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2 ml-1">Senha</label>
+                    <div class="relative group">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-lock text-slate-400 group-focus-within:text-indigo-500 transition"></i>
+                        </div>
+                        <input type="password" id="login-senha" class="block w-full pl-10 pr-3 py-3 border border-slate-200 rounded-xl leading-5 bg-slate-50 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all sm:text-sm font-bold text-slate-700" placeholder="••••••••">
+                    </div>
+                </div>
+
+                <div id="msg-erro" class="hidden bg-red-50 text-red-600 text-xs font-bold p-3 rounded-lg flex items-center gap-2 animate-pulse">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Erro ao conectar.</span>
+                </div>
+
+                <button onclick="Login.entrar()" class="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg text-sm font-bold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform active:scale-[0.98]">
+                    Acessar Sistema
+                </button>
+            </div>
+
+            <div class="mt-8 text-center">
+                <p class="text-xs text-slate-400">
+                    Problemas de acesso? <a href="#" class="font-bold text-indigo-600 hover:text-indigo-500">Contate a Gestão</a>
+                </p>
+                <p class="text-[10px] text-slate-300 mt-4">v2.0.4 • Gupy Hub Productivity</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <script src="js/config.js"></script>
+
+    <script src="js/sistema.js"></script>
+
+    <script src="js/login.js"></script>
+
+    <script>
+        document.addEventListener('keypress', function(e) {
+            if(e.key === 'Enter') {
+                const btn = document.querySelector('button');
+                if(btn && !btn.disabled) Login.entrar();
+            }
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "driver": "PostgreSQL",
+            "connectString": "postgresql://postgres.btzdlrjqdzisvyskskeb:GupyMesa_2025_Pedro@aws-1-sa-east-1.pooler.supabase.com:6543/postgres",
+            "name": "GupyMesa DB"
+        }
+    ]
+}
