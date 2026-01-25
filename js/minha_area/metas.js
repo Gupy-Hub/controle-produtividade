@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Sincronia Fina de Erros (Igualando validação estrita do Comparativo.js)
+   ATUALIZAÇÃO: Correção Final (Uso de Number() em vez de parseInt para alinhar erros com DB)
 */
 
 MinhaArea.Metas = {
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando dados (Versão Final Sincronizada)...");
+        console.log("🚀 Metas: Carregando dados (Correção Divergência Erros)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -47,7 +47,7 @@ MinhaArea.Metas = {
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            // Trazemos tudo para filtrar no JS
+            // Sem filtro de % nula para bater volumetria total
             const qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim);
@@ -340,8 +340,7 @@ MinhaArea.Metas = {
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
                 
-                // CORREÇÃO DEFINITIVA DE ERROS
-                // Usa Number() para evitar que strings sujas (ex: "1 (revisar)") sejam contadas como erro pelo parseInt
+                // CORREÇÃO: Usar Number() para evitar contar "1 (revisar)" como erro via parseInt.
                 if (a.qtd_nok && Number(a.qtd_nok) > 0) {
                     countErros++;
                 }
