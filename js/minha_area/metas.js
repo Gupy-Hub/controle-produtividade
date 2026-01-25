@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Correção do Valor da Meta de Assertividade (Reflete Gestão)
+   ATUALIZAÇÃO: Correção Crítica - Cálculo de Cobertura e Resultado por Volume (não por registros)
 */
 
 MinhaArea.Metas = {
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando dados reais...");
+        console.log("🚀 Metas: Carregando dados (Volume Real)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -43,12 +43,13 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // Buscas no Banco
+            // Buscas
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
+            // CORREÇÃO 1: Adicionado 'qtd_ok' na busca para calcular volume total
             const qAssertividade = Sistema.supabase.from('assertividade')
-                .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id') 
+                .select('data_referencia, porcentagem_assertividade, status, qtd_nok, qtd_ok, usuario_id') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim)
                 .not('porcentagem_assertividade', 'is', null);
 
@@ -108,7 +109,7 @@ MinhaArea.Metas = {
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // --- CÁLCULO DAS METAS (Crucial para a correção) ---
+            // Metas (Cálculo Ponderado)
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -121,7 +122,6 @@ MinhaArea.Metas = {
                 }
                 
                 const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
-                // AQUI: Pega o valor exato do banco. Se nulo, assume 98.0
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
@@ -149,7 +149,6 @@ MinhaArea.Metas = {
                 for (const a in mapMetas) {
                     for (const ms in mapMetas[a]) {
                         const d = mapMetas[a][ms];
-                        // Lógica de Produção (Capacidade)
                         let capacidadeDiaria = d.somaIndividual;
                         const validos = d.qtdAssistentesDB;
                         const gap = targetAssistentes - validos;
@@ -163,7 +162,6 @@ MinhaArea.Metas = {
                         }
                         d.prodTotalDiario = capacidadeDiaria;
                         
-                        // Lógica de Assertividade (Inteligente)
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -172,7 +170,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            // Processamento Produção Real
+            // Processamento Dados Reais
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -188,7 +186,6 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Processamento Assertividade Real
             const mapAssert = new Map();
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
@@ -208,7 +205,7 @@ MinhaArea.Metas = {
                 if (!isNaN(val)) mapAssert.get(dataKey).push(val);
             });
 
-            // Geração de Dados para Gráficos
+            // Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -298,14 +295,18 @@ MinhaArea.Metas = {
         let totalMeta = 0;
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
-        let totalErros = 0; 
         
-        // Acumulador para a meta de assertividade no período
+        // CORREÇÃO 2: Variáveis para contagem de VOLUME
+        let totalAuditadosVolume = 0;
+        let totalAcertosVolume = 0;
+        let totalErrosVolume = 0;
+
         let somaMetaAssertConfigurada = 0;
         let diasParaMediaMeta = 0;
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
+        // Cálculo Volume Produção e Meta de Assertividade
         let tempDate = new Date(dtInicio);
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
@@ -320,11 +321,11 @@ MinhaArea.Metas = {
             if (prodDia) totalValidados += Number(prodDia.quantidade || 0);
             totalMeta += Math.round(metaConfig.prodTotalDiario * (isNaN(fator)?1:fator));
 
-            // Acumula a meta configurada para média
             somaMetaAssertConfigurada += metaConfig.assertFinal;
             diasParaMediaMeta++;
         }
 
+        // Loop Assertividade
         asserts.forEach(a => {
             const uId = a.usuario_id;
             if (isGeral) {
@@ -335,18 +336,24 @@ MinhaArea.Metas = {
             if (!STATUS_IGNORAR.includes(status)) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
+                
+                // CORREÇÃO 3: Somar volumes reais (qtd_ok e qtd_nok)
+                const qtdOk = a.qtd_ok ? parseInt(a.qtd_ok) : 0;
+                const qtdNok = a.qtd_nok ? parseInt(a.qtd_nok) : 0;
+                
+                totalAcertosVolume += qtdOk;
+                totalErrosVolume += qtdNok;
+                totalAuditadosVolume += (qtdOk + qtdNok);
             }
-            if (a.qtd_nok && Number(a.qtd_nok) > 0) totalErros++;
         });
 
+        // Médias
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
-        const totalAuditados = asserts.length; 
-        const semAuditoria = Math.max(0, totalValidados - totalAuditados);
-        const totalAcertos = totalAuditados - totalErros;
-        const pctAuditado = totalValidados > 0 ? ((totalAuditados / totalValidados) * 100) : 0;
-
-        // CÁLCULO DA META FINAL DO PERÍODO
         const metaAssertRef = diasParaMediaMeta > 0 ? (somaMetaAssertConfigurada / diasParaMediaMeta) : 98.0;
+
+        // Cálculos de Cobertura Baseado em Volume
+        const pctAuditado = totalValidados > 0 ? ((totalAuditadosVolume / totalValidados) * 100) : 0;
+        const pctResultado = totalAuditadosVolume > 0 ? ((totalAcertosVolume / totalAuditadosVolume) * 100) : 100;
 
         // Updates no DOM
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
@@ -354,21 +361,19 @@ MinhaArea.Metas = {
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        
-        // CORREÇÃO: Usando a meta calculada do DB em vez de valor fixo
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
+        // Cards Corrigidos (Cobertura e Resultado)
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
-        this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
+        this.setTxt('auditoria-total-auditados', totalAuditadosVolume.toLocaleString('pt-BR')); // Agora mostra volume real
         this.setTxt('auditoria-pct-cobertura', pctAuditado.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
         this.setBar('bar-auditoria-cov', pctAuditado, 'bg-purple-500');
 
-        this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); 
-        this.setTxt('auditoria-total-nok', totalErros.toLocaleString('pt-BR')); 
-        const pctOk = totalAuditados > 0 ? (totalAcertos / totalAuditados * 100) : 100;
-        this.setBar('bar-auditoria-res', pctOk, pctOk >= 95 ? 'bg-emerald-500' : 'bg-rose-500');
+        this.setTxt('auditoria-total-ok', totalAcertosVolume.toLocaleString('pt-BR')); 
+        this.setTxt('auditoria-total-nok', totalErrosVolume.toLocaleString('pt-BR')); 
+        
+        this.setBar('bar-auditoria-res', pctResultado, pctResultado >= 95 ? 'bg-emerald-500' : 'bg-rose-500');
     },
 
     renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorHex, isPercent) {
@@ -391,7 +396,7 @@ MinhaArea.Metas = {
                         data: dataReal,
                         borderColor: colorHex,
                         borderWidth: 2,
-                        backgroundColor: colorHex + '10', // 10% opacity fill
+                        backgroundColor: colorHex + '10', 
                         pointBackgroundColor: '#fff',
                         pointBorderColor: colorHex,
                         pointRadius: 3,
