@@ -1,15 +1,15 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v4.2 - ULTRA SAFE (Locking + Low Concurrency)
-   MOTIVO: Correção Definitiva de Race Condition e Timeouts 57014/500
+   ATUALIZAÇÃO: v4.3 - SMART BATCHING (Híbrido: Rápido para leves, Seguro para pesados)
+   MOTIVO: Eliminar erros 500 no console e otimizar tempo de download
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
-    isLocked: false, // 🔒 Trava de segurança contra cliques duplos
+    isLocked: false, // 🔒 Trava de segurança
 
-    // --- MANIPULAÇÃO DE DADOS (SEQUENCIAL OTIMIZADO) ---
+    // --- MANIPULAÇÃO DE DADOS ---
     fetchParalelo: async function(tabela, colunas, filtrosFn) {
         // 1. Count Inicial
         let qCount = Sistema.supabase.from(tabela).select('*', { count: 'exact', head: true });
@@ -26,16 +26,23 @@ MinhaArea.Metas = {
         const totalPages = Math.ceil(count / pageSize);
         let allData = [];
 
-        console.log(`🛡️ [SAFE MODE] ${tabela}: Baixando ${count} registros (${totalPages} pgs) em lotes reduzidos...`);
+        // CONFIGURAÇÃO INTELIGENTE DE LOTE
+        // Se for assertividade (pesada), vai 1 por 1 (Serial) para não travar o banco.
+        // Se forem outras (leves), vai 5 por 5 (Paralelo) para ser rápido.
+        const isHeavyTable = (tabela === 'assertividade');
+        const BATCH_SIZE = isHeavyTable ? 1 : 5;
+        const modo = isHeavyTable ? 'SERIAL (Blindado)' : 'TURBO (Rápido)';
 
-        // Helper: Retry Strategy com Backoff Exponencial
+        console.log(`🛡️ [v4.3] ${tabela}: Baixando ${count} registros (${totalPages} pgs). Modo: ${modo}...`);
+
+        // Helper: Retry Strategy
         const fetchPageSafe = async (pageIndex) => {
-            const maxRetries = 4; // Aumentado para 4 tentativas para resiliência total
+            const maxRetries = 5; 
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
                     let q = Sistema.supabase.from(tabela)
                         .select(colunas)
-                        .order('id', { ascending: true }) // Order by ID garante estabilidade na paginação
+                        .order('id', { ascending: true }) 
                         .range(pageIndex * pageSize, (pageIndex + 1) * pageSize - 1);
                     
                     q = filtrosFn(q);
@@ -44,70 +51,66 @@ MinhaArea.Metas = {
                     if (error) throw error;
                     return data || [];
                 } catch (err) {
-                    const delay = 2000 * attempt; // 2s, 4s, 8s, 16s
+                    // Backoff mais agressivo para tabela pesada
+                    const baseDelay = isHeavyTable ? 3000 : 1000;
+                    const delay = baseDelay * attempt; 
+                    
                     console.warn(`⚠️ [RETRY] ${tabela} Pág ${pageIndex}: Tentativa ${attempt}/${maxRetries} falhou. Aguardando ${delay}ms...`);
+                    
                     if (attempt === maxRetries) throw err;
                     await new Promise(r => setTimeout(r, delay));
                 }
             }
         };
 
-        // 2. Processamento em Lotes Conservadores (BATCH_SIZE = 2)
-        // Reduzido para 2 para garantir estabilidade máxima e evitar Erro 57014
-        const BATCH_SIZE = 2; 
-        
+        // 2. Processamento
         for (let i = 0; i < totalPages; i += BATCH_SIZE) {
             const batchPromises = [];
-            // Prepara o lote
             for (let j = i; j < i + BATCH_SIZE && j < totalPages; j++) {
                 batchPromises.push(fetchPageSafe(j));
             }
 
             try {
-                // Aguarda o lote atual terminar antes de pedir o próximo
                 const batchResults = await Promise.all(batchPromises);
                 batchResults.forEach(data => {
                     if (data) allData = allData.concat(data);
                 });
                 
-                // Log de progresso controlado (apenas a cada 10 lotes ou no final)
+                // Feedback visual de progresso
                 const progresso = Math.min(((i + BATCH_SIZE) / totalPages) * 100, 100).toFixed(0);
+                
+                // Log reduzido para não travar o navegador
                 if (i % (BATCH_SIZE * 5) === 0 || progresso == '100') {
-                    console.log(`⏳ [SAFE] ${tabela}: ${progresso}% carregado (${allData.length} recs)...`);
+                    console.log(`⏳ [${modo}] ${tabela}: ${progresso}% carregado (${allData.length} recs)...`);
                 }
                 
             } catch (err) {
-                console.error(`❌ [FALHA] Lote iniciando em ${i} da tabela ${tabela} falhou definitivamente.`, err);
-                // Não paramos o loop para tentar salvar o que der do resto
+                console.error(`❌ [FALHA CRÍTICA] Lote ${i} da tabela ${tabela}.`, err);
             }
         }
         
         const gap = count - allData.length;
         if (gap === 0) {
-             console.log(`✅ [SAFE] ${tabela}: Download perfeito. ${allData.length}/${count}.`);
+             console.log(`✅ [${modo}] ${tabela}: Sucesso Total. ${allData.length}/${count}.`);
         } else {
-             console.warn(`⚠️ [SAFE] ${tabela}: Concluído com divergência. ${allData.length}/${count} (Gap: ${gap})`);
+             console.warn(`⚠️ [${modo}] ${tabela}: Concluído com gap. ${allData.length}/${count} (Faltam: ${gap})`);
         }
         
         return allData;
     },
 
     carregar: async function() {
-        // 1. Trava de Execução (Evita duplo clique/execução paralela)
         if (this.isLocked) {
-            console.warn("⛔ Metas: Carregamento já em andamento. Ignorando nova solicitação para proteger o banco.");
+            console.warn("⛔ Metas: Aguarde o carregamento atual terminar.");
             return;
         }
-        this.isLocked = true; // 🔒 Bloqueia
+        this.isLocked = true;
 
-        console.log("🚀 Metas: Iniciando Modo Espelho (v4.2 - Ultra Safe)...");
-        
-        // Limpeza segura de timers anteriores para evitar erro no console
-        try { console.timeEnd("⏱️ Tempo Download Total"); } catch(e) {}
+        console.log("🚀 Metas: Iniciando Modo Espelho (v4.3 - Smart Batching)...");
+        try { console.timeEnd("⏱️ Tempo Total"); } catch(e) {}
 
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
-
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const dtInicio = new Date(inicio + 'T12:00:00');
         const dtFim = new Date(fim + 'T12:00:00');
@@ -117,9 +120,9 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            console.time("⏱️ Tempo Download Total");
+            console.time("⏱️ Tempo Total");
 
-            // Filtros Base
+            // Queries e Filtros
             const applyFiltersProd = (q) => {
                 let qq = q.gte('data_referencia', inicio).lte('data_referencia', fim);
                 if (uid) qq = qq.eq('usuario_id', uid);
@@ -132,7 +135,6 @@ MinhaArea.Metas = {
             };
             const applyFiltersUser = (q) => q;
 
-            // Query Metas (Leve)
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
@@ -140,24 +142,23 @@ MinhaArea.Metas = {
 
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
-            // DOWNLOAD EM CASCATA (SERIAL) 
-            // Baixamos um tipo de dado por vez para não engarrafar a conexão
+            // --- EXECUÇÃO OTIMIZADA ---
             
-            // Passo 1: Metadados Leves
+            // 1. Dados Leves (Usuários + Metas) -> Pode ir rápido
             dadosUsuarios = await this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser);
             const resMetas = await qMetas;
             dadosMetasRaw = resMetas.data || [];
 
-            // Passo 2: Produção (Médio)
+            // 2. Produção (Médio) -> Modo Turbo
             dadosProducaoRaw = await this.fetchParalelo('producao', '*', applyFiltersProd);
 
-            // Passo 3: Assertividade (Pesado) - Totalmente Isolado
+            // 3. Assertividade (Pesado) -> Modo Serial (Blindado)
+            // Aqui é onde ocorriam os erros 500. Agora irá 1 por 1.
             dadosAssertividadeRaw = await this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert);
             
-            console.timeEnd("⏱️ Tempo Download Total");
+            console.timeEnd("⏱️ Tempo Total");
 
-            // --- LÓGICA DE NEGÓCIO (Mantida v4.0) ---
-
+            // --- PROCESSAMENTO (Business Logic) ---
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -180,7 +181,7 @@ MinhaArea.Metas = {
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // Metas Config
+            // Configuração Metas
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -188,9 +189,7 @@ MinhaArea.Metas = {
                 const uId = m.usuario_id;
                 
                 if (!mapMetas[a]) mapMetas[a] = {};
-                if (!mapMetas[a][ms]) {
-                    mapMetas[a][ms] = { prodTotalDiario: 0, somaIndividual: 0, qtdAssistentesDB: 0, prodValues: [], assertValues: [], assertFinal: 98.0 };
-                }
+                if (!mapMetas[a][ms]) mapMetas[a][ms] = { prodTotalDiario: 0, somaIndividual: 0, qtdAssistentesDB: 0, prodValues: [], assertValues: [], assertFinal: 98.0 };
                 
                 const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
@@ -232,7 +231,6 @@ MinhaArea.Metas = {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
                         d.prodTotalDiario = capacidadeDiaria;
-                        
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -241,7 +239,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            // Processamento Produção
+            // Mapas de Produção e Assertividade
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -257,30 +255,22 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Gráficos e KPIs
             const mapAssert = new Map();
             const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; 
-
             dadosAssertividadeRaw.forEach(a => {
                 const uId = a.usuario_id;
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
-                
-                if (isGeral) {
-                    if (idsBloqueados.has(uId)) return;
-                    if (!mapUser[uId]) return;
-                }
-                
+                if (isGeral && (idsBloqueados.has(uId) || !mapUser[uId])) return;
                 const status = (a.status || '').toUpperCase();
                 if (!STATUS_IGNORAR_GRAFICO.includes(status) && a.porcentagem_assertividade !== null) {
                     if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
-                    let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
-                    let val = parseFloat(valStr);
+                    let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                     if (!isNaN(val)) mapAssert.get(dataKey).push(val);
                 }
             });
 
-            // Geração Labels Gráfico
+            // Gráficos e KPIs
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             const labels = [], dataProdReal = [], dataProdMeta = [], dataAssertReal = [], dataAssertMeta = [];
@@ -290,7 +280,6 @@ MinhaArea.Metas = {
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 const isFDS = (d.getDay() === 0 || d.getDay() === 6);
                 if (!modoMensal && isFDS) continue; 
-
                 const dataStr = d.toISOString().split('T')[0];
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
@@ -339,7 +328,7 @@ MinhaArea.Metas = {
         } catch (err) {
             console.error("❌ Erro Metas:", err);
         } finally {
-            this.isLocked = false; // 🔓 Libera a trava SEMPRE, mesmo com erro, para permitir nova tentativa
+            this.isLocked = false; 
         }
     },
 
@@ -369,15 +358,12 @@ MinhaArea.Metas = {
         let totalMeta = 0;
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
-        
         let countTotalAuditados = 0;
         let countErros = 0;
         let somaMetaAssertConfigurada = 0;
         let diasParaMediaMeta = 0;
-
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
-        // 1. Produção
         let tempDate = new Date(dtInicio);
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
@@ -393,69 +379,47 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Unificado (Modo Espelho)
         asserts.forEach(a => {
             const uId = a.usuario_id;
-            
-            // A) KPI (%)
             let isKpiEligible = true;
-            if (isGeral) {
-                if (idsBloqueados.has(uId) || !mapUser[uId]) isKpiEligible = false;
-            }
+            if (isGeral && (idsBloqueados.has(uId) || !mapUser[uId])) isKpiEligible = false;
             const status = (a.status || '').toUpperCase();
             if (isKpiEligible && !STATUS_IGNORAR.includes(status) && a.porcentagem_assertividade !== null) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
-
-            // B) VOLUMETRIA AUDITORIA (Lógica Simplificada)
-            // Se tem nome, entra. Sem frescura.
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
-                
-                // Validação Simples: Igual ao DB
-                if (a.qtd_nok && Number(a.qtd_nok) > 0) {
-                    countErros++;
-                }
+                if (a.qtd_nok && Number(a.qtd_nok) > 0) countErros++;
             }
         });
 
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const metaAssertRef = diasParaMediaMeta > 0 ? (somaMetaAssertConfigurada / diasParaMediaMeta) : 98.0;
-
         const totalAcertos = countTotalAuditados - countErros;
         const pctCobertura = totalValidados > 0 ? ((countTotalAuditados / totalValidados) * 100) : 0;
         const pctResultado = countTotalAuditados > 0 ? ((totalAcertos / countTotalAuditados) * 100) : 100;
 
-        // Updates
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
-
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
-
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', countTotalAuditados.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-pct-cobertura', pctCobertura.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
         this.setBar('bar-auditoria-cov', pctCobertura, 'bg-purple-500');
-
         this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-total-nok', countErros.toLocaleString('pt-BR')); 
-        
         this.setBar('bar-auditoria-res', pctResultado, pctResultado >= 95 ? 'bg-emerald-500' : 'bg-rose-500');
     },
 
     renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorHex, isPercent) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
-
-        if (canvasId === 'graficoEvolucaoProducao') {
-            if (this.chartProd) this.chartProd.destroy();
-        } else {
-            if (this.chartAssert) this.chartAssert.destroy();
-        }
+        if (canvasId === 'graficoEvolucaoProducao') { if (this.chartProd) this.chartProd.destroy(); } 
+        else { if (this.chartAssert) this.chartAssert.destroy(); }
 
         const config = {
             type: 'line',
@@ -516,11 +480,7 @@ MinhaArea.Metas = {
                         beginAtZero: true, 
                         border: { display: false },
                         grid: { color: '#f1f5f9' }, 
-                        ticks: { 
-                            font: { size: 10 },
-                            color: '#94a3b8',
-                            callback: function(val) { return isPercent ? val + '%' : val; } 
-                        } 
+                        ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(val) { return isPercent ? val + '%' : val; } } 
                     },
                     x: { 
                         grid: { display: false },
@@ -529,9 +489,7 @@ MinhaArea.Metas = {
                 }
             }
         };
-
         const newChart = new Chart(ctx, config);
-
         if (canvasId === 'graficoEvolucaoProducao') this.chartProd = newChart;
         else this.chartAssert = newChart;
     },
@@ -540,7 +498,6 @@ MinhaArea.Metas = {
         ['meta-assert-real','meta-assert-meta','meta-prod-real','meta-prod-meta',
          'auditoria-total-validados','auditoria-total-auditados','auditoria-pct-cobertura',
          'auditoria-total-ok','auditoria-total-nok'].forEach(id => this.setTxt(id, '--'));
-        
         ['bar-meta-assert','bar-meta-prod','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { 
             const el = document.getElementById(id); 
             if(el) el.style.width = '0%'; 
