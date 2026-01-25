@@ -1,13 +1,13 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   CORREÇÃO: Paginação Automática (Pega TUDO) + Filtro Vanessa
+   CORREÇÃO: Paginação Automática + Design Clean + Configuração de Gráficos Otimizada
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // Função Auxiliar para baixar tudo (fura o bloqueio de 1000 linhas)
+    // --- MANIPULAÇÃO DE DADOS (Inalterada para garantir integridade) ---
     fetchAll: async function(table, queryBuilder) {
         let allData = [];
         let page = 0;
@@ -32,7 +32,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento...");
+        console.log("🚀 Metas: Iniciando carregamento (Clean Layout)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -45,7 +45,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 1. Buscas
+            // Buscas no Supabase
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
@@ -75,7 +75,6 @@ MinhaArea.Metas = {
                 dadosMetasRaw = m.data || [];
                 dadosUsuarios = u.data || [];
             } else {
-                // PAGINAÇÃO AQUI TAMBÉM
                 const [p, a, m, u] = await Promise.all([
                     this.fetchAll('producao', qProducao),
                     this.fetchAll('assertividade', qAssertividade),
@@ -88,7 +87,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // --- CRIAÇÃO DA LISTA DE BLOQUEIO ---
+            // --- FILTRO E CÁLCULOS (Lógica mantida integralmente) ---
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -101,17 +100,12 @@ MinhaArea.Metas = {
                     nome: (u.nome || '').toUpperCase().trim(),
                     ativo: u.ativo
                 };
-
                 const nomeUpper = mapUser[u.id].nome;
                 const funcaoUpper = mapUser[u.id].funcao;
                 const perfilUpper = mapUser[u.id].perfil;
-
                 const isGestao = termosGestao.some(t => funcaoUpper.includes(t) || perfilUpper.includes(t));
                 const isNomeProibido = nomesBloqueados.some(n => nomeUpper.includes(n));
-
-                if (isGestao || isNomeProibido) {
-                    idsBloqueados.add(u.id);
-                }
+                if (isGestao || isNomeProibido) idsBloqueados.add(u.id);
             });
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
@@ -134,12 +128,10 @@ MinhaArea.Metas = {
                 if (isGeral) {
                     const isBloqueado = idsBloqueados.has(uId);
                     const uData = mapUser[uId];
-
                     if (!isBloqueado && uData) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
                         else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
-
                         if (considerar && valProd > 0) {
                             mapMetas[a][ms].somaIndividual += valProd;
                             mapMetas[a][ms].qtdAssistentesDB++; 
@@ -202,28 +194,25 @@ MinhaArea.Metas = {
                 const uId = a.usuario_id;
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
-                
                 const status = (a.status || '').toUpperCase();
                 if (STATUS_IGNORAR.includes(status)) return;
-
                 if (isGeral) {
-                    if (idsBloqueados.has(uId)) return; // BLOQUEIO!
-                    if (!mapUser[uId]) return; // IGNORA FANTASMAS!
+                    if (idsBloqueados.has(uId)) return;
+                    if (!mapUser[uId]) return;
                 }
-
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                 let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
                 let val = parseFloat(valStr);
                 if (!isNaN(val)) mapAssert.get(dataKey).push(val);
             });
 
-            // --- GRÁFICOS ---
+            // --- PREPARAÇÃO GRÁFICOS ---
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
             const labels = [], dataProdReal = [], dataProdMeta = [], dataAssertReal = [], dataAssertMeta = [];
             const aggMensal = new Map(); 
-            const mesesNomes = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+            const mesesNomes = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
                 const isFDS = (d.getDay() === 0 || d.getDay() === 6);
@@ -273,8 +262,10 @@ MinhaArea.Metas = {
             this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsBloqueados);
 
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
-            this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação (Docs)', '#2563eb', false);
-            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade (%)', '#059669', true);
+            
+            // Renderização com estilo mais clean
+            this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação', '#3b82f6', false);
+            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade', '#10b981', true);
 
         } catch (err) {
             console.error("❌ Erro Metas:", err);
@@ -328,10 +319,9 @@ MinhaArea.Metas = {
 
         asserts.forEach(a => {
             const uId = a.usuario_id;
-            
             if (isGeral) {
-                if (idsBloqueados.has(uId)) return; // BLOQUEIO!
-                if (!mapUser[uId]) return; // FANTASMA!
+                if (idsBloqueados.has(uId)) return;
+                if (!mapUser[uId]) return;
             }
 
             const status = (a.status || '').toUpperCase();
@@ -342,7 +332,6 @@ MinhaArea.Metas = {
                     qtdAssertMedia++; 
                 }
             }
-            
             if (a.qtd_nok && Number(a.qtd_nok) > 0) totalErros++;
         });
 
@@ -350,10 +339,12 @@ MinhaArea.Metas = {
         const totalAuditados = asserts.length; 
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
         const totalAcertos = totalAuditados - totalErros;
+        const pctAuditado = totalValidados > 0 ? ((totalAuditados / totalValidados) * 100) : 0;
 
+        // Atualização dos elementos do DOM (IDs mantidos para consistência)
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
+        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-500');
 
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
@@ -363,6 +354,9 @@ MinhaArea.Metas = {
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
+        
+        // Novo elemento: Percentual Auditado
+        this.setTxt('auditoria-pct-cobertura', pctAuditado.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
         
         this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-total-nok', totalErros.toLocaleString('pt-BR')); 
@@ -389,19 +383,21 @@ MinhaArea.Metas = {
                         backgroundColor: colorReal,
                         borderRadius: 4,
                         barPercentage: 0.6,
+                        maxBarThickness: 40,
                         order: 2
                     },
                     {
-                        label: 'Meta Esperada',
+                        label: 'Meta',
                         data: dataMeta,
                         type: 'line',
                         borderColor: '#94a3b8',
                         borderWidth: 2,
                         pointBackgroundColor: '#fff',
                         pointBorderColor: '#94a3b8',
-                        pointRadius: 3,
-                        borderDash: [5, 5],
-                        tension: 0.1,
+                        pointRadius: 0, 
+                        pointHoverRadius: 4,
+                        borderDash: [4, 4],
+                        tension: 0.3,
                         order: 1,
                         spanGaps: true
                     }
@@ -412,8 +408,15 @@ MinhaArea.Metas = {
                 maintainAspectRatio: false,
                 interaction: { intersect: false, mode: 'index' },
                 plugins: {
-                    legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 8 } },
+                    legend: { display: false }, // Legenda removida para visual mais clean
                     tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#1e293b',
+                        bodyColor: '#475569',
+                        borderColor: '#e2e8f0',
+                        borderWidth: 1,
+                        padding: 10,
+                        displayColors: true,
                         callbacks: {
                             label: function(ctx) {
                                 let val = ctx.raw;
@@ -427,10 +430,18 @@ MinhaArea.Metas = {
                 scales: {
                     y: { 
                         beginAtZero: true, 
-                        grid: { color: '#f1f5f9' }, 
-                        ticks: { callback: function(val) { return isPercent ? val + '%' : val; } } 
+                        border: { display: false },
+                        grid: { color: '#f8fafc', drawBorder: false }, // Grade muito sutil
+                        ticks: { 
+                            font: { size: 10 },
+                            color: '#94a3b8',
+                            callback: function(val) { return isPercent ? val + '%' : val; } 
+                        } 
                     },
-                    x: { grid: { display: false } }
+                    x: { 
+                        grid: { display: false, drawBorder: false },
+                        ticks: { font: { size: 10 }, color: '#94a3b8' }
+                    }
                 }
             }
         };
@@ -442,8 +453,15 @@ MinhaArea.Metas = {
     },
 
     resetarCards: function() {
-        ['meta-assert-real','meta-assert-meta','meta-prod-real','meta-prod-meta','auditoria-total-validados','auditoria-total-auditados','auditoria-sem-audit','auditoria-total-ok','auditoria-total-nok'].forEach(id => this.setTxt(id, '--'));
-        ['bar-meta-assert','bar-meta-prod'].forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
+        ['meta-assert-real','meta-assert-meta','meta-prod-real','meta-prod-meta',
+         'auditoria-total-validados','auditoria-total-auditados','auditoria-sem-audit',
+         'auditoria-total-ok','auditoria-total-nok','auditoria-pct-cobertura']
+         .forEach(id => this.setTxt(id, '--'));
+        
+        ['bar-meta-assert','bar-meta-prod'].forEach(id => { 
+            const el = document.getElementById(id); 
+            if(el) el.style.width = '0%'; 
+        });
     },
 
     setTxt: function(id, val) { const el = document.getElementById(id); if(el) el.innerText = val; },

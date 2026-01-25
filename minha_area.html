@@ -30,6 +30,7 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+        /* Estilos legados para abas antigas (Diário) */
         .kpi-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); border: 1px solid #f1f5f9; padding: 12px 16px; display: flex; flex-direction: column; justify-content: space-between; height: 100px; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; }
         .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05); }
         .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
@@ -195,14 +196,100 @@
         </div>
 
         <div id="ma-tab-metas" class="ma-view hidden animate-enter space-y-6">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition"><div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-cubes text-6xl text-blue-600"></i></div><div><h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Validação</h3><div class="flex justify-between items-end mb-2"><div><span class="text-4xl font-black text-blue-600 tracking-tight" id="meta-prod-real">--</span><span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Realizado</span></div><div class="text-right relative z-10"><span class="text-xl font-bold text-slate-400" id="meta-prod-meta">--</span><span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Meta Esperada</span></div></div></div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2"><div id="bar-meta-prod" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div></div></div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition"><div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-bullseye text-6xl text-emerald-600"></i></div><div><h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Assertividade</h3><div class="flex justify-between items-end mb-2"><div><span class="text-4xl font-black text-emerald-600 tracking-tight" id="meta-assert-real">--%</span><span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Realizado</span></div><div class="text-right relative z-10"><span class="text-xl font-bold text-slate-400" id="meta-assert-meta">--%</span><span class="text-[10px] text-slate-400 font-bold uppercase block mt-1">Meta</span></div></div></div><div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden mt-2"><div id="bar-meta-assert" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div></div></div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between relative overflow-hidden group hover:shadow-md transition"><div class="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition"><i class="fas fa-search text-6xl text-purple-600"></i></div><h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 border-b border-slate-100 pb-2">Auditoria</h3><div class="space-y-4"><div><span class="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Acumulado</span><div class="grid grid-cols-3 gap-2 text-center bg-slate-50 p-2 rounded border border-slate-100"><div><div class="text-[10px] text-slate-500 font-bold">Validados</div><div class="text-sm font-black text-blue-600" id="auditoria-total-validados">--</div></div><div class="border-x border-slate-200"><div><div class="text-[10px] text-slate-500 font-bold">Auditados</div><div class="text-sm font-black text-purple-600" id="auditoria-total-auditados">--</div></div></div><div><div><div class="text-[10px] text-slate-500 font-bold">Não Auditados</div><div class="text-sm font-black text-slate-400" id="auditoria-sem-audit">--</div></div></div></div></div><div><span class="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Resultado</span><div class="flex gap-2"><div class="flex-1 bg-emerald-50 border border-emerald-100 rounded p-2 flex justify-between items-center"><span class="text-[10px] font-bold text-emerald-600"><i class="fas fa-check mr-1"></i>OK</span><span class="font-black text-emerald-700 text-sm" id="auditoria-total-ok">--</span></div><div class="flex-1 bg-rose-50 border border-rose-100 rounded p-2 flex justify-between items-center"><span class="text-[10px] font-bold text-rose-600"><i class="fas fa-times mr-1"></i>NOK</span><span class="font-black text-rose-700 text-sm" id="auditoria-total-nok">--</span></div></div></div></div></div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between h-32 relative overflow-hidden group">
+                    <div class="flex justify-between items-start z-10">
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Validação (Entregas)</span>
+                            <div class="flex items-baseline gap-2 mt-1">
+                                <span class="text-4xl font-black text-slate-800 tracking-tight" id="meta-prod-real">--</span>
+                                <span class="text-xs font-semibold text-slate-400">/ <span id="meta-prod-meta">--</span> Meta</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600">
+                            <i class="fas fa-cubes text-lg"></i>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-4">
+                        <div id="bar-meta-prod" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between h-32 relative overflow-hidden group">
+                    <div class="flex justify-between items-start z-10">
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase tracking-wide">Qualidade (Assertividade)</span>
+                            <div class="flex items-baseline gap-2 mt-1">
+                                <span class="text-4xl font-black text-slate-800 tracking-tight" id="meta-assert-real">--%</span>
+                                <span class="text-xs font-semibold text-slate-400">/ <span id="meta-assert-meta">--%</span> Meta</span>
+                            </div>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                            <i class="fas fa-check-circle text-lg"></i>
+                        </div>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-4">
+                        <div id="bar-meta-assert" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
+                    </div>
+                </div>
             </div>
+
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+                <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wide mb-4 flex items-center gap-2">
+                    <i class="fas fa-search text-purple-500"></i> Cobertura de Auditoria
+                </h3>
+                <div class="flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left divide-y md:divide-y-0 md:divide-x divide-slate-100">
+                    
+                    <div class="flex-1 w-full flex flex-col items-center md:items-start px-4">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Entregue</span>
+                        <span class="text-2xl font-black text-slate-700" id="auditoria-total-validados">--</span>
+                        <span class="text-[10px] text-slate-400 font-semibold mt-1">Documentos processados</span>
+                    </div>
+
+                    <div class="flex-1 w-full flex flex-col items-center px-4 pt-4 md:pt-0">
+                        <span class="text-[10px] font-bold text-purple-500 uppercase mb-1 bg-purple-50 px-2 py-0.5 rounded-full">Auditados</span>
+                        <div class="flex items-baseline gap-1">
+                            <span class="text-2xl font-black text-purple-600" id="auditoria-total-auditados">--</span>
+                            <span class="text-xs text-purple-400 font-bold">(<span id="auditoria-pct-cobertura">--%</span>)</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400 font-semibold mt-1">Faltam: <span id="auditoria-sem-audit">--</span></span>
+                    </div>
+
+                    <div class="flex-1 w-full flex items-center justify-center gap-4 px-4 pt-4 md:pt-0">
+                        <div class="text-center">
+                            <span class="block text-xl font-black text-emerald-600" id="auditoria-total-ok">--</span>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Aprovados</span>
+                        </div>
+                        <div class="h-8 w-px bg-slate-200"></div>
+                        <div class="text-center">
+                            <span class="block text-xl font-black text-rose-500" id="auditoria-total-nok">--</span>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase">Reprovados</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 min-h-[400px]"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-slate-700 flex items-center gap-2"><div class="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-cubes"></i></div><span>Evolução da Validação</span></h3><span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase periodo-label">--</span></div><div class="h-[320px] w-full"><canvas id="graficoEvolucaoProducao"></canvas></div></div>
-                <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 min-h-[400px]"><div class="flex justify-between items-center mb-6"><h3 class="font-bold text-slate-700 flex items-center gap-2"><div class="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600"><i class="fas fa-bullseye"></i></div><span>Evolução da Assertividade</span></h3><span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase periodo-label">--</span></div><div class="h-[320px] w-full"><canvas id="graficoEvolucaoAssertividade"></canvas></div></div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[350px]">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-sm font-bold text-slate-700">Evolução Diária (Volume)</h3>
+                        <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase periodo-label">--</span>
+                    </div>
+                    <div class="h-[280px] w-full relative">
+                        <canvas id="graficoEvolucaoProducao"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 min-h-[350px]">
+                    <div class="flex justify-between items-center mb-6">
+                        <h3 class="text-sm font-bold text-slate-700">Evolução Diária (Qualidade)</h3>
+                        <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase periodo-label">--</span>
+                    </div>
+                    <div class="h-[280px] w-full relative">
+                        <canvas id="graficoEvolucaoAssertividade"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
