@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Sincronia Total de Volumetria (Remove filtros dos cards de auditoria)
+   ATUALIZAÇÃO: Correção de Divergência (Remoção de filtro restritivo de % nula)
 */
 
 MinhaArea.Metas = {
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando modo 'Auditoria Unificada'...");
+        console.log("🚀 Metas: Carregando dados (Correção Divergência 4k)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -47,10 +47,11 @@ MinhaArea.Metas = {
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
+            // CORREÇÃO CRÍTICA: Removido .not('porcentagem_assertividade', 'is', null)
+            // Agora trazemos TUDO para filtrar no JS (KPI vs Volumetria)
             const qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome') 
-                .gte('data_referencia', inicio).lte('data_referencia', fim)
-                .not('porcentagem_assertividade', 'is', null);
+                .gte('data_referencia', inicio).lte('data_referencia', fim);
 
             const qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
@@ -85,7 +86,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // Filtros de Usuário (Apenas para KPI de equipe)
+            // Filtros e Bloqueios
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -108,7 +109,7 @@ MinhaArea.Metas = {
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // Metas Config (Cálculo Ponderado)
+            // Metas (Cálculo Ponderado)
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -194,14 +195,14 @@ MinhaArea.Metas = {
                 const dataKey = a.data_referencia;
                 if (!dataKey) return;
                 
-                // Filtro para GRÁFICOS (Mantém visualização limpa)
                 if (isGeral) {
                     if (idsBloqueados.has(uId)) return;
                     if (!mapUser[uId]) return;
                 }
                 
+                // Para gráfico, precisamos de valor numérico válido
                 const status = (a.status || '').toUpperCase();
-                if (!STATUS_IGNORAR_GRAFICO.includes(status)) {
+                if (!STATUS_IGNORAR_GRAFICO.includes(status) && a.porcentagem_assertividade !== null) {
                     if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                     let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
                     let val = parseFloat(valStr);
@@ -301,7 +302,6 @@ MinhaArea.Metas = {
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
         
-        // --- VARIAVEIS AUDITORIA (SEM FILTRO DE USUÁRIO) ---
         let countTotalAuditados = 0;
         let countErros = 0;
 
@@ -310,7 +310,7 @@ MinhaArea.Metas = {
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
-        // 1. Cálculo Produção
+        // 1. Produção (Volume)
         let tempDate = new Date(dtInicio);
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
@@ -329,25 +329,26 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Unificado
+        // 2. Loop Dados Assertividade
         asserts.forEach(a => {
             const uId = a.usuario_id;
-            const status = (a.status || '').toUpperCase();
             
-            // --- A) LÓGICA DE KPI (FILTRADA - EQUIPE ATIVA) ---
-            // Queremos a média da equipe, não distorcida por admins/testes
+            // --- A) KPI EQUIPE (%) ---
+            // Aplica filtros de bloqueio/equipe ativa SOMENTE para calcular a média de acerto da equipe
             let isKpiEligible = true;
             if (isGeral) {
                 if (idsBloqueados.has(uId) || !mapUser[uId]) isKpiEligible = false;
             }
 
-            if (isKpiEligible && !STATUS_IGNORAR.includes(status)) {
+            const status = (a.status || '').toUpperCase();
+            // Ignora status inválidos E exige que a porcentagem não seja nula para a média
+            if (isKpiEligible && !STATUS_IGNORAR.includes(status) && a.porcentagem_assertividade !== null) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
 
-            // --- B) LÓGICA DE AUDITORIA (TOTAL / SEM FILTRO) ---
-            // Conta TUDO o que foi auditado, igual à aba Assertividade
+            // --- B) VOLUMETRIA AUDITORIA (CARDS) ---
+            // Conta TUDO que tem auditora, independente se tem % calculada ou status
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
                 if (a.qtd_nok && Number(a.qtd_nok) > 0) {
@@ -356,17 +357,16 @@ MinhaArea.Metas = {
             }
         });
 
-        // Totais e Médias
+        // Médias
         const mediaAssert = qtdAssertMedia > 0 ? (somaAssertMedia / qtdAssertMedia) : 0;
         const metaAssertRef = diasParaMediaMeta > 0 ? (somaMetaAssertConfigurada / diasParaMediaMeta) : 98.0;
 
+        // Totais Auditoria
         const totalAcertos = countTotalAuditados - countErros;
         const pctCobertura = totalValidados > 0 ? ((countTotalAuditados / totalValidados) * 100) : 0;
         const pctResultado = countTotalAuditados > 0 ? ((totalAcertos / countTotalAuditados) * 100) : 100;
 
-        // --- ATUALIZAÇÃO DOM ---
-        
-        // Cards Produção e KPI
+        // --- UPDATES DOM ---
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
@@ -375,7 +375,7 @@ MinhaArea.Metas = {
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Cards Auditoria (Agora com números REAIS totais)
+        // Cards Auditoria
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', countTotalAuditados.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-pct-cobertura', pctCobertura.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
