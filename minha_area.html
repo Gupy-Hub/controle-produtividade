@@ -17,353 +17,249 @@
             theme: {
                 extend: {
                     fontFamily: { sans: ['Inter', 'sans-serif'] },
-                    colors: {
-                        brand: { 500: '#2563eb', 600: '#1d4ed8' }
-                    },
-                    animation: {
-                        'fade-in': 'fadeIn 0.5s ease-out',
-                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                    },
+                    animation: { 'fade-in': 'fadeIn 0.3s ease-out' },
                     keyframes: {
-                        fadeIn: {
-                            '0%': { opacity: '0', transform: 'translateY(10px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        }
+                        fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } }
                     }
                 }
             }
         }
     </script>
-
     <style>
-        /* Scrollbar Personalizada */
+        /* Scrollbar suave */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #f1f5f9; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        .glass-effect {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-        }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-600 font-sans antialiased overflow-hidden h-screen flex">
+<body class="bg-slate-50 text-slate-600 font-sans antialiased h-screen flex overflow-hidden">
 
-    <aside id="menu-lateral" class="w-64 bg-white border-r border-slate-200 flex flex-col justify-between z-20 transition-all duration-300 relative shadow-xl">
-        <div class="p-6 flex items-center justify-center border-b border-slate-100">
-            <div class="flex items-center gap-3">
-                <div class="bg-blue-600 text-white p-2 rounded-lg">
-                    <i class="fas fa-bolt text-xl"></i>
-                </div>
-                <div>
-                    <h1 class="font-black text-slate-800 text-lg leading-none tracking-tight">GUPY</h1>
-                    <span class="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Performance</span>
-                </div>
-            </div>
-        </div>
-        <div class="flex-1 overflow-y-auto py-4 px-3 space-y-1" id="menu-content">
-            <div class="flex items-center justify-center h-full">
-                <i class="fas fa-circle-notch fa-spin text-blue-500"></i>
-            </div>
-        </div>
-        <div class="p-4 border-t border-slate-100 bg-slate-50/50">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold border-2 border-white shadow-sm" id="user-avatar">
-                    <i class="fas fa-user"></i>
-                </div>
-                <div class="overflow-hidden">
-                    <p class="text-sm font-bold text-slate-700 truncate" id="user-name">Carregando...</p>
-                    <p class="text-xs text-slate-400 truncate" id="user-role">...</p>
-                </div>
-            </div>
-            <button onclick="Sistema.logout()" class="mt-3 w-full flex items-center justify-center gap-2 text-xs font-bold text-rose-500 hover:bg-rose-50 py-2 rounded-lg transition-colors">
-                <i class="fas fa-sign-out-alt"></i> Sair
-            </button>
-        </div>
-    </aside>
+    <aside id="menu-lateral" class="w-64 bg-white border-r border-slate-200 hidden lg:flex flex-col z-20 shadow-sm">
+        </aside>
 
     <main class="flex-1 flex flex-col relative h-full overflow-hidden">
         
-        <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm z-10">
+        <header class="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm z-10">
             <div class="flex items-center gap-4">
                 <button id="toggle-menu" class="lg:hidden text-slate-400 hover:text-blue-600 transition-colors">
                     <i class="fas fa-bars text-xl"></i>
                 </button>
                 <div>
-                    <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
-                        <i class="fas fa-user-astronaut text-blue-500"></i> Minha Área
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i class="fas fa-user-circle text-blue-600"></i> Minha Área
                     </h2>
-                    <p class="text-xs text-slate-400">Acompanhamento individual de performance</p>
                 </div>
             </div>
 
-            <div class="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
-                
-                <div id="container-filtro-usuario" class="hidden relative group border-r border-slate-200 pr-3 mr-1">
-                    <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                        <i class="fas fa-search text-xs"></i>
-                    </div>
-                    <select id="filtro-usuario" class="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-48 shadow-sm">
-                        <option value="">Visão Geral (Minha Equipe)</option>
+            <div class="flex items-center gap-3 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                <div id="container-filtro-usuario" class="hidden relative group border-r border-slate-200 pr-2 mr-1">
+                    <select id="filtro-usuario" class="bg-transparent text-xs font-bold text-slate-600 focus:outline-none w-48">
+                        <option value="">Visão Geral</option>
                     </select>
                 </div>
 
                 <div class="flex items-center gap-2">
-                    <div class="relative">
-                        <input type="date" id="filtro-data-inicio" class="pl-8 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-sm cursor-pointer">
-                        <i class="fas fa-calendar absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                    </div>
-                    <span class="text-slate-300 font-bold text-xs">até</span>
-                    <div class="relative">
-                        <input type="date" id="filtro-data-fim" class="pl-8 pr-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none shadow-sm cursor-pointer">
-                        <i class="fas fa-calendar absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none"></i>
-                    </div>
+                    <input type="date" id="filtro-data-inicio" class="bg-white border border-slate-200 rounded text-xs font-bold text-slate-600 px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none">
+                    <span class="text-xs text-slate-400">até</span>
+                    <input type="date" id="filtro-data-fim" class="bg-white border border-slate-200 rounded text-xs font-bold text-slate-600 px-2 py-1 focus:ring-1 focus:ring-blue-500 outline-none">
                 </div>
 
-                <button onclick="MinhaArea.atualizarTudo()" class="bg-blue-600 hover:bg-blue-700 text-white w-8 h-8 rounded-lg flex items-center justify-center transition-all shadow-md active:scale-95" title="Atualizar Dados">
-                    <i class="fas fa-sync-alt"></i>
+                <button onclick="MinhaArea.atualizarTudo()" class="bg-blue-600 hover:bg-blue-700 text-white w-7 h-7 rounded flex items-center justify-center transition-all shadow-sm" title="Atualizar">
+                    <i class="fas fa-sync-alt text-xs"></i>
                 </button>
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6 bg-slate-50 relative scroll-smooth">
+        <div class="flex-1 overflow-y-auto p-6 bg-slate-50 scroll-smooth">
             
-            <div class="flex items-center gap-2 mb-6 border-b border-slate-200 pb-1 sticky top-0 bg-slate-50 z-10 pt-2">
-                <button onclick="MinhaArea.trocarAba('geral')" id="btn-tab-geral" class="tab-btn px-4 py-2 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-all flex items-center gap-2">
-                    <i class="fas fa-chart-pie"></i> Dia a Dia
+            <div class="flex items-center gap-1 mb-6 border-b border-slate-200 sticky top-0 bg-slate-50 pt-2 z-10">
+                <button onclick="MinhaArea.trocarAba('geral')" id="btn-tab-geral" class="px-4 py-2 text-sm font-bold text-blue-600 border-b-2 border-blue-600 transition-colors">
+                    Dia a Dia
                 </button>
-                <button onclick="MinhaArea.trocarAba('metas')" id="btn-tab-metas" class="tab-btn px-4 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-300 transition-all flex items-center gap-2">
-                    <i class="fas fa-bullseye"></i> Metas & OKR
+                <button onclick="MinhaArea.trocarAba('metas')" id="btn-tab-metas" class="px-4 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-300 transition-colors">
+                    Metas / OKR
                 </button>
-                <button onclick="MinhaArea.trocarAba('comparativo')" id="btn-tab-comparativo" class="tab-btn px-4 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-300 transition-all flex items-center gap-2">
-                    <i class="fas fa-exchange-alt"></i> Comparativo
+                <button onclick="MinhaArea.trocarAba('comparativo')" id="btn-tab-comparativo" class="px-4 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-300 transition-colors">
+                    Comparativo
                 </button>
-                <button onclick="MinhaArea.trocarAba('auditoria')" id="btn-tab-auditoria" class="tab-btn px-4 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-300 transition-all flex items-center gap-2">
-                    <i class="fas fa-clipboard-check"></i> Auditoria
+                <button onclick="MinhaArea.trocarAba('auditoria')" id="btn-tab-auditoria" class="px-4 py-2 text-sm font-medium text-slate-500 hover:text-blue-600 border-b-2 border-transparent hover:border-blue-300 transition-colors">
+                    Auditoria
                 </button>
             </div>
 
             <div id="container-checkin-alert" class="mb-6 hidden"></div>
 
             <div id="tab-geral" class="tab-content animate-fade-in space-y-6">
-                <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group">
-                        <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity"><i class="fas fa-layer-group text-4xl text-blue-600"></i></div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Total Produzido</p>
+                <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Total Produzido</p>
                         <h3 id="kpi-total" class="text-2xl font-black text-slate-700">--</h3>
-                        <div class="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden"><div id="bar-volume" class="h-full bg-blue-500 w-0 transition-all duration-1000"></div></div>
-                        <p class="text-[10px] text-right mt-1 text-blue-600 font-bold"><span id="kpi-pct">0%</span> da meta</p>
+                        <div class="w-full bg-slate-100 h-1 mt-2 rounded"><div id="bar-volume" class="h-full bg-blue-500 w-0"></div></div>
+                        <p class="text-[10px] text-right mt-1 text-blue-600 font-bold"><span id="kpi-pct">0%</span> meta</p>
                     </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group">
-                        <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity"><i class="fas fa-check-double text-4xl text-emerald-600"></i></div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Assertividade</p>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Assertividade</p>
                         <h3 id="kpi-assertividade-val" class="text-2xl font-black text-emerald-600">--%</h3>
-                        <div class="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden"><div id="bar-assert" class="h-full bg-emerald-500 w-0 transition-all duration-1000"></div></div>
+                        <div class="w-full bg-slate-100 h-1 mt-2 rounded"><div id="bar-assert" class="h-full bg-emerald-500 w-0"></div></div>
                         <p class="text-[10px] text-right mt-1 text-emerald-600 font-bold">Meta: <span id="kpi-meta-assert-target">98%</span></p>
                     </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden group">
-                         <div class="absolute right-0 top-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity"><i class="fas fa-tachometer-alt text-4xl text-amber-500"></i></div>
-                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Média Diária</p>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Média Diária</p>
                         <h3 id="kpi-media" class="text-2xl font-black text-slate-700">--</h3>
-                        <div class="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden"><div id="bar-velocidade" class="h-full bg-amber-500 w-0 transition-all duration-1000"></div></div>
-                        <p class="text-[10px] text-right mt-1 text-amber-600 font-bold">Meta: <span id="kpi-meta-dia">--</span>/dia</p>
+                        <div class="w-full bg-slate-100 h-1 mt-2 rounded"><div id="bar-velocidade" class="h-full bg-amber-500 w-0"></div></div>
+                        <p class="text-[10px] text-right mt-1 text-amber-600 font-bold">Meta: <span id="kpi-meta-dia">--</span></p>
                     </div>
-
-                    <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden">
-                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Dias Produtivos</p>
-                        <div class="flex items-end gap-1">
-                            <h3 id="kpi-dias" class="text-2xl font-black text-slate-700">--</h3>
-                            <span class="text-xs text-slate-400 mb-1 font-medium">/ <span id="kpi-dias-uteis">--</span> úteis</span>
-                        </div>
-                        <div class="w-full bg-slate-100 h-1.5 mt-3 rounded-full overflow-hidden"><div id="bar-dias" class="h-full bg-indigo-400 w-0 transition-all duration-1000"></div></div>
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                        <p class="text-[10px] uppercase font-bold text-slate-400">Dias Úteis</p>
+                        <h3 id="kpi-dias" class="text-2xl font-black text-slate-700">--</h3>
+                        <div class="w-full bg-slate-100 h-1 mt-2 rounded"><div id="bar-dias" class="h-full bg-indigo-400 w-0"></div></div>
+                        <p class="text-[10px] text-right mt-1 text-slate-400">de <span id="kpi-dias-uteis">--</span></p>
                     </div>
-
-                     <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm relative overflow-hidden col-span-2">
-                        <div class="flex justify-between items-start">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm col-span-2">
+                        <div class="flex justify-between">
                             <div>
-                                <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Meta Acumulada (Mês)</p>
+                                <p class="text-[10px] uppercase font-bold text-slate-400">Meta Acumulada</p>
                                 <h3 id="kpi-meta-acumulada" class="text-2xl font-black text-slate-400">--</h3>
                             </div>
                             <div class="text-right">
-                                <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Performance Global</p>
+                                <p class="text-[10px] uppercase font-bold text-slate-400">Performance</p>
                                 <h3 id="kpi-assert-performance" class="text-2xl font-black text-blue-600">--%</h3>
                             </div>
                         </div>
-                        <p class="text-[10px] text-slate-400 mt-2 bg-slate-50 p-1 rounded border border-slate-100 text-center">
-                            <i class="fas fa-info-circle mr-1"></i> Dados baseados na configuração atual de metas.
-                        </p>
                     </div>
                 </div>
 
                 <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-                        <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-list-ul mr-2 text-blue-500"></i>Extrato Diário Detalhado</h3>
-                        <button class="text-xs text-blue-600 font-bold hover:underline"><i class="fas fa-download mr-1"></i> Exportar</button>
+                    <div class="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                        <h3 class="font-bold text-slate-700 text-xs uppercase">Extrato Diário</h3>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200">
-                                    <th class="px-3 py-3 font-bold border-r border-slate-200 w-24">Data</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200" title="Fator de Correção">Fator</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200 text-slate-400">FIFO</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200 text-slate-400">GT</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200 text-slate-400">GP</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200 bg-blue-50/30 text-blue-700">Realizado</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200">Meta Dia</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200">% Ating.</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200">Meta Assert.</th>
-                                    <th class="px-2 py-3 font-bold text-center border-r border-slate-200">Assertividade</th>
-                                    <th class="px-2 py-3 font-bold text-left">Ocorrências / Justificativas</th>
+                                <tr class="text-[10px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                                    <th class="px-3 py-2 font-bold border-r border-slate-200">Data</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200">Fator</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200 text-slate-400">FIFO</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200 text-slate-400">GT</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200 text-slate-400">GP</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200 bg-blue-50 text-blue-700">Realizado</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200">Meta Dia</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200">% Ating.</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200">Meta Assert.</th>
+                                    <th class="px-2 py-2 font-bold text-center border-r border-slate-200">Assertividade</th>
+                                    <th class="px-2 py-2 font-bold text-left">Justificativa</th>
                                 </tr>
                             </thead>
-                            <tbody id="tabela-extrato" class="text-sm">
-                                <tr><td colspan="11" class="text-center py-12 text-slate-400">Carregando dados...</td></tr>
+                            <tbody id="tabela-extrato" class="text-xs">
+                                <tr><td colspan="11" class="text-center py-4 text-slate-400">Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
-            <div id="tab-metas" class="tab-content hidden animate-fade-in">
+            <div id="tab-metas" class="tab-content hidden animate-fade-in space-y-6">
                 
-                <div id="dashboard-metas" class="space-y-6">
-
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fas fa-boxes text-6xl text-blue-600"></i></div>
                         
-                        <div class="bg-white rounded-xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
-                            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <i class="fas fa-boxes text-6xl text-blue-600"></i>
-                            </div>
-                            <div class="flex flex-col h-full justify-between relative z-10">
-                                <div class="flex items-center gap-3 mb-2">
-                                    <div class="p-2 bg-blue-50 rounded-lg text-blue-600">
-                                        <i class="fas fa-dolly-flatbed text-xl"></i>
-                                    </div>
-                                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider">Volume de Produção</h3>
-                                </div>
-                                
-                                <div class="flex items-end gap-2 mb-4">
-                                    <span id="meta-prod-real" class="text-4xl font-black text-slate-800 tracking-tight">--</span>
-                                    <span class="text-sm text-slate-400 font-medium mb-2">/ meta <span id="meta-prod-meta">--</span></span>
-                                </div>
-
-                                <div class="w-full bg-slate-100 rounded-full h-3 mb-2 overflow-hidden">
-                                    <div id="bar-meta-prod" class="bg-blue-600 h-full rounded-full transition-all duration-1000 relative" style="width: 0%">
-                                        <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
-                                    </div>
-                                </div>
-                                <p id="txt-status-prod" class="text-xs text-blue-600 font-semibold text-right">Calculando...</p>
-                            </div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="p-2 bg-blue-50 rounded text-blue-600"><i class="fas fa-dolly-flatbed"></i></div>
+                            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Volume de Produção</h3>
+                        </div>
+                        
+                        <div class="flex items-end gap-2 mb-4">
+                            <span id="meta-prod-real" class="text-4xl font-black text-slate-800 tracking-tight">--</span>
+                            <span class="text-sm text-slate-400 font-medium mb-1">/ meta <span id="meta-prod-meta">--</span></span>
                         </div>
 
-                        <div class="bg-white rounded-xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-all relative overflow-hidden group">
-                            <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <i class="fas fa-bullseye text-6xl text-emerald-600"></i>
-                            </div>
-                            <div class="flex flex-col h-full justify-between relative z-10">
-                                <div class="flex items-center gap-3 mb-2">
-                                    <div class="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                                        <i class="fas fa-check-circle text-xl"></i>
-                                    </div>
-                                    <h3 class="text-sm font-bold text-slate-500 uppercase tracking-wider">Qualidade (Assertividade)</h3>
-                                </div>
-
-                                <div class="flex items-end gap-2 mb-4">
-                                    <span id="meta-assert-real" class="text-4xl font-black text-slate-800 tracking-tight">--%</span>
-                                    <span class="text-sm text-slate-400 font-medium mb-2">/ alvo <span id="meta-assert-meta">98.00%</span></span>
-                                </div>
-
-                                <div class="w-full bg-slate-100 rounded-full h-3 mb-2 overflow-hidden">
-                                    <div id="bar-meta-assert" class="bg-emerald-500 h-full rounded-full transition-all duration-1000 relative" style="width: 0%"></div>
-                                </div>
-                                <p id="txt-status-assert" class="text-xs text-emerald-600 font-semibold text-right">Aguardando dados...</p>
+                        <div class="w-full bg-slate-100 rounded-full h-3 mb-2 overflow-hidden">
+                            <div id="bar-meta-prod" class="bg-blue-600 h-full rounded-full transition-all duration-1000 relative w-0">
+                                <div class="absolute inset-0 bg-white/20 animate-pulse"></div>
                             </div>
                         </div>
+                        <p id="txt-status-prod" class="text-xs text-blue-600 font-bold text-right">Calculando...</p>
                     </div>
 
-                    <div class="bg-slate-50 rounded-xl border border-slate-200 p-5">
-                        <h4 class="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
-                            <i class="fas fa-search"></i> Detalhamento da Auditoria
-                        </h4>
+                    <div class="bg-white rounded-xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
+                        <div class="absolute top-0 right-0 p-4 opacity-10"><i class="fas fa-bullseye text-6xl text-emerald-600"></i></div>
                         
-                        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div class="bg-white p-4 rounded-lg border border-slate-100 shadow-sm flex flex-col items-center justify-center">
-                                <span class="text-xs text-slate-400 font-semibold mb-1">Total Entregue</span>
-                                <span id="auditoria-total-validados" class="text-xl font-bold text-slate-700">--</span>
-                                <i class="fas fa-arrow-down text-slate-200 mt-2 text-xs"></i>
-                            </div>
-
-                            <div class="bg-white p-4 rounded-lg border-b-4 border-blue-400 shadow-sm flex flex-col items-center justify-center relative">
-                                <span class="text-xs text-blue-500 font-bold mb-1">Auditados</span>
-                                <span id="auditoria-total-auditados" class="text-2xl font-black text-slate-800">--</span>
-                                <span class="text-[10px] text-slate-400 mt-1">(Amostragem)</span>
-                            </div>
-
-                            <div class="bg-white p-4 rounded-lg border-b-4 border-emerald-400 shadow-sm flex flex-col items-center justify-center">
-                                <span class="text-xs text-emerald-600 font-bold mb-1">Conformes (OK)</span>
-                                <span id="auditoria-total-ok" class="text-2xl font-black text-emerald-700">--</span>
-                                <i class="fas fa-check text-emerald-200 mt-1"></i>
-                            </div>
-
-                            <div class="bg-white p-4 rounded-lg border-b-4 border-rose-400 shadow-sm flex flex-col items-center justify-center">
-                                <span class="text-xs text-rose-600 font-bold mb-1">Não Conformes</span>
-                                <span id="auditoria-total-nok" class="text-2xl font-black text-rose-700">--</span>
-                                <i class="fas fa-times text-rose-200 mt-1"></i>
-                            </div>
+                        <div class="flex items-center gap-3 mb-2">
+                            <div class="p-2 bg-emerald-50 rounded text-emerald-600"><i class="fas fa-check-circle"></i></div>
+                            <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Qualidade (Assertividade)</h3>
                         </div>
-                        
-                        <div class="mt-3 flex justify-end">
-                            <span class="text-[10px] text-slate-400 bg-slate-100 px-2 py-1 rounded">
-                                <i class="fas fa-info-circle mr-1"></i> <span id="auditoria-sem-audit">--</span> documentos não passaram por auditoria ainda.
-                            </span>
+
+                        <div class="flex items-end gap-2 mb-4">
+                            <span id="meta-assert-real" class="text-4xl font-black text-slate-800 tracking-tight">--%</span>
+                            <span class="text-sm text-slate-400 font-medium mb-1">/ alvo <span id="meta-assert-meta">98.00%</span></span>
+                        </div>
+
+                        <div class="w-full bg-slate-100 rounded-full h-3 mb-2 overflow-hidden">
+                            <div id="bar-meta-assert" class="bg-emerald-500 h-full rounded-full transition-all duration-1000 relative w-0"></div>
+                        </div>
+                        <p id="txt-status-assert" class="text-xs text-emerald-600 font-bold text-right">Analisando...</p>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                    <h4 class="text-xs font-bold text-slate-400 uppercase mb-4 flex items-center gap-2">
+                        <i class="fas fa-filter"></i> Funil de Qualidade
+                    </h4>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div class="p-4 rounded-lg bg-slate-50 border border-slate-100 text-center">
+                            <span class="text-xs text-slate-400 font-bold block mb-1">Entregues</span>
+                            <span id="auditoria-total-validados" class="text-xl font-black text-slate-700">--</span>
+                        </div>
+                        <div class="p-4 rounded-lg bg-blue-50 border border-blue-100 text-center relative">
+                            <span class="text-xs text-blue-500 font-bold block mb-1">Auditados</span>
+                            <span id="auditoria-total-auditados" class="text-xl font-black text-blue-700">--</span>
+                        </div>
+                        <div class="p-4 rounded-lg bg-emerald-50 border border-emerald-100 text-center">
+                            <span class="text-xs text-emerald-600 font-bold block mb-1">Conformes (OK)</span>
+                            <span id="auditoria-total-ok" class="text-xl font-black text-emerald-700">--</span>
+                        </div>
+                        <div class="p-4 rounded-lg bg-rose-50 border border-rose-100 text-center">
+                            <span class="text-xs text-rose-600 font-bold block mb-1">Não Conformes</span>
+                            <span id="auditoria-total-nok" class="text-xl font-black text-rose-700">--</span>
                         </div>
                     </div>
+                    <div class="mt-3 text-right">
+                        <span class="text-[10px] text-slate-400">
+                            <i class="fas fa-info-circle"></i> <span id="auditoria-sem-audit">--</span> docs não auditados.
+                        </span>
+                    </div>
+                </div>
 
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                            <div class="flex justify-between items-center mb-4 border-b border-slate-50 pb-2">
-                                <h4 class="font-bold text-slate-700 text-sm"><i class="fas fa-chart-line text-blue-500 mr-2"></i>Evolução Diária</h4>
-                                <span class="periodo-label text-[10px] font-bold text-white bg-blue-500 px-2 py-0.5 rounded-full">Diário</span>
-                            </div>
-                            <div class="relative h-64 w-full">
-                                <canvas id="graficoEvolucaoProducao"></canvas>
-                            </div>
-                        </div>
-
-                        <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                             <div class="flex justify-between items-center mb-4 border-b border-slate-50 pb-2">
-                                <h4 class="font-bold text-slate-700 text-sm"><i class="fas fa-heartbeat text-emerald-500 mr-2"></i>Consistência da Qualidade</h4>
-                                <span class="periodo-label text-[10px] font-bold text-white bg-emerald-500 px-2 py-0.5 rounded-full">Diário</span>
-                            </div>
-                            <div class="relative h-64 w-full">
-                                <canvas id="graficoEvolucaoAssertividade"></canvas>
-                            </div>
-                        </div>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                        <h4 class="font-bold text-slate-700 text-sm mb-4"><i class="fas fa-chart-bar text-blue-500 mr-2"></i>Produção Diária</h4>
+                        <div class="relative h-64 w-full"><canvas id="graficoEvolucaoProducao"></canvas></div>
+                    </div>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                        <h4 class="font-bold text-slate-700 text-sm mb-4"><i class="fas fa-chart-line text-emerald-500 mr-2"></i>Qualidade Diária</h4>
+                        <div class="relative h-64 w-full"><canvas id="graficoEvolucaoAssertividade"></canvas></div>
                     </div>
                 </div>
 
             </div>
 
             <div id="tab-comparativo" class="tab-content hidden animate-fade-in space-y-6">
-                <div class="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex items-center gap-4">
+                <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center gap-4">
                     <label class="text-sm font-bold text-slate-600">Comparar com:</label>
-                    <select id="select-comparar-usuario" class="bg-slate-50 border border-slate-200 rounded-lg text-sm px-3 py-2 w-64 focus:outline-none focus:border-blue-500">
-                        <option value="media">Média da Equipe (Benchmark)</option>
-                        </select>
-                    <button onclick="MinhaArea.Comparativo.gerarComparacao()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700">Comparar</button>
+                    <select id="select-comparar-usuario" class="bg-slate-50 border border-slate-200 rounded text-sm px-3 py-2 w-full md:w-64 focus:border-blue-500 outline-none">
+                        <option value="media">Média da Equipe</option>
+                    </select>
+                    <button onclick="MinhaArea.Comparativo.gerarComparacao()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 w-full md:w-auto">Comparar</button>
                 </div>
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                        <h4 class="font-bold text-slate-700 mb-4 text-sm">Produção vs Comparativo</h4>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                        <h4 class="font-bold text-slate-700 mb-4 text-xs uppercase">Produção</h4>
                         <div class="relative h-64"><canvas id="chart-comp-prod"></canvas></div>
                     </div>
-                    <div class="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
-                        <h4 class="font-bold text-slate-700 mb-4 text-sm">Qualidade vs Comparativo</h4>
+                    <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                        <h4 class="font-bold text-slate-700 mb-4 text-xs uppercase">Qualidade</h4>
                         <div class="relative h-64"><canvas id="chart-comp-assert"></canvas></div>
                     </div>
                 </div>
@@ -371,22 +267,22 @@
 
             <div id="tab-auditoria" class="tab-content hidden animate-fade-in space-y-6">
                  <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                    <div class="p-4 border-b border-slate-100 bg-slate-50/50">
-                        <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-search-minus mr-2 text-rose-500"></i>Erros Identificados (Não Conformidades)</h3>
+                    <div class="p-3 border-b border-slate-200 bg-slate-50">
+                        <h3 class="font-bold text-slate-700 text-xs uppercase"><i class="fas fa-exclamation-circle mr-2 text-rose-500"></i>Erros Apontados</h3>
                     </div>
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead>
-                                <tr class="text-[10px] text-slate-500 uppercase tracking-wider bg-slate-50 border-b border-slate-200">
-                                    <th class="px-4 py-3 font-bold">Data</th>
-                                    <th class="px-4 py-3 font-bold">Documento / ID</th>
-                                    <th class="px-4 py-3 font-bold">Auditor(a)</th>
-                                    <th class="px-4 py-3 font-bold text-rose-600">Motivo (NOK)</th>
-                                    <th class="px-4 py-3 font-bold">Observação</th>
+                                <tr class="text-[10px] text-slate-500 uppercase bg-slate-50 border-b border-slate-200">
+                                    <th class="px-4 py-2 font-bold">Data</th>
+                                    <th class="px-4 py-2 font-bold">Documento</th>
+                                    <th class="px-4 py-2 font-bold">Auditor</th>
+                                    <th class="px-4 py-2 font-bold text-rose-600">Erro (NOK)</th>
+                                    <th class="px-4 py-2 font-bold">Obs</th>
                                 </tr>
                             </thead>
-                            <tbody id="tabela-auditoria-feedback" class="text-sm text-slate-600">
-                                <tr><td colspan="5" class="text-center py-8 text-slate-400">Selecione o período para ver feedbacks.</td></tr>
+                            <tbody id="tabela-auditoria-feedback" class="text-xs text-slate-600">
+                                <tr><td colspan="5" class="text-center py-8 text-slate-400">Carregando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -408,7 +304,6 @@
     <script src="js/minha_area/main.js"></script>
 
     <script>
-        // Inicialização
         document.addEventListener('DOMContentLoaded', () => {
             Sistema.verificarLogin();
             MinhaArea.init();
