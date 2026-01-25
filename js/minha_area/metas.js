@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v3.0 - Turbo Paralelo com Anti-Duplicidade e Ordenação
+   ATUALIZAÇÃO: v3.1 (Golden) - Performance Turbo + Validação Estrita de Erros
 */
 
 MinhaArea.Metas = {
@@ -25,13 +25,12 @@ MinhaArea.Metas = {
 
         // 2. Dispara requisições com ORDENAÇÃO (Essencial para não vir duplicado)
         for (let i = 0; i < totalPages; i++) {
-            // Importante: .order('id') garante estabilidade na paginação
             let q = Sistema.supabase.from(tabela)
                 .select(colunas)
-                .order('id', { ascending: true }) 
+                .order('id', { ascending: true }) // Garante estabilidade
                 .range(i * pageSize, (i + 1) * pageSize - 1);
             
-            q = filtrosFn(q); // Reaplica filtros de data/usuário
+            q = filtrosFn(q);
             promises.push(q);
         }
 
@@ -45,7 +44,6 @@ MinhaArea.Metas = {
         responses.forEach(r => {
             if (r.data) {
                 r.data.forEach(item => {
-                    // Se o item tiver ID, garantimos unicidade. Se não, aceitamos (ex: views sem PK)
                     if (item.id) {
                         if (!idsVistos.has(item.id)) {
                             idsVistos.add(item.id);
@@ -63,7 +61,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando Carga Blindada (v3.0)...");
+        console.log("🚀 Metas: Iniciando Carga Estrita (v3.1)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -87,9 +85,9 @@ MinhaArea.Metas = {
                 if (uid) qq = qq.eq('usuario_id', uid);
                 return qq;
             };
-            const applyFiltersUser = (q) => q; // Traz todos para mapear nomes
+            const applyFiltersUser = (q) => q;
 
-            // Query Metas (Leve)
+            // Query Metas
             let qMetas = Sistema.supabase.from('metas')
                 .select('usuario_id, mes, ano, meta_producao, meta_assertividade') 
                 .gte('ano', anoInicio).lte('ano', anoFim);
@@ -101,10 +99,7 @@ MinhaArea.Metas = {
             console.time("⏱️ Tempo Download");
             const [p, a, m, u] = await Promise.all([
                 this.fetchParalelo('producao', '*', applyFiltersProd),
-                
-                // Trazemos ID para poder deduplicar corretamente
                 this.fetchParalelo('assertividade', 'id, data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome', applyFiltersAssert),
-                
                 qMetas,
                 this.fetchParalelo('usuarios', 'id, ativo, nome, perfil, funcao', applyFiltersUser)
             ]);
@@ -117,7 +112,6 @@ MinhaArea.Metas = {
 
             // --- LÓGICA DE NEGÓCIO ---
 
-            // Mapeamento de Usuários
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -217,7 +211,7 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Preparação Gráficos
+            // Gráficos
             const mapAssert = new Map();
             const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; 
 
@@ -351,7 +345,7 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Dados Assertividade (Já deduplicado)
+        // 2. Loop Unificado (Com Validação Estrita)
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
@@ -366,10 +360,17 @@ MinhaArea.Metas = {
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
 
-            // B) VOLUMETRIA AUDITORIA
+            // B) VOLUMETRIA AUDITORIA (CORREÇÃO DE OURO: Regex Estrita)
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
-                if (a.qtd_nok && Number(a.qtd_nok) > 0) {
+                
+                // Validação: Converte para string, remove espaços e verifica se é SOMENTE números.
+                // Isso elimina coisas como "1 (revisar)", "1?", etc.
+                const valStr = String(a.qtd_nok || '').trim();
+                const valNum = Number(valStr);
+                const isPuro = /^\d+(\.\d+)?$/.test(valStr); // Regex: Só aceita dígitos (e decimal opcional)
+
+                if (a.qtd_nok && valNum > 0 && isPuro) {
                     countErros++;
                 }
             }
