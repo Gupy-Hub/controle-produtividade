@@ -1,13 +1,13 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Design Minimalista & Compacto
+   ATUALIZAÇÃO: Correção do Valor da Meta de Assertividade (Reflete Gestão)
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (Inalterado) ---
+    // --- MANIPULAÇÃO DE DADOS ---
     fetchAll: async function(table, queryBuilder) {
         let allData = [];
         let page = 0;
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando modo Minimalista...");
+        console.log("🚀 Metas: Carregando dados reais...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -43,7 +43,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // Buscas
+            // Buscas no Banco
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
@@ -108,7 +108,7 @@ MinhaArea.Metas = {
 
             const usuariosQueProduziram = new Set(dadosProducaoRaw.map(p => p.usuario_id));
 
-            // Cálculo Meta
+            // --- CÁLCULO DAS METAS (Crucial para a correção) ---
             const mapMetas = {};
             dadosMetasRaw.forEach(m => {
                 const a = parseInt(m.ano);
@@ -121,6 +121,7 @@ MinhaArea.Metas = {
                 }
                 
                 const valProd = m.meta_producao ? parseInt(m.meta_producao) : 0;
+                // AQUI: Pega o valor exato do banco. Se nulo, assume 98.0
                 const valAssert = (m.meta_assertividade !== null) ? parseFloat(m.meta_assertividade) : 98.0;
 
                 if (isGeral) {
@@ -148,6 +149,7 @@ MinhaArea.Metas = {
                 for (const a in mapMetas) {
                     for (const ms in mapMetas[a]) {
                         const d = mapMetas[a][ms];
+                        // Lógica de Produção (Capacidade)
                         let capacidadeDiaria = d.somaIndividual;
                         const validos = d.qtdAssistentesDB;
                         const gap = targetAssistentes - validos;
@@ -160,6 +162,8 @@ MinhaArea.Metas = {
                             capacidadeDiaria = 100 * targetAssistentes;
                         }
                         d.prodTotalDiario = capacidadeDiaria;
+                        
+                        // Lógica de Assertividade (Inteligente)
                         if (d.assertValues.length > 0) {
                             const res = this.calcularMetaInteligente(d.assertValues);
                             d.assertFinal = res.valor;
@@ -168,7 +172,7 @@ MinhaArea.Metas = {
                 }
             }
 
-            // Dados Reais
+            // Processamento Produção Real
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -184,6 +188,7 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
+            // Processamento Assertividade Real
             const mapAssert = new Map();
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
@@ -203,7 +208,7 @@ MinhaArea.Metas = {
                 if (!isNaN(val)) mapAssert.get(dataKey).push(val);
             });
 
-            // Gráficos
+            // Geração de Dados para Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -219,11 +224,14 @@ MinhaArea.Metas = {
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
                 const dia = d.getDate();
+
                 const metaConfig = mapMetas[ano]?.[mes] || { prodTotalDiario: (isGeral ? 100 * this.getQtdAssistentesConfigurada() : 100), assertFinal: 98.0 };
+                
                 const prodDia = mapProd.get(dataStr);
                 const qtd = prodDia ? Number(prodDia.quantidade || 0) : 0;
                 const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1); 
                 const metaDia = Math.round(metaConfig.prodTotalDiario * (isNaN(fator) ? 1 : fator));
+
                 const assertsDia = mapAssert.get(dataStr) || [];
                 
                 if (modoMensal) {
@@ -291,6 +299,10 @@ MinhaArea.Metas = {
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
         let totalErros = 0; 
+        
+        // Acumulador para a meta de assertividade no período
+        let somaMetaAssertConfigurada = 0;
+        let diasParaMediaMeta = 0;
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
@@ -300,11 +312,17 @@ MinhaArea.Metas = {
             const dataStr = d.toISOString().split('T')[0];
             const ano = d.getFullYear();
             const mes = d.getMonth() + 1;
+            
             const metaConfig = mapMetas[ano]?.[mes] || { prodTotalDiario: (isGeral ? 100 * this.getQtdAssistentesConfigurada() : 100), assertFinal: 98.0 };
+            
             const prodDia = mapProd.get(dataStr);
             const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1);
             if (prodDia) totalValidados += Number(prodDia.quantidade || 0);
             totalMeta += Math.round(metaConfig.prodTotalDiario * (isNaN(fator)?1:fator));
+
+            // Acumula a meta configurada para média
+            somaMetaAssertConfigurada += metaConfig.assertFinal;
+            diasParaMediaMeta++;
         }
 
         asserts.forEach(a => {
@@ -327,14 +345,19 @@ MinhaArea.Metas = {
         const totalAcertos = totalAuditados - totalErros;
         const pctAuditado = totalValidados > 0 ? ((totalAuditados / totalValidados) * 100) : 0;
 
-        // KPI Updates
+        // CÁLCULO DA META FINAL DO PERÍODO
+        const metaAssertRef = diasParaMediaMeta > 0 ? (somaMetaAssertConfigurada / diasParaMediaMeta) : 98.0;
+
+        // Updates no DOM
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
         this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        const metaAssertRef = 98.0; 
+        
+        // CORREÇÃO: Usando a meta calculada do DB em vez de valor fixo
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
+        
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
