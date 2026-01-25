@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: Correção de Divergência (Remoção de filtro restritivo de % nula)
+   ATUALIZAÇÃO: Sincronização Estrita com Aba Assertividade (Comparativo)
 */
 
 MinhaArea.Metas = {
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Carregando dados (Correção Divergência 4k)...");
+        console.log("🚀 Metas: Carregando dados (Lógica Espelhada Comparativo)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -47,8 +47,7 @@ MinhaArea.Metas = {
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
-            // CORREÇÃO CRÍTICA: Removido .not('porcentagem_assertividade', 'is', null)
-            // Agora trazemos TUDO para filtrar no JS (KPI vs Volumetria)
+            // [CRÍTICO] Trazemos 'auditora_nome' e REMOVEMOS filtro de % nula para bater com Comparativo.js
             const qAssertividade = Sistema.supabase.from('assertividade')
                 .select('data_referencia, porcentagem_assertividade, status, qtd_nok, usuario_id, auditora_nome') 
                 .gte('data_referencia', inicio).lte('data_referencia', fim);
@@ -86,7 +85,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // Filtros e Bloqueios
+            // Filtros de Usuário (Para KPI de Equipe)
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -186,7 +185,7 @@ MinhaArea.Metas = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // Mapeamento Assertividade para Gráficos
+            // Mapeamento para Gráficos
             const mapAssert = new Map();
             const STATUS_IGNORAR_GRAFICO = ['REV', 'EMPR', 'DUPL', 'IA']; 
 
@@ -200,8 +199,8 @@ MinhaArea.Metas = {
                     if (!mapUser[uId]) return;
                 }
                 
-                // Para gráfico, precisamos de valor numérico válido
                 const status = (a.status || '').toUpperCase();
+                // Apenas dados válidos vão para o gráfico de evolução
                 if (!STATUS_IGNORAR_GRAFICO.includes(status) && a.porcentagem_assertividade !== null) {
                     if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
                     let valStr = String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.');
@@ -299,9 +298,11 @@ MinhaArea.Metas = {
         let totalValidados = 0; 
         let totalMeta = 0;
         
+        // Contadores KPI Equipe (Média %)
         let somaAssertMedia = 0;
         let qtdAssertMedia = 0;
         
+        // Contadores Auditoria Volumetria (Comparativo)
         let countTotalAuditados = 0;
         let countErros = 0;
 
@@ -310,7 +311,7 @@ MinhaArea.Metas = {
 
         const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
 
-        // 1. Produção (Volume)
+        // 1. Cálculo Produção
         let tempDate = new Date(dtInicio);
         for (let d = new Date(tempDate); d <= dtFim; d.setDate(d.getDate() + 1)) {
             const isFDS = (d.getDay() === 0 || d.getDay() === 6);
@@ -329,26 +330,25 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Dados Assertividade
+        // 2. Loop Dados Assertividade (Lógica Dupla)
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
             // --- A) KPI EQUIPE (%) ---
-            // Aplica filtros de bloqueio/equipe ativa SOMENTE para calcular a média de acerto da equipe
+            // Este bloco mantém o filtro de usuário e status para calcular a média de assertividade da equipe
             let isKpiEligible = true;
             if (isGeral) {
                 if (idsBloqueados.has(uId) || !mapUser[uId]) isKpiEligible = false;
             }
 
             const status = (a.status || '').toUpperCase();
-            // Ignora status inválidos E exige que a porcentagem não seja nula para a média
             if (isKpiEligible && !STATUS_IGNORAR.includes(status) && a.porcentagem_assertividade !== null) {
                 let val = parseFloat(String(a.porcentagem_assertividade || '0').replace('%','').replace(',','.'));
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
 
-            // --- B) VOLUMETRIA AUDITORIA (CARDS) ---
-            // Conta TUDO que tem auditora, independente se tem % calculada ou status
+            // --- B) VOLUMETRIA AUDITORIA (Idêntico ao comparativo.js) ---
+            // Conta absolutamente tudo que tem "auditora_nome" preenchido
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
                 if (a.qtd_nok && Number(a.qtd_nok) > 0) {
@@ -375,7 +375,7 @@ MinhaArea.Metas = {
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
-        // Cards Auditoria
+        // Cards Auditoria (Agora refletem 100% o banco)
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', countTotalAuditados.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-pct-cobertura', pctCobertura.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
