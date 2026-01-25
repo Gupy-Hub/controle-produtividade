@@ -13,99 +13,87 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <style> 
-        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; color: #0f172a; } 
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; color: #0f172a; } 
         
-        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #64748b; font-weight: 700; }
+        .tab-btn { transition: all 0.2s; position: relative; cursor: pointer; color: #64748b; font-weight: 600; font-size: 0.8rem; }
         .tab-btn:hover { color: #1e293b; background-color: #f1f5f9; }
         .tab-btn.active { color: #2563eb; background-color: #eff6ff; }
         
-        .animate-enter { animation: enter 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-        @keyframes enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-enter { animation: enter 0.3s ease-out; }
+        @keyframes enter { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* Estilos Legados (Diário) */
+        /* KPI Card Legado */
         .kpi-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #f1f5f9; padding: 12px 16px; display: flex; flex-direction: column; justify-content: space-between; height: 100px; position: relative; overflow: hidden; }
         .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
         .kpi-title { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
         .kpi-main-val { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #1e293b; }
         .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; }
 
-        /* Novos Estilos 2026 (Metas) */
-        .bento-card {
-            background: white; border-radius: 24px; 
-            border: 1px solid #f1f5f9;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
-            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        .bento-card:hover {
-            transform: translateY(-4px);
-            box-shadow: 0 15px 30px -5px rgba(0,0,0,0.06);
-            border-color: #e2e8f0;
-        }
-        .icon-squircle {
-            width: 48px; height: 48px; border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 1.25rem;
-        }
-        .glass-header {
-            background: rgba(255,255,255,0.7);
-            backdrop-filter: blur(8px);
-            border-bottom: 1px solid rgba(241,245,249,0.8);
+        /* Minimal Card Style */
+        .min-card {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            display: flex; flex-direction: column; justify-content: center;
+            height: 110px;
         }
     </style>
 </head>
-<body class="bg-slate-50/80">
+<body class="bg-slate-50">
     <script src="js/config.js"></script>
     <script src="js/sistema.js"></script> 
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
-    <div class="bg-white/90 backdrop-blur-md border-b border-slate-200/60 sticky top-12 left-0 w-full z-40 h-16 flex items-center">
+    <div class="bg-white border-b border-slate-200 sticky top-12 left-0 w-full z-40 h-14 flex items-center">
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
             <div class="flex gap-2 overflow-x-auto no-scrollbar py-1">
-                <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 whitespace-nowrap"><i class="fas fa-calendar-day"></i> Dia a Dia</button>
-                <button onclick="MinhaArea.mudarAba('metas')" id="btn-ma-metas" class="tab-btn px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 whitespace-nowrap"><i class="fas fa-bullseye"></i> Meta/OKR</button>
-                <button onclick="MinhaArea.mudarAba('auditoria')" id="btn-ma-auditoria" class="tab-btn px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 whitespace-nowrap"><i class="fas fa-clipboard-check"></i> Auditoria</button>
-                <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 whitespace-nowrap"><i class="fas fa-chart-pie"></i> Assertividade</button>
-                <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-4 py-2 rounded-xl text-xs uppercase tracking-wide flex items-center gap-2 whitespace-nowrap"><i class="fas fa-comments"></i> Feedback</button>
+                <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-3 py-1.5 rounded-md flex items-center gap-2 whitespace-nowrap"><i class="fas fa-calendar-day text-xs"></i> Dia a Dia</button>
+                <button onclick="MinhaArea.mudarAba('metas')" id="btn-ma-metas" class="tab-btn px-3 py-1.5 rounded-md flex items-center gap-2 whitespace-nowrap"><i class="fas fa-bullseye text-xs"></i> Meta/OKR</button>
+                <button onclick="MinhaArea.mudarAba('auditoria')" id="btn-ma-auditoria" class="tab-btn px-3 py-1.5 rounded-md flex items-center gap-2 whitespace-nowrap"><i class="fas fa-clipboard-check text-xs"></i> Auditoria</button>
+                <button onclick="MinhaArea.mudarAba('comparativo')" id="btn-ma-comparativo" class="tab-btn px-3 py-1.5 rounded-md flex items-center gap-2 whitespace-nowrap"><i class="fas fa-chart-pie text-xs"></i> Assertividade</button>
+                <button onclick="MinhaArea.mudarAba('feedback')" id="btn-ma-feedback" class="tab-btn px-3 py-1.5 rounded-md flex items-center gap-2 whitespace-nowrap"><i class="fas fa-comments text-xs"></i> Feedback</button>
             </div>
             
             <div class="flex items-center gap-4">
                 <div id="admin-selector-container" class="hidden flex items-center gap-2 border-r border-slate-200 pr-4 mr-2">
-                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-blue-50/50 border border-blue-100 text-blue-700 text-xs font-bold rounded-lg block p-2 outline-none cursor-pointer w-40 truncate hover:bg-blue-50 transition"></select>
+                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded block p-1.5 outline-none cursor-pointer w-40 truncate"></select>
                 </div>
                 
                 <div class="flex items-center gap-2">
-                    <div class="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/60">
-                        <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1.5 text-xs font-bold rounded-lg shadow-sm text-blue-600 bg-white transition">Mês</button>
-                        <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:bg-white hover:text-slate-700 transition">Semana</button>
-                        <button onclick="MinhaArea.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:bg-white hover:text-slate-700 transition">Ano</button>
+                    <div class="flex bg-slate-100 p-0.5 rounded border border-slate-200">
+                        <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-2 py-1 text-xs font-semibold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
+                        <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-2 py-1 text-xs font-semibold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition">Semana</button>
+                        <button onclick="MinhaArea.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-2 py-1 text-xs font-semibold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition">Ano</button>
                     </div>
-                    <div class="w-px h-6 bg-slate-200 mx-2"></div>
+                    <div class="w-px h-5 bg-slate-200 mx-2"></div>
                     <div class="flex gap-2">
-                        <select id="sel-ano" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer hover:border-slate-300 transition"></select>
-                        <select id="sel-mes" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-700 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer min-w-[110px] hover:border-slate-300 transition">
+                        <select id="sel-ano" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer"></select>
+                        <select id="sel-mes" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer min-w-[100px]">
                             <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option>
                             <option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option>
                             <option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option>
                             <option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
                         </select>
-                        <select id="sel-semana" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-blue-50 border border-blue-200 text-blue-800 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer"><option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option></select>
-                        <select id="sel-subperiodo-ano" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-purple-50 border border-purple-200 text-purple-800 text-xs font-bold rounded-xl px-3 py-2 outline-none cursor-pointer"><option value="full">Ano Completo</option><optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup><optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup></select>
+                        <select id="sel-semana" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-slate-50 border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer"><option value="1">Semana 1</option><option value="2">Semana 2</option><option value="3">Semana 3</option><option value="4">Semana 4</option><option value="5">Semana 5</option></select>
+                        <select id="sel-subperiodo-ano" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-slate-50 border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer"><option value="full">Ano Completo</option><optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup><optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup></select>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-20">
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
             <div id="container-checkin-alert" class="hidden mb-4"></div>
@@ -219,146 +207,98 @@
 
         <div id="ma-tab-metas" class="ma-view hidden animate-enter">
             
-            <div class="grid grid-cols-12 gap-6">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 
-                <div class="col-span-12 lg:col-span-6 bento-card p-8 flex flex-col justify-between h-[280px] relative overflow-hidden">
-                    <div class="absolute top-0 right-0 p-8 opacity-5 pointer-events-none transform translate-x-4 -translate-y-4">
-                        <i class="fas fa-cubes text-9xl"></i>
+                <div class="min-card">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-semibold text-slate-500 uppercase">Validação</span>
+                        <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">Entregas</span>
                     </div>
-                    
-                    <div class="flex justify-between items-start z-10">
-                        <div class="flex flex-col gap-2">
-                            <div class="icon-squircle bg-blue-50 text-blue-600 mb-2 shadow-sm">
-                                <i class="fas fa-layer-group"></i>
-                            </div>
-                            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Entrega Total</h3>
-                        </div>
-                        <div class="text-right">
-                            <div class="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">Ciclo Atual</div>
-                        </div>
+                    <div class="flex items-baseline gap-1.5 mb-2">
+                        <span class="text-2xl font-bold text-slate-800" id="meta-prod-real">--</span>
+                        <span class="text-xs text-slate-400">/ <span id="meta-prod-meta">--</span></span>
                     </div>
-                    
-                    <div class="z-10 mt-4">
-                        <div class="flex items-baseline gap-1">
-                            <span class="text-6xl font-black text-slate-800 tracking-tighter" id="meta-prod-real">--</span>
-                            <span class="text-xl font-bold text-slate-400 tracking-tight">/ <span id="meta-prod-meta">--</span></span>
-                        </div>
-                        <p class="text-sm text-slate-500 font-medium mt-1">Documentos processados e validados.</p>
-                    </div>
-
-                    <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden mt-6 shadow-inner">
-                        <div id="bar-meta-prod" class="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full relative">
-                            <div class="absolute top-0 right-0 w-full h-full bg-white/20 animate-pulse"></div>
-                        </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div id="bar-meta-prod" class="h-full bg-blue-600 rounded-full" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="col-span-12 lg:col-span-6 bento-card p-8 flex flex-col justify-between h-[280px] relative overflow-hidden">
-                    <div class="absolute top-0 right-0 p-8 opacity-5 pointer-events-none transform translate-x-4 -translate-y-4">
-                        <i class="fas fa-bullseye text-9xl"></i>
+                <div class="min-card">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-semibold text-slate-500 uppercase">Assertividade</span>
+                        <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Qualidade</span>
                     </div>
-                    
-                    <div class="flex justify-between items-start z-10">
-                        <div class="flex flex-col gap-2">
-                            <div class="icon-squircle bg-emerald-50 text-emerald-600 mb-2 shadow-sm">
-                                <i class="fas fa-check-double"></i>
-                            </div>
-                            <h3 class="text-sm font-bold text-slate-500 uppercase tracking-widest">Qualidade</h3>
-                        </div>
-                        <div class="text-right">
-                             <div class="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">Meta: 98.00%</div>
-                        </div>
+                    <div class="flex items-baseline gap-1.5 mb-2">
+                        <span class="text-2xl font-bold text-slate-800" id="meta-assert-real">--%</span>
+                        <span class="text-xs text-slate-400">Meta: <span id="meta-assert-meta">--%</span></span>
                     </div>
-                    
-                    <div class="z-10 mt-4">
-                        <div class="flex items-baseline gap-1">
-                            <span class="text-6xl font-black text-slate-800 tracking-tighter" id="meta-assert-real">--%</span>
-                            <span class="text-xl font-bold text-slate-400 tracking-tight">Assertividade</span>
-                        </div>
-                        <p class="text-sm text-slate-500 font-medium mt-1">Média ponderada de acertos.</p>
-                    </div>
-
-                    <div class="w-full bg-slate-100 h-3 rounded-full overflow-hidden mt-6 shadow-inner">
-                        <div id="bar-meta-assert" class="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 rounded-full relative">
-                            <div class="absolute top-0 right-0 w-full h-full bg-white/20 animate-pulse"></div>
-                        </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div id="bar-meta-assert" class="h-full bg-emerald-500 rounded-full" style="width: 0%"></div>
                     </div>
                 </div>
 
-                <div class="col-span-12 bento-card p-8">
-                    <div class="flex items-center gap-3 mb-8">
-                        <div class="w-10 h-10 rounded-full bg-purple-50 flex items-center justify-center text-purple-600 shadow-sm border border-purple-100"><i class="fas fa-search"></i></div>
+                <div class="min-card">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-semibold text-slate-500 uppercase">Cobertura Auditoria</span>
+                        <span class="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Fiscalização</span>
+                    </div>
+                    <div class="flex items-baseline gap-1.5 mb-2">
+                        <span class="text-2xl font-bold text-slate-800" id="auditoria-total-auditados">--</span>
+                        <span class="text-xs text-slate-400">de <span id="auditoria-total-validados">--</span> docs</span>
+                    </div>
+                    <div class="flex justify-between items-center text-[10px] text-slate-400 mb-1">
+                        <span>Progresso</span>
+                        <span id="auditoria-pct-cobertura">--%</span>
+                    </div>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div id="bar-auditoria-cov" class="h-full bg-purple-500 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <div class="min-card">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-xs font-semibold text-slate-500 uppercase">Resultado Audit</span>
+                        <span class="text-[10px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">Status</span>
+                    </div>
+                    <div class="flex items-center gap-4 mb-2 mt-1">
                         <div>
-                            <h3 class="font-bold text-slate-700 text-lg">Funil de Auditoria</h3>
-                            <p class="text-xs text-slate-400 font-bold uppercase tracking-wide">Rastreabilidade do Ciclo</p>
+                            <span class="text-xl font-bold text-emerald-600 block" id="auditoria-total-ok">--</span>
+                            <span class="text-[10px] text-slate-400 font-semibold uppercase">Aprovados</span>
+                        </div>
+                        <div class="w-px h-6 bg-slate-200"></div>
+                        <div>
+                            <span class="text-xl font-bold text-rose-600 block" id="auditoria-total-nok">--</span>
+                            <span class="text-[10px] text-slate-400 font-semibold uppercase">Reprovados</span>
                         </div>
                     </div>
-
-                    <div class="relative px-4">
-                        <div class="absolute top-1/2 left-0 w-full h-1 bg-slate-100 -translate-y-1/2 rounded-full hidden md:block z-0"></div>
-                        <div class="absolute top-1/2 left-0 h-1 bg-purple-200 -translate-y-1/2 rounded-full hidden md:block z-0 transition-all duration-1000" id="bar-auditoria-flow" style="width: 0%"></div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-4 relative z-10">
-                            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-center md:w-4/5 mx-auto relative group hover:border-blue-200 transition">
-                                <div class="w-3 h-3 bg-blue-500 rounded-full absolute -top-1.5 left-1/2 -translate-x-1/2 ring-4 ring-white hidden md:block"></div>
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Entrada</span>
-                                <span class="text-2xl font-black text-slate-700 block" id="auditoria-total-validados">--</span>
-                                <span class="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">Processados</span>
-                            </div>
-
-                            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-center md:w-4/5 mx-auto relative group hover:border-purple-200 transition">
-                                <div class="w-3 h-3 bg-purple-500 rounded-full absolute -top-1.5 left-1/2 -translate-x-1/2 ring-4 ring-white hidden md:block"></div>
-                                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Amostragem</span>
-                                <div class="flex justify-center items-baseline gap-1">
-                                    <span class="text-2xl font-black text-purple-600" id="auditoria-total-auditados">--</span>
-                                    <span class="text-xs font-bold text-slate-400" title="Cobertura">(<span id="auditoria-pct-cobertura">--%</span>)</span>
-                                </div>
-                                <span class="text-xs font-semibold text-slate-400 mt-1 block">Faltam: <span id="auditoria-sem-audit">--</span></span>
-                            </div>
-
-                            <div class="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm text-center md:w-4/5 mx-auto relative flex items-center justify-center gap-4 hover:border-emerald-200 transition">
-                                <div class="w-3 h-3 bg-emerald-500 rounded-full absolute -top-1.5 left-1/2 -translate-x-1/2 ring-4 ring-white hidden md:block"></div>
-                                <div class="text-center">
-                                    <span class="block text-xl font-black text-emerald-600" id="auditoria-total-ok">--</span>
-                                    <span class="text-[9px] font-bold text-slate-400 uppercase">Aprovados</span>
-                                </div>
-                                <div class="h-8 w-px bg-slate-100"></div>
-                                <div class="text-center">
-                                    <span class="block text-xl font-black text-rose-500" id="auditoria-total-nok">--</span>
-                                    <span class="text-[9px] font-bold text-slate-400 uppercase">Reprovados</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-span-12 lg:col-span-6 bento-card p-6 min-h-[400px]">
-                    <div class="flex justify-between items-center mb-6">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-500 flex items-center justify-center text-sm"><i class="fas fa-chart-line"></i></div>
-                            <h3 class="font-bold text-slate-700 text-sm">Tendência de Volume</h3>
-                        </div>
-                        <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase periodo-label">--</span>
-                    </div>
-                    <div class="h-[300px] w-full relative">
-                        <canvas id="graficoEvolucaoProducao"></canvas>
-                    </div>
-                </div>
-
-                <div class="col-span-12 lg:col-span-6 bento-card p-6 min-h-[400px]">
-                    <div class="flex justify-between items-center mb-6">
-                        <div class="flex items-center gap-3">
-                            <div class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-500 flex items-center justify-center text-sm"><i class="fas fa-chart-area"></i></div>
-                            <h3 class="font-bold text-slate-700 text-sm">Estabilidade da Qualidade</h3>
-                        </div>
-                        <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-slate-100 uppercase periodo-label">--</span>
-                    </div>
-                    <div class="h-[300px] w-full relative">
-                        <canvas id="graficoEvolucaoAssertividade"></canvas>
+                    <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden mt-auto">
+                        <div id="bar-auditoria-res" class="h-full bg-emerald-500 rounded-full" style="width: 100%"></div>
                     </div>
                 </div>
 
             </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm min-h-[280px]">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-bold text-slate-600 uppercase">Evolução de Volume</h3>
+                        <span class="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 uppercase periodo-label">--</span>
+                    </div>
+                    <div class="h-[220px] w-full relative">
+                        <canvas id="graficoEvolucaoProducao"></canvas>
+                    </div>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-lg p-4 shadow-sm min-h-[280px]">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-xs font-bold text-slate-600 uppercase">Evolução de Qualidade</h3>
+                        <span class="text-[10px] font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 uppercase periodo-label">--</span>
+                    </div>
+                    <div class="h-[220px] w-full relative">
+                        <canvas id="graficoEvolucaoAssertividade"></canvas>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <div id="ma-tab-auditoria" class="ma-view hidden animate-enter space-y-4">

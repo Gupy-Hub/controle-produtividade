@@ -1,13 +1,13 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO 2026: Gráficos High-End (Gradientes, Smooth Curves) + Bento Layout Support
+   ATUALIZAÇÃO: Design Minimalista & Compacto
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (Core Inalterado) ---
+    // --- MANIPULAÇÃO DE DADOS (Inalterado) ---
     fetchAll: async function(table, queryBuilder) {
         let allData = [];
         let page = 0;
@@ -30,7 +30,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando renderização High-Fidelity...");
+        console.log("🚀 Metas: Carregando modo Minimalista...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -43,7 +43,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // Buscas (Otimizadas)
+            // Buscas
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
@@ -85,7 +85,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // --- LÓGICA DE NEGÓCIO (Mantida) ---
+            // Filtros e Bloqueios
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -203,7 +203,7 @@ MinhaArea.Metas = {
                 if (!isNaN(val)) mapAssert.get(dataKey).push(val);
             });
 
-            // Preparação Gráficos
+            // Gráficos
             const diffDays = (dtFim - dtInicio) / (1000 * 60 * 60 * 24);
             const modoMensal = diffDays > 35;
             
@@ -219,14 +219,11 @@ MinhaArea.Metas = {
                 const ano = d.getFullYear();
                 const mes = d.getMonth() + 1;
                 const dia = d.getDate();
-
                 const metaConfig = mapMetas[ano]?.[mes] || { prodTotalDiario: (isGeral ? 100 * this.getQtdAssistentesConfigurada() : 100), assertFinal: 98.0 };
-                
                 const prodDia = mapProd.get(dataStr);
                 const qtd = prodDia ? Number(prodDia.quantidade || 0) : 0;
                 const fator = prodDia ? Number(prodDia.fator) : (isFDS ? 0 : 1); 
                 const metaDia = Math.round(metaConfig.prodTotalDiario * (isNaN(fator) ? 1 : fator));
-
                 const assertsDia = mapAssert.get(dataStr) || [];
                 
                 if (modoMensal) {
@@ -258,11 +255,9 @@ MinhaArea.Metas = {
 
             this.atualizarCardsKPI(mapProd, dadosAssertividadeRaw, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsBloqueados);
 
-            document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Visão Mensal' : 'Visão Diária');
-            
-            // --- RENDERIZAÇÃO 2026: Gráficos com Gradientes e Curvas ---
-            this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação', '#3b82f6', false);
-            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade', '#10b981', true);
+            document.querySelectorAll('.periodo-label').forEach(el => el.innerText = modoMensal ? 'Mensal' : 'Diário');
+            this.renderizarGrafico('graficoEvolucaoProducao', labels, dataProdReal, dataProdMeta, 'Validação', '#2563eb', false);
+            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dataAssertReal, dataAssertMeta, 'Assertividade', '#059669', true);
 
         } catch (err) {
             console.error("❌ Erro Metas:", err);
@@ -332,40 +327,30 @@ MinhaArea.Metas = {
         const totalAcertos = totalAuditados - totalErros;
         const pctAuditado = totalValidados > 0 ? ((totalAuditados / totalValidados) * 100) : 0;
 
-        // Atualização DOM
+        // KPI Updates
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-gradient-to-r from-blue-500 to-blue-400'); // Gradiente via classe Tailwind
+        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
 
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-gradient-to-r from-emerald-500 to-emerald-400' : 'bg-gradient-to-r from-rose-500 to-rose-400');
+        this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
-        this.setTxt('auditoria-sem-audit', semAuditoria.toLocaleString('pt-BR'));
         this.setTxt('auditoria-pct-cobertura', pctAuditado.toLocaleString('pt-BR', {maximumFractionDigits: 1}) + '%');
+        this.setBar('bar-auditoria-cov', pctAuditado, 'bg-purple-500');
+
         this.setTxt('auditoria-total-ok', totalAcertos.toLocaleString('pt-BR')); 
         this.setTxt('auditoria-total-nok', totalErros.toLocaleString('pt-BR')); 
-        
-        // Indicador Visual de Fluxo (Barra de Auditoria)
-        const elAuditBar = document.getElementById('bar-auditoria-flow');
-        if (elAuditBar) {
-             elAuditBar.style.width = Math.min(pctAuditado, 100) + '%';
-        }
+        const pctOk = totalAuditados > 0 ? (totalAcertos / totalAuditados * 100) : 100;
+        this.setBar('bar-auditoria-res', pctOk, pctOk >= 95 ? 'bg-emerald-500' : 'bg-rose-500');
     },
 
     renderizarGrafico: function(canvasId, labels, dataReal, dataMeta, labelReal, colorHex, isPercent) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return;
-        const ctx2d = ctx.getContext('2d');
-
-        // --- TENDÊNCIA 2026: Gradient Fills ---
-        // Cria um gradiente vertical suave para o preenchimento da linha
-        let gradient = ctx2d.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, colorHex + '66'); // 40% opacidade no topo
-        gradient.addColorStop(1, colorHex + '00'); // 0% opacidade na base (fade out)
 
         if (canvasId === 'graficoEvolucaoProducao') {
             if (this.chartProd) this.chartProd.destroy();
@@ -374,34 +359,32 @@ MinhaArea.Metas = {
         }
 
         const config = {
-            type: 'line', // Mudança para Line Chart preenchido (Area Chart)
+            type: 'line',
             data: {
                 labels: labels,
                 datasets: [
                     {
                         label: labelReal,
                         data: dataReal,
-                        backgroundColor: gradient,
                         borderColor: colorHex,
-                        borderWidth: 3,
+                        borderWidth: 2,
+                        backgroundColor: colorHex + '10', // 10% opacity fill
                         pointBackgroundColor: '#fff',
                         pointBorderColor: colorHex,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        pointBorderWidth: 2,
-                        fill: true, // Preenchimento ativado
-                        tension: 0.4, // Curva suave (Bézier)
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        fill: true,
+                        tension: 0.3,
                         order: 2
                     },
                     {
                         label: 'Meta',
                         data: dataMeta,
-                        type: 'line',
-                        borderColor: '#94a3b8',
+                        borderColor: '#cbd5e1',
                         borderWidth: 2,
                         pointRadius: 0,
-                        borderDash: [6, 6],
-                        tension: 0.4,
+                        borderDash: [4, 4],
+                        tension: 0.3,
                         fill: false,
                         order: 1
                     }
@@ -414,12 +397,11 @@ MinhaArea.Metas = {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(30, 41, 59, 0.9)', // Tooltip escura (contraste)
-                        titleColor: '#f1f5f9',
-                        bodyColor: '#e2e8f0',
-                        padding: 12,
-                        cornerRadius: 8,
+                        backgroundColor: '#1e293b',
+                        padding: 8,
+                        cornerRadius: 6,
                         displayColors: true,
+                        bodyFont: { size: 11 },
                         callbacks: {
                             label: function(ctx) {
                                 let val = ctx.raw;
@@ -434,17 +416,16 @@ MinhaArea.Metas = {
                     y: { 
                         beginAtZero: true, 
                         border: { display: false },
-                        grid: { color: '#f1f5f9', tickLength: 0 }, 
+                        grid: { color: '#f1f5f9' }, 
                         ticks: { 
-                            font: { family: "'Nunito', sans-serif", size: 11, weight: '600' },
+                            font: { size: 10 },
                             color: '#94a3b8',
-                            padding: 10,
                             callback: function(val) { return isPercent ? val + '%' : val; } 
                         } 
                     },
                     x: { 
                         grid: { display: false },
-                        ticks: { font: { family: "'Nunito', sans-serif", size: 10 }, color: '#94a3b8' }
+                        ticks: { font: { size: 10 }, color: '#94a3b8', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }
                     }
                 }
             }
@@ -458,11 +439,10 @@ MinhaArea.Metas = {
 
     resetarCards: function() {
         ['meta-assert-real','meta-assert-meta','meta-prod-real','meta-prod-meta',
-         'auditoria-total-validados','auditoria-total-auditados','auditoria-sem-audit',
-         'auditoria-total-ok','auditoria-total-nok','auditoria-pct-cobertura']
-         .forEach(id => this.setTxt(id, '--'));
+         'auditoria-total-validados','auditoria-total-auditados','auditoria-pct-cobertura',
+         'auditoria-total-ok','auditoria-total-nok'].forEach(id => this.setTxt(id, '--'));
         
-        ['bar-meta-assert','bar-meta-prod','bar-auditoria-flow'].forEach(id => { 
+        ['bar-meta-assert','bar-meta-prod','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { 
             const el = document.getElementById(id); 
             if(el) el.style.width = '0%'; 
         });
@@ -473,7 +453,7 @@ MinhaArea.Metas = {
         const el = document.getElementById(id);
         if(el) {
             el.style.width = Math.min(pct, 100) + '%';
-            el.className = `h-full rounded-full transition-all duration-1000 ${colorClass}`;
+            el.className = `h-full rounded-full transition-all duration-700 ${colorClass}`;
         }
     }
 };
