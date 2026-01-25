@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   CORREÇÃO: Paginação Automática (Pega TUDO) + Filtro Vanessa
+   DESCRIÇÃO: Engine de Metas e OKRs (Minha Área) - VERSÃO UI 2.0
+   ATUALIZAÇÃO: Design Moderno + Correção de Dados (Paginação + Lei Seca)
 */
 
 MinhaArea.Metas = {
@@ -32,7 +32,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando carregamento...");
+        console.log("🚀 Metas 2.0: Iniciando carregamento...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -45,7 +45,7 @@ MinhaArea.Metas = {
         this.resetarCards();
 
         try {
-            // 1. Buscas
+            // Definição das Queries
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
@@ -75,7 +75,7 @@ MinhaArea.Metas = {
                 dadosMetasRaw = m.data || [];
                 dadosUsuarios = u.data || [];
             } else {
-                // PAGINAÇÃO AQUI TAMBÉM
+                // Paginação Automática para Visão Geral
                 const [p, a, m, u] = await Promise.all([
                     this.fetchAll('producao', qProducao),
                     this.fetchAll('assertividade', qAssertividade),
@@ -88,7 +88,7 @@ MinhaArea.Metas = {
                 dadosUsuarios = u;
             }
 
-            // --- CRIAÇÃO DA LISTA DE BLOQUEIO ---
+            // --- SEGURANÇA: FILTRO SNIPER (VANESSA/GESTÃO) ---
             const idsBloqueados = new Set();
             const mapUser = {};
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
@@ -134,8 +134,8 @@ MinhaArea.Metas = {
                 if (isGeral) {
                     const isBloqueado = idsBloqueados.has(uId);
                     const uData = mapUser[uId];
-
-                    if (!isBloqueado && uData) {
+                    // Só soma meta se não for gestão/bloqueado
+                    if (uData && !isBloqueado) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
                         else if (!uData.ativo && usuariosQueProduziram.has(uId)) considerar = true;
@@ -208,7 +208,7 @@ MinhaArea.Metas = {
 
                 if (isGeral) {
                     if (idsBloqueados.has(uId)) return; // BLOQUEIO!
-                    if (!mapUser[uId]) return; // IGNORA FANTASMAS!
+                    if (!mapUser[uId]) return; // IGNORA FANTASMAS
                 }
 
                 if(!mapAssert.has(dataKey)) mapAssert.set(dataKey, []);
@@ -281,19 +281,18 @@ MinhaArea.Metas = {
         }
     },
 
+    // Métodos Auxiliares
     getQtdAssistentesConfigurada: function() {
         const manual = localStorage.getItem('gupy_config_qtd_assistentes');
         const qtd = manual ? parseInt(manual) : 17; 
         return qtd > 0 ? qtd : 17;
     },
-
     calcularModaOuMedia: function(valores) {
         if (!valores || valores.length === 0) return { valor: 100 };
         const frequencia = {}; let maxFreq = 0; let moda = valores[0]; let soma = 0;
         valores.forEach(v => { soma += v; frequencia[v] = (frequencia[v] || 0) + 1; if (frequencia[v] > maxFreq) { maxFreq = frequencia[v]; moda = v; } });
         if ((maxFreq / valores.length) >= 0.3) { return { valor: moda }; } else { return { valor: Math.round(soma / valores.length) }; }
     },
-
     calcularMetaInteligente: function(valores) {
         if (!valores || valores.length === 0) return { valor: 98.0, isMedia: false };
         const soma = valores.reduce((a, b) => a + b, 0);
@@ -302,6 +301,7 @@ MinhaArea.Metas = {
         if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number((soma/valores.length).toFixed(2)), isMedia: true }; }
     },
 
+    // UI UPDATE FUNCTION (Atualizada para os novos IDs e Barras)
     atualizarCardsKPI: function(mapProd, asserts, mapMetas, dtInicio, dtFim, isGeral, mapUser, usuariosQueProduziram, idsBloqueados) {
         let totalValidados = 0; 
         let totalMeta = 0;
@@ -330,8 +330,8 @@ MinhaArea.Metas = {
             const uId = a.usuario_id;
             
             if (isGeral) {
-                if (idsBloqueados.has(uId)) return; // BLOQUEIO!
-                if (!mapUser[uId]) return; // FANTASMA!
+                if (idsBloqueados.has(uId)) return;
+                if (!mapUser[uId]) return;
             }
 
             const status = (a.status || '').toUpperCase();
@@ -351,14 +351,23 @@ MinhaArea.Metas = {
         const semAuditoria = Math.max(0, totalValidados - totalAuditados);
         const totalAcertos = totalAuditados - totalErros;
 
+        // UI Updates (Novos Seletores)
         this.setTxt('meta-prod-real', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-        this.setBar('bar-meta-prod', totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0, 'bg-blue-600');
+        
+        // Barra Prod
+        const pctProd = totalMeta > 0 ? (totalValidados/totalMeta)*100 : 0;
+        this.setBar('bar-meta-prod', pctProd, pctProd >= 100 ? 'bg-emerald-500' : (pctProd >= 80 ? 'bg-blue-600' : 'bg-rose-500'));
+        this.setTxt('txt-status-prod', pctProd >= 100 ? 'Meta Batida! 🚀' : `${(100-pctProd).toFixed(1)}% para a meta`);
 
         this.setTxt('meta-assert-real', mediaAssert.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
         const metaAssertRef = 98.0; 
         this.setTxt('meta-assert-meta', metaAssertRef.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})+'%');
-        this.setBar('bar-meta-assert', (mediaAssert/metaAssertRef)*100, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
+        
+        // Barra Assert
+        const pctAssertBar = (mediaAssert / metaAssertRef) * 100; // Escala visual relativa à meta
+        this.setBar('bar-meta-assert', pctAssertBar, mediaAssert >= metaAssertRef ? 'bg-emerald-500' : 'bg-rose-500');
+        this.setTxt('txt-status-assert', mediaAssert >= metaAssertRef ? 'Qualidade Excelente ✨' : 'Abaixo da meta');
 
         this.setTxt('auditoria-total-validados', totalValidados.toLocaleString('pt-BR'));
         this.setTxt('auditoria-total-auditados', totalAuditados.toLocaleString('pt-BR'));
@@ -451,7 +460,10 @@ MinhaArea.Metas = {
         const el = document.getElementById(id);
         if(el) {
             el.style.width = Math.min(pct, 100) + '%';
-            el.className = `h-full rounded-full transition-all duration-1000 ${colorClass}`;
+            // Reseta classes antigas de cor e aplica a nova
+            el.className = `h-full rounded-full transition-all duration-1000 relative ${colorClass}`;
+            // Adiciona o brilho
+            el.innerHTML = '<div class="absolute inset-0 bg-white/20 animate-pulse"></div>';
         }
     }
 };
