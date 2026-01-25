@@ -1,13 +1,13 @@
 /* ARQUIVO: js/minha_area/metas.js
    DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v3.1 (Golden) - Performance Turbo + Validação Estrita de Erros
+   ATUALIZAÇÃO: v3.2 - Turbo Paralelo + Lógica Bruta de Erros (Alinhamento 100% DB)
 */
 
 MinhaArea.Metas = {
     chartProd: null,
     chartAssert: null,
 
-    // --- MANIPULAÇÃO DE DADOS (PARALELO + ORDENADO) ---
+    // --- MANIPULAÇÃO DE DADOS (TURBO PARALELO) ---
     fetchParalelo: async function(tabela, colunas, filtrosFn) {
         // 1. Count Rápido
         let qCount = Sistema.supabase.from(tabela).select('*', { count: 'exact', head: true });
@@ -23,21 +23,20 @@ MinhaArea.Metas = {
 
         console.log(`🚀 [TURBO] ${tabela}: Baixando ${count} linhas em ${totalPages} conexões...`);
 
-        // 2. Dispara requisições com ORDENAÇÃO (Essencial para não vir duplicado)
+        // 2. Dispara requisições com ORDENAÇÃO
         for (let i = 0; i < totalPages; i++) {
             let q = Sistema.supabase.from(tabela)
                 .select(colunas)
-                .order('id', { ascending: true }) // Garante estabilidade
+                .order('id', { ascending: true }) // Essencial para estabilidade
                 .range(i * pageSize, (i + 1) * pageSize - 1);
             
             q = filtrosFn(q);
             promises.push(q);
         }
 
-        // 3. Aguarda todas as conexões
         const responses = await Promise.all(promises);
         
-        // 4. Junta e Remove Duplicatas (Safety check)
+        // 3. Junta e Remove Duplicatas (Safety check)
         let allData = [];
         const idsVistos = new Set();
 
@@ -61,7 +60,7 @@ MinhaArea.Metas = {
     },
 
     carregar: async function() {
-        console.log("🚀 Metas: Iniciando Carga Estrita (v3.1)...");
+        console.log("🚀 Metas: Iniciando Carga Sincronizada (v3.2)...");
         const uid = MinhaArea.getUsuarioAlvo(); 
         const isGeral = (uid === null);
 
@@ -95,7 +94,7 @@ MinhaArea.Metas = {
 
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
-            // EXECUÇÃO PARALELA TOTAL
+            // DOWNLOAD TURBO
             console.time("⏱️ Tempo Download");
             const [p, a, m, u] = await Promise.all([
                 this.fetchParalelo('producao', '*', applyFiltersProd),
@@ -345,7 +344,7 @@ MinhaArea.Metas = {
             diasParaMediaMeta++;
         }
 
-        // 2. Loop Unificado (Com Validação Estrita)
+        // 2. Loop Unificado (Volta para lógica Simples = DB Real)
         asserts.forEach(a => {
             const uId = a.usuario_id;
             
@@ -360,17 +359,13 @@ MinhaArea.Metas = {
                 if(!isNaN(val)) { somaAssertMedia += val; qtdAssertMedia++; }
             }
 
-            // B) VOLUMETRIA AUDITORIA (CORREÇÃO DE OURO: Regex Estrita)
+            // B) VOLUMETRIA AUDITORIA (Lógica Bruta: Se Number > 0, é Erro)
+            // Removemos Regex e Trim para garantir igualdade com o script de teste
             if (a.auditora_nome && a.auditora_nome.trim() !== '') {
                 countTotalAuditados++; 
                 
-                // Validação: Converte para string, remove espaços e verifica se é SOMENTE números.
-                // Isso elimina coisas como "1 (revisar)", "1?", etc.
-                const valStr = String(a.qtd_nok || '').trim();
-                const valNum = Number(valStr);
-                const isPuro = /^\d+(\.\d+)?$/.test(valStr); // Regex: Só aceita dígitos (e decimal opcional)
-
-                if (a.qtd_nok && valNum > 0 && isPuro) {
+                // Conversão direta. Se o banco diz que é > 0, é > 0.
+                if (a.qtd_nok && Number(a.qtd_nok) > 0) {
                     countErros++;
                 }
             }
