@@ -27,7 +27,9 @@ Produtividade.Assertividade = {
         const atingiu = media >= meta;
 
         // 3. Definição de Cores e Ícones
-        // Verde (Emerald) se atingiu, Vermelho (Rose) se não
+        // Agora usamos o padrão visual definido no Sistema.Assertividade.config se quisermos ser estritos,
+        // mas aqui mantemos o visual de "Pill" específico da tabela de produtividade.
+        
         const corTexto = atingiu ? 'text-emerald-700' : 'text-rose-700';
         const bgCor = atingiu ? 'bg-emerald-50' : 'bg-rose-50';
         const borda = atingiu ? 'border-emerald-100' : 'border-rose-100';

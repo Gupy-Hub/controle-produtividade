@@ -1,24 +1,26 @@
+// ARQUIVO: js/minha_area/assertividade.js
 MinhaArea.Assertividade = {
     carregar: async function() {
         const periodo = MinhaArea.getPeriodo();
+        const display = document.getElementById('assert-meta-display');
         
-        try {
-            // Tenta buscar a meta global mais recente definida para este mês
-            const { data } = await MinhaArea.supabase
-                .from('metas_assertividade')
-                .select('valor_minimo')
-                .lte('data_inicio', periodo.fim) // Começou antes do fim do mês
-                .order('data_inicio', { ascending: false })
-                .limit(1);
+        if(!display) return;
 
-            const display = document.getElementById('assert-meta-display');
-            if (data && data.length > 0) {
-                display.innerText = data[0].valor_minimo + "%";
-            } else {
-                display.innerText = "Não definida";
+        display.innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i>';
+
+        try {
+            if (!window.AssertividadeService) {
+                throw new Error("Service não carregado");
             }
+
+            // Usa a função centralizada para buscar a meta
+            const metaValor = await window.AssertividadeService.buscarMetaVigente(periodo.fim);
+            
+            display.innerText = metaValor + "%";
+            
         } catch (e) {
-            console.warn("Erro ao buscar meta assertividade:", e);
+            console.warn("Erro ao buscar meta via Service:", e);
+            display.innerText = "98%"; // Fallback seguro
         }
     }
 };

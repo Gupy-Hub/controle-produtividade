@@ -16,7 +16,6 @@ Gestao.Assertividade = {
         obs: ''
     },
 
-    // Ponto de entrada chamado pelo Menu
     carregar: async function() {
         if (!this.inicializado) {
             await this.transformarFiltrosEmSelects();
@@ -25,7 +24,6 @@ Gestao.Assertividade = {
         this.atualizarFiltrosEBuscar();
     },
 
-    // Função que o HTML chama no onkeyup/onchange
     atualizarFiltrosEBuscar: function() {
         const tbody = document.getElementById('lista-assertividade');
         
@@ -38,9 +36,7 @@ Gestao.Assertividade = {
         this.filtros.obs = document.getElementById('filtro-obs')?.value || '';
         this.filtros.auditora = document.getElementById('filtro-auditora')?.value || '';
 
-        if (tbody) {
-            tbody.style.opacity = '0.5';
-        }
+        if (tbody) tbody.style.opacity = '0.5';
         
         clearTimeout(this.timerBusca);
         this.timerBusca = setTimeout(() => {
@@ -60,33 +56,21 @@ Gestao.Assertividade = {
         if (infoPag) infoPag.innerText = "Filtrando...";
 
         try {
-            let query = Sistema.supabase
-                .from('assertividade')
-                .select('*')
-                .order('data_referencia', { ascending: false })
-                .order('id', { ascending: false })
-                .limit(100);
+            // USANDO O NOVO MÓDULO CENTRAL
+            const dados = await Sistema.Assertividade.buscar({
+                buscaGeral: this.filtros.busca,
+                data: this.filtros.data,
+                empresa: this.filtros.empresa,
+                assistente: this.filtros.assistente,
+                doc: this.filtros.doc,
+                obs: this.filtros.obs,
+                auditora: this.filtros.auditora,
+                status: this.filtros.status,
+                limit: 100
+            });
 
-            // Filtros
-            if (this.filtros.busca) {
-                const termo = `%${this.filtros.busca}%`;
-                query = query.or(`assistente_nome.ilike.${termo},empresa_nome.ilike.${termo}`);
-            }
-
-            if (this.filtros.data) query = query.eq('data_referencia', this.filtros.data);
-            if (this.filtros.empresa) query = query.ilike('empresa_nome', `%${this.filtros.empresa}%`);
-            if (this.filtros.assistente) query = query.ilike('assistente_nome', `%${this.filtros.assistente}%`);
-            if (this.filtros.doc) query = query.ilike('doc_name', `%${this.filtros.doc}%`);
-            if (this.filtros.obs) query = query.ilike('observacao', `%${this.filtros.obs}%`);
-            if (this.filtros.auditora) query = query.eq('auditora_nome', this.filtros.auditora);
-            if (this.filtros.status) query = query.eq('status', this.filtros.status);
-
-            const { data, error } = await query;
-
-            if (error) throw error;
-
-            this.renderizarTabela(data || []);
-            if (infoPag) infoPag.innerHTML = `Exibindo <b>${(data || []).length}</b> registros recentes.`;
+            this.renderizarTabela(dados);
+            if (infoPag) infoPag.innerHTML = `Exibindo <b>${dados.length}</b> registros recentes.`;
 
         } catch (error) {
             console.error("Erro busca:", error);
@@ -104,43 +88,16 @@ Gestao.Assertividade = {
 
         let html = '';
         lista.forEach(item => {
-            // Status Styles
-            let statusClass = 'bg-slate-100 text-slate-500 border-slate-200';
-            const st = (item.status || '').toUpperCase();
-            if (['OK', 'VALIDO'].includes(st)) statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
-            else if (st.includes('NOK')) statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
-            else if (st.includes('REV')) statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
-
-            // Datas
             const dataFmt = item.data_referencia ? item.data_referencia.split('-').reverse().join('/') : '-';
             
-            // --- CORREÇÃO CRÍTICA DE VAZIOS/NULOS ---
-            // Se for null/undefined/vazio, exibe traço '-' e cor cinza.
-            // NÃO converte para 0.
-            
-            const rawPorc = item.porcentagem_assertividade;
-            let displayPorc = '-';
-            let corPorc = "text-slate-300 font-light"; // Cor neutra para vazio
+            // Usando funções do Core para formatação
+            const badgeStatus = Sistema.Assertividade.renderizarBadgeStatus(item.status);
+            const stylePorc = Sistema.Assertividade.obterEstiloPorcentagem(item.porcentagem_assertividade);
+            const valPorc = Sistema.Assertividade.formatarValor(item.porcentagem_assertividade);
 
-            // Verifica se tem valor REAL (não nulo, não vazio)
-            if (rawPorc !== null && rawPorc !== undefined && rawPorc !== '') {
-                displayPorc = rawPorc; // Exibe exatamente o que veio do banco (ex: "100,00%")
-                
-                // Cálculo apenas para cor
-                const valP = parseFloat(String(rawPorc).replace('%','').replace(',','.'));
-                
-                if (!isNaN(valP)) {
-                    corPorc = "text-slate-500"; // Cor padrão se for número
-                    if(valP >= 99) corPorc = "text-emerald-600 font-bold";
-                    else if(valP < 90) corPorc = "text-rose-600 font-bold";
-                }
-            }
-            
-            // Lógica similar para campos numéricos (Qtd Campos, OK, NOK)
-            // Se for null, mostra '-'
-            const qtdCampos = item.qtd_campos !== null ? item.qtd_campos : '-';
-            const qtdOk = item.qtd_ok !== null ? item.qtd_ok : '-';
-            const qtdNok = item.qtd_nok !== null ? item.qtd_nok : '-';
+            const valCampos = Sistema.Assertividade.formatarValor(item.qtd_campos);
+            const valOk = Sistema.Assertividade.formatarValor(item.qtd_ok);
+            const valNok = Sistema.Assertividade.formatarValor(item.qtd_nok);
 
             html += `
                 <tr class="hover:bg-slate-50 transition text-[11px] whitespace-nowrap">
@@ -150,15 +107,15 @@ Gestao.Assertividade = {
                     <td class="px-3 py-2 text-slate-600 truncate max-w-[150px]" title="${item.assistente_nome}">${item.assistente_nome || '-'}</td>
                     <td class="px-3 py-2 text-slate-500 truncate max-w-[150px]" title="${item.doc_name}">${item.doc_name || '-'}</td>
                     <td class="px-3 py-2 text-center">
-                        <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${statusClass}">${item.status || '-'}</span>
+                        ${badgeStatus}
                     </td>
                     <td class="px-3 py-2 text-slate-400 italic truncate max-w-[200px]" title="${item.observacao}">${item.observacao || ''}</td>
                     
-                    <td class="px-3 py-2 text-center font-mono text-slate-500">${qtdCampos}</td>
-                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/30">${qtdOk}</td>
-                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/30">${qtdNok}</td>
+                    <td class="px-3 py-2 text-center font-mono text-slate-500">${valCampos}</td>
+                    <td class="px-3 py-2 text-center font-bold text-emerald-600 bg-emerald-50/30">${valOk}</td>
+                    <td class="px-3 py-2 text-center font-bold text-rose-600 bg-rose-50/30">${valNok}</td>
                     
-                    <td class="px-3 py-2 text-center ${corPorc}">${displayPorc}</td>
+                    <td class="px-3 py-2 text-center ${stylePorc}">${valPorc}</td>
                     <td class="px-3 py-2 text-slate-500 uppercase text-[10px]">${item.auditora_nome || '-'}</td>
                 </tr>
             `;
