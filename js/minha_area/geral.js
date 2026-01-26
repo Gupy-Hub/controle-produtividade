@@ -1,7 +1,4 @@
-/* ARQUIVO: js/minha_area/geral.js
-   DESCRIÇÃO: Engine do Painel "Dia a Dia"
-   CORREÇÃO: Paginação Automática (Pega TUDO, mesmo > 1000 linhas) + Filtro Vanessa
-*/
+/* ARQUIVO: js/minha_area/geral.js */
 
 MinhaArea.Geral = {
     // Função Auxiliar para baixar tudo (fura o bloqueio de 1000 linhas)
@@ -20,7 +17,6 @@ MinhaArea.Geral = {
             if (data.length > 0) {
                 allData = allData.concat(data);
                 page++;
-                // Se veio menos que o tamanho da página, acabou
                 if (data.length < pageSize) hasMore = false;
             } else {
                 hasMore = false;
@@ -43,7 +39,7 @@ MinhaArea.Geral = {
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Baixando base completa...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando indicadores centralizados...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -51,7 +47,7 @@ MinhaArea.Geral = {
             const anoInicio = dtInicio.getFullYear();
             const anoFim = dtFim.getFullYear();
 
-            // 1. Definição das Queries (Sem limit, usaremos Range no fetchAll)
+            // 1. Definição das Queries
             const qProducao = Sistema.supabase.from('producao')
                 .select('*').gte('data_referencia', inicio).lte('data_referencia', fim);
 
@@ -67,33 +63,30 @@ MinhaArea.Geral = {
             const qUsuarios = Sistema.supabase.from('usuarios')
                 .select('id, ativo, nome, perfil, funcao');
 
-            // 2. Execução com Paginação (Aqui está o segredo!)
-            // Se for visão individual, não precisa paginar tanto, mas mantemos o padrão
+            // 2. Execução com Paginação
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
             if (!isGeral) {
-                // Individual: carrega direto (poucos dados)
                 const [p, a, m, u] = await Promise.all([
                     qProducao.eq('usuario_id', uid),
                     qAssertividade.eq('usuario_id', uid),
                     qMetas.eq('usuario_id', uid),
-                    qUsuarios // Usuários sempre carrega todos para mapear nomes se precisar
+                    qUsuarios
                 ]);
                 dadosProducaoRaw = p.data || [];
                 dadosAssertividadeRaw = a.data || [];
                 dadosMetasRaw = m.data || [];
                 dadosUsuarios = u.data || [];
             } else {
-                // Geral: Carrega em Lotes (Loop)
                 const [p, a, m, u] = await Promise.all([
                     this.fetchAll('producao', qProducao),
-                    this.fetchAll('assertividade', qAssertividade), // <--- AQUI VAI VIR TUDO ( > 1000)
-                    qMetas, // Metas geralmente são poucas
-                    this.fetchAll('usuarios', qUsuarios) // <--- PEGA TODOS OS USUÁRIOS
+                    this.fetchAll('assertividade', qAssertividade),
+                    qMetas,
+                    this.fetchAll('usuarios', qUsuarios)
                 ]);
                 dadosProducaoRaw = p;
                 dadosAssertividadeRaw = a;
-                dadosMetasRaw = m.data || m; // fetchAll retorna array direto, query normal retorna {data}
+                dadosMetasRaw = m.data || m;
                 dadosUsuarios = u;
             }
 
@@ -107,10 +100,8 @@ MinhaArea.Geral = {
                  await this.processarCheckingInterface(uid, dadosCheckins);
             }
 
-            // --- MAPEAMENTO ---
-            // Agora sim teremos a Vanessa e as Auditoras carregadas corretamente
+            // --- MAPEAMENTO E FILTROS ---
             const mapUser = {};
-            // Filtros de Bloqueio (Sniper)
             const idsBloqueados = new Set();
             const termosGestao = ['AUDITORA', 'GESTORA', 'ADMIN', 'COORD', 'SUPERVIS', 'LIDER'];
             const nomesBloqueados = ['VANESSA', 'KEILA', 'BRENDA', 'PATRICIA', 'PATRÍCIA', 'GUPY'];
@@ -156,7 +147,6 @@ MinhaArea.Geral = {
                     const uData = mapUser[uId];
                     const isBloqueado = idsBloqueados.has(uId);
 
-                    // Ignora na Meta se for Bloqueado (Vanessa, Gestão)
                     if (uData && !isBloqueado) {
                         let considerar = false;
                         if (uData.ativo) considerar = true;
@@ -175,7 +165,7 @@ MinhaArea.Geral = {
                 }
             });
 
-            // Projeção
+            // Projeção Geral de Metas
             if (isGeral) {
                 const targetAssistentes = this.getQtdAssistentesConfigurada(); 
                 for (const a in mapMetas) {
@@ -200,7 +190,7 @@ MinhaArea.Geral = {
                 }
             }
 
-            // --- AGREGAÇÃO DE DADOS ---
+            // --- AGREGAÇÃO DE PRODUÇÃO ---
             const mapProd = new Map();
             if (isGeral) {
                 dadosProducaoRaw.forEach(p => {
@@ -219,7 +209,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- ASSERTIVIDADE (AGORA SIM, COMPLETA E FILTRADA) ---
+            // --- AGREGAÇÃO DE ASSERTIVIDADE (PREPARADA PARA O CÉREBRO) ---
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
             const mapAssert = new Map();
             
@@ -230,25 +220,28 @@ MinhaArea.Geral = {
                 if (STATUS_IGNORAR.includes(status)) return;
 
                 if (isGeral) {
-                    // Filtro 1: Bloqueio Nominal/Cargo (Vanessa, Keila, Gestão)
                     if (idsBloqueados.has(uId)) return;
-                    
-                    // Filtro 2: Fantasmas (Usuários não encontrados no banco)
                     if (!mapUser[uId]) return;
                 }
 
                 const key = a.data_referencia;
                 if(!mapAssert.has(key)) mapAssert.set(key, { soma: 0, qtd: 0 });
+                
+                // Soma a porcentagem BRUTA
                 if (a.porcentagem_assertividade !== null) {
                     mapAssert.get(key).soma += this.parseValorPorcentagem(a.porcentagem_assertividade);
-                    mapAssert.get(key).qtd++;
+                    mapAssert.get(key).qtd++; // Conta +1 documento
                 }
             });
 
+            // --- CONSTRUÇÃO DO GRID ---
             const mapCheckins = new Set(dadosCheckins.map(c => c.data_referencia));
             const listaGrid = [];
+            
+            // Acumuladores KPI
             let totalProdReal = 0, totalMetaEsperada = 0, somaFatorProdutivo = 0;
             let totalAssertSoma = 0, totalAssertQtd = 0;
+            
             const qtdTarget = this.getQtdAssistentesConfigurada();
 
             for (let d = new Date(dtInicio); d <= dtFim; d.setDate(d.getDate() + 1)) {
@@ -279,25 +272,37 @@ MinhaArea.Geral = {
                 totalMetaEsperada += metaDiaCalculada;
 
                 const assertDoDia = mapAssert.get(dataStr);
+                
+                // ----------------------------------------------------
+                // MUDANÇA CRUCIAL: USANDO O CÉREBRO (SISTEMA)
+                // ----------------------------------------------------
                 let assertDiaDisplay = { val: 0, text: '-', class: 'text-slate-300' };
                 
                 if (assertDoDia && assertDoDia.qtd > 0) {
-                    const mediaDia = assertDoDia.soma / assertDoDia.qtd;
+                    // 1. O Sistema calcula a média correta (Soma / Qtd)
+                    const mediaDia = Sistema.Assertividade.calcularMedia(assertDoDia.soma, assertDoDia.qtd);
+                    
+                    // 2. O Sistema define a cor
+                    const visual = Sistema.Assertividade.obterStatusVisual(mediaDia, configMes.assertFinal);
+                    
+                    // 3. Formatamos para exibir
+                    assertDiaDisplay = {
+                        val: mediaDia,
+                        text: Sistema.Assertividade.formatarPorcentagem(mediaDia),
+                        class: `${visual.class} border rounded px-1`
+                    };
+
                     totalAssertSoma += assertDoDia.soma;
                     totalAssertQtd += assertDoDia.qtd;
-                    assertDiaDisplay.val = mediaDia;
-                    assertDiaDisplay.text = this.fmtPct(mediaDia);
-                    assertDiaDisplay.class = mediaDia >= configMes.assertFinal ? 
-                        'text-emerald-600 font-bold bg-emerald-50 border border-emerald-100 rounded px-1' : 
-                        'text-rose-600 font-bold bg-rose-50 border border-rose-100 rounded px-1';
                 }
+                // ----------------------------------------------------
 
-                if (temRegistro) {
+                if (temRegistro || (assertDoDia && assertDoDia.qtd > 0)) {
                     listaGrid.push({
                         data: dataStr, fator, qtd: qtdReal, metaDia: metaDiaCalculada,
                         metaConfigAssert: configMes.assertFinal,
                         assertDisplay: assertDiaDisplay, justificativa: justif,
-                        fifo: prodDoDia.fifo, gt: prodDoDia.gt, gp: prodDoDia.gp,
+                        fifo: prodDoDia?.fifo || 0, gt: prodDoDia?.gt || 0, gp: prodDoDia?.gp || 0,
                         validado: mapCheckins.has(dataStr)
                     });
                 }
@@ -324,19 +329,25 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
-                        <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
+                        
+                        <td class="px-2 py-2 border-r border-slate-100 text-center">
+                            <span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span>
+                        </td>
+                        
                         <td class="px-2 py-2 border-r border-slate-100 max-w-[200px]" title="${item.justificativa||''}"><span class="${classJust}">${item.justificativa||'-'}</span></td>
                     </tr>`;
             });
 
+            // --- KPIS DO TOPO TAMBÉM USAM O CÉREBRO ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
             if(document.getElementById('bar-volume')) document.getElementById('bar-volume').style.width = `${Math.min(pctVol, 100)}%`;
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
-            const assertReal = totalAssertQtd > 0 ? (totalAssertSoma / totalAssertQtd) : 0;
-            this.setTxt('kpi-assertividade-val', this.fmtPct(assertReal));
+            // CÁLCULO DA MÉDIA GLOBAL DO PERÍODO
+            const assertReal = Sistema.Assertividade.calcularMedia(totalAssertSoma, totalAssertQtd);
+            this.setTxt('kpi-assertividade-val', Sistema.Assertividade.formatarPorcentagem(assertReal));
             
             const configFim = mapMetas[anoFim]?.[new Date(dtFim).getMonth()+1] || { assertFinal: 98.0 };
             this.setTxt('kpi-meta-assert-target', `${configFim.assertFinal}%`);
@@ -389,7 +400,7 @@ MinhaArea.Geral = {
 
     processarCheckingInterface: async function(uid, checkins) {
         if (!uid || MinhaArea.usuario.id !== parseInt(uid)) return;
-        const ontemStr = '2025-12-16'; 
+        const ontemStr = '2025-12-16'; // Exemplo
         const jaValidou = checkins.some(c => c.data_referencia === ontemStr);
         const container = document.getElementById('container-checkin-alert');
         if (!container) return;

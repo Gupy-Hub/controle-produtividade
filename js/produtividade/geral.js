@@ -1,7 +1,4 @@
-/* ARQUIVO: js/produtividade/geral.js
-   DESCRIÇÃO: Engine V34 (Com Regra de Visibilidade Inteligente para Admin/Gestão)
-*/
-
+/* ARQUIVO: js/produtividade/geral.js */
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -130,14 +127,12 @@ Produtividade.Geral = {
             ? this.dadosOriginais.filter(d => d.usuario.id == this.usuarioSelecionado) 
             : this.dadosOriginais;
 
-        // --- NOVA LÓGICA DE FILTRO INTELIGENTE ---
+        // Filtro Inteligente
         if (!mostrarGestao && !this.usuarioSelecionado) {
             lista = lista.filter(d => {
                 const funcao = (d.usuario.funcao || '').toUpperCase();
                 const isGestao = ['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN'].includes(funcao);
                 const temProducao = Number(d.totais.qty) > 0;
-                
-                // MOSTRA SE: Não for gestão OU (For gestão MAS produziu algo)
                 return !isGestao || temProducao;
             });
         }
@@ -152,39 +147,9 @@ Produtividade.Geral = {
             let conteudoHTML = '';
 
             if (isDia) {
-                conteudoHTML = `
-                    <div class="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in select-none">
-                        <div class="relative">
-                            <div class="absolute -top-4 -left-6 text-4xl animate-bounce" style="animation-delay: 0.1s">🍹</div>
-                            <div class="absolute -top-8 right-0 text-4xl animate-bounce" style="animation-delay: 0.3s">🎉</div>
-                            <div class="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-100 rounded-full flex items-center justify-center shadow-lg border-4 border-white">
-                                <i class="fas fa-umbrella-beach text-5xl text-amber-500 transform -rotate-12"></i>
-                            </div>
-                        </div>
-                        <div class="text-center space-y-2">
-                            <h3 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 drop-shadow-sm">
-                                Hoje é Folga, Uhuuuu!!!
-                            </h3>
-                            <p class="text-slate-400 font-medium text-lg">
-                                Recarregue as energias! 🔋✨
-                            </p>
-                        </div>
-                    </div>
-                `;
+                conteudoHTML = `<div class="flex flex-col items-center justify-center gap-4 py-16 animate-fade-in select-none"><div class="relative"><div class="absolute -top-4 -left-6 text-4xl animate-bounce" style="animation-delay: 0.1s">🍹</div><div class="absolute -top-8 right-0 text-4xl animate-bounce" style="animation-delay: 0.3s">🎉</div><div class="w-24 h-24 bg-gradient-to-br from-amber-200 to-orange-100 rounded-full flex items-center justify-center shadow-lg border-4 border-white"><i class="fas fa-umbrella-beach text-5xl text-amber-500 transform -rotate-12"></i></div></div><div class="text-center space-y-2"><h3 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 drop-shadow-sm">Hoje é Folga, Uhuuuu!!!</h3><p class="text-slate-400 font-medium text-lg">Recarregue as energias! 🔋✨</p></div></div>`;
             } else {
-                conteudoHTML = `
-                    <div class="flex flex-col items-center justify-center gap-3 py-16 animate-fade-in">
-                        <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 shadow-inner">
-                            <i class="fas fa-wind text-4xl text-slate-300"></i>
-                        </div>
-                        <div class="text-center">
-                            <h3 class="text-xl font-bold text-slate-500">Tudo calmo por aqui...</h3>
-                            <p class="text-sm text-slate-400 max-w-[250px] mx-auto leading-relaxed">
-                                Nenhum registro de produção ou auditoria encontrado neste período.
-                            </p>
-                        </div>
-                    </div>
-                `;
+                conteudoHTML = `<div class="flex flex-col items-center justify-center gap-3 py-16 animate-fade-in"><div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-2 shadow-inner"><i class="fas fa-wind text-4xl text-slate-300"></i></div><div class="text-center"><h3 class="text-xl font-bold text-slate-500">Tudo calmo por aqui...</h3><p class="text-sm text-slate-400 max-w-[250px] mx-auto leading-relaxed">Nenhum registro de produção ou auditoria encontrado neste período.</p></div></div>`;
             }
 
             tbody.innerHTML = `<tr><td colspan="12" class="bg-white border-b border-slate-100">${conteudoHTML}</td></tr>`;
@@ -206,39 +171,15 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            // ASSERTIVIDADE
-            let htmlAssertividade = '<span class="text-xs text-slate-300">-</span>';
-            const qtdAuditada = Number(d.auditoria.qtd || 0);
-            const somaPorcentagem = Number(d.auditoria.soma || 0);
-
-            if (qtdAuditada > 0) {
-                const mediaFinal = somaPorcentagem / qtdAuditada;
-                const metaAssert = Number(d.meta_assertividade || 98); 
-                
-                let corTexto = 'text-rose-600';
-                let corBg = 'bg-rose-50';
-                let icon = '<i class="fas fa-times-circle ml-1"></i>';
-
-                if (mediaFinal >= metaAssert) {
-                    corTexto = 'text-emerald-600';
-                    corBg = 'bg-emerald-50';
-                    icon = '<i class="fas fa-check-circle ml-1"></i>';
-                } else if (mediaFinal >= (metaAssert - 2)) { 
-                    corTexto = 'text-amber-600';
-                    corBg = 'bg-amber-50';
-                    icon = '<i class="fas fa-exclamation-circle ml-1"></i>';
-                }
-
-                htmlAssertividade = `
-                    <div class="flex items-center justify-center gap-1 ${corTexto} font-bold text-xs px-2 py-1 rounded ${corBg}">
-                        ${mediaFinal.toFixed(2)}%
-                        ${icon}
-                    </div>
-                    <span class="text-[9px] text-slate-400 block mt-0.5" title="Baseado em ${qtdAuditada} auditorias">
-                        (${qtdAuditada} aud.)
-                    </span>
-                `;
-            }
+            // -----------------------------------------------------------------
+            // AQUI ESTÁ A MUDANÇA: USANDO O RENDERIZADOR CENTRAL DO SISTEMA
+            // -----------------------------------------------------------------
+            const htmlAssertividade = Sistema.Assertividade.renderizarCelulaHTML(
+                d.auditoria.soma,
+                d.auditoria.qtd,
+                d.meta_assertividade
+            );
+            // -----------------------------------------------------------------
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
@@ -246,7 +187,6 @@ Produtividade.Geral = {
                 ? 'text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded cursor-help decoration-dotted underline decoration-amber-400' 
                 : 'font-mono text-slate-500';
 
-            // Destaque visual se for Admin/Gestor
             const cargo = (d.usuario.funcao || 'ND').toUpperCase();
             const isAdmin = ['ADMINISTRADOR', 'ADMIN', 'GESTORA'].includes(cargo);
             const styleCargo = isAdmin ? 'text-indigo-600 bg-indigo-50 px-1 rounded border border-indigo-100' : 'text-slate-400';
@@ -327,7 +267,6 @@ Produtividade.Geral = {
 
         dados.forEach(d => {
             const funcao = (d.usuario.funcao || '').toUpperCase();
-            // KPI Global considera todos que produzem, não só assistentes
             const isAssistente = !['AUDITORA', 'GESTORA', 'ADMINISTRADOR', 'ADMIN'].includes(funcao);
             const hasProduction = Number(d.totais.qty) > 0;
             
@@ -338,7 +277,6 @@ Produtividade.Geral = {
             totalProdGeral += prodUser;
             totalMetaGeral += metaUser;
 
-            // Para KPIs de capacidade/média, incluímos Admin se ele produziu
             if (isAssistente || isFiltrado || hasProduction) {
                 if (diasUser > 0 || prodUser > 0) ativosCountAssistentes++;
                 manDaysAssistentes += diasUser;
@@ -354,8 +292,10 @@ Produtividade.Geral = {
         const barVol = document.getElementById('bar-volume');
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
-        const mediaGlobalAssert = qtdAuditoriasAssistentes > 0 ? (somaNotasAssistentes / qtdAuditoriasAssistentes) : 0;
-        this.setTxt('kpi-meta-assertividade-val', mediaGlobalAssert.toFixed(2).replace('.', ',') + '%');
+        // CÁLCULO DA MÉDIA GLOBAL VIA SISTEMA
+        const mediaGlobalAssert = Sistema.Assertividade.calcularMedia(somaNotasAssistentes, qtdAuditoriasAssistentes);
+        this.setTxt('kpi-meta-assertividade-val', Sistema.Assertividade.formatarPorcentagem(mediaGlobalAssert));
+        
         this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
         const capacidadeTotalPadrao = 17; 
@@ -383,9 +323,7 @@ Produtividade.Geral = {
     },
 
     renderTopLists: function(dados) {
-        // Ranking inclui Admin se tiver produção
         const op = dados.filter(d => Number(d.totais.qty) > 0);
-        
         const topProd = [...op].sort((a,b) => b.totais.qty - a.totais.qty).slice(0, 3);
         const listProd = document.getElementById('top-prod-list');
         if(listProd) {
@@ -395,13 +333,13 @@ Produtividade.Geral = {
 
         const topAssert = [...dados]
             .filter(d => Number(d.auditoria.qtd) > 0)
-            .map(u => ({ ...u, mediaCalc: u.auditoria.qtd > 0 ? (u.auditoria.soma / u.auditoria.qtd) : 0 }))
+            .map(u => ({ ...u, mediaCalc: Sistema.Assertividade.calcularMedia(u.auditoria.soma, u.auditoria.qtd) }))
             .sort((a,b) => b.mediaCalc - a.mediaCalc)
             .slice(0, 3);
         const listAssert = document.getElementById('top-assert-list');
         if(listAssert) {
              if (topAssert.length === 0) listAssert.innerHTML = '<span class="text-[9px] text-slate-400 italic text-center block">Sem dados</span>';
-             else listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${u.mediaCalc.toFixed(1)}%</span></div>`).join('');
+             else listAssert.innerHTML = topAssert.map(u => `<div class="flex justify-between text-[10px]"><span class="truncate w-16" title="${u.usuario.nome}">${u.usuario.nome.split(' ')[0]}</span><span class="font-bold text-emerald-600">${Sistema.Assertividade.formatarPorcentagem(u.mediaCalc)}</span></div>`).join('');
         }
     },
     
