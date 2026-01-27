@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Visual Premium + Gradient Charts)
+   DESCRIÇÃO: Engine de Metas (Nomes Corrigidos + Cálculo de Meta Dinâmica)
 */
 
 MinhaArea.Metas = {
@@ -13,15 +13,15 @@ MinhaArea.Metas = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
-        const modoMensal = diffDias > 35; // Agrupa por mês se período longo
+        const modoMensal = diffDias > 35; 
 
-        console.log(`🚀 Metas: Visual Premium Carregando... (Modo Mensal: ${modoMensal})`);
+        console.log(`🚀 Metas: Carregando ${inicio} a ${fim}.`);
 
         this.resetarCards(true);
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            // 1. DADOS & METAS
+            // 1. Dados e Metas
             const [kpisRes, configRes] = await Promise.all([
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
                 Sistema.supabase.from('metas').select('*').eq('ano', new Date(inicio).getFullYear())
@@ -29,19 +29,17 @@ MinhaArea.Metas = {
 
             if (kpisRes.error) throw kpisRes.error;
             
-            // Mapas de Dados
-            const dadosDiarios = kpisRes.data || [];
             const mapaDados = {};
-            dadosDiarios.forEach(d => { mapaDados[d.data_ref || d.data] = d; });
+            (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
 
             const mapMetas = {};
             (configRes.data || []).forEach(m => {
-                if (!uid || m.usuario_id == uid) { // Filtra se for user específico
+                if (!uid || m.usuario_id == uid) {
                     mapMetas[m.mes] = { prod: m.meta_producao || 100, assert: m.meta_assertividade || 98.0 };
                 }
             });
 
-            // --- PROCESSAMENTO DE DADOS ---
+            // --- Processamento ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
             const metaPadrao = uid ? 100 : (100 * this.getQtdAssistentesConfigurada());
@@ -58,7 +56,6 @@ MinhaArea.Metas = {
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
                 if (modoMensal) {
-                    // Agregação Mensal
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
@@ -86,7 +83,6 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
-                    // Modo Diário
                     const iso = curr.toISOString().split('T')[0];
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
@@ -108,36 +104,35 @@ MinhaArea.Metas = {
                 acc.val += pReal; acc.meta += pMeta; acc.audit += aAudit; acc.nok += aNok;
             }
 
-            // 4. ATUALIZAR CARDS (DOM)
+            // 4. ATUALIZAR DOM
             const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : 0;
             const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
             const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
             const pctAprov = acc.audit > 0 ? ((acc.audit-acc.nok)/acc.audit*100) : 100;
 
+            // Validação (Com Meta Acumulada do Período)
             this.updateCard('prod', acc.val, acc.meta, pctProd, 'Atingimento');
-            this.updateCard('assert', pctAssert, 98, pctAssert, 'Índice Real', true); // isPercent = true
             
-            // Cobertura
+            // Assertividade
+            this.updateCard('assert', pctAssert, 98, pctAssert, 'Índice Real', true);
+            
+            // Auditados (Cobertura)
             this.setTxt('auditoria-total-auditados', acc.audit);
             this.setTxt('auditoria-total-validados', acc.val);
             this.setBar('bar-auditoria-cov', pctCob, 'bg-purple-500');
-            this.setTxt('sub-auditoria-cov', this.fmtPct(pctCob));
-            this.colorirTexto('sub-auditoria-cov', pctCob, 100, 50, 'text-purple-600');
+            this.atualizarPorcentagemCard('bar-auditoria-cov', pctCob, 'Cobertura');
 
-            // Resultado
+            // Auditoria (Resultado)
             this.setTxt('auditoria-total-ok', acc.audit - acc.nok);
             this.setTxt('auditoria-total-nok', acc.nok);
             this.setBar('bar-auditoria-res', pctAprov, 'bg-emerald-500');
-            this.setTxt('sub-auditoria-res', this.fmtPct(pctAprov));
-            this.colorirTexto('sub-auditoria-res', pctAprov, 95, 80, 'text-emerald-600');
+            this.atualizarPorcentagemCard('bar-auditoria-res', pctAprov, 'Aprovação');
 
-
-            // 5. RENDERIZAR GRÁFICOS
+            // Gráficos
             const periodoTxt = this.getLabelPeriodo(inicio, fim);
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
-            
-            this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false); // Azul Premium
-            this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true); // Emerald Premium
+            this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false);
+            this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true);
 
         } catch (err) {
             console.error("Erro Metas:", err);
@@ -147,45 +142,57 @@ MinhaArea.Metas = {
         }
     },
 
-    // --- UTILS VISUAIS ---
     updateCard: function(type, real, meta, pct, subLabel, isPct = false) {
         const txtReal = isPct ? this.fmtPct(real) : real.toLocaleString('pt-BR');
         const txtMeta = isPct ? `${meta}%` : meta.toLocaleString('pt-BR');
         
         this.setTxt(`meta-${type}-real`, txtReal);
         this.setTxt(`meta-${type}-meta`, txtMeta);
-        this.setTxt(`sub-meta-${type}`, this.fmtPct(pct));
         
         const corBarra = type === 'prod' ? 'bg-blue-500' : 'bg-emerald-500';
-        const corTexto = type === 'prod' ? 'text-blue-600' : 'text-emerald-600';
         
         this.setBar(`bar-meta-${type}`, pct, corBarra);
-        this.colorirTexto(`sub-meta-${type}`, pct, 100, 80, corTexto);
+        this.atualizarPorcentagemCard(`bar-meta-${type}`, pct, subLabel);
     },
 
-    colorirTexto: function(id, val, metaHigh, metaMed, defaultColor) {
-        const el = document.getElementById(id);
-        if(!el) return;
-        el.className = 'font-bold ';
-        if (val >= metaHigh) el.classList.add('text-emerald-600');
-        else if (val >= metaMed) el.classList.add('text-amber-500');
-        else el.classList.add('text-rose-500');
+    atualizarPorcentagemCard: function(barId, pct, labelTxt) {
+        const bar = document.getElementById(barId);
+        if(!bar) return;
+        const container = bar.parentElement.parentElement;
+        if(!container) return;
+
+        let label = container.querySelector('.pct-dynamic-label');
+        if(!label) {
+            label = document.createElement('div');
+            label.className = 'flex justify-between items-center mt-2 text-[10px] text-slate-500 font-bold pct-dynamic-label animate-enter';
+            label.innerHTML = `<span class="pct-lbl"></span><span class="pct-val"></span>`;
+            container.appendChild(label);
+        }
+
+        label.querySelector('.pct-lbl').innerText = labelTxt;
+        const valSpan = label.querySelector('.pct-val');
+        valSpan.innerText = this.fmtPct(pct);
+        
+        if (pct >= 100 || (labelTxt === 'Aprovação' && pct >= 95) || (labelTxt === 'Índice Real' && pct >= 98)) {
+            valSpan.className = 'pct-val text-emerald-600 font-black';
+        } else if (pct >= 80) {
+            valSpan.className = 'pct-val text-blue-600 font-bold';
+        } else {
+            valSpan.className = 'pct-val text-rose-600 font-bold';
+        }
     },
 
-    // --- GRÁFICOS COM DEGRADÊ (PREMIUM LOOK) ---
     renderizarGrafico: function(id, lbl, dReal, dMeta, label, corHex, isPct) {
         const ctx = document.getElementById(id);
         if(!ctx) return;
         
-        // Limpeza Segura
         if(id.includes('Producao')) { if(this.chartProd) { this.chartProd.destroy(); this.chartProd = null; } } 
         else { if(this.chartAssert) { this.chartAssert.destroy(); this.chartAssert = null; } }
 
-        // Criação do Degradê
         const canvasCtx = ctx.getContext('2d');
         const gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, corHex + '40'); // 25% Opacidade no topo
-        gradient.addColorStop(1, corHex + '00'); // 0% Opacidade embaixo
+        gradient.addColorStop(0, corHex + '40');
+        gradient.addColorStop(1, corHex + '00');
 
         const config = {
             type: 'line',
@@ -196,15 +203,14 @@ MinhaArea.Metas = {
                         label: label, 
                         data: dReal, 
                         borderColor: corHex, 
-                        backgroundColor: gradient, // Aplica Degradê
+                        backgroundColor: gradient,
                         borderWidth: 2,
                         fill: true, 
-                        tension: 0.35, // Curva suave
-                        pointRadius: lbl.length > 20 ? 0 : 4, 
+                        tension: 0.35, 
+                        pointRadius: lbl.length > 20 ? 0 : 4,
                         pointBackgroundColor: '#fff',
                         pointBorderColor: corHex,
-                        pointBorderWidth: 2,
-                        pointHoverRadius: 6
+                        pointBorderWidth: 2
                     },
                     { 
                         label: 'Meta', 
@@ -222,79 +228,31 @@ MinhaArea.Metas = {
                 responsive: true, 
                 maintainAspectRatio: false, 
                 interaction: { intersect: false, mode: 'index' },
-                plugins: { 
-                    legend: { display: false }, 
-                    tooltip: {
-                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
-                        titleColor: '#f8fafc',
-                        bodyColor: '#f8fafc',
-                        borderColor: 'rgba(255,255,255,0.1)',
-                        borderWidth: 1,
-                        padding: 10,
-                        displayColors: false, // Remove quadradinho de cor
-                        callbacks: {
-                            label: c => ` ${c.dataset.label}: ${c.raw?.toLocaleString('pt-BR') || '0'}${isPct ? '%' : ''}`
-                        }
-                    } 
-                },
+                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', callbacks: { label: c => ` ${c.dataset.label}: ${c.raw?.toLocaleString('pt-BR') || '0'}${isPct ? '%' : ''}` } } },
                 scales: { 
-                    y: { 
-                        beginAtZero: true, 
-                        grid: { color: '#f1f5f9', drawBorder: false }, 
-                        ticks: { 
-                            callback: v => isPct ? v+'%' : v,
-                            color: '#94a3b8',
-                            font: { size: 10, family: 'Inter' }
-                        } 
-                    }, 
-                    x: { 
-                        grid: { display: false }, 
-                        ticks: { 
-                            color: '#94a3b8',
-                            font: { size: 10, family: 'Inter' },
-                            maxRotation: 0,
-                            autoSkip: true,
-                            autoSkipPadding: 20
-                        } 
-                    } 
+                    y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => isPct ? v+'%' : v, color: '#94a3b8', font: { size: 10 } } }, 
+                    x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 0, autoSkip: true } } 
                 }
             }
         };
 
         const novoChart = new Chart(ctx, config);
-        
         if(id.includes('Producao')) this.chartProd = novoChart; 
         else this.chartAssert = novoChart;
     },
 
     resetarCards: function(showLoading) {
         const ids = ['meta-prod-real','meta-assert-real','auditoria-total-auditados','auditoria-total-ok','auditoria-total-nok'];
-        ids.forEach(id => { 
-            const el = document.getElementById(id); 
-            if(el) el.innerHTML = showLoading ? '<i class="fas fa-spinner fa-spin text-slate-300 text-sm"></i>' : '--'; 
-        });
-        ['bar-meta-prod','bar-meta-assert','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { 
-            const el = document.getElementById(id); 
-            if(el) el.style.width = '0%'; 
-        });
-        // Reseta textos secundários
-        ['sub-meta-prod','sub-meta-assert','sub-auditoria-cov','sub-auditoria-res'].forEach(id => this.setTxt(id, '--%'));
+        ids.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = showLoading ? '<i class="fas fa-spinner fa-spin text-slate-300"></i>' : '--'; });
+        ['bar-meta-prod','bar-meta-assert','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
+        document.querySelectorAll('.pct-dynamic-label').forEach(el => el.remove());
     },
 
-    getLabelPeriodo: function(i, f) {
-        return `${i.split('-').reverse().slice(0,2).join('/')} a ${f.split('-').reverse().slice(0,2).join('/')}`;
-    },
-
-    getQtdAssistentesConfigurada: function() { 
-        const m = localStorage.getItem('gupy_config_qtd_assistentes'); 
-        return m ? parseInt(m) : 17; 
-    },
-
+    getLabelPeriodo: function(i, f) { return `${i.split('-').reverse().slice(0,2).join('/')} a ${f.split('-').reverse().slice(0,2).join('/')}`; },
+    getQtdAssistentesConfigurada: function() { const m = localStorage.getItem('gupy_config_qtd_assistentes'); return m ? parseInt(m) : 17; },
     fmtPct: function(v) { return (v||0).toLocaleString('pt-BR',{maximumFractionDigits:1}) + '%'; },
     setTxt: function(id, v) { const e = document.getElementById(id); if(e) e.innerText = v; },
     setBar: function(id, v, c) { const e = document.getElementById(id); if(e) { e.style.width = Math.min(v||0, 100) + '%'; e.className = `h-full rounded-full transition-all duration-1000 ${c}`; } },
-    
-    // Helpers de Filtro e Datas
     getDatasFiltro: function() { return MinhaArea.getDatasFiltro(); },
     getUsuarioAlvo: function() { return MinhaArea.getUsuarioAlvo(); }
 };

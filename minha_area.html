@@ -37,16 +37,8 @@
         .kpi-main-val { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #1e293b; }
         .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; }
 
-        /* Minimal Card Style (Pode ser removido se não usado mais, mas mantido para compatibilidade) */
-        .min-card {
-            background: white;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 16px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-            display: flex; flex-direction: column; justify-content: center;
-            height: 110px;
-        }
+        /* Estilo para label dinâmico de porcentagem */
+        .pct-dynamic-label { animation: enter 0.5s ease-out; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -214,7 +206,7 @@
                 <div class="kpi-card border-l-4 border-l-blue-500 relative overflow-hidden group">
                     <i class="fas fa-box-open kpi-icon-bg text-blue-500 group-hover:scale-110 transition-transform duration-500"></i>
                     <div>
-                        <div class="kpi-title text-blue-600">Volume de Entregas</div>
+                        <div class="kpi-title text-blue-600">Validação</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-slate-800" id="meta-prod-real">--</span>
                             <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100" title="Meta Esperada">
@@ -234,7 +226,7 @@
                 <div class="kpi-card border-l-4 border-l-emerald-500 relative overflow-hidden group">
                     <i class="fas fa-check-circle kpi-icon-bg text-emerald-500 group-hover:scale-110 transition-transform duration-500"></i>
                     <div>
-                        <div class="kpi-title text-emerald-600">Qualidade (Assertividade)</div>
+                        <div class="kpi-title text-emerald-600">Assertividade</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-slate-800" id="meta-assert-real">--%</span>
                             <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100">
@@ -254,7 +246,7 @@
                 <div class="kpi-card border-l-4 border-l-purple-500 relative overflow-hidden group">
                     <i class="fas fa-search kpi-icon-bg text-purple-500 group-hover:scale-110 transition-transform duration-500"></i>
                     <div>
-                        <div class="kpi-title text-purple-600">Cobertura Auditoria</div>
+                        <div class="kpi-title text-purple-600">Auditados</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-slate-800" id="auditoria-total-auditados">--</span>
                             <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100">
@@ -266,7 +258,7 @@
                         <div id="bar-auditoria-cov" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
                     </div>
                     <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Amostragem:</span>
+                        <span>Cobertura:</span>
                         <span id="sub-auditoria-cov" class="font-bold text-purple-600">--%</span>
                     </div>
                 </div>
@@ -274,7 +266,7 @@
                 <div class="kpi-card border-l-4 border-l-amber-500 relative overflow-hidden group">
                     <i class="fas fa-thumbs-up kpi-icon-bg text-amber-500 group-hover:scale-110 transition-transform duration-500"></i>
                     <div>
-                        <div class="kpi-title text-amber-600">Resultado Final</div>
+                        <div class="kpi-title text-amber-600">Auditoria</div>
                         <div class="flex items-center gap-3 mt-1">
                             <div class="flex flex-col">
                                 <span class="text-lg font-black text-emerald-600 leading-none" id="auditoria-total-ok">--</span>
@@ -291,24 +283,27 @@
                         <div id="bar-auditoria-res" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width: 100%"></div>
                     </div>
                     <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Taxa de Aprovação:</span>
+                        <span>Aprovação:</span>
                         <span id="sub-auditoria-res" class="font-bold text-emerald-600">--%</span>
                     </div>
                 </div>
 
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]"> <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col h-full">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
+                
+                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col h-full">
                     <div class="flex justify-between items-center mb-4">
                         <div>
                             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
                                 <i class="fas fa-chart-area text-blue-500"></i> Evolução de Volume
                             </h3>
-                            <p class="text-[10px] text-slate-400 font-medium mt-0.5">Comparativo: Realizado vs Meta</p>
+                            <p class="text-[10px] text-slate-400 font-medium mt-0.5">Realizado vs Meta</p>
                         </div>
                         <span class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100 uppercase periodo-label">--</span>
                     </div>
-                    <div class="flex-1 w-full relative min-h-0"> <canvas id="graficoEvolucaoProducao"></canvas>
+                    <div class="flex-1 w-full relative min-h-0">
+                        <canvas id="graficoEvolucaoProducao"></canvas>
                     </div>
                 </div>
 
@@ -318,7 +313,7 @@
                             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
                                 <i class="fas fa-chart-line text-emerald-500"></i> Evolução de Qualidade
                             </h3>
-                            <p class="text-[10px] text-slate-400 font-medium mt-0.5">Variação do Índice de Assertividade</p>
+                            <p class="text-[10px] text-slate-400 font-medium mt-0.5">Índice de Assertividade</p>
                         </div>
                         <span class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100 uppercase periodo-label">--</span>
                     </div>
