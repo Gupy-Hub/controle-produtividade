@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas com UX Refinado (Modo Mensal + Porcentagem Dinâmica)
+   DESCRIÇÃO: Engine de Metas Final (KPIs Padronizados com Progresso no Rodapé)
 */
 
 MinhaArea.Metas = {
@@ -14,7 +14,7 @@ MinhaArea.Metas = {
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
         
-        // REGRA DE UX: Se o filtro for maior que 35 dias, agrupa por MÊS.
+        // UX: Agrupa por mês se o período for longo (>35 dias)
         const modoMensal = diffDias > 35;
 
         console.log(`🚀 Metas: Carregando de ${inicio} até ${fim}. Modo Mensal: ${modoMensal}`);
@@ -23,7 +23,7 @@ MinhaArea.Metas = {
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            // 1. BUSCA DADOS BRUTOS (RPC)
+            // 1. DADOS (RPC)
             const { data: dadosDiarios, error } = await Sistema.supabase
                 .rpc('get_kpis_minha_area', { 
                     p_inicio: inicio, 
@@ -33,14 +33,13 @@ MinhaArea.Metas = {
 
             if (error) throw error;
 
-            // Mapa O(1)
             const mapaDados = {};
             (dadosDiarios || []).forEach(d => {
                 const key = d.data_ref || d.data; 
                 if(key) mapaDados[key] = d;
             });
 
-            // 2. BUSCA METAS CONFIGURADAS
+            // 2. METAS
             const dtInicio = new Date(inicio + 'T12:00:00');
             const anoRef = dtInicio.getFullYear();
             
@@ -59,22 +58,19 @@ MinhaArea.Metas = {
                 };
             });
 
-            // --- PROCESSAMENTO ADAPTATIVO ---
+            // --- PROCESSAMENTO ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             
             let totalVal = 0, totalMeta = 0;
             let totalAudit = 0, totalNok = 0;
-            let somaMediasAssert = 0, diasComAssert = 0; 
-
             const metaPadraoProd = uid ? 100 : (100 * this.getQtdAssistentesConfigurada());
 
             let currentDt = new Date(inicio + 'T12:00:00');
             const endDt = new Date(fim + 'T12:00:00');
 
             if (modoMensal) {
-                // --- MODO MENSAL ---
+                // MODO MENSAL
                 currentDt.setDate(1); 
-
                 while (currentDt <= endDt) {
                     const mes = currentDt.getMonth() + 1;
                     const ano = currentDt.getFullYear();
@@ -118,9 +114,8 @@ MinhaArea.Metas = {
                     
                     currentDt.setMonth(currentDt.getMonth() + 1);
                 }
-
             } else {
-                // --- MODO DIÁRIO ---
+                // MODO DIÁRIO
                 while (currentDt <= endDt) {
                     const isoDate = currentDt.toISOString().split('T')[0];
                     const diaMes = currentDt.getDate();
@@ -148,37 +143,39 @@ MinhaArea.Metas = {
                 }
             }
 
-            // 4. CÁLCULO KPIS FINAIS
+            // 4. CÁLCULO KPIS
+            const pctProd = totalMeta > 0 ? (totalVal/totalMeta)*100 : 0;
+            const mediaFinalAssert = totalAudit > 0 ? ((totalAudit - totalNok) / totalAudit * 100) : 0; // Média Real
             const cob = totalVal > 0 ? ((totalAudit / totalVal) * 100) : 0;
             const res = totalAudit > 0 ? (((totalAudit - totalNok) / totalAudit) * 100) : 100;
-            // Assertividade Geral (Média Ponderada Real)
-            const mediaFinalAssert = totalAudit > 0 ? ((totalAudit - totalNok) / totalAudit * 100) : 0;
 
             // 5. ATUALIZAR INTERFACE (DOM)
             
-            // --- CARD VALIDAÇÃO (PRODUÇÃO) ---
+            // --- VALIDAÇÃO ---
             this.setTxt('meta-prod-real', totalVal.toLocaleString('pt-BR'));
             this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-            const pctProd = totalMeta > 0 ? (totalVal/totalMeta)*100 : 0;
             this.setBar('bar-meta-prod', pctProd, 'bg-blue-600');
-            // NOVO: Atualiza a porcentagem abaixo da barra
-            this.atualizarPorcentagemCard('bar-meta-prod', pctProd);
+            this.atualizarPorcentagemCard('bar-meta-prod', pctProd, 'Progresso');
 
-            // --- CARD ASSERTIVIDADE ---
+            // --- ASSERTIVIDADE ---
             this.setTxt('meta-assert-real', mediaFinalAssert.toLocaleString('pt-BR',{minimumFractionDigits:2})+'%');
             this.setTxt('meta-assert-meta', 'Meta: 98,00%'); 
             this.setBar('bar-meta-assert', mediaFinalAssert, mediaFinalAssert>=98?'bg-emerald-500':'bg-rose-500');
+            this.atualizarPorcentagemCard('bar-meta-assert', mediaFinalAssert, 'Índice Real');
 
-            // --- CARD COBERTURA ---
+            // --- COBERTURA ---
             this.setTxt('auditoria-total-auditados', totalAudit.toLocaleString('pt-BR'));
             this.setTxt('auditoria-total-validados', totalVal.toLocaleString('pt-BR'));
-            this.setTxt('auditoria-pct-cobertura', cob.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%');
+            // Removemos/Ocultamos o texto antigo se necessário, aqui focamos no update do novo footer
+            this.setTxt('auditoria-pct-cobertura', cob.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%'); 
             this.setBar('bar-auditoria-cov', cob, 'bg-purple-500');
+            this.atualizarPorcentagemCard('bar-auditoria-cov', cob, 'Cobertura');
 
-            // --- CARD RESULTADO ---
+            // --- RESULTADO ---
             this.setTxt('auditoria-total-ok', (totalAudit - totalNok).toLocaleString('pt-BR'));
             this.setTxt('auditoria-total-nok', totalNok.toLocaleString('pt-BR'));
             this.setBar('bar-auditoria-res', res, res>=95?'bg-emerald-500':'bg-rose-500');
+            this.atualizarPorcentagemCard('bar-auditoria-res', res, 'Aprovação');
 
             // 6. RENDERIZAR GRÁFICOS
             const periodoTxt = this.getLabelPeriodo(inicio, fim);
@@ -195,8 +192,8 @@ MinhaArea.Metas = {
         }
     },
 
-    // --- HELPER: Injeção de Porcentagem (UI) ---
-    atualizarPorcentagemCard: function(barId, pct) {
+    // --- HELPER: Injeção de Porcentagem no Rodapé do Card ---
+    atualizarPorcentagemCard: function(barId, pct, labelTxt = 'Progresso') {
         const bar = document.getElementById(barId);
         if(!bar) return;
         const container = bar.parentElement.parentElement; // div.min-card
@@ -207,18 +204,23 @@ MinhaArea.Metas = {
         if(!label) {
             label = document.createElement('div');
             label.className = 'flex justify-between items-center mt-2 text-[10px] text-slate-500 font-bold pct-dynamic-label animate-enter';
-            label.innerHTML = '<span>Progresso</span><span class="pct-val">--%</span>';
+            label.innerHTML = `<span class="pct-lbl"></span><span class="pct-val"></span>`;
             container.appendChild(label);
         }
 
+        label.querySelector('.pct-lbl').innerText = labelTxt;
         const valSpan = label.querySelector('.pct-val');
+        
+        // Formatação Inteligente (Se for > 100, mostra normal)
         valSpan.innerText = pct.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
         
-        // Colora se bateu a meta (>= 100%)
-        if (pct >= 100) {
+        // Coloração Dinâmica
+        if (pct >= 100 || (labelTxt === 'Aprovação' && pct >= 95) || (labelTxt === 'Índice Real' && pct >= 98)) {
             valSpan.className = 'pct-val text-emerald-600 font-black';
-        } else {
+        } else if (pct >= 80) {
             valSpan.className = 'pct-val text-blue-600 font-bold';
+        } else {
+            valSpan.className = 'pct-val text-rose-600 font-bold';
         }
     },
 
@@ -317,5 +319,5 @@ MinhaArea.Metas = {
     },
 
     setTxt: function(id, v) { const e = document.getElementById(id); if(e) e.innerText = v; },
-    setBar: function(id, v, c) { const e = document.getElementById(id); if(e) { e.style.width = Math.min(v, 100) + '%'; e.className = `h-full rounded-full transition-all duration-700 ${c}`; } }
+    setBar: function(id, v, c) { const e = document.getElementById(id); if(e) { e.style.width = Math.min(v||0, 100) + '%'; e.className = `h-full rounded-full transition-all duration-700 ${c}`; } }
 };
