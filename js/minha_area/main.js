@@ -1,5 +1,6 @@
 /* ARQUIVO: js/minha_area/main.js
-   DESCRIÇÃO: Controlador de Filtros (Corrigido: Semana vinculada ao Mês)
+   DESCRIÇÃO: Controlador de Filtros (Corrigido: Semana Recortada pelo Mês)
+   REGRA: Semana de Seg-Dom, mas nunca exibe dias do mês anterior.
 */
 
 const MinhaArea = {
@@ -8,40 +9,29 @@ const MinhaArea = {
     filtroPeriodo: 'mes', // mes, semana, ano
 
     init: async function() {
-        // 1. Inicializa Supabase
         if (!Sistema.supabase) await Sistema.inicializar(false);
         
-        // 2. Verifica Sessão
         const storedUser = localStorage.getItem('usuario_logado');
         if (!storedUser) { window.location.href = 'index.html'; return; }
         this.usuario = JSON.parse(storedUser);
         
-        // 3. Configura Acesso Admin
         await this.setupAdminAccess();
 
         if (!this.isAdmin()) {
             this.usuarioAlvoId = this.usuario.id;
         }
 
-        // 4. Popula Selects Iniciais
         this.popularSeletoresFixos();
-        
-        // 5. Restaura Estado Salvo ou Define Padrão
         this.carregarEstadoSalvo();
-        
-        // 6. Renderiza Interface e Atualiza
         this.atualizarInterfaceFiltros();
         
-        // Se estiver em modo semana, garante que as semanas do mês atual sejam geradas
         if (this.filtroPeriodo === 'semana') {
             this.popularSemanasDoMes();
         }
 
         this.atualizarTudo();
 
-        // --- LISTENERS DE EVENTOS ---
-        
-        // Ao mudar Ano ou Mês -> Se for semana, recarrega a lista de semanas
+        // Listeners
         ['sel-ano', 'sel-mes'].forEach(id => {
             const el = document.getElementById(id);
             if(el) {
@@ -54,7 +44,6 @@ const MinhaArea = {
             }
         });
 
-        // Ao mudar Semana ou Subperíodo -> Apenas salva e atualiza
         ['sel-semana', 'sel-subperiodo-ano'].forEach(id => {
             const el = document.getElementById(id);
             if(el) el.addEventListener('change', () => this.salvarEAtualizar());
@@ -75,32 +64,23 @@ const MinhaArea = {
         }
     },
 
-    // --- VISUAL DOS FILTROS ---
     mudarPeriodo: function(tipo) {
         this.filtroPeriodo = tipo;
         this.atualizarInterfaceFiltros();
-        
-        if (tipo === 'semana') {
-            this.popularSemanasDoMes(); // Gera as semanas do mês atual
-        }
-        
+        if (tipo === 'semana') this.popularSemanasDoMes();
         this.salvarEAtualizar();
     },
 
     atualizarInterfaceFiltros: function() {
-        // 1. Atualiza Botões (Visual)
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
-                if (t === this.filtroPeriodo) {
-                    btn.className = "px-3 py-1.5 text-xs font-bold rounded shadow-sm text-blue-600 bg-white border border-blue-200 transition-all";
-                } else {
-                    btn.className = "px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:bg-slate-100 transition-all";
-                }
+                btn.className = (t === this.filtroPeriodo) 
+                    ? "px-3 py-1.5 text-xs font-bold rounded shadow-sm text-blue-600 bg-white border border-blue-200 transition-all"
+                    : "px-3 py-1.5 text-xs font-bold rounded text-slate-500 hover:bg-slate-100 transition-all";
             }
         });
 
-        // 2. Controle de Visibilidade dos Selects
         const elMes = document.getElementById('sel-mes');
         const elSemana = document.getElementById('sel-semana');
         const elSubAno = document.getElementById('sel-subperiodo-ano');
@@ -110,16 +90,13 @@ const MinhaArea = {
         if(elSubAno) elSubAno.classList.add('hidden');
 
         if (this.filtroPeriodo === 'mes') {
-            // Mês: Mostra Ano + Mês
             if(elMes) elMes.classList.remove('hidden');
         } 
         else if (this.filtroPeriodo === 'semana') {
-            // Semana: Mostra Ano + Mês (para filtrar) + Semana
             if(elMes) elMes.classList.remove('hidden');
             if(elSemana) elSemana.classList.remove('hidden');
         } 
         else if (this.filtroPeriodo === 'ano') {
-            // Ano: Mostra Ano + Subperíodo (Trimestre/Semestre)
             if(elSubAno) elSubAno.classList.remove('hidden');
         }
     },
@@ -128,7 +105,6 @@ const MinhaArea = {
         const anoAtual = new Date().getFullYear();
         const mesAtual = new Date().getMonth();
 
-        // 1. Popular Ano (Único)
         const elAno = document.getElementById('sel-ano');
         if(elAno) {
             elAno.innerHTML = `
@@ -139,12 +115,11 @@ const MinhaArea = {
             elAno.value = anoAtual;
         }
 
-        // 2. Popular Mês
         const elMes = document.getElementById('sel-mes');
         if(elMes) elMes.value = mesAtual;
     },
 
-    // --- LÓGICA INTELIGENTE DE SEMANAS DO MÊS ---
+    // --- CORREÇÃO DA LÓGICA DE SEMANAS ---
     popularSemanasDoMes: function() {
         const elSemana = document.getElementById('sel-semana');
         const elAno = document.getElementById('sel-ano');
@@ -153,51 +128,66 @@ const MinhaArea = {
         if (!elSemana || !elAno || !elMes) return;
 
         const ano = parseInt(elAno.value);
-        const mes = parseInt(elMes.value); // 0 = Jan
+        const mes = parseInt(elMes.value); 
 
-        // 1. Encontrar a primeira segunda-feira da semana que contém o dia 1 do mês
+        // Limites do Mês
         const primeiroDiaMes = new Date(ano, mes, 1);
-        const diaSemana = primeiroDiaMes.getDay(); // 0 (Dom) a 6 (Sab)
-        
-        // Ajuste para começar na Segunda (ISO)
-        // Se for Dom (0), volta 6 dias. Se for Seg (1), volta 0. Se for Ter (2), volta 1...
-        const diffToMonday = diaSemana === 0 ? 6 : diaSemana - 1;
-        
-        let currentMonday = new Date(primeiroDiaMes);
-        currentMonday.setDate(primeiroDiaMes.getDate() - diffToMonday);
-
         const ultimoDiaMes = new Date(ano, mes + 1, 0);
+
+        // Encontrar a Segunda-Feira da primeira semana (pode cair no mês anterior)
+        // Dia da semana: 0 (Dom) ... 6 (Sab) -> ISO: 1 (Seg) ... 7 (Dom)
+        // Ajuste: Segunda = 1.
+        let diaSemana = primeiroDiaMes.getDay(); 
+        if (diaSemana === 0) diaSemana = 7; // Domingo vira 7 para facilitar conta da Segunda (1)
         
+        let segundaFeiraAtual = new Date(primeiroDiaMes);
+        segundaFeiraAtual.setDate(primeiroDiaMes.getDate() - (diaSemana - 1));
+
         let html = '';
         let count = 1;
 
-        // Loop: Enquanto a segunda-feira for antes ou igual ao último dia do mês
-        while (currentMonday <= ultimoDiaMes) {
-            const start = new Date(currentMonday);
-            const end = new Date(currentMonday);
-            end.setDate(end.getDate() + 6);
+        // Loop enquanto a segunda-feira ainda estiver dentro do mês 
+        // OU se a semana começou antes mas termina dentro do mês
+        while (segundaFeiraAtual <= ultimoDiaMes) {
+            const domingoAtual = new Date(segundaFeiraAtual);
+            domingoAtual.setDate(segundaFeiraAtual.getDate() + 6);
 
-            // Formatação para valor e texto
+            // Se a semana inteira já passou do fim do mês (caso raro de loop), para.
+            if (segundaFeiraAtual > ultimoDiaMes) break;
+
+            // --- RECORTE (CLAMP) ---
+            // Início: O maior entre (Segunda da Semana) e (1º do Mês)
+            const inicioReal = segundaFeiraAtual < primeiroDiaMes ? primeiroDiaMes : segundaFeiraAtual;
+            
+            // Fim: O menor entre (Domingo da Semana) e (Último do Mês)
+            // (Opcional: se quiser mostrar até o dia 5 do mês seguinte, remova o clamp do fim. 
+            //  Mas por consistência com "Mês Anterior", geralmente travamos o mês todo).
+            const fimReal = domingoAtual > ultimoDiaMes ? ultimoDiaMes : domingoAtual;
+
+            // Formatação
             const fmt = d => d.toISOString().split('T')[0];
             const fmtBr = d => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 
-            const valor = `${fmt(start)}|${fmt(end)}`;
-            const texto = `Semana ${count} (${fmtBr(start)} a ${fmtBr(end)})`;
+            // Só adiciona se houver dias válidos (Safety check)
+            if (inicioReal <= fimReal) {
+                const valor = `${fmt(inicioReal)}|${fmt(fimReal)}`;
+                const texto = `Semana ${count} (${fmtBr(inicioReal)} a ${fmtBr(fimReal)})`;
+                html += `<option value="${valor}">${texto}</option>`;
+                count++;
+            }
 
-            html += `<option value="${valor}">${texto}</option>`;
-
-            // Avança para a próxima semana
-            currentMonday.setDate(currentMonday.getDate() + 7);
-            count++;
+            // Avança para próxima Segunda
+            segundaFeiraAtual.setDate(segundaFeiraAtual.getDate() + 7);
         }
 
         elSemana.innerHTML = html;
         
-        // Tenta manter a seleção anterior se possível, senão pega a primeira
-        // (Lógica opcional, aqui pega a primeira por padrão para simplificar)
+        // Tenta selecionar a primeira opção por padrão se nenhuma estiver salva
+        if (elSemana.options.length > 0 && !elSemana.value) {
+            elSemana.selectedIndex = 0;
+        }
     },
 
-    // --- OBTENÇÃO DAS DATAS PARA FILTRAGEM ---
     getDatasFiltro: function() {
         const fmt = (d) => d.toISOString().split('T')[0];
         const ano = parseInt(document.getElementById('sel-ano').value);
@@ -209,23 +199,17 @@ const MinhaArea = {
                 fim: fmt(new Date(ano, mes + 1, 0)) 
             };
         }
-        
         else if (this.filtroPeriodo === 'semana') {
-            // O value do select já é "2025-01-01|2025-01-07"
             const rawVal = document.getElementById('sel-semana').value;
             if (rawVal && rawVal.includes('|')) {
                 const [i, f] = rawVal.split('|');
                 return { inicio: i, fim: f };
-            } else {
-                // Fallback de segurança
-                return { inicio: fmt(new Date()), fim: fmt(new Date()) };
             }
+            return { inicio: fmt(new Date()), fim: fmt(new Date()) };
         }
-        
         else if (this.filtroPeriodo === 'ano') {
             const tipo = document.getElementById('sel-subperiodo-ano').value;
             let inicio, fim;
-            
             switch(tipo) {
                 case 'S1': inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); break;
                 case 'S2': inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); break;
@@ -239,13 +223,12 @@ const MinhaArea = {
         }
     },
 
-    // --- PERSISTÊNCIA E ATUALIZAÇÃO ---
     salvarEAtualizar: function() {
         const estado = {
             tipo: this.filtroPeriodo,
             ano: document.getElementById('sel-ano')?.value,
             mes: document.getElementById('sel-mes')?.value,
-            // Não salvamos a semana específica para evitar bugs ao mudar de mês
+            // Não salva semana específica para evitar bugs na troca de mês
             sub: document.getElementById('sel-subperiodo-ano')?.value
         };
         localStorage.setItem('ma_filtro_state', JSON.stringify(estado));
@@ -295,12 +278,10 @@ const MinhaArea = {
         if (abaId === 'feedback' && this.Feedback) this.Feedback.carregar();
     },
     
-    // --- ADMIN ---
     atualizarListaAssistentes: async function() {
         if (!this.isAdmin()) return;
         const select = document.getElementById('admin-user-selector');
-        if (!select) return;
-        if(select.options.length > 1) return; 
+        if (!select || select.options.length > 1) return;
 
         try {
             const { data, error } = await Sistema.supabase
