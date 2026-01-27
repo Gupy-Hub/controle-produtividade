@@ -1,5 +1,5 @@
 /* ARQUIVO: js/login.js
-   DESCRIÇÃO: Módulo de Autenticação (Com Redirecionamento Robusto)
+   DESCRIÇÃO: Módulo de Autenticação (Com Hashing Client-Side)
 */
 
 const Login = {
@@ -26,8 +26,15 @@ const Login = {
         const id = idInput.value.trim();
         const senha = senhaInput.value.trim();
 
+        // Validação básica de input
         if (!id || !senha) {
             this.mostrarErro('Preencha todos os campos.');
+            return;
+        }
+
+        // Validação de tipo de ID (Evita envio de NaN para o RPC)
+        if (isNaN(parseInt(id))) {
+            this.mostrarErro('O ID deve ser numérico.');
             return;
         }
 
@@ -38,10 +45,14 @@ const Login = {
         if(msgErro) msgErro.classList.add('hidden');
 
         try {
-            // Chamada segura ao banco (RPC verifica o hash)
+            // 1. GERA O HASH DA SENHA (SHA-256)
+            // O banco espera o hash para comparar, nunca a senha em texto plano.
+            const senhaHash = await Sistema.gerarHash(senha);
+
+            // 2. Chamada segura ao banco
             const { data, error } = await Sistema.supabase.rpc('api_login', { 
                 p_id: parseInt(id), 
-                p_senha: senha 
+                p_senha: senhaHash 
             });
 
             if (error) throw error;
@@ -49,17 +60,18 @@ const Login = {
             // --- SUCESSO ---
             Sistema.salvarSessao(data);
 
-            // 1. Verificação de Troca de Senha
+            // 3. Verificação de Troca de Senha Obrigatória
             if (data.trocar_senha === true) {
                 alert("⚠️ AVISO DE SEGURANÇA:\n\nSua senha foi resetada pelo administrador.\nPor favor, defina uma nova senha assim que acessar o sistema.");
             }
             
-            // 2. Redirecionamento
+            // 4. Redirecionamento baseado no perfil
             this.redirecionar(data);
 
         } catch (error) {
             console.error("Erro Login:", error);
             
+            // Tratamento de Erros SQL (RPC)
             if (error.code === 'P0001') {
                 this.mostrarErro('Senha incorreta.');
             } else if (error.code === 'P0002') {
@@ -67,6 +79,7 @@ const Login = {
             } else if (error.code === 'P0003') {
                 this.mostrarErro('Acesso negado. Usuário inativo.');
             } else {
+                // Fallback para erros genéricos (ex: timeout, network)
                 this.mostrarErro('Erro ao conectar: ' + (error.message || 'Erro desconhecido'));
             }
         } finally {
@@ -82,10 +95,10 @@ const Login = {
         const perfil = (usuario.perfil || '').toLowerCase().trim();
         const funcao = (usuario.funcao || '').toLowerCase().trim();
 
-        // Lista de perfis permitidos na Gestão
+        // Lista de perfis com acesso ao Painel de Gestão
         const perfisGestao = ['admin', 'administrador', 'gestor', 'gestora'];
 
-        // Verifica se o perfil OU a função dão acesso à gestão
+        // Verifica permissão
         if (perfisGestao.includes(perfil) || perfisGestao.includes(funcao)) {
             console.log("🔒 Acesso concedido: Painel de Gestão");
             window.location.href = 'gestao.html';
@@ -106,7 +119,8 @@ const Login = {
     }
 };
 
-// Inicializa o módulo
+// Inicializa o módulo após o carregamento do DOM
 document.addEventListener('DOMContentLoaded', () => {
+    // Pequeno delay para garantir que o script sistema.js carregou
     setTimeout(() => Login.init(), 100);
 });
