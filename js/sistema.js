@@ -1,5 +1,5 @@
+// ARQUIVO: js/sistema.js - ATUALIZAÇÃO
 const Sistema = {
-    // URL da API do Supabase (lida do config.js)
     supabaseUrl: CONFIG.SUPABASE_URL,
     supabaseKey: CONFIG.SUPABASE_ANON_KEY,
     supabase: null,
@@ -15,7 +15,6 @@ const Sistema = {
         this.verificarSessaoGlobal();
     },
 
-    // --- NOVA FUNÇÃO DE CRIPTOGRAFIA (SHA-256) ---
     gerarHash: async function(texto) {
         const msgBuffer = new TextEncoder().encode(texto);
         const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -23,11 +22,12 @@ const Sistema = {
         const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
         return hashHex;
     },
-    // ---------------------------------------------
 
     salvarSessao: function(dadosUsuario) {
         localStorage.setItem('usuario_logado', JSON.stringify(dadosUsuario));
         localStorage.setItem('sessao_timestamp', new Date().getTime());
+        // Chama o registro de checking ao logar
+        this.registrarAcesso(dadosUsuario.id);
     },
 
     lerSessao: function() {
@@ -53,9 +53,40 @@ const Sistema = {
         if (!usuario) {
             window.location.href = 'index.html';
         } else {
-            // Exibe nome do usuário se houver elemento para isso
             const elNome = document.getElementById('usuario-nome-top');
             if (elNome) elNome.innerText = usuario.nome.split(' ')[0];
+            // Registra atividade em páginas internas
+            this.registrarAcesso(usuario.id);
+        }
+    },
+
+    /**
+     * FUNÇÃO DE CHECKING: Registra a presença diária do usuário
+     * Baseado na tabela 'acessos_diarios' do banco de dados.
+     */
+    registrarAcesso: async function(usuarioId) {
+        if (!usuarioId) return;
+        
+        const hoje = new Date().toISOString().split('T')[0];
+        const storageKey = `checkin_${usuarioId}_${hoje}`;
+
+        // Evita chamadas desnecessárias se já registrou nesta sessão/dia local
+        if (localStorage.getItem(storageKey)) return;
+
+        try {
+            const { error } = await this.supabase
+                .from('acessos_diarios')
+                .upsert({ 
+                    usuario_id: usuarioId, 
+                    data_referencia: hoje 
+                }, { onConflict: 'usuario_id,data_referencia' });
+
+            if (error) throw error;
+            
+            localStorage.setItem(storageKey, 'true');
+            console.log(`Checking realizado para usuário ${usuarioId} em ${hoje}`);
+        } catch (err) {
+            console.error("Erro ao registrar checking:", err.message);
         }
     },
 
@@ -70,5 +101,4 @@ const Sistema = {
     }
 };
 
-// Inicializa o sistema automaticamente
 Sistema.init();

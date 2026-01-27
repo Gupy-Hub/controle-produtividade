@@ -18,9 +18,41 @@ Object.assign(window.Produtividade, {
         }
         this.usuario = JSON.parse(storedUser);
 
+        // Reabilita o Checking: Regista ou verifica a presença do dia
+        if (window.Sistema && window.Sistema.registrarAcesso) {
+            await window.Sistema.registrarAcesso(this.usuario.id);
+        }
+
         this.popularSeletoresIniciais();
         this.carregarEstadoSalvo();
+        this.verificarStatusPresenca(); // Feedback visual do checking
         this.mudarAba('geral');
+    },
+
+    /**
+     * Feedback visual para o utilizador sobre o estado do checking diário
+     */
+    verificarStatusPresenca: async function() {
+        const hoje = new Date().toISOString().split('T')[0];
+        try {
+            const { data, error } = await Sistema.supabase
+                .from('acessos_diarios')
+                .select('id')
+                .eq('usuario_id', this.usuario.id)
+                .eq('data_referencia', hoje)
+                .maybeSingle();
+
+            const statusEl = document.getElementById('status-presenca-hoje');
+            if (statusEl) {
+                if (data) {
+                    statusEl.innerHTML = '<span class="text-emerald-500 text-xs font-bold"><i class="fas fa-check-circle"></i> CHECKING REALIZADO</span>';
+                } else {
+                    statusEl.innerHTML = '<span class="text-amber-500 text-xs font-bold"><i class="fas fa-clock"></i> AGUARDANDO CHECKING</span>';
+                }
+            }
+        } catch (err) {
+            console.error("Erro ao verificar status de presença:", err);
+        }
     },
 
     popularSeletoresIniciais: function() {
@@ -46,7 +78,7 @@ Object.assign(window.Produtividade, {
     mudarPeriodo: function(tipo, salvar = true) {
         this.filtroPeriodo = tipo;
         
-        // Atualiza botões
+        // Atualiza botões de interface
         ['dia', 'mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
@@ -55,14 +87,13 @@ Object.assign(window.Produtividade, {
             }
         });
 
-        // Alterna visibilidade
+        // Alterna visibilidade dos seletores
         const selDia = document.getElementById('sel-data-dia');
         const selMes = document.getElementById('sel-mes');
         const selSemana = document.getElementById('sel-semana');
         const selSubAno = document.getElementById('sel-subperiodo-ano');
         const selAno = document.getElementById('sel-ano');
 
-        // Esconde tudo primeiro
         if(selDia) selDia.classList.add('hidden');
         if(selMes) selMes.classList.add('hidden');
         if(selSemana) selSemana.classList.add('hidden');
@@ -97,7 +128,6 @@ Object.assign(window.Produtividade, {
         };
         localStorage.setItem('prod_filtro_state', JSON.stringify(estado));
         
-        // --- DEBOUNCE ---
         if (this.debounceTimer) clearTimeout(this.debounceTimer);
 
         const statusEl = document.getElementById('tabela-corpo');
@@ -121,7 +151,7 @@ Object.assign(window.Produtividade, {
                 
                 this.mudarPeriodo(s.tipo, false);
                 return;
-            } catch(e) { console.error("Erro estado salvo", e); }
+            } catch(e) { console.error("Erro ao carregar estado salvo", e); }
         }
         this.mudarPeriodo('mes', false);
     },
@@ -141,44 +171,27 @@ Object.assign(window.Produtividade, {
                 inicio = new Date(ano, mes, 1);
                 fim = new Date(ano, mes + 1, 0);
             } 
-            // --- CORREÇÃO: LÓGICA SEMANAL (Domingo a Sábado) ---
             else if (this.filtroPeriodo === 'semana') {
                 const semanaIndex = parseInt(document.getElementById('sel-semana').value);
-                
-                // Começa no dia 1 do mês
                 let current = new Date(ano, mes, 1);
                 
-                // Se não for a Semana 1, avança até o primeiro Domingo e soma semanas
                 if (semanaIndex > 1) {
-                    // Avança até o primeiro domingo
-                    while (current.getDay() !== 0) {
-                        current.setDate(current.getDate() + 1);
-                    }
-                    // Soma as semanas restantes
+                    while (current.getDay() !== 0) { current.setDate(current.getDate() + 1); }
                     current.setDate(current.getDate() + (semanaIndex - 2) * 7);
                 }
                 
                 inicio = new Date(current);
-                
-                // O fim é o próximo Sábado
                 fim = new Date(current);
-                while (fim.getDay() !== 6) {
-                    fim.setDate(fim.getDate() + 1);
-                }
+                while (fim.getDay() !== 6) { fim.setDate(fim.getDate() + 1); }
                 
-                // Limites do mês (Clamp)
                 const ultimoDiaMes = new Date(ano, mes + 1, 0);
-                
-                // Se o início da semana caiu no mês seguinte (ex: Semana 5 num mês curto)
                 if (inicio.getMonth() !== mes) {
                     inicio = ultimoDiaMes;
                     fim = ultimoDiaMes;
                 } else {
-                    // Se o fim passou do mês, corta no último dia
                     if (fim > ultimoDiaMes) fim = ultimoDiaMes;
                 }
             } 
-            // ----------------------------------------------------
             else if (this.filtroPeriodo === 'ano') {
                 const sub = document.getElementById('sel-subperiodo-ano').value;
                 if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
@@ -217,6 +230,7 @@ Object.assign(window.Produtividade, {
         const ctrlAlvo = document.getElementById(`ctrl-${abaId}`);
         if(ctrlAlvo) ctrlAlvo.classList.remove('hidden');
 
+        // Inicializa módulos específicos se existirem
         if (abaId === 'geral' && this.Geral) this.Geral.init();
         if (abaId === 'consolidado' && this.Consolidado) this.Consolidado.init();
         if (abaId === 'performance' && this.Performance) this.Performance.init();
@@ -231,6 +245,7 @@ Object.assign(window.Produtividade, {
     }
 });
 
+// Inicialização automática após o carregamento do DOM
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         if(window.Produtividade && window.Produtividade.init) window.Produtividade.init();
