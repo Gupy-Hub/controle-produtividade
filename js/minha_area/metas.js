@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Correção: Soma de Metas na Visão Geral)
+   DESCRIÇÃO: Engine de Metas (Lógica Estrita: Soma de Ativos conforme Gestão)
 */
 
 MinhaArea.Metas = {
@@ -15,59 +15,68 @@ MinhaArea.Metas = {
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
         const modoMensal = diffDias > 35; 
 
-        console.log(`🚀 Metas: Carregando de ${inicio} até ${fim}. Modo Mensal: ${modoMensal}`);
+        console.log(`🚀 Metas: Carregando ${inicio} a ${fim} (Modo Mensal: ${modoMensal})`);
 
         this.resetarCards(true);
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            // 1. BUSCA DADOS & CONFIGURAÇÕES
-            // Buscamos dados de produção e a tabela de metas do ano
-            const [kpisRes, configRes] = await Promise.all([
-                Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
-                Sistema.supabase.from('metas').select('*').eq('ano', new Date(inicio).getFullYear())
-            ]);
+            const anoRef = new Date(inicio).getFullYear();
 
-            if (kpisRes.error) throw kpisRes.error;
-            
-            // Mapa de Realizado
-            const mapaDados = {};
-            (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
-
-            // --- CORREÇÃO CRÍTICA: MAPA DE METAS (ACUMULADOR) ---
-            const mapMetas = {};
-            
-            // Inicializa estrutura vazia
-            (configRes.data || []).forEach(m => {
-                // Filtro de Segurança: Se estiver vendo um usuário específico, ignora os outros
-                if (uid && m.usuario_id != uid) return;
-
-                const mes = m.mes;
-                if (!mapMetas[mes]) {
-                    mapMetas[mes] = { prod: 0, assert_soma: 0, count: 0 };
-                }
-
-                // SOMA a produção (Para visão geral ser o total da equipe)
-                mapMetas[mes].prod += (m.meta_producao || 0);
-                
-                // Acumula assertividade para média posterior
-                mapMetas[mes].assert_soma += (m.meta_assertividade || 98.0);
-                mapMetas[mes].count++;
+            // 1. BUSCAR DADOS DE PRODUÇÃO (RPC)
+            const pKpis = Sistema.supabase.rpc('get_kpis_minha_area', { 
+                p_inicio: inicio, 
+                p_fim: fim, 
+                p_usuario_id: uid 
             });
 
-            // Calcula média da assertividade (pois meta de qualidade não se soma, se tira média)
-            Object.keys(mapMetas).forEach(mes => {
-                const item = mapMetas[mes];
+            // 2. BUSCAR METAS E USUÁRIOS (Lógica de Gestão)
+            const pMetas = Sistema.supabase.from('metas').select('*').eq('ano', anoRef);
+            const pUsuarios = Sistema.supabase.from('usuarios').select('id, ativo').eq('ativo', true);
+
+            const [kpisRes, metasRes, usersRes] = await Promise.all([pKpis, pMetas, pUsuarios]);
+
+            if (kpisRes.error) throw kpisRes.error;
+            if (metasRes.error) throw metasRes.error;
+
+            // --- PROCESSAMENTO DA META (CORE DA CORREÇÃO) ---
+            const mapMetaMensal = {}; // Ex: { 1: 5500, 2: 5500 }
+            const activeUserIds = new Set((usersRes.data || []).map(u => u.id));
+            
+            // Se tiver filtro de usuário, consideramos apenas ele (se estiver ativo)
+            const idsParaConsiderar = uid ? new Set([parseInt(uid)]) : activeUserIds;
+
+            (metasRes.data || []).forEach(m => {
+                // Só soma a meta se o usuário estiver na lista de ativos/selecionados
+                if (idsParaConsiderar.has(m.usuario_id)) {
+                    const mes = m.mes;
+                    
+                    if (!mapMetaMensal[mes]) {
+                        mapMetaMensal[mes] = { prod: 0, assert_soma: 0, count: 0 };
+                    }
+
+                    // SOMA A PRODUÇÃO (Acumula capacidade do time)
+                    mapMetaMensal[mes].prod += (m.meta_producao || 0);
+                    
+                    // Acumula para média de assertividade
+                    mapMetaMensal[mes].assert_soma += (m.meta_assertividade || 98.0);
+                    mapMetaMensal[mes].count++;
+                }
+            });
+
+            // Consolida médias de assertividade
+            Object.keys(mapMetaMensal).forEach(k => {
+                const item = mapMetaMensal[k];
                 item.assert = item.count > 0 ? (item.assert_soma / item.count) : 98.0;
             });
 
-            // --- PROCESSAMENTO ---
+            // --- MAPEAMENTO DE DADOS REAIS ---
+            const mapaDados = {};
+            (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
+
+            // --- LOOP CRONOLÓGICO ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
-            
-            // Fallback: Se não tiver meta no banco, calcula 100 * pessoas
-            const qtdPessoasFallback = uid ? 1 : this.getQtdAssistentesConfigurada(); 
-            const metaPadraoFallback = 100 * qtdPessoasFallback;
 
             let curr = new Date(inicio + 'T12:00:00');
             const end = new Date(fim + 'T12:00:00');
@@ -77,12 +86,13 @@ MinhaArea.Metas = {
                 const mes = curr.getMonth() + 1;
                 const ano = curr.getFullYear();
                 
-                // Pega a meta somada do mapa ou usa o fallback
-                const metaMesCfg = mapMetas[mes] || { prod: metaPadraoFallback, assert: 98.0 };
+                // Busca a meta calculada do mês (Soma dos ativos) ou 0 se não houver config
+                const metaMesCfg = mapMetaMensal[mes] || { prod: 0, assert: 98.0 };
                 
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
                 if (modoMensal) {
+                    // Agregação Mensal
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
@@ -95,7 +105,7 @@ MinhaArea.Metas = {
                         const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
                         
                         pReal += reg.total_producao;
-                        if(!isFDS) pMeta += metaMesCfg.prod;
+                        if(!isFDS) pMeta += metaMesCfg.prod; // Soma meta do time por dia útil
                         aAudit += reg.total_auditados;
                         aNok += reg.total_nok;
                     }
@@ -110,10 +120,12 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
+                    // Modo Diário
                     const iso = curr.toISOString().split('T')[0];
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
                     
+                    // A Meta Diária é a soma das metas de todos os ativos (definida no mapMetaMensal)
                     pMeta = isFDS ? 0 : metaMesCfg.prod;
                     pReal = reg.total_producao;
                     
@@ -131,7 +143,7 @@ MinhaArea.Metas = {
                 acc.val += pReal; acc.meta += pMeta; acc.audit += aAudit; acc.nok += aNok;
             }
 
-            // 4. ATUALIZAR CARDS
+            // 4. ATUALIZAR UI
             const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : 0;
             const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
             const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
@@ -150,10 +162,9 @@ MinhaArea.Metas = {
             this.setBar('bar-auditoria-res', pctAprov, 'bg-emerald-500');
             this.atualizarPorcentagemCard('bar-auditoria-res', pctAprov, 'Aprovação');
 
-            // 5. RENDERIZAR GRÁFICOS
+            // Renderiza Gráficos
             const periodoTxt = this.getLabelPeriodo(inicio, fim);
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
-            
             this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false);
             this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true);
 
