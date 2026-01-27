@@ -1,7 +1,9 @@
-/* ARQUIVO: js/minha_area/geral.js */
+/* ARQUIVO: js/minha_area/geral.js
+   DESCRIÇÃO: Visão Geral e Diária (Corrigido: Checking Dinâmico D-1)
+*/
 
 MinhaArea.Geral = {
-    // Função Auxiliar para baixar tudo (fura o bloqueio de 1000 linhas)
+    // Função Auxiliar para baixar tudo (fura o bloqueio de 1000 linhas do Supabase)
     fetchAll: async function(table, queryBuilder) {
         let allData = [];
         let page = 0;
@@ -33,13 +35,14 @@ MinhaArea.Geral = {
         const tbody = document.getElementById('tabela-extrato');
         const alertContainer = document.getElementById('container-checkin-alert');
         
+        // Limpa alertas antigos
         if (alertContainer) {
             alertContainer.innerHTML = '';
             alertContainer.classList.add('hidden');
         }
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
-        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando indicadores centralizados...</span></div></td></tr>';
+        if(tbody) tbody.innerHTML = '<tr><td colspan="11" class="text-center py-20 text-slate-400 bg-slate-50/50"><div class="flex flex-col items-center gap-2"><i class="fas fa-spinner fa-spin text-2xl text-blue-400"></i><span class="text-xs font-bold">Calculando indicadores...</span></div></td></tr>';
 
         try {
             const dtInicio = new Date(inicio + 'T12:00:00');
@@ -67,6 +70,7 @@ MinhaArea.Geral = {
             let dadosProducaoRaw = [], dadosAssertividadeRaw = [], dadosMetasRaw = [], dadosUsuarios = [];
 
             if (!isGeral) {
+                // Modo Individual
                 const [p, a, m, u] = await Promise.all([
                     qProducao.eq('usuario_id', uid),
                     qAssertividade.eq('usuario_id', uid),
@@ -78,6 +82,7 @@ MinhaArea.Geral = {
                 dadosMetasRaw = m.data || [];
                 dadosUsuarios = u.data || [];
             } else {
+                // Modo Visão Geral (Gestão)
                 const [p, a, m, u] = await Promise.all([
                     this.fetchAll('producao', qProducao),
                     this.fetchAll('assertividade', qAssertividade),
@@ -90,14 +95,16 @@ MinhaArea.Geral = {
                 dadosUsuarios = u;
             }
 
-            // Checkins (Individual)
+            // Checkins (Apenas Individual) - Trazemos para pintar a tabela
             let dadosCheckins = [];
             if (!isGeral) {
                  const { data } = await Sistema.supabase.from('checking_diario')
                     .select('data_referencia, status').eq('usuario_id', uid)
                     .gte('data_referencia', inicio).lte('data_referencia', fim);
                  dadosCheckins = data || [];
-                 await this.processarCheckingInterface(uid, dadosCheckins);
+                 
+                 // CHAMA O ALERTA DE CHECKING (Agora Corrigido)
+                 await this.processarCheckingInterface(uid);
             }
 
             // --- MAPEAMENTO E FILTROS ---
@@ -209,7 +216,7 @@ MinhaArea.Geral = {
                 dadosProducaoRaw.forEach(p => mapProd.set(p.data_referencia, p));
             }
 
-            // --- AGREGAÇÃO DE ASSERTIVIDADE (PREPARADA PARA O CÉREBRO) ---
+            // --- AGREGAÇÃO DE ASSERTIVIDADE ---
             const STATUS_IGNORAR = ['REV', 'EMPR', 'DUPL', 'IA'];
             const mapAssert = new Map();
             
@@ -227,10 +234,9 @@ MinhaArea.Geral = {
                 const key = a.data_referencia;
                 if(!mapAssert.has(key)) mapAssert.set(key, { soma: 0, qtd: 0 });
                 
-                // Soma a porcentagem BRUTA
                 if (a.porcentagem_assertividade !== null) {
                     mapAssert.get(key).soma += this.parseValorPorcentagem(a.porcentagem_assertividade);
-                    mapAssert.get(key).qtd++; // Conta +1 documento
+                    mapAssert.get(key).qtd++; 
                 }
             });
 
@@ -273,19 +279,12 @@ MinhaArea.Geral = {
 
                 const assertDoDia = mapAssert.get(dataStr);
                 
-                // ----------------------------------------------------
-                // MUDANÇA CRUCIAL: USANDO O CÉREBRO (SISTEMA)
-                // ----------------------------------------------------
                 let assertDiaDisplay = { val: 0, text: '-', class: 'text-slate-300' };
                 
                 if (assertDoDia && assertDoDia.qtd > 0) {
-                    // 1. O Sistema calcula a média correta (Soma / Qtd)
                     const mediaDia = Sistema.Assertividade.calcularMedia(assertDoDia.soma, assertDoDia.qtd);
-                    
-                    // 2. O Sistema define a cor
                     const visual = Sistema.Assertividade.obterStatusVisual(mediaDia, configMes.assertFinal);
                     
-                    // 3. Formatamos para exibir
                     assertDiaDisplay = {
                         val: mediaDia,
                         text: Sistema.Assertividade.formatarPorcentagem(mediaDia),
@@ -295,7 +294,6 @@ MinhaArea.Geral = {
                     totalAssertSoma += assertDoDia.soma;
                     totalAssertQtd += assertDoDia.qtd;
                 }
-                // ----------------------------------------------------
 
                 if (temRegistro || (assertDoDia && assertDoDia.qtd > 0)) {
                     listaGrid.push({
@@ -329,23 +327,18 @@ MinhaArea.Geral = {
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-bold">${item.metaDia}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center ${corProd}">${this.fmtPct(pctProd)}</td>
                         <td class="px-2 py-2 border-r border-slate-100 text-center text-slate-400 font-mono">${item.metaConfigAssert}%</td>
-                        
-                        <td class="px-2 py-2 border-r border-slate-100 text-center">
-                            <span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span>
-                        </td>
-                        
+                        <td class="px-2 py-2 border-r border-slate-100 text-center"><span class="${item.assertDisplay.class}">${item.assertDisplay.text}</span></td>
                         <td class="px-2 py-2 border-r border-slate-100 max-w-[200px]" title="${item.justificativa||''}"><span class="${classJust}">${item.justificativa||'-'}</span></td>
                     </tr>`;
             });
 
-            // --- KPIS DO TOPO TAMBÉM USAM O CÉREBRO ---
+            // --- KPIS DO TOPO ---
             this.setTxt('kpi-total', totalProdReal.toLocaleString('pt-BR'));
             this.setTxt('kpi-meta-acumulada', totalMetaEsperada.toLocaleString('pt-BR'));
             const pctVol = totalMetaEsperada > 0 ? (totalProdReal / totalMetaEsperada) * 100 : 0;
             if(document.getElementById('bar-volume')) document.getElementById('bar-volume').style.width = `${Math.min(pctVol, 100)}%`;
             this.setTxt('kpi-pct', this.fmtPct(pctVol));
 
-            // CÁLCULO DA MÉDIA GLOBAL DO PERÍODO
             const assertReal = Sistema.Assertividade.calcularMedia(totalAssertSoma, totalAssertQtd);
             this.setTxt('kpi-assertividade-val', Sistema.Assertividade.formatarPorcentagem(assertReal));
             
@@ -398,25 +391,81 @@ MinhaArea.Geral = {
         if ((maxFreq / valores.length) >= 0.70) { return { valor: moda, isMedia: false }; } else { return { valor: Number((soma/valores.length).toFixed(2)), isMedia: true }; }
     },
 
-    processarCheckingInterface: async function(uid, checkins) {
+    // --- CORREÇÃO: CHECKING DINÂMICO ---
+    processarCheckingInterface: async function(uid) {
         if (!uid || MinhaArea.usuario.id !== parseInt(uid)) return;
-        const ontemStr = '2025-12-16'; // Exemplo
-        const jaValidou = checkins.some(c => c.data_referencia === ontemStr);
+
+        // 1. Calcula D-1 (Ontem)
+        const hoje = new Date();
+        hoje.setHours(0,0,0,0);
+        const ontem = new Date(hoje);
+        ontem.setDate(ontem.getDate() - 1);
+        const ontemStr = ontem.toISOString().split('T')[0];
+        
+        // Formata para exibição
+        const dia = String(ontem.getDate()).padStart(2, '0');
+        const mes = String(ontem.getMonth() + 1).padStart(2, '0');
+        const ano = ontem.getFullYear();
+        const dataBonita = `${dia}/${mes}/${ano}`;
+
         const container = document.getElementById('container-checkin-alert');
         if (!container) return;
-        if (!jaValidou) {
-            container.innerHTML = `<div class="bg-white border-l-4 border-blue-500 shadow-md rounded-r-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in"><div class="flex items-center gap-3"><div class="bg-blue-50 p-3 rounded-full text-blue-600"><i class="fas fa-clipboard-check text-xl"></i></div><div><h4 class="font-bold text-slate-700 text-sm">Checking Diário Pendente (TESTE)</h4><p class="text-xs text-slate-500">Confirme a conferência dos dados do dia 16/12/2025.</p></div></div><button onclick="MinhaArea.Geral.realizarCheckin('${ontemStr}')" class="group bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:shadow-md active:scale-95 whitespace-nowrap"><span>Validar Dados</span><i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i></button></div>`;
-            container.classList.remove('hidden');
-        } else {
-            container.innerHTML = `<div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-center gap-2 shadow-sm opacity-90 transition-all"><i class="fas fa-check-circle text-emerald-600"></i><span class="text-emerald-800 font-bold text-xs">Dados de 16/12/2025 confirmados!</span></div>`;
-            container.classList.remove('hidden');
+
+        try {
+            // 2. Consulta específica para "Ontem"
+            const { data } = await Sistema.supabase
+                .from('checking_diario')
+                .select('id')
+                .eq('usuario_id', uid)
+                .eq('data_referencia', ontemStr)
+                .maybeSingle();
+
+            const pendente = !data;
+
+            if (pendente) {
+                // Alerta Pendente (Não trava mais a tela)
+                container.innerHTML = `
+                <div class="bg-white border-l-4 border-blue-500 shadow-md rounded-r-lg p-4 flex flex-col sm:flex-row items-center justify-between gap-4 animate-fade-in mb-6">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-blue-50 p-3 rounded-full text-blue-600">
+                            <i class="fas fa-clipboard-check text-xl"></i>
+                        </div>
+                        <div>
+                            <h4 class="font-bold text-slate-700 text-sm">Checking Diário Pendente</h4>
+                            <p class="text-xs text-slate-500">Por favor, confirme a conferência dos dados de ontem (${dataBonita}).</p>
+                        </div>
+                    </div>
+                    <button onclick="MinhaArea.Geral.realizarCheckin('${ontemStr}')" 
+                        class="group bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg text-xs font-bold shadow-sm transition-all flex items-center gap-2 hover:shadow-md active:scale-95 whitespace-nowrap">
+                        <span>Validar Dados</span>
+                        <i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
+                    </button>
+                </div>`;
+                container.classList.remove('hidden');
+            } else {
+                // Feedback Sucesso (Temporário)
+                container.innerHTML = `
+                <div class="bg-emerald-50 border border-emerald-100 rounded-lg p-3 flex items-center justify-center gap-2 shadow-sm opacity-90 transition-all mb-6">
+                    <i class="fas fa-check-circle text-emerald-600"></i>
+                    <span class="text-emerald-800 font-bold text-xs">Checking de ${dataBonita} realizado com sucesso!</span>
+                </div>`;
+                container.classList.remove('hidden');
+                setTimeout(() => { container.classList.add('hidden'); }, 5000);
+            }
+        } catch(err) {
+            console.error("Erro checking interface:", err);
         }
     },
 
     realizarCheckin: async function(dataStr) {
-        if(!confirm(`Confirma validação de ${dataStr}?`)) return;
+        if(!confirm(`Confirma que conferiu todos os dados do dia ${dataStr.split('-').reverse().join('/')}?`)) return;
         try {
-            await Sistema.supabase.from('checking_diario').insert({ usuario_id: MinhaArea.usuario.id, data_referencia: dataStr, status: 'VALIDADO' });
+            await Sistema.supabase.from('checking_diario').insert({ 
+                usuario_id: MinhaArea.usuario.id, 
+                data_referencia: dataStr, 
+                status: 'VALIDADO',
+                data_checkin: new Date().toISOString()
+            });
             this.carregar();
         } catch (e) { alert('Erro: ' + e.message); }
     },
