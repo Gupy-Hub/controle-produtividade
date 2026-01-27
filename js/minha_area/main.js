@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/main.js
-   DESCRIÇÃO: Controlador Principal (Filtros Avançados: Mês, Semana, Ano, Trimestre)
+   DESCRIÇÃO: Controlador Principal (Compatível com HTML Simplificado)
 */
 
 const MinhaArea = {
@@ -8,32 +8,34 @@ const MinhaArea = {
     filtroPeriodo: 'mes', // mes, semana, ano
 
     init: async function() {
+        // 1. Inicializa Supabase
         if (!Sistema.supabase) await Sistema.inicializar(false);
         
+        // 2. Verifica Sessão
         const storedUser = localStorage.getItem('usuario_logado');
         if (!storedUser) { window.location.href = 'index.html'; return; }
         this.usuario = JSON.parse(storedUser);
         
+        // 3. Configura Acesso Admin
         await this.setupAdminAccess();
 
+        // Se não for admin, trava no próprio ID
         if (!this.isAdmin()) {
             this.usuarioAlvoId = this.usuario.id;
         }
 
+        // 4. Popula Selects e Restaura Estado
         this.popularSeletoresIniciais();
-        
-        // Carrega estado anterior ou define padrão
         this.carregarEstadoSalvo();
         
-        // Renderiza a interface inicial
+        // 5. Renderiza Interface
         this.atualizarInterfaceFiltros();
         this.atualizarTudo();
 
-        // Listeners Globais para recarregar ao mudar selects
-        document.querySelectorAll('.filtro-auto-update').forEach(el => {
-            el.addEventListener('change', () => {
-                this.salvarEAtualizar();
-            });
+        // Listeners para salvar estado ao mudar filtro
+        ['sel-ano', 'sel-mes', 'sel-semana', 'sel-subperiodo-ano'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('change', () => this.salvarEAtualizar());
         });
     },
 
@@ -51,7 +53,7 @@ const MinhaArea = {
         }
     },
 
-    // --- LÓGICA DE FILTROS (VISUAL) ---
+    // --- VISUAL DOS FILTROS ---
     mudarPeriodo: function(tipo) {
         this.filtroPeriodo = tipo;
         this.atualizarInterfaceFiltros();
@@ -59,61 +61,64 @@ const MinhaArea = {
     },
 
     atualizarInterfaceFiltros: function() {
-        // 1. Atualiza Botões
+        // 1. Atualiza Estilo dos Botões
         ['mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
                 if (t === this.filtroPeriodo) {
-                    btn.className = "px-4 py-1.5 text-xs font-bold rounded-md bg-white text-blue-600 shadow-sm border border-blue-100 transition-all";
+                    btn.className = "px-2 py-1 text-xs font-semibold rounded shadow-sm text-blue-600 bg-white transition border border-blue-100";
                 } else {
-                    btn.className = "px-4 py-1.5 text-xs font-bold rounded-md text-slate-500 hover:bg-slate-50 hover:text-slate-600 transition-all";
+                    btn.className = "px-2 py-1 text-xs font-semibold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition";
                 }
             }
         });
 
-        // 2. Exibe Containers Específicos
-        document.getElementById('container-filtro-mes').classList.add('hidden');
-        document.getElementById('container-filtro-semana').classList.add('hidden');
-        document.getElementById('container-filtro-ano').classList.add('hidden');
+        // 2. Exibe/Oculta Selects (Diretamente nos elementos, sem container)
+        const elMes = document.getElementById('sel-mes');
+        const elSemana = document.getElementById('sel-semana');
+        const elSubAno = document.getElementById('sel-subperiodo-ano');
+
+        if(elMes) elMes.classList.add('hidden');
+        if(elSemana) elSemana.classList.add('hidden');
+        if(elSubAno) elSubAno.classList.add('hidden');
 
         if (this.filtroPeriodo === 'mes') {
-            document.getElementById('container-filtro-mes').classList.remove('hidden');
+            if(elMes) elMes.classList.remove('hidden');
         } else if (this.filtroPeriodo === 'semana') {
-            document.getElementById('container-filtro-semana').classList.remove('hidden');
+            if(elSemana) elSemana.classList.remove('hidden');
         } else if (this.filtroPeriodo === 'ano') {
-            document.getElementById('container-filtro-ano').classList.remove('hidden');
+            if(elSubAno) elSubAno.classList.remove('hidden');
         }
     },
 
     popularSeletoresIniciais: function() {
         const anoAtual = new Date().getFullYear();
-        const mesAtual = new Date().getMonth(); // 0-11
+        const mesAtual = new Date().getMonth();
 
-        // 1. Popular Anos (Geral)
-        const selectsAno = document.querySelectorAll('.select-ano-pop');
-        const htmlAnos = `
-            <option value="${anoAtual}">${anoAtual}</option>
-            <option value="${anoAtual-1}">${anoAtual-1}</option>
-            <option value="${anoAtual+1}">${anoAtual+1}</option>
-        `;
-        selectsAno.forEach(s => s.innerHTML = htmlAnos);
+        // Popular Ano (Único)
+        const elAno = document.getElementById('sel-ano');
+        if(elAno) {
+            elAno.innerHTML = `
+                <option value="${anoAtual}">${anoAtual}</option>
+                <option value="${anoAtual-1}">${anoAtual-1}</option>
+                <option value="${anoAtual+1}">${anoAtual+1}</option>
+            `;
+            elAno.value = anoAtual;
+        }
 
-        // 2. Popular Meses
+        // Popular Mês
         const elMes = document.getElementById('sel-mes');
         if(elMes) elMes.value = mesAtual;
 
-        // 3. Popular Semanas (ISO 8601 - Lógica Simplificada)
+        // Popular Semanas
         const elSemana = document.getElementById('sel-semana');
         if(elSemana) {
             let htmlSem = '';
-            // Gera 53 semanas genéricas
             for(let i=1; i<=53; i++) {
                 htmlSem += `<option value="${i}">Semana ${i}</option>`;
             }
             elSemana.innerHTML = htmlSem;
-            // Tenta selecionar a semana atual
-            const currentWeek = this.getSemanaAtual();
-            elSemana.value = currentWeek;
+            elSemana.value = this.getSemanaAtual();
         }
     },
 
@@ -125,12 +130,13 @@ const MinhaArea = {
         return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
     },
 
-    // --- LÓGICA DE DATAS (O CORAÇÃO DO SISTEMA) ---
+    // --- LÓGICA DE DATAS (CORRIGIDA PARA SELETORES ÚNICOS) ---
     getDatasFiltro: function() {
         const fmt = (d) => d.toISOString().split('T')[0];
-        
+        // Todos usam o mesmo seletor de ano
+        const ano = parseInt(document.getElementById('sel-ano').value);
+
         if (this.filtroPeriodo === 'mes') {
-            const ano = parseInt(document.getElementById('sel-ano').value);
             const mes = parseInt(document.getElementById('sel-mes').value);
             return { 
                 inicio: fmt(new Date(ano, mes, 1)), 
@@ -139,32 +145,22 @@ const MinhaArea = {
         }
         
         else if (this.filtroPeriodo === 'semana') {
-            const ano = parseInt(document.getElementById('sel-ano-semana').value);
             const semana = parseInt(document.getElementById('sel-semana').value);
             return this.getDateRangeOfWeek(semana, ano);
         }
         
         else if (this.filtroPeriodo === 'ano') {
-            const ano = parseInt(document.getElementById('sel-ano-full').value);
-            const tipo = document.getElementById('sel-periodo-ano').value; // ano_completo, 1_semestre, 2_semestre, 1_tri...
-            
+            const tipo = document.getElementById('sel-subperiodo-ano').value;
             let inicio, fim;
             
             switch(tipo) {
-                case '1_semestre':
-                    inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); break;
-                case '2_semestre':
-                    inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); break;
-                case '1_trimestre':
-                    inicio = new Date(ano, 0, 1); fim = new Date(ano, 2, 31); break;
-                case '2_trimestre':
-                    inicio = new Date(ano, 3, 1); fim = new Date(ano, 5, 30); break;
-                case '3_trimestre':
-                    inicio = new Date(ano, 6, 1); fim = new Date(ano, 8, 30); break;
-                case '4_trimestre':
-                    inicio = new Date(ano, 9, 1); fim = new Date(ano, 11, 31); break;
-                default: // ano_completo
-                    inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); break;
+                case 'S1': inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); break;
+                case 'S2': inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); break;
+                case 'T1': inicio = new Date(ano, 0, 1); fim = new Date(ano, 2, 31); break;
+                case 'T2': inicio = new Date(ano, 3, 1); fim = new Date(ano, 5, 30); break;
+                case 'T3': inicio = new Date(ano, 6, 1); fim = new Date(ano, 8, 30); break;
+                case 'T4': inicio = new Date(ano, 9, 1); fim = new Date(ano, 11, 31); break;
+                default:   inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); break; // full
             }
             return { inicio: fmt(inicio), fim: fmt(fim) };
         }
@@ -191,8 +187,9 @@ const MinhaArea = {
         const estado = {
             tipo: this.filtroPeriodo,
             ano: document.getElementById('sel-ano')?.value,
-            mes: document.getElementById('sel-mes')?.value
-            // ... outros campos podem ser salvos aqui
+            mes: document.getElementById('sel-mes')?.value,
+            semana: document.getElementById('sel-semana')?.value,
+            sub: document.getElementById('sel-subperiodo-ano')?.value
         };
         localStorage.setItem('ma_filtro_state', JSON.stringify(estado));
         this.atualizarTudo();
@@ -204,9 +201,10 @@ const MinhaArea = {
             try {
                 const s = JSON.parse(salvo);
                 if (s.tipo) this.filtroPeriodo = s.tipo;
-                // Restaura valores dos selects se existirem
                 if(s.ano && document.getElementById('sel-ano')) document.getElementById('sel-ano').value = s.ano;
                 if(s.mes && document.getElementById('sel-mes')) document.getElementById('sel-mes').value = s.mes;
+                if(s.semana && document.getElementById('sel-semana')) document.getElementById('sel-semana').value = s.semana;
+                if(s.sub && document.getElementById('sel-subperiodo-ano')) document.getElementById('sel-subperiodo-ano').value = s.sub;
             } catch(e) {}
         }
     },
@@ -223,23 +221,18 @@ const MinhaArea = {
 
     mudarAba: function(abaId) {
         document.querySelectorAll('.ma-view').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active')); // Limpa visual antigo
-        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('bg-blue-600', 'text-white'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
         const aba = document.getElementById(`ma-tab-${abaId}`);
         const btn = document.getElementById(`btn-ma-${abaId}`);
         
         if(aba) aba.classList.remove('hidden');
-        if(btn) {
-            btn.classList.add('active');
-            // Estilo ativo conforme seu padrão (se for texto azul ou fundo azul, ajuste aqui)
-        }
+        if(btn) btn.classList.add('active');
         
         this.carregarDadosAba(abaId);
     },
 
     carregarDadosAba: function(abaId) {
-        console.log("🔄 Carregando aba:", abaId);
         if (abaId === 'diario' && this.Geral) this.Geral.carregar();
         if (abaId === 'metas' && this.Metas) this.Metas.carregar();
         if (abaId === 'auditoria' && this.Auditoria) this.Auditoria.carregar();
@@ -253,8 +246,6 @@ const MinhaArea = {
         const select = document.getElementById('admin-user-selector');
         if (!select) return;
         
-        // Mantém seleção atual
-        const atual = select.value;
         if(select.options.length > 1) return; // Já carregou
 
         try {
@@ -285,6 +276,7 @@ const MinhaArea = {
     getUsuarioAlvo: function() { return this.usuarioAlvoId; }
 };
 
+// Inicialização segura
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => { if(typeof MinhaArea !== 'undefined') MinhaArea.init(); }, 100);
 });
