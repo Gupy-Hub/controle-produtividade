@@ -2,11 +2,10 @@
 
 window.Produtividade = window.Produtividade || {};
 
-// Mesclamos as funções principais no objeto global existente
 Object.assign(window.Produtividade, {
     supabase: null, 
     usuario: null,
-    filtroPeriodo: 'mes', // Padrão
+    filtroPeriodo: 'mes',
 
     init: async function() {
         console.log("Módulo Produtividade Iniciado");
@@ -18,23 +17,22 @@ Object.assign(window.Produtividade, {
         }
         this.usuario = JSON.parse(storedUser);
 
-        // Reabilita o Checking: Regista ou verifica a presença do dia
+        // --- REABILITAÇÃO DO CHECKING ---
+        // Registra a atividade diária assim que entra no dashboard
         if (window.Sistema && window.Sistema.registrarAcesso) {
             await window.Sistema.registrarAcesso(this.usuario.id);
         }
 
         this.popularSeletoresIniciais();
         this.carregarEstadoSalvo();
-        this.verificarStatusPresenca(); // Feedback visual do checking
+        this.verificarStatusPresenca(); // Atualiza UI de presença
         this.mudarAba('geral');
     },
 
-    /**
-     * Feedback visual para o utilizador sobre o estado do checking diário
-     */
     verificarStatusPresenca: async function() {
         const hoje = new Date().toISOString().split('T')[0];
         try {
+            // Verifica na tabela acessos_diarios se há registro para hoje
             const { data, error } = await Sistema.supabase
                 .from('acessos_diarios')
                 .select('id')
@@ -45,9 +43,9 @@ Object.assign(window.Produtividade, {
             const statusEl = document.getElementById('status-presenca-hoje');
             if (statusEl) {
                 if (data) {
-                    statusEl.innerHTML = '<span class="text-emerald-500 text-xs font-bold"><i class="fas fa-check-circle"></i> CHECKING REALIZADO</span>';
+                    statusEl.innerHTML = '<span class="text-green-500 font-bold"><i class="fas fa-check-circle"></i> CHECKING ATIVO</span>';
                 } else {
-                    statusEl.innerHTML = '<span class="text-amber-500 text-xs font-bold"><i class="fas fa-clock"></i> AGUARDANDO CHECKING</span>';
+                    statusEl.innerHTML = '<span class="text-amber-500 font-bold"><i class="fas fa-clock"></i> AGUARDANDO REGISTRO</span>';
                 }
             }
         } catch (err) {
@@ -68,7 +66,6 @@ Object.assign(window.Produtividade, {
         const mesAtual = new Date().getMonth();
         if(mesSelect) mesSelect.value = mesAtual;
 
-        // Data Dia Atual
         const diaInput = document.getElementById('sel-data-dia');
         if(diaInput && !diaInput.value) {
             diaInput.value = new Date().toISOString().split('T')[0];
@@ -78,38 +75,36 @@ Object.assign(window.Produtividade, {
     mudarPeriodo: function(tipo, salvar = true) {
         this.filtroPeriodo = tipo;
         
-        // Atualiza botões de interface
         ['dia', 'mes', 'semana', 'ano'].forEach(t => {
             const btn = document.getElementById(`btn-periodo-${t}`);
             if(btn) {
-                if(t === tipo) btn.className = "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition";
-                else btn.className = "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
+                btn.className = (t === tipo) 
+                    ? "px-3 py-1 text-xs font-bold rounded bg-white shadow-sm text-blue-600 transition"
+                    : "px-3 py-1 text-xs font-bold rounded hover:bg-white hover:shadow-sm transition text-slate-500";
             }
         });
 
-        // Alterna visibilidade dos seletores
-        const selDia = document.getElementById('sel-data-dia');
-        const selMes = document.getElementById('sel-mes');
-        const selSemana = document.getElementById('sel-semana');
-        const selSubAno = document.getElementById('sel-subperiodo-ano');
-        const selAno = document.getElementById('sel-ano');
+        const elementos = {
+            dia: document.getElementById('sel-data-dia'),
+            mes: document.getElementById('sel-mes'),
+            semana: document.getElementById('sel-semana'),
+            sub: document.getElementById('sel-subperiodo-ano'),
+            ano: document.getElementById('sel-ano')
+        };
 
-        if(selDia) selDia.classList.add('hidden');
-        if(selMes) selMes.classList.add('hidden');
-        if(selSemana) selSemana.classList.add('hidden');
-        if(selSubAno) selSubAno.classList.add('hidden');
-        if(selAno) selAno.classList.remove('hidden'); 
+        Object.values(elementos).forEach(el => el?.classList.add('hidden'));
+        elementos.ano?.classList.remove('hidden');
 
         if (tipo === 'dia') {
-            if(selDia) selDia.classList.remove('hidden');
-            if(selAno) selAno.classList.add('hidden'); 
+            elementos.dia?.classList.remove('hidden');
+            elementos.ano?.classList.add('hidden');
         } else if (tipo === 'mes') {
-            if(selMes) selMes.classList.remove('hidden');
+            elementos.mes?.classList.remove('hidden');
         } else if (tipo === 'semana') {
-            if(selSemana) selSemana.classList.remove('hidden');
-            if(selMes) selMes.classList.remove('hidden'); 
+            elementos.semana?.classList.remove('hidden');
+            elementos.mes?.classList.remove('hidden');
         } else if (tipo === 'ano') {
-            if(selSubAno) selSubAno.classList.remove('hidden');
+            elementos.sub?.classList.remove('hidden');
         }
 
         if(salvar) this.salvarEAtualizar();
@@ -151,18 +146,20 @@ Object.assign(window.Produtividade, {
                 
                 this.mudarPeriodo(s.tipo, false);
                 return;
-            } catch(e) { console.error("Erro ao carregar estado salvo", e); }
+            } catch(e) { console.error("Erro estado salvo", e); }
         }
         this.mudarPeriodo('mes', false);
     },
 
     getDatasFiltro: function() {
         let inicio, fim;
+        const fmt = (d) => {
+            if (typeof d === 'string') return d; 
+            return d.toISOString().split('T')[0];
+        };
 
         if (this.filtroPeriodo === 'dia') {
-            const dataDia = document.getElementById('sel-data-dia').value;
-            inicio = dataDia;
-            fim = dataDia;
+            inicio = fim = document.getElementById('sel-data-dia').value;
         } else {
             const ano = parseInt(document.getElementById('sel-ano').value);
             const mes = parseInt(document.getElementById('sel-mes').value);
@@ -170,50 +167,25 @@ Object.assign(window.Produtividade, {
             if (this.filtroPeriodo === 'mes') {
                 inicio = new Date(ano, mes, 1);
                 fim = new Date(ano, mes + 1, 0);
-            } 
-            else if (this.filtroPeriodo === 'semana') {
-                const semanaIndex = parseInt(document.getElementById('sel-semana').value);
-                let current = new Date(ano, mes, 1);
-                
-                if (semanaIndex > 1) {
-                    while (current.getDay() !== 0) { current.setDate(current.getDate() + 1); }
-                    current.setDate(current.getDate() + (semanaIndex - 2) * 7);
+            } else if (this.filtroPeriodo === 'semana') {
+                const sem = parseInt(document.getElementById('sel-semana').value);
+                let d = new Date(ano, mes, 1);
+                if (sem > 1) {
+                    while (d.getDay() !== 0) d.setDate(d.getDate() + 1);
+                    d.setDate(d.getDate() + (sem - 2) * 7);
                 }
-                
-                inicio = new Date(current);
-                fim = new Date(current);
-                while (fim.getDay() !== 6) { fim.setDate(fim.getDate() + 1); }
-                
-                const ultimoDiaMes = new Date(ano, mes + 1, 0);
-                if (inicio.getMonth() !== mes) {
-                    inicio = ultimoDiaMes;
-                    fim = ultimoDiaMes;
-                } else {
-                    if (fim > ultimoDiaMes) fim = ultimoDiaMes;
-                }
-            } 
-            else if (this.filtroPeriodo === 'ano') {
+                inicio = new Date(d);
+                fim = new Date(d);
+                while (fim.getDay() !== 6) fim.setDate(fim.getDate() + 1);
+                const last = new Date(ano, mes + 1, 0);
+                if (fim > last) fim = last;
+            } else if (this.filtroPeriodo === 'ano') {
                 const sub = document.getElementById('sel-subperiodo-ano').value;
                 if (sub === 'full') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 11, 31); }
                 else if (sub === 'S1') { inicio = new Date(ano, 0, 1); fim = new Date(ano, 5, 30); }
                 else if (sub === 'S2') { inicio = new Date(ano, 6, 1); fim = new Date(ano, 11, 31); }
-                else if (sub.startsWith('T')) {
-                    const tri = parseInt(sub.replace('T', ''));
-                    const mesInicio = (tri - 1) * 3;
-                    const mesFim = mesInicio + 3;
-                    inicio = new Date(ano, mesInicio, 1);
-                    fim = new Date(ano, mesFim, 0);
-                }
             }
         }
-
-        const fmt = (d) => {
-            if (typeof d === 'string') return d; 
-            const year = d.getFullYear();
-            const month = String(d.getMonth() + 1).padStart(2, '0');
-            const day = String(d.getDate()).padStart(2, '0');
-            return `${year}-${month}-${day}`;
-        };
         return { inicio: fmt(inicio), fim: fmt(fim) };
     },
 
@@ -221,33 +193,27 @@ Object.assign(window.Produtividade, {
         document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
         document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
 
-        const abaAlvo = document.getElementById(`tab-${abaId}`);
-        const btnAlvo = document.getElementById(`btn-${abaId}`);
-        
-        if (abaAlvo) abaAlvo.classList.remove('hidden');
-        if (btnAlvo) btnAlvo.classList.add('active');
+        document.getElementById(`tab-${abaId}`)?.classList.remove('hidden');
+        document.getElementById(`btn-${abaId}`)?.classList.add('active');
+        document.getElementById(`ctrl-${abaId}`)?.classList.remove('hidden');
 
-        const ctrlAlvo = document.getElementById(`ctrl-${abaId}`);
-        if(ctrlAlvo) ctrlAlvo.classList.remove('hidden');
-
-        // Inicializa módulos específicos se existirem
-        if (abaId === 'geral' && this.Geral) this.Geral.init();
-        if (abaId === 'consolidado' && this.Consolidado) this.Consolidado.init();
-        if (abaId === 'performance' && this.Performance) this.Performance.init();
-        if (abaId === 'matriz' && this.Matriz) this.Matriz.init();
+        if (this[abaId.charAt(0).toUpperCase() + abaId.slice(1)]) {
+            this[abaId.charAt(0).toUpperCase() + abaId.slice(1)].init?.();
+        }
     },
     
     atualizarTodasAbas: function() {
-        if(this.Geral && !document.getElementById('tab-geral').classList.contains('hidden')) this.Geral.carregarTela();
-        if(this.Consolidado && !document.getElementById('tab-consolidado').classList.contains('hidden')) this.Consolidado.carregar();
-        if(this.Performance && !document.getElementById('tab-performance').classList.contains('hidden')) this.Performance.carregar();
-        if(this.Matriz && !document.getElementById('tab-matriz').classList.contains('hidden')) this.Matriz.carregar();
+        const abas = ['Geral', 'Consolidado', 'Performance', 'Matriz'];
+        abas.forEach(aba => {
+            const id = aba.toLowerCase();
+            if(this[aba] && !document.getElementById(`tab-${id}`).classList.contains('hidden')) {
+                const func = this[aba].carregarTela || this[aba].carregar;
+                if(func) func.call(this[aba]);
+            }
+        });
     }
 });
 
-// Inicialização automática após o carregamento do DOM
 document.addEventListener('DOMContentLoaded', () => {
-    setTimeout(() => {
-        if(window.Produtividade && window.Produtividade.init) window.Produtividade.init();
-    }, 100);
+    setTimeout(() => { window.Produtividade?.init(); }, 100);
 });
