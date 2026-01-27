@@ -1,296 +1,227 @@
-/* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Filtrando Apenas Assistentes na Meta Geral)
+/* ARQUIVO: js/gestao/metas.js
+   DESCRIÇÃO: Gestão de Metas (Com Filtro de Cargos Operacionais)
+   NOTA: Garante que apenas quem compõe o indicador apareça na lista para definir meta.
 */
 
-MinhaArea.Metas = {
-    chartProd: null,
-    chartAssert: null,
-    isLocked: false,
+Gestao.Metas = {
+    estado: {
+        mes: new Date().getMonth() + 1, 
+        ano: new Date().getFullYear(),
+        lista: []
+    },
+
+    init: function() {
+        this.atualizarLabelPeriodo();
+        this.carregar();
+    },
+
+    mudarMes: function(delta) {
+        let novoMes = this.estado.mes + delta;
+        if (novoMes > 12) {
+            novoMes = 1;
+            this.estado.ano++;
+        } else if (novoMes < 1) {
+            novoMes = 12;
+            this.estado.ano--;
+        }
+        this.estado.mes = novoMes;
+        this.atualizarLabelPeriodo();
+        this.carregar();
+    },
+
+    atualizarLabelPeriodo: function() {
+        const nomesMeses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+        const label = document.getElementById('metas-periodo-label');
+        if (label) label.innerText = `${nomesMeses[this.estado.mes - 1]} de ${this.estado.ano}`;
+    },
 
     carregar: async function() {
-        if (this.isLocked) return;
-        this.isLocked = true;
+        const tbody = document.getElementById('lista-metas');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center py-12"><i class="fas fa-spinner fa-spin text-blue-500 text-2xl"></i></td></tr>';
 
-        const { inicio, fim } = MinhaArea.getDatasFiltro();
-        const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
-        const modoMensal = diffDias > 35; 
-
-        console.log(`🚀 Metas: Carregando ${inicio} a ${fim}. Modo Mensal: ${modoMensal}`);
-
-        this.resetarCards(true);
-        const uid = MinhaArea.getUsuarioAlvo(); 
-        
         try {
-            const anoRef = new Date(inicio).getFullYear();
+            // 1. Busca TODOS os usuários ATIVOS
+            const { data: usuarios, error: errUser } = await Sistema.supabase
+                .from('usuarios')
+                .select('*')
+                .eq('ativo', true) // Opcional: mostrar inativos se precisar editar histórico, mas padrão é ativo
+                .order('nome');
+            if (errUser) throw errUser;
 
-            // 1. QUERY COMPLEXA (DADOS + METAS + PERFIL)
-            const [kpisRes, metasRes, usersRes] = await Promise.all([
-                // A. Dados de Produção
-                Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
-                
-                // B. Tabela de Metas do Ano
-                Sistema.supabase.from('metas').select('*').eq('ano', anoRef),
-                
-                // C. Usuários Ativos + Perfil (Para filtrar Gestão)
-                Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true)
-            ]);
+            // 2. Busca Metas já cadastradas para este mês ESPECÍFICO
+            // (Isso garante que editamos SÓ este mês, sem tocar nos anteriores)
+            const { data: metasExistentes, error: errMeta } = await Sistema.supabase
+                .from('metas')
+                .select('*')
+                .eq('mes', this.estado.mes)
+                .eq('ano', this.estado.ano);
+            if (errMeta) throw errMeta;
 
-            if (kpisRes.error) throw kpisRes.error;
-            if (metasRes.error) throw metasRes.error;
-
-            // --- 2. FILTRAGEM DE QUEM COMPÕE A META ---
-            const mapMetaMensal = {}; 
+            // 3. FILTRO DE CARGOS (Sincronizado com o Dashboard)
+            const termosGestao = ['GESTOR', 'AUDITOR', 'ADMIN', 'COORD', 'LIDER', 'LÍDER', 'SUPERVIS', 'GERENTE'];
             
-            // Termos que indicam que NÃO é assistente operacional
-            const termosGestao = ['GESTOR', 'AUDITOR', 'ADMIN', 'COORD', 'LIDER', 'SUPERVIS'];
-            
-            const idsOperacionais = new Set();
-            (usersRes.data || []).forEach(u => {
+            const assistentes = usuarios.filter(u => {
                 const p = (u.perfil || '').toUpperCase();
                 const f = (u.funcao || '').toUpperCase();
-                
-                // Se NÃO tiver nenhum termo de gestão, é operacional
-                const ehGestao = termosGestao.some(t => p.includes(t) || f.includes(t));
-                
-                if (!ehGestao) {
-                    idsOperacionais.add(u.id);
-                }
+                // Retorna true apenas se NÃO for gestão
+                return !termosGestao.some(t => p.includes(t) || f.includes(t));
             });
 
-            // Se o usuário selecionou um filtro específico (ex: ver a Gestora X), 
-            // e essa gestora tiver meta no banco, mostramos a meta dela.
-            // Se for Visão Geral, mostramos a soma apenas dos operacionais.
-            let idsValidos;
-            if (uid) {
-                idsValidos = new Set([parseInt(uid)]);
-            } else {
-                idsValidos = idsOperacionais; // Apenas assistentes na visão geral
-            }
+            console.log(`📋 Carregando metas para ${assistentes.length} assistentes operacionais.`);
 
-            console.log(`👥 Usuários considerados na meta: ${idsValidos.size}`);
-
-            (metasRes.data || []).forEach(m => {
-                if (idsValidos.has(m.usuario_id)) {
-                    const mes = m.mes;
-                    if (!mapMetaMensal[mes]) mapMetaMensal[mes] = { prod: 0, assert_soma: 0, count: 0 };
-
-                    mapMetaMensal[mes].prod += (m.meta_producao || 0);
-                    mapMetaMensal[mes].assert_soma += (m.meta_assertividade || 98.0);
-                    mapMetaMensal[mes].count++;
-                }
+            // 4. Monta a lista
+            this.estado.lista = assistentes.map(u => {
+                const meta = metasExistentes?.find(m => m.usuario_id === u.id);
+                return {
+                    ...u,
+                    meta_prod: meta ? meta.meta_producao : null,
+                    meta_assert: meta ? meta.meta_assertividade : null
+                };
             });
 
-            Object.keys(mapMetaMensal).forEach(k => {
-                const item = mapMetaMensal[k];
-                item.assert = item.count > 0 ? (item.assert_soma / item.count) : 98.0;
-            });
+            this.renderizar();
 
-            // --- 3. DADOS REAIS ---
-            const mapaDados = {};
-            (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
+        } catch (error) {
+            console.error(error);
+            if(tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-red-500 py-4">Erro ao carregar: ${error.message}</td></tr>`;
+        }
+    },
 
-            // --- 4. LOOP CRONOLÓGICO ---
-            const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
-            let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
+    renderizar: function() {
+        const tbody = document.getElementById('lista-metas');
+        const footer = document.getElementById('resumo-metas-footer');
+        if (!tbody) return;
 
-            let curr = new Date(inicio + 'T12:00:00');
-            const end = new Date(fim + 'T12:00:00');
-            if (modoMensal) curr.setDate(1);
+        if (this.estado.lista.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-slate-400">Nenhum assistente operacional encontrado.</td></tr>';
+            return;
+        }
 
-            while (curr <= end) {
-                const mes = curr.getMonth() + 1;
-                const ano = curr.getFullYear();
-                
-                const metaMesCfg = mapMetaMensal[mes] || { prod: 0, assert: 98.0 };
-                let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
-
-                if (modoMensal) {
-                    const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
-                    const lastDay = new Date(ano, mes, 0).getDate();
-                    
-                    for(let d=1; d<=lastDay; d++) {
-                        const dia = new Date(ano, mes-1, d);
-                        if (dia < new Date(inicio) || dia > new Date(fim)) continue;
-                        
-                        const iso = dia.toISOString().split('T')[0];
-                        const isFDS = (dia.getDay()===0 || dia.getDay()===6);
-                        const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
-                        
-                        pReal += reg.total_producao;
-                        if(!isFDS) pMeta += metaMesCfg.prod;
-                        aAudit += reg.total_auditados;
-                        aNok += reg.total_nok;
-                    }
-                    
-                    if (curr >= new Date(inicio) || new Date(ano, mes, 0) <= end) {
-                        chartData.labels.push(label);
-                        chartData.prodReal.push(pReal);
-                        chartData.prodMeta.push(pMeta);
-                        chartData.assReal.push(aAudit>0 ? ((aAudit-aNok)/aAudit*100) : null);
-                        chartData.assMeta.push(metaMesCfg.assert);
-                    }
-                    curr.setMonth(curr.getMonth() + 1);
-
-                } else {
-                    const iso = curr.toISOString().split('T')[0];
-                    const isFDS = (curr.getDay()===0 || curr.getDay()===6);
-                    const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
-                    
-                    pMeta = isFDS ? 0 : metaMesCfg.prod;
-                    pReal = reg.total_producao;
-                    
-                    chartData.labels.push(`${curr.getDate()}/${mes}`);
-                    chartData.prodReal.push(pReal);
-                    chartData.prodMeta.push(pMeta);
-                    chartData.assReal.push(reg.media_assertividade > 0 ? reg.media_assertividade : null);
-                    chartData.assMeta.push(metaMesCfg.assert);
-                    
-                    aAudit = reg.total_auditados;
-                    aNok = reg.total_nok;
-                    curr.setDate(curr.getDate() + 1);
-                }
-
-                acc.val += pReal; acc.meta += pMeta; acc.audit += aAudit; acc.nok += aNok;
-            }
-
-            // 5. ATUALIZAR DOM
-            const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : 0;
-            const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
-            const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
-            const pctAprov = acc.audit > 0 ? ((acc.audit-acc.nok)/acc.audit*100) : 100;
-
-            this.updateCard('prod', acc.val, acc.meta, pctProd, 'Atingimento');
-            this.updateCard('assert', pctAssert, 98, pctAssert, 'Índice Real', true);
+        let html = '';
+        this.estado.lista.forEach(item => {
+            const prodVal = item.meta_prod !== null ? item.meta_prod : '';
+            const assertVal = item.meta_assert !== null ? item.meta_assert : '';
             
-            this.setTxt('auditoria-total-auditados', acc.audit.toLocaleString('pt-BR'));
-            this.setTxt('auditoria-total-validados', acc.val.toLocaleString('pt-BR'));
-            this.setBar('bar-auditoria-cov', pctCob, 'bg-purple-500');
-            this.atualizarPorcentagemCard('bar-auditoria-cov', pctCob, 'Cobertura');
+            const contratoClass = item.contrato === 'PJ' ? 'bg-sky-50 text-sky-700 border-sky-200' : 'bg-slate-50 text-slate-600 border-slate-200';
+            
+            html += `
+            <tr class="hover:bg-slate-50 border-b border-slate-50 transition group">
+                <td class="px-6 py-4 text-center">
+                    <input type="checkbox" class="check-meta-item w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer" value="${item.id}">
+                </td>
+                <td class="px-6 py-4 font-mono text-slate-400 text-xs">#${item.id}</td>
+                <td class="px-6 py-4 font-bold text-slate-700 flex flex-col">
+                    <span>${item.nome}</span>
+                    <span class="text-[9px] text-slate-400 font-normal uppercase">${item.funcao || 'Assistente'}</span>
+                </td>
+                <td class="px-6 py-4">
+                    <span class="px-2 py-1 rounded text-[10px] font-bold border ${contratoClass}">${item.contrato || 'ND'}</span>
+                </td>
+                
+                <td class="px-4 py-3 text-center bg-blue-50/10 group-hover:bg-blue-50/30 transition border-x border-slate-100">
+                    <div class="relative max-w-[120px] mx-auto">
+                        <input type="number" id="prod-${item.id}" value="${prodVal}" placeholder="0"
+                            class="w-full text-center border border-slate-300 rounded-lg py-1.5 text-sm font-bold text-blue-700 focus:border-blue-500 outline-none focus:ring-2 focus:ring-blue-100 transition">
+                        <span class="absolute right-2 top-2 text-[10px] text-slate-300 font-bold select-none">qtd</span>
+                    </div>
+                </td>
 
-            this.setTxt('auditoria-total-ok', (acc.audit - acc.nok).toLocaleString('pt-BR'));
-            this.setTxt('auditoria-total-nok', acc.nok.toLocaleString('pt-BR'));
-            this.setBar('bar-auditoria-res', pctAprov, 'bg-emerald-500');
-            this.atualizarPorcentagemCard('bar-auditoria-res', pctAprov, 'Aprovação');
+                <td class="px-4 py-3 text-center bg-emerald-50/10 group-hover:bg-emerald-50/30 transition border-r border-slate-100">
+                    <div class="relative max-w-[120px] mx-auto">
+                        <input type="number" id="assert-${item.id}" value="${assertVal}" step="0.1" placeholder="0.0"
+                            class="w-full text-center border border-slate-300 rounded-lg py-1.5 text-sm font-bold text-emerald-700 focus:border-emerald-500 outline-none focus:ring-2 focus:ring-emerald-100 transition">
+                        <span class="absolute right-2 top-2 text-[10px] text-slate-300 font-bold select-none">%</span>
+                    </div>
+                </td>
 
-            // Renderiza Gráficos
-            const periodoTxt = this.getLabelPeriodo(inicio, fim);
-            document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
-            this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false);
-            this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true);
+                <td class="px-6 py-4 text-right">
+                    <span class="text-xs text-emerald-500 font-bold bg-emerald-50 px-2 py-1 rounded-full">
+                        <i class="fas fa-check-circle mr-1"></i> Ativo
+                    </span>
+                </td>
+            </tr>`;
+        });
 
-        } catch (err) {
-            console.error("Erro Metas:", err);
-            this.resetarCards(false); 
-        } finally {
-            this.isLocked = false;
-        }
+        tbody.innerHTML = html;
+        if(footer) footer.innerText = `${this.estado.lista.length} assistentes operacionais listados`;
     },
 
-    updateCard: function(type, real, meta, pct, subLabel, isPct = false) {
-        const txtReal = isPct ? this.fmtPct(real) : real.toLocaleString('pt-BR');
-        const txtMeta = isPct ? `${meta}%` : meta.toLocaleString('pt-BR');
-        this.setTxt(`meta-${type}-real`, txtReal);
-        this.setTxt(`meta-${type}-meta`, txtMeta);
-        const corBarra = type === 'prod' ? 'bg-blue-500' : 'bg-emerald-500';
-        this.setBar(`bar-meta-${type}`, pct, corBarra);
-        this.atualizarPorcentagemCard(`bar-meta-${type}`, pct, subLabel);
+    toggleSelecionarTodos: function() {
+        const master = document.getElementById('check-meta-todos');
+        const checks = document.querySelectorAll('.check-meta-item');
+        checks.forEach(c => c.checked = master.checked);
     },
 
-    atualizarPorcentagemCard: function(barId, pct, labelTxt) {
-        const bar = document.getElementById(barId);
-        if(!bar) return;
-        const container = bar.parentElement.parentElement;
-        if(!container) return;
+    aplicarEmMassa: function() {
+        const valProd = document.getElementById('input-massa-prod').value;
+        const valAssert = document.getElementById('input-massa-assert').value;
 
-        let label = container.querySelector('.pct-dynamic-label');
-        if(!label) {
-            label = document.createElement('div');
-            label.className = 'flex justify-between items-center text-[10px] text-slate-500 font-bold pct-dynamic-label';
-            label.innerHTML = `<span class="pct-lbl"></span><span class="pct-val"></span>`;
-            container.appendChild(label);
-        }
-        label.querySelector('.pct-lbl').innerText = labelTxt;
-        const valSpan = label.querySelector('.pct-val');
-        valSpan.innerText = this.fmtPct(pct);
-        
-        if (pct >= 100 || (labelTxt === 'Aprovação' && pct >= 95) || (labelTxt === 'Índice Real' && pct >= 98)) {
-            valSpan.className = 'pct-val text-emerald-600 font-black';
-        } else if (pct >= 80) {
-            valSpan.className = 'pct-val text-blue-600 font-bold';
-        } else {
-            valSpan.className = 'pct-val text-rose-600 font-bold';
-        }
-    },
+        if (!valProd && !valAssert) return alert("Preencha ao menos um valor para aplicar.");
 
-    renderizarGrafico: function(id, lbl, dReal, dMeta, label, corHex, isPct) {
-        const ctx = document.getElementById(id);
-        if(!ctx) return;
-        if(id.includes('Producao')) { if(this.chartProd) { this.chartProd.destroy(); this.chartProd = null; } } 
-        else { if(this.chartAssert) { this.chartAssert.destroy(); this.chartAssert = null; } }
+        const checks = document.querySelectorAll('.check-meta-item:checked');
+        if (checks.length === 0) return alert("Selecione os assistentes na lista primeiro.");
 
-        const canvasCtx = ctx.getContext('2d');
-        const gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
-        gradient.addColorStop(0, corHex + '40');
-        gradient.addColorStop(1, corHex + '00');
-
-        const config = {
-            type: 'line',
-            data: {
-                labels: lbl,
-                datasets: [
-                    { 
-                        label: label, 
-                        data: dReal, 
-                        borderColor: corHex, 
-                        backgroundColor: gradient,
-                        borderWidth: 2,
-                        fill: true, 
-                        tension: 0.35, 
-                        pointRadius: lbl.length > 20 ? 0 : 4,
-                        pointBackgroundColor: '#fff',
-                        pointBorderColor: corHex,
-                        pointBorderWidth: 2
-                    },
-                    { 
-                        label: 'Meta', 
-                        data: dMeta, 
-                        borderColor: '#94a3b8', 
-                        borderDash: [6,6], 
-                        tension: 0, 
-                        fill: false, 
-                        pointRadius: 0,
-                        borderWidth: 1.5
-                    }
-                ]
-            },
-            options: {
-                responsive: true, 
-                maintainAspectRatio: false, 
-                interaction: { intersect: false, mode: 'index' },
-                plugins: { legend: { display: false }, tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.9)', callbacks: { label: c => ` ${c.dataset.label}: ${c.raw?.toLocaleString('pt-BR') || '0'}${isPct ? '%' : ''}` } } },
-                scales: { 
-                    y: { beginAtZero: true, grid: { color: '#f1f5f9', drawBorder: false }, ticks: { callback: v => isPct ? v+'%' : v, color: '#94a3b8', font: { size: 10 } } }, 
-                    x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { size: 10 }, maxRotation: 0, autoSkip: true } } 
-                }
+        checks.forEach(chk => {
+            const uid = chk.value;
+            if (valProd) {
+                const inp = document.getElementById(`prod-${uid}`);
+                if(inp) inp.value = valProd;
             }
-        };
-        const novoChart = new Chart(ctx, config);
-        if(id.includes('Producao')) this.chartProd = novoChart; 
-        else this.chartAssert = novoChart;
+            if (valAssert) {
+                const inp = document.getElementById(`assert-${uid}`);
+                if(inp) inp.value = valAssert;
+            }
+        });
     },
 
-    resetarCards: function(showLoading) {
-        const ids = ['meta-prod-real','meta-assert-real','auditoria-total-auditados','auditoria-total-ok','auditoria-total-nok'];
-        ids.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = showLoading ? '<i class="fas fa-spinner fa-spin text-slate-300"></i>' : '--'; });
-        ['bar-meta-prod','bar-meta-assert','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
-        document.querySelectorAll('.pct-dynamic-label').forEach(el => el.remove());
-    },
+    salvarTodas: async function() {
+        const btn = document.querySelector('button[onclick="Gestao.Metas.salvarTodas()"]');
+        const originalText = btn ? btn.innerHTML : 'Salvar';
+        if(btn) {
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Salvando...';
+            btn.disabled = true;
+        }
 
-    getLabelPeriodo: function(i, f) { return `${i.split('-').reverse().slice(0,2).join('/')} a ${f.split('-').reverse().slice(0,2).join('/')}`; },
-    getQtdAssistentesConfigurada: function() { const m = localStorage.getItem('gupy_config_qtd_assistentes'); return m ? parseInt(m) : 17; },
-    fmtPct: function(v) { return (v||0).toLocaleString('pt-BR',{maximumFractionDigits:1}) + '%'; },
-    setTxt: function(id, v) { const e = document.getElementById(id); if(e) e.innerText = v; },
-    setBar: function(id, v, c) { const e = document.getElementById(id); if(e) { e.style.width = Math.min(v||0, 100) + '%'; e.className = `h-full rounded-full transition-all duration-1000 ${c}`; } },
-    getDatasFiltro: function() { return MinhaArea.getDatasFiltro(); },
-    getUsuarioAlvo: function() { return MinhaArea.getUsuarioAlvo(); }
+        const upserts = [];
+        
+        this.estado.lista.forEach(item => {
+            const valProd = document.getElementById(`prod-${item.id}`)?.value;
+            const valAssert = document.getElementById(`assert-${item.id}`)?.value;
+
+            // Apenas adiciona ao payload se o campo existir e tiver sido carregado
+            if (document.getElementById(`prod-${item.id}`)) {
+                upserts.push({
+                    usuario_id: item.id,
+                    usuario_nome: item.nome,
+                    mes: this.estado.mes, // Garante que salva SÓ no mês selecionado
+                    ano: this.estado.ano,   // Garante que salva SÓ no ano selecionado
+                    meta_producao: valProd ? parseInt(valProd) : 0,
+                    meta_assertividade: valAssert ? parseFloat(valAssert.replace(',', '.')) : 0
+                });
+            }
+        });
+
+        if (upserts.length === 0) {
+            if(btn) { btn.innerHTML = originalText; btn.disabled = false; }
+            return alert("Nada para salvar.");
+        }
+
+        try {
+            // Upsert seguro: Atualiza se existir (mes, ano, user), cria se não.
+            const { error } = await Sistema.supabase
+                .from('metas')
+                .upsert(upserts, { onConflict: 'usuario_id, mes, ano' });
+
+            if (error) throw error;
+
+            alert(`✅ Metas de ${this.estado.lista.length} assistentes salvas para o mês ${this.estado.mes}/${this.estado.ano}!`);
+            this.carregar(); 
+
+        } catch (error) {
+            console.error(error);
+            alert("Erro ao salvar: " + error.message);
+        } finally {
+            if(btn) { btn.innerHTML = originalText; btn.disabled = false; }
+        }
+    }
 };
