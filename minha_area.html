@@ -30,15 +30,28 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        /* KPI Card (Padrão Unificado) */
-        .kpi-card { background: white; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); border: 1px solid #f1f5f9; padding: 12px 16px; display: flex; flex-direction: column; justify-content: space-between; height: 110px; position: relative; overflow: hidden; }
+        /* KPI CARD - CORREÇÃO DE LAYOUT (FLEXÍVEL) */
+        .kpi-card { 
+            background: white; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); 
+            border: 1px solid #f1f5f9; 
+            padding: 16px; /* Mais espaçamento interno */
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            min-height: 130px; /* Altura mínima flexível */
+            height: auto; 
+            position: relative; 
+            overflow: hidden; 
+        }
         .kpi-icon-bg { position: absolute; right: -10px; bottom: -15px; font-size: 4rem; opacity: 0.06; transform: rotate(-15deg); pointer-events: none; }
-        .kpi-title { font-size: 0.65rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
-        .kpi-main-val { font-size: 1.5rem; font-weight: 900; line-height: 1; color: #1e293b; }
-        .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; }
+        .kpi-title { font-size: 0.7rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .kpi-main-val { font-size: 1.6rem; font-weight: 900; line-height: 1; color: #1e293b; letter-spacing: -0.02em; }
+        .kpi-sub-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 0.7rem; font-weight: 600; color: #64748b; padding-top: 8px; }
 
-        /* Estilo para label dinâmico de porcentagem */
-        .pct-dynamic-label { animation: enter 0.5s ease-out; }
+        /* Animação para os números */
+        .pct-dynamic-label { animation: enter 0.5s ease-out; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #f1f5f9; }
     </style>
 </head>
 <body class="bg-slate-50">
@@ -49,7 +62,7 @@
     <script src="js/menu/global.js"></script>
     <div id="global-menu"></div>
 
-    <div class="bg-white border-b border-slate-200 sticky top-12 left-0 w-full z-40 h-14 flex items-center">
+    <div class="bg-white border-b border-slate-200 sticky top-12 left-0 w-full z-40 h-14 flex items-center shadow-sm">
         <div class="max-w-[1600px] mx-auto px-4 w-full flex items-center justify-between">
             <div class="flex gap-2 overflow-x-auto no-scrollbar py-1">
                 <button onclick="MinhaArea.mudarAba('diario')" id="btn-ma-diario" class="tab-btn active px-3 py-1.5 rounded-md flex items-center gap-2 whitespace-nowrap"><i class="fas fa-calendar-day text-xs"></i> Dia a Dia</button>
@@ -61,33 +74,33 @@
             
             <div class="flex items-center gap-4">
                 <div id="admin-selector-container" class="hidden flex items-center gap-2 border-r border-slate-200 pr-4 mr-2">
-                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded block p-1.5 outline-none cursor-pointer w-40 truncate"></select>
+                    <select id="admin-user-selector" onchange="MinhaArea.mudarUsuarioAlvo(this.value)" class="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-semibold rounded block p-1.5 outline-none cursor-pointer w-40 truncate shadow-sm focus:border-blue-300"></select>
                 </div>
                 
                 <div class="flex items-center gap-2">
-                    <div class="flex bg-slate-100 p-0.5 rounded border border-slate-200">
-                        <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-2 py-1 text-xs font-semibold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
-                        <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-2 py-1 text-xs font-semibold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition">Semana</button>
-                        <button onclick="MinhaArea.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-2 py-1 text-xs font-semibold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition">Ano</button>
+                    <div class="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                        <button onclick="MinhaArea.mudarPeriodo('mes')" id="btn-periodo-mes" class="px-3 py-1 text-xs font-bold rounded shadow-sm text-blue-600 bg-white transition">Mês</button>
+                        <button onclick="MinhaArea.mudarPeriodo('semana')" id="btn-periodo-semana" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition">Semana</button>
+                        <button onclick="MinhaArea.mudarPeriodo('ano')" id="btn-periodo-ano" class="px-3 py-1 text-xs font-bold rounded text-slate-500 hover:bg-white hover:text-slate-700 transition">Ano</button>
                     </div>
                     <div class="w-px h-5 bg-slate-200 mx-2"></div>
                     <div class="flex gap-2">
-                        <select id="sel-ano" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer"></select>
-                        <select id="sel-mes" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer min-w-[100px]">
+                        <select id="sel-ano" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded px-2 py-1 outline-none cursor-pointer hover:border-blue-300 transition"></select>
+                        <select id="sel-mes" onchange="MinhaArea.salvarEAtualizar()" class="bg-white border border-slate-200 text-slate-600 text-xs font-bold rounded px-2 py-1 outline-none cursor-pointer min-w-[100px] hover:border-blue-300 transition">
                             <option value="0">Janeiro</option><option value="1">Fevereiro</option><option value="2">Março</option>
                             <option value="3">Abril</option><option value="4">Maio</option><option value="5">Junho</option>
                             <option value="6">Julho</option><option value="7">Agosto</option><option value="8">Setembro</option>
                             <option value="9">Outubro</option><option value="10">Novembro</option><option value="11">Dezembro</option>
                         </select>
-                        <select id="sel-semana" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-slate-50 border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer"></select>
-                        <select id="sel-subperiodo-ano" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-slate-50 border border-slate-200 text-slate-600 text-xs font-semibold rounded px-2 py-1 outline-none cursor-pointer"><option value="full">Ano Completo</option><optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup><optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup></select>
+                        <select id="sel-semana" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold rounded px-2 py-1 outline-none cursor-pointer"></select>
+                        <select id="sel-subperiodo-ano" onchange="MinhaArea.salvarEAtualizar()" class="hidden bg-slate-50 border border-slate-200 text-slate-600 text-xs font-bold rounded px-2 py-1 outline-none cursor-pointer"><option value="full">Ano Completo</option><optgroup label="Semestres"><option value="S1">1º Semestre</option><option value="S2">2º Semestre</option></optgroup><optgroup label="Trimestres"><option value="T1">1º Trimestre</option><option value="T2">2º Trimestre</option><option value="T3">3º Trimestre</option><option value="T4">4º Trimestre</option></optgroup></select>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-20">
+    <div class="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 pt-8">
         
         <div id="ma-tab-diario" class="ma-view animate-enter space-y-4">
             <div id="container-checkin-alert" class="hidden mb-4"></div>
@@ -209,7 +222,7 @@
                         <div class="kpi-title text-blue-600">Validação</div>
                         <div class="flex items-baseline gap-2">
                             <span class="kpi-main-val text-slate-800" id="meta-prod-real">--</span>
-                            <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100" title="Meta Esperada">
+                            <span class="text-[10px] font-bold text-slate-400 bg-slate-50 px-1.5 rounded border border-slate-100" title="Meta do Período Selecionado">
                                 Meta: <span id="meta-prod-meta">--</span>
                             </span>
                         </div>
@@ -217,11 +230,7 @@
                     <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
                         <div id="bar-meta-prod" class="h-full bg-blue-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
                     </div>
-                    <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Atingimento:</span>
-                        <span id="sub-meta-prod" class="font-bold text-blue-600">--%</span>
                     </div>
-                </div>
 
                 <div class="kpi-card border-l-4 border-l-emerald-500 relative overflow-hidden group">
                     <i class="fas fa-check-circle kpi-icon-bg text-emerald-500 group-hover:scale-110 transition-transform duration-500"></i>
@@ -236,10 +245,6 @@
                     </div>
                     <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
                         <div id="bar-meta-assert" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                    <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Índice Real:</span>
-                        <span id="sub-meta-assert" class="font-bold text-emerald-600">--%</span>
                     </div>
                 </div>
 
@@ -256,10 +261,6 @@
                     </div>
                     <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
                         <div id="bar-auditoria-cov" class="h-full bg-purple-500 rounded-full transition-all duration-1000" style="width: 0%"></div>
-                    </div>
-                    <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Cobertura:</span>
-                        <span id="sub-auditoria-cov" class="font-bold text-purple-600">--%</span>
                     </div>
                 </div>
 
@@ -282,18 +283,14 @@
                     <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
                         <div id="bar-auditoria-res" class="h-full bg-emerald-500 rounded-full transition-all duration-1000" style="width: 100%"></div>
                     </div>
-                    <div class="kpi-sub-row text-slate-500 mt-2">
-                        <span>Aprovação:</span>
-                        <span id="sub-auditoria-res" class="font-bold text-emerald-600">--%</span>
-                    </div>
                 </div>
 
             </div>
 
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[400px]">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[420px]">
                 
-                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col h-full">
-                    <div class="flex justify-between items-center mb-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col h-full relative">
+                    <div class="flex justify-between items-center mb-6">
                         <div>
                             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
                                 <i class="fas fa-chart-area text-blue-500"></i> Evolução de Volume
@@ -307,8 +304,8 @@
                     </div>
                 </div>
 
-                <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm flex flex-col h-full">
-                    <div class="flex justify-between items-center mb-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-6 shadow-sm flex flex-col h-full relative">
+                    <div class="flex justify-between items-center mb-6">
                         <div>
                             <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wide flex items-center gap-2">
                                 <i class="fas fa-chart-line text-emerald-500"></i> Evolução de Qualidade

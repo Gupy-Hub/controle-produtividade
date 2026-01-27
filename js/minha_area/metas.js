@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Nomes Corrigidos + Cálculo de Meta Dinâmica)
+   DESCRIÇÃO: Engine de Metas (Cálculo Exato da Meta por Filtro + UI Refinada)
 */
 
 MinhaArea.Metas = {
@@ -13,15 +13,17 @@ MinhaArea.Metas = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
+        
+        // UX: Se o filtro for longo (>35 dias), agrupa os dados por mês
         const modoMensal = diffDias > 35; 
 
-        console.log(`🚀 Metas: Carregando ${inicio} a ${fim}.`);
+        console.log(`🚀 Metas: Carregando de ${inicio} até ${fim}. Modo Mensal: ${modoMensal}`);
 
         this.resetarCards(true);
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            // 1. Dados e Metas
+            // 1. BUSCA DADOS & CONFIGURAÇÕES (RPC + SELECT)
             const [kpisRes, configRes] = await Promise.all([
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
                 Sistema.supabase.from('metas').select('*').eq('ano', new Date(inicio).getFullYear())
@@ -29,9 +31,11 @@ MinhaArea.Metas = {
 
             if (kpisRes.error) throw kpisRes.error;
             
+            // Mapa para acesso rápido aos dados diários
             const mapaDados = {};
             (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
 
+            // Mapa de Metas Configuradas (Mês -> Config)
             const mapMetas = {};
             (configRes.data || []).forEach(m => {
                 if (!uid || m.usuario_id == uid) {
@@ -39,14 +43,16 @@ MinhaArea.Metas = {
                 }
             });
 
-            // --- Processamento ---
+            // --- PROCESSAMENTO (Loop Diário ou Mensal) ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
+            
+            // Meta Padrão (Fallback caso não tenha configuração no banco)
             const metaPadrao = uid ? 100 : (100 * this.getQtdAssistentesConfigurada());
 
             let curr = new Date(inicio + 'T12:00:00');
             const end = new Date(fim + 'T12:00:00');
-            if (modoMensal) curr.setDate(1);
+            if (modoMensal) curr.setDate(1); // Ajuste para iniciar do dia 1 no modo mensal
 
             while (curr <= end) {
                 const mes = curr.getMonth() + 1;
@@ -56,6 +62,7 @@ MinhaArea.Metas = {
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
                 if (modoMensal) {
+                    // --- MODO MENSAL (Agregação) ---
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
@@ -68,7 +75,7 @@ MinhaArea.Metas = {
                         const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
                         
                         pReal += reg.total_producao;
-                        if(!isFDS) pMeta += metaMesCfg.prod;
+                        if(!isFDS) pMeta += metaMesCfg.prod; // Soma meta apenas em dias úteis
                         aAudit += reg.total_auditados;
                         aNok += reg.total_nok;
                     }
@@ -83,6 +90,7 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
+                    // --- MODO DIÁRIO (Detalhado) ---
                     const iso = curr.toISOString().split('T')[0];
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
@@ -101,36 +109,38 @@ MinhaArea.Metas = {
                     curr.setDate(curr.getDate() + 1);
                 }
 
+                // Acumuladores Totais
                 acc.val += pReal; acc.meta += pMeta; acc.audit += aAudit; acc.nok += aNok;
             }
 
-            // 4. ATUALIZAR DOM
+            // 4. ATUALIZAR CARDS (DOM)
             const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : 0;
             const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
             const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
             const pctAprov = acc.audit > 0 ? ((acc.audit-acc.nok)/acc.audit*100) : 100;
 
-            // Validação (Com Meta Acumulada do Período)
+            // Card 1: Validação (Meta Dinâmica Calculada)
             this.updateCard('prod', acc.val, acc.meta, pctProd, 'Atingimento');
             
-            // Assertividade
+            // Card 2: Assertividade
             this.updateCard('assert', pctAssert, 98, pctAssert, 'Índice Real', true);
             
-            // Auditados (Cobertura)
-            this.setTxt('auditoria-total-auditados', acc.audit);
-            this.setTxt('auditoria-total-validados', acc.val);
+            // Card 3: Auditados (Cobertura)
+            this.setTxt('auditoria-total-auditados', acc.audit.toLocaleString('pt-BR'));
+            this.setTxt('auditoria-total-validados', acc.val.toLocaleString('pt-BR'));
             this.setBar('bar-auditoria-cov', pctCob, 'bg-purple-500');
             this.atualizarPorcentagemCard('bar-auditoria-cov', pctCob, 'Cobertura');
 
-            // Auditoria (Resultado)
-            this.setTxt('auditoria-total-ok', acc.audit - acc.nok);
-            this.setTxt('auditoria-total-nok', acc.nok);
+            // Card 4: Auditoria (Resultado)
+            this.setTxt('auditoria-total-ok', (acc.audit - acc.nok).toLocaleString('pt-BR'));
+            this.setTxt('auditoria-total-nok', acc.nok.toLocaleString('pt-BR'));
             this.setBar('bar-auditoria-res', pctAprov, 'bg-emerald-500');
             this.atualizarPorcentagemCard('bar-auditoria-res', pctAprov, 'Aprovação');
 
-            // Gráficos
+            // 5. RENDERIZAR GRÁFICOS
             const periodoTxt = this.getLabelPeriodo(inicio, fim);
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
+            
             this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false);
             this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true);
 
@@ -142,6 +152,8 @@ MinhaArea.Metas = {
         }
     },
 
+    // --- FUNÇÕES AUXILIARES DE UI ---
+    
     updateCard: function(type, real, meta, pct, subLabel, isPct = false) {
         const txtReal = isPct ? this.fmtPct(real) : real.toLocaleString('pt-BR');
         const txtMeta = isPct ? `${meta}%` : meta.toLocaleString('pt-BR');
@@ -161,10 +173,11 @@ MinhaArea.Metas = {
         const container = bar.parentElement.parentElement;
         if(!container) return;
 
+        // Verifica se já existe o rodapé, se não, cria
         let label = container.querySelector('.pct-dynamic-label');
         if(!label) {
             label = document.createElement('div');
-            label.className = 'flex justify-between items-center mt-2 text-[10px] text-slate-500 font-bold pct-dynamic-label animate-enter';
+            label.className = 'flex justify-between items-center text-[10px] text-slate-500 font-bold pct-dynamic-label';
             label.innerHTML = `<span class="pct-lbl"></span><span class="pct-val"></span>`;
             container.appendChild(label);
         }
@@ -173,6 +186,7 @@ MinhaArea.Metas = {
         const valSpan = label.querySelector('.pct-val');
         valSpan.innerText = this.fmtPct(pct);
         
+        // Cores semânticas
         if (pct >= 100 || (labelTxt === 'Aprovação' && pct >= 95) || (labelTxt === 'Índice Real' && pct >= 98)) {
             valSpan.className = 'pct-val text-emerald-600 font-black';
         } else if (pct >= 80) {
