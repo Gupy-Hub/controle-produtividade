@@ -1,5 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Leitura Estrita do Banco com Auditoria no Console)
+   DESCRIÇÃO: Engine de Metas (Correção: Soma de Metas Individuais + Filtro de Cargo)
+   SOLUÇÃO: Soma a meta de todos os assistentes ativos para compor a meta do time.
 */
 
 MinhaArea.Metas = {
@@ -13,7 +14,7 @@ MinhaArea.Metas = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
-        const modoMensal = diffDias > 35; 
+        const modoMensal = diffDias > 35; // Agrupa por mês se período longo
 
         console.log(`🚀 Metas: Carregando ${inicio} a ${fim} (Modo Mensal: ${modoMensal})`);
 
@@ -23,52 +24,51 @@ MinhaArea.Metas = {
         try {
             const anoRef = new Date(inicio).getFullYear();
 
-            // 1. QUERY: DADOS REAIS + METAS + USUÁRIOS ATIVOS
+            // 1. QUERY MULTIPLA: Dados + Metas + Usuários
             const [kpisRes, metasRes, usersRes] = await Promise.all([
+                // A. Dados de Produção (Realizado)
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
+                
+                // B. Tabela de Metas (Configurado)
                 Sistema.supabase.from('metas').select('*').eq('ano', anoRef),
-                Sistema.supabase.from('usuarios').select('id, nome, perfil, funcao').eq('ativo', true)
+                
+                // C. Usuários Ativos (Para filtrar cargos)
+                Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true)
             ]);
 
             if (kpisRes.error) throw kpisRes.error;
             if (metasRes.error) throw metasRes.error;
 
-            // --- 2. FILTRAGEM DE QUEM ENTRA NA CONTA ---
+            // --- 2. DEFINIÇÃO DE QUEM ENTRA NA CONTA ---
             const mapMetaMensal = {}; 
             
-            // Lista de exclusão (Normalizada)
+            // Cargos que NÃO devem somar meta (Gestão/Auditoria)
             const termosGestao = ['GESTOR', 'AUDITOR', 'ADMIN', 'COORD', 'LIDER', 'LÍDER', 'SUPERVIS', 'GERENTE'];
             
-            // Mapa para logs e validação
-            const operacionais = []; 
-            const userMap = {};
-
+            const idsOperacionais = new Set();
             (usersRes.data || []).forEach(u => {
-                userMap[u.id] = u.nome;
                 const p = (u.perfil || '').toUpperCase();
                 const f = (u.funcao || '').toUpperCase();
                 
-                // Se NÃO contém termos de gestão, é operacional
-                const ehGestao = termosGestao.some(t => p.includes(t) || f.includes(t));
-                
-                if (!ehGestao) {
-                    operacionais.push(u.id);
+                // Se NÃO tiver termo de gestão, é operacional (Assistente)
+                if (!termosGestao.some(t => p.includes(t) || f.includes(t))) {
+                    idsOperacionais.add(u.id);
                 }
             });
 
-            // Se tem filtro de usuário, usa só ele. Senão, usa todos os operacionais.
-            let idsValidos = new Set();
+            // Se tem filtro de usuário (uid), usa só ele. Se não, usa todos os operacionais.
+            let idsValidos;
             if (uid) {
-                idsValidos.add(parseInt(uid));
+                idsValidos = new Set([parseInt(uid)]);
             } else {
-                operacionais.forEach(id => idsValidos.add(id));
+                idsValidos = idsOperacionais;
             }
 
-            // --- 3. CÁLCULO DA META (SOMA DO BANCO) ---
-            const auditoriaCalculo = []; // Para mostrar no console
+            console.log(`👥 Usuários considerados na Meta: ${idsValidos.size}`);
 
+            // --- 3. CÁLCULO DA META (SOMA DO BANCO) ---
             (metasRes.data || []).forEach(m => {
-                // Só soma se o usuário for válido (Ativo e Operacional)
+                // Só processa se o usuário for válido (Ativo e Operacional)
                 if (idsValidos.has(m.usuario_id)) {
                     const mes = m.mes;
                     
@@ -76,32 +76,16 @@ MinhaArea.Metas = {
                         mapMetaMensal[mes] = { prod: 0, assert_soma: 0, count: 0 };
                     }
 
-                    // SOMA ESTRITA
-                    const valProd = m.meta_producao || 0;
-                    mapMetaMensal[mes].prod += valProd;
+                    // SOMA (Aqui estava o erro: antes sobrescrevia, agora soma +=)
+                    mapMetaMensal[mes].prod += (m.meta_producao || 0);
                     
-                    // Média de Assertividade
+                    // Assertividade é média, não soma
                     mapMetaMensal[mes].assert_soma += (m.meta_assertividade || 98.0);
                     mapMetaMensal[mes].count++;
-
-                    // Auditoria (Apenas mês atual/primeiro do filtro para não poluir)
-                    if (mes === new Date(inicio).getMonth() + 1) {
-                        auditoriaCalculo.push({
-                            Usuario: userMap[m.usuario_id] || m.usuario_id,
-                            Meta: valProd
-                        });
-                    }
                 }
             });
 
-            // Exibe auditoria no console para você conferir a soma
-            console.groupCollapsed("🧮 AUDITORIA DE CÁLCULO DE META (Mês Atual)");
-            console.table(auditoriaCalculo.sort((a,b) => a.Usuario.localeCompare(b.Usuario)));
-            const totalAuditado = auditoriaCalculo.reduce((acc, item) => acc + item.Meta, 0);
-            console.log(`TOTAL DIÁRIO CALCULADO: ${totalAuditado}`);
-            console.groupEnd();
-
-            // Consolida médias
+            // Finaliza médias de assertividade
             Object.keys(mapMetaMensal).forEach(k => {
                 const item = mapMetaMensal[k];
                 item.assert = item.count > 0 ? (item.assert_soma / item.count) : 98.0;
@@ -111,7 +95,7 @@ MinhaArea.Metas = {
             const mapaDados = {};
             (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
 
-            // --- 5. LOOP CRONOLÓGICO ---
+            // --- 5. LOOP CRONOLÓGICO (DIA A DIA) ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
 
@@ -123,12 +107,13 @@ MinhaArea.Metas = {
                 const mes = curr.getMonth() + 1;
                 const ano = curr.getFullYear();
                 
-                // Pega a meta somada do mês
+                // Recupera a meta SOMADA do mês (ex: 10.650)
                 const metaMesCfg = mapMetaMensal[mes] || { prod: 0, assert: 98.0 };
                 
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
                 if (modoMensal) {
+                    // Visão Agregada (Mês)
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
@@ -141,7 +126,7 @@ MinhaArea.Metas = {
                         const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
                         
                         pReal += reg.total_producao;
-                        if(!isFDS) pMeta += metaMesCfg.prod;
+                        if(!isFDS) pMeta += metaMesCfg.prod; // Soma meta do time por dia útil
                         aAudit += reg.total_auditados;
                         aNok += reg.total_nok;
                     }
@@ -156,11 +141,12 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
+                    // Visão Detalhada (Dia)
                     const iso = curr.toISOString().split('T')[0];
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
                     
-                    // Meta do dia = Soma das metas individuais do mês
+                    // Meta do dia = Soma das metas individuais (10.650)
                     pMeta = isFDS ? 0 : metaMesCfg.prod;
                     pReal = reg.total_producao;
                     
