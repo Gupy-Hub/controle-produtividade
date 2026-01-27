@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas Final (KPIs Padronizados com Progresso no Rodapé)
+   DESCRIÇÃO: Engine de Metas (Visual Premium + Gradient Charts)
 */
 
 MinhaArea.Metas = {
@@ -13,176 +13,131 @@ MinhaArea.Metas = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
-        
-        // UX: Agrupa por mês se o período for longo (>35 dias)
-        const modoMensal = diffDias > 35;
+        const modoMensal = diffDias > 35; // Agrupa por mês se período longo
 
-        console.log(`🚀 Metas: Carregando de ${inicio} até ${fim}. Modo Mensal: ${modoMensal}`);
+        console.log(`🚀 Metas: Visual Premium Carregando... (Modo Mensal: ${modoMensal})`);
 
         this.resetarCards(true);
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            // 1. DADOS (RPC)
-            const { data: dadosDiarios, error } = await Sistema.supabase
-                .rpc('get_kpis_minha_area', { 
-                    p_inicio: inicio, 
-                    p_fim: fim, 
-                    p_usuario_id: uid 
-                });
+            // 1. DADOS & METAS
+            const [kpisRes, configRes] = await Promise.all([
+                Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
+                Sistema.supabase.from('metas').select('*').eq('ano', new Date(inicio).getFullYear())
+            ]);
 
-            if (error) throw error;
-
+            if (kpisRes.error) throw kpisRes.error;
+            
+            // Mapas de Dados
+            const dadosDiarios = kpisRes.data || [];
             const mapaDados = {};
-            (dadosDiarios || []).forEach(d => {
-                const key = d.data_ref || d.data; 
-                if(key) mapaDados[key] = d;
+            dadosDiarios.forEach(d => { mapaDados[d.data_ref || d.data] = d; });
+
+            const mapMetas = {};
+            (configRes.data || []).forEach(m => {
+                if (!uid || m.usuario_id == uid) { // Filtra se for user específico
+                    mapMetas[m.mes] = { prod: m.meta_producao || 100, assert: m.meta_assertividade || 98.0 };
+                }
             });
 
-            // 2. METAS
-            const dtInicio = new Date(inicio + 'T12:00:00');
-            const anoRef = dtInicio.getFullYear();
-            
-            let qMetas = Sistema.supabase.from('metas')
-                .select('mes, meta_producao, meta_assertividade') 
-                .eq('ano', anoRef);
-            if (uid) qMetas = qMetas.eq('usuario_id', uid);
-            
-            const { data: configMetas } = await qMetas;
-            
-            const mapMetasConfig = {};
-            (configMetas || []).forEach(m => {
-                mapMetasConfig[m.mes] = { 
-                    prod: m.meta_producao || 100, 
-                    assert: m.meta_assertividade || 98.0 
-                };
-            });
-
-            // --- PROCESSAMENTO ---
+            // --- PROCESSAMENTO DE DADOS ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
-            
-            let totalVal = 0, totalMeta = 0;
-            let totalAudit = 0, totalNok = 0;
-            const metaPadraoProd = uid ? 100 : (100 * this.getQtdAssistentesConfigurada());
+            let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
+            const metaPadrao = uid ? 100 : (100 * this.getQtdAssistentesConfigurada());
 
-            let currentDt = new Date(inicio + 'T12:00:00');
-            const endDt = new Date(fim + 'T12:00:00');
+            let curr = new Date(inicio + 'T12:00:00');
+            const end = new Date(fim + 'T12:00:00');
+            if (modoMensal) curr.setDate(1);
 
-            if (modoMensal) {
-                // MODO MENSAL
-                currentDt.setDate(1); 
-                while (currentDt <= endDt) {
-                    const mes = currentDt.getMonth() + 1;
-                    const ano = currentDt.getFullYear();
-                    const nomeMes = currentDt.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
+            while (curr <= end) {
+                const mes = curr.getMonth() + 1;
+                const ano = curr.getFullYear();
+                const metaMesCfg = mapMetas[mes] || { prod: metaPadrao, assert: 98.0 };
+                
+                let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
+
+                if (modoMensal) {
+                    // Agregação Mensal
+                    const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
+                    const lastDay = new Date(ano, mes, 0).getDate();
                     
-                    let mesProdReal = 0, mesProdMeta = 0;
-                    let mesAudit = 0, mesNok = 0;
-                    
-                    const metaDoMesCfg = mapMetasConfig[mes] || { prod: metaPadraoProd, assert: 98.0 };
-                    const ultimoDiaMes = new Date(ano, mes, 0).getDate();
-
-                    for(let d=1; d<=ultimoDiaMes; d++) {
-                        const diaObj = new Date(ano, mes-1, d);
-                        if (diaObj < new Date(inicio) || diaObj > new Date(fim)) continue; 
-
-                        const isFDS = (diaObj.getDay() === 0 || diaObj.getDay() === 6);
-                        const isoDate = diaObj.toISOString().split('T')[0];
-                        const dadosDia = mapaDados[isoDate] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
-
-                        mesProdReal += dadosDia.total_producao;
-                        if (!isFDS) mesProdMeta += metaDoMesCfg.prod;
+                    for(let d=1; d<=lastDay; d++) {
+                        const dia = new Date(ano, mes-1, d);
+                        if (dia < new Date(inicio) || dia > new Date(fim)) continue;
                         
-                        mesAudit += dadosDia.total_auditados;
-                        mesNok += dadosDia.total_nok;
+                        const iso = dia.toISOString().split('T')[0];
+                        const isFDS = (dia.getDay()===0 || dia.getDay()===6);
+                        const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
+                        
+                        pReal += reg.total_producao;
+                        if(!isFDS) pMeta += metaMesCfg.prod;
+                        aAudit += reg.total_auditados;
+                        aNok += reg.total_nok;
                     }
-
-                    if (currentDt >= new Date(inicio) || new Date(ano, mes, 0) <= endDt) {
-                        chartData.labels.push(`${nomeMes}`);
-                        chartData.prodReal.push(mesProdReal);
-                        chartData.prodMeta.push(mesProdMeta); 
-
-                        const assertMes = mesAudit > 0 ? ((mesAudit - mesNok) / mesAudit * 100) : null;
-                        chartData.assReal.push(assertMes);
-                        chartData.assMeta.push(metaDoMesCfg.assert);
-                    }
-
-                    totalVal += mesProdReal;
-                    totalMeta += mesProdMeta;
-                    totalAudit += mesAudit;
-                    totalNok += mesNok;
                     
-                    currentDt.setMonth(currentDt.getMonth() + 1);
+                    if (curr >= new Date(inicio) || new Date(ano, mes, 0) <= end) {
+                        chartData.labels.push(label);
+                        chartData.prodReal.push(pReal);
+                        chartData.prodMeta.push(pMeta);
+                        chartData.assReal.push(aAudit>0 ? ((aAudit-aNok)/aAudit*100) : null);
+                        chartData.assMeta.push(metaMesCfg.assert);
+                    }
+                    curr.setMonth(curr.getMonth() + 1);
+
+                } else {
+                    // Modo Diário
+                    const iso = curr.toISOString().split('T')[0];
+                    const isFDS = (curr.getDay()===0 || curr.getDay()===6);
+                    const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
+                    
+                    pMeta = isFDS ? 0 : metaMesCfg.prod;
+                    pReal = reg.total_producao;
+                    
+                    chartData.labels.push(`${curr.getDate()}/${mes}`);
+                    chartData.prodReal.push(pReal);
+                    chartData.prodMeta.push(pMeta);
+                    chartData.assReal.push(reg.media_assertividade > 0 ? reg.media_assertividade : null);
+                    chartData.assMeta.push(metaMesCfg.assert);
+                    
+                    aAudit = reg.total_auditados;
+                    aNok = reg.total_nok;
+                    curr.setDate(curr.getDate() + 1);
                 }
-            } else {
-                // MODO DIÁRIO
-                while (currentDt <= endDt) {
-                    const isoDate = currentDt.toISOString().split('T')[0];
-                    const diaMes = currentDt.getDate();
-                    const mes = currentDt.getMonth() + 1;
-                    const isFDS = (currentDt.getDay() === 0 || currentDt.getDay() === 6);
 
-                    const metaDoMes = mapMetasConfig[mes] || { prod: metaPadraoProd, assert: 98.0 };
-                    const metaDia = isFDS ? 0 : metaDoMes.prod;
-                    const dadosDia = mapaDados[isoDate] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
-
-                    chartData.labels.push(`${String(diaMes).padStart(2,'0')}/${String(mes).padStart(2,'0')}`);
-                    chartData.prodReal.push(dadosDia.total_producao);
-                    chartData.prodMeta.push(metaDia);
-
-                    const valAssert = dadosDia.media_assertividade > 0 ? parseFloat(dadosDia.media_assertividade) : null;
-                    chartData.assReal.push(valAssert);
-                    chartData.assMeta.push(metaDoMes.assert);
-
-                    totalVal += dadosDia.total_producao;
-                    totalMeta += metaDia;
-                    totalAudit += dadosDia.total_auditados;
-                    totalNok += dadosDia.total_nok;
-
-                    currentDt.setDate(currentDt.getDate() + 1);
-                }
+                acc.val += pReal; acc.meta += pMeta; acc.audit += aAudit; acc.nok += aNok;
             }
 
-            // 4. CÁLCULO KPIS
-            const pctProd = totalMeta > 0 ? (totalVal/totalMeta)*100 : 0;
-            const mediaFinalAssert = totalAudit > 0 ? ((totalAudit - totalNok) / totalAudit * 100) : 0; // Média Real
-            const cob = totalVal > 0 ? ((totalAudit / totalVal) * 100) : 0;
-            const res = totalAudit > 0 ? (((totalAudit - totalNok) / totalAudit) * 100) : 100;
+            // 4. ATUALIZAR CARDS (DOM)
+            const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : 0;
+            const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
+            const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
+            const pctAprov = acc.audit > 0 ? ((acc.audit-acc.nok)/acc.audit*100) : 100;
 
-            // 5. ATUALIZAR INTERFACE (DOM)
+            this.updateCard('prod', acc.val, acc.meta, pctProd, 'Atingimento');
+            this.updateCard('assert', pctAssert, 98, pctAssert, 'Índice Real', true); // isPercent = true
             
-            // --- VALIDAÇÃO ---
-            this.setTxt('meta-prod-real', totalVal.toLocaleString('pt-BR'));
-            this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
-            this.setBar('bar-meta-prod', pctProd, 'bg-blue-600');
-            this.atualizarPorcentagemCard('bar-meta-prod', pctProd, 'Progresso');
+            // Cobertura
+            this.setTxt('auditoria-total-auditados', acc.audit);
+            this.setTxt('auditoria-total-validados', acc.val);
+            this.setBar('bar-auditoria-cov', pctCob, 'bg-purple-500');
+            this.setTxt('sub-auditoria-cov', this.fmtPct(pctCob));
+            this.colorirTexto('sub-auditoria-cov', pctCob, 100, 50, 'text-purple-600');
 
-            // --- ASSERTIVIDADE ---
-            this.setTxt('meta-assert-real', mediaFinalAssert.toLocaleString('pt-BR',{minimumFractionDigits:2})+'%');
-            this.setTxt('meta-assert-meta', 'Meta: 98,00%'); 
-            this.setBar('bar-meta-assert', mediaFinalAssert, mediaFinalAssert>=98?'bg-emerald-500':'bg-rose-500');
-            this.atualizarPorcentagemCard('bar-meta-assert', mediaFinalAssert, 'Índice Real');
+            // Resultado
+            this.setTxt('auditoria-total-ok', acc.audit - acc.nok);
+            this.setTxt('auditoria-total-nok', acc.nok);
+            this.setBar('bar-auditoria-res', pctAprov, 'bg-emerald-500');
+            this.setTxt('sub-auditoria-res', this.fmtPct(pctAprov));
+            this.colorirTexto('sub-auditoria-res', pctAprov, 95, 80, 'text-emerald-600');
 
-            // --- COBERTURA ---
-            this.setTxt('auditoria-total-auditados', totalAudit.toLocaleString('pt-BR'));
-            this.setTxt('auditoria-total-validados', totalVal.toLocaleString('pt-BR'));
-            // Removemos/Ocultamos o texto antigo se necessário, aqui focamos no update do novo footer
-            this.setTxt('auditoria-pct-cobertura', cob.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%'); 
-            this.setBar('bar-auditoria-cov', cob, 'bg-purple-500');
-            this.atualizarPorcentagemCard('bar-auditoria-cov', cob, 'Cobertura');
 
-            // --- RESULTADO ---
-            this.setTxt('auditoria-total-ok', (totalAudit - totalNok).toLocaleString('pt-BR'));
-            this.setTxt('auditoria-total-nok', totalNok.toLocaleString('pt-BR'));
-            this.setBar('bar-auditoria-res', res, res>=95?'bg-emerald-500':'bg-rose-500');
-            this.atualizarPorcentagemCard('bar-auditoria-res', res, 'Aprovação');
-
-            // 6. RENDERIZAR GRÁFICOS
+            // 5. RENDERIZAR GRÁFICOS
             const periodoTxt = this.getLabelPeriodo(inicio, fim);
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
             
-            this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#2563eb', false);
-            this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#059669', true);
+            this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false); // Azul Premium
+            this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true); // Emerald Premium
 
         } catch (err) {
             console.error("Erro Metas:", err);
@@ -192,59 +147,46 @@ MinhaArea.Metas = {
         }
     },
 
-    // --- HELPER: Injeção de Porcentagem no Rodapé do Card ---
-    atualizarPorcentagemCard: function(barId, pct, labelTxt = 'Progresso') {
-        const bar = document.getElementById(barId);
-        if(!bar) return;
-        const container = bar.parentElement.parentElement; // div.min-card
-        if(!container) return;
-
-        // Verifica se já existe, se não, cria
-        let label = container.querySelector('.pct-dynamic-label');
-        if(!label) {
-            label = document.createElement('div');
-            label.className = 'flex justify-between items-center mt-2 text-[10px] text-slate-500 font-bold pct-dynamic-label animate-enter';
-            label.innerHTML = `<span class="pct-lbl"></span><span class="pct-val"></span>`;
-            container.appendChild(label);
-        }
-
-        label.querySelector('.pct-lbl').innerText = labelTxt;
-        const valSpan = label.querySelector('.pct-val');
+    // --- UTILS VISUAIS ---
+    updateCard: function(type, real, meta, pct, subLabel, isPct = false) {
+        const txtReal = isPct ? this.fmtPct(real) : real.toLocaleString('pt-BR');
+        const txtMeta = isPct ? `${meta}%` : meta.toLocaleString('pt-BR');
         
-        // Formatação Inteligente (Se for > 100, mostra normal)
-        valSpan.innerText = pct.toLocaleString('pt-BR', {minimumFractionDigits:1, maximumFractionDigits:1}) + '%';
+        this.setTxt(`meta-${type}-real`, txtReal);
+        this.setTxt(`meta-${type}-meta`, txtMeta);
+        this.setTxt(`sub-meta-${type}`, this.fmtPct(pct));
         
-        // Coloração Dinâmica
-        if (pct >= 100 || (labelTxt === 'Aprovação' && pct >= 95) || (labelTxt === 'Índice Real' && pct >= 98)) {
-            valSpan.className = 'pct-val text-emerald-600 font-black';
-        } else if (pct >= 80) {
-            valSpan.className = 'pct-val text-blue-600 font-bold';
-        } else {
-            valSpan.className = 'pct-val text-rose-600 font-bold';
-        }
+        const corBarra = type === 'prod' ? 'bg-blue-500' : 'bg-emerald-500';
+        const corTexto = type === 'prod' ? 'text-blue-600' : 'text-emerald-600';
+        
+        this.setBar(`bar-meta-${type}`, pct, corBarra);
+        this.colorirTexto(`sub-meta-${type}`, pct, 100, 80, corTexto);
     },
 
-    getLabelPeriodo: function(i, f) {
-        const d1 = i.split('-').reverse().slice(0,2).join('/');
-        const d2 = f.split('-').reverse().slice(0,2).join('/');
-        return `${d1} a ${d2}`;
+    colorirTexto: function(id, val, metaHigh, metaMed, defaultColor) {
+        const el = document.getElementById(id);
+        if(!el) return;
+        el.className = 'font-bold ';
+        if (val >= metaHigh) el.classList.add('text-emerald-600');
+        else if (val >= metaMed) el.classList.add('text-amber-500');
+        else el.classList.add('text-rose-500');
     },
 
-    getQtdAssistentesConfigurada: function() { 
-        const m = localStorage.getItem('gupy_config_qtd_assistentes'); 
-        return m ? parseInt(m) : 17; 
-    },
-
-    renderizarGrafico: function(id, lbl, dReal, dMeta, label, cor, isPct) {
+    // --- GRÁFICOS COM DEGRADÊ (PREMIUM LOOK) ---
+    renderizarGrafico: function(id, lbl, dReal, dMeta, label, corHex, isPct) {
         const ctx = document.getElementById(id);
         if(!ctx) return;
         
-        if(id.includes('Producao')) { 
-            if(this.chartProd) { this.chartProd.destroy(); this.chartProd = null; }
-        } else { 
-            if(this.chartAssert) { this.chartAssert.destroy(); this.chartAssert = null; }
-        }
-        
+        // Limpeza Segura
+        if(id.includes('Producao')) { if(this.chartProd) { this.chartProd.destroy(); this.chartProd = null; } } 
+        else { if(this.chartAssert) { this.chartAssert.destroy(); this.chartAssert = null; } }
+
+        // Criação do Degradê
+        const canvasCtx = ctx.getContext('2d');
+        const gradient = canvasCtx.createLinearGradient(0, 0, 0, 300);
+        gradient.addColorStop(0, corHex + '40'); // 25% Opacidade no topo
+        gradient.addColorStop(1, corHex + '00'); // 0% Opacidade embaixo
+
         const config = {
             type: 'line',
             data: {
@@ -253,22 +195,26 @@ MinhaArea.Metas = {
                     { 
                         label: label, 
                         data: dReal, 
-                        borderColor: cor, 
-                        backgroundColor: cor+'15', 
+                        borderColor: corHex, 
+                        backgroundColor: gradient, // Aplica Degradê
+                        borderWidth: 2,
                         fill: true, 
-                        tension: 0.3, 
-                        pointRadius: lbl.length > 20 ? 0 : 3, 
-                        pointHoverRadius: 5
+                        tension: 0.35, // Curva suave
+                        pointRadius: lbl.length > 20 ? 0 : 4, 
+                        pointBackgroundColor: '#fff',
+                        pointBorderColor: corHex,
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 6
                     },
                     { 
                         label: 'Meta', 
                         data: dMeta, 
                         borderColor: '#94a3b8', 
-                        borderDash: [5,5], 
-                        tension: 0.1, 
+                        borderDash: [6,6], 
+                        tension: 0, 
                         fill: false, 
                         pointRadius: 0,
-                        borderWidth: 2
+                        borderWidth: 1.5
                     }
                 ]
             },
@@ -279,27 +225,36 @@ MinhaArea.Metas = {
                 plugins: { 
                     legend: { display: false }, 
                     tooltip: {
-                        backgroundColor: '#1e293b',
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#f8fafc',
+                        bodyColor: '#f8fafc',
+                        borderColor: 'rgba(255,255,255,0.1)',
+                        borderWidth: 1,
                         padding: 10,
+                        displayColors: false, // Remove quadradinho de cor
                         callbacks: {
-                            label: c => ` ${c.dataset.label}: ` + (c.raw?.toLocaleString('pt-BR') || '-') + (isPct ? '%' : '')
+                            label: c => ` ${c.dataset.label}: ${c.raw?.toLocaleString('pt-BR') || '0'}${isPct ? '%' : ''}`
                         }
                     } 
                 },
                 scales: { 
                     y: { 
                         beginAtZero: true, 
-                        grid: { color: '#f1f5f9' }, 
-                        ticks: { callback: v => isPct ? v+'%' : v } 
+                        grid: { color: '#f1f5f9', drawBorder: false }, 
+                        ticks: { 
+                            callback: v => isPct ? v+'%' : v,
+                            color: '#94a3b8',
+                            font: { size: 10, family: 'Inter' }
+                        } 
                     }, 
                     x: { 
                         grid: { display: false }, 
                         ticks: { 
-                            font: { size: 10 },
-                            color: '#64748b',
-                            autoSkip: false, 
+                            color: '#94a3b8',
+                            font: { size: 10, family: 'Inter' },
                             maxRotation: 0,
-                            minRotation: 0
+                            autoSkip: true,
+                            autoSkipPadding: 20
                         } 
                     } 
                 }
@@ -313,11 +268,33 @@ MinhaArea.Metas = {
     },
 
     resetarCards: function(showLoading) {
-        const ids = ['meta-assert-real','meta-prod-real','auditoria-total-validados','auditoria-total-auditados','auditoria-total-ok','auditoria-total-nok'];
-        ids.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = showLoading ? '<i class="fas fa-spinner fa-spin text-blue-300"></i>' : '--'; });
-        ['bar-meta-assert','bar-meta-prod','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
+        const ids = ['meta-prod-real','meta-assert-real','auditoria-total-auditados','auditoria-total-ok','auditoria-total-nok'];
+        ids.forEach(id => { 
+            const el = document.getElementById(id); 
+            if(el) el.innerHTML = showLoading ? '<i class="fas fa-spinner fa-spin text-slate-300 text-sm"></i>' : '--'; 
+        });
+        ['bar-meta-prod','bar-meta-assert','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { 
+            const el = document.getElementById(id); 
+            if(el) el.style.width = '0%'; 
+        });
+        // Reseta textos secundários
+        ['sub-meta-prod','sub-meta-assert','sub-auditoria-cov','sub-auditoria-res'].forEach(id => this.setTxt(id, '--%'));
     },
 
+    getLabelPeriodo: function(i, f) {
+        return `${i.split('-').reverse().slice(0,2).join('/')} a ${f.split('-').reverse().slice(0,2).join('/')}`;
+    },
+
+    getQtdAssistentesConfigurada: function() { 
+        const m = localStorage.getItem('gupy_config_qtd_assistentes'); 
+        return m ? parseInt(m) : 17; 
+    },
+
+    fmtPct: function(v) { return (v||0).toLocaleString('pt-BR',{maximumFractionDigits:1}) + '%'; },
     setTxt: function(id, v) { const e = document.getElementById(id); if(e) e.innerText = v; },
-    setBar: function(id, v, c) { const e = document.getElementById(id); if(e) { e.style.width = Math.min(v||0, 100) + '%'; e.className = `h-full rounded-full transition-all duration-700 ${c}`; } }
+    setBar: function(id, v, c) { const e = document.getElementById(id); if(e) { e.style.width = Math.min(v||0, 100) + '%'; e.className = `h-full rounded-full transition-all duration-1000 ${c}`; } },
+    
+    // Helpers de Filtro e Datas
+    getDatasFiltro: function() { return MinhaArea.getDatasFiltro(); },
+    getUsuarioAlvo: function() { return MinhaArea.getUsuarioAlvo(); }
 };
