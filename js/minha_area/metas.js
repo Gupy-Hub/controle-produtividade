@@ -1,7 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas e OKRs (Minha Área)
-   ATUALIZAÇÃO: v6.0 - TIMELINE CONTÍNUA (Correção de Dias Faltantes)
-   SOLUÇÃO: Gera labels dia-a-dia independentemente de haver dados no banco.
+   DESCRIÇÃO: Engine de Metas (Eixo X Contínuo + Compatível com Novos Filtros)
 */
 
 MinhaArea.Metas = {
@@ -13,17 +11,14 @@ MinhaArea.Metas = {
         if (this.isLocked) return;
         this.isLocked = true;
 
-        console.log("🚀 Metas: Iniciando Modo Timeline Contínua (v6.0)...");
-        try { console.timeEnd("⏱️ Tempo Total"); } catch(e) {}
-        console.time("⏱️ Tempo Total");
+        const { inicio, fim } = MinhaArea.getDatasFiltro();
+        console.log(`🚀 Metas: Carregando de ${inicio} até ${fim}`);
 
         this.resetarCards(true);
-
         const uid = MinhaArea.getUsuarioAlvo(); 
-        const { inicio, fim } = MinhaArea.getDatasFiltro();
         
         try {
-            // 1. CHAMADA RPC (Dados Reais)
+            // 1. DADOS REAIS (RPC)
             const { data: dadosDiarios, error } = await Sistema.supabase
                 .rpc('get_kpis_minha_area', { 
                     p_inicio: inicio, 
@@ -33,22 +28,20 @@ MinhaArea.Metas = {
 
             if (error) throw error;
 
-            console.log(`✅ Dados Recebidos: ${dadosDiarios.length} registros.`);
-
-            // Cria um Mapa para acesso rápido: "2023-10-01" -> { dados }
+            // Mapa para acesso rápido (O(1))
             const mapaDados = {};
-            dadosDiarios.forEach(d => {
-                const key = d.data_ref || d.data; // Compatibilidade
+            (dadosDiarios || []).forEach(d => {
+                const key = d.data_ref || d.data; 
                 if(key) mapaDados[key] = d;
             });
 
-            // 2. BUSCAR METAS CONFIGURADAS
+            // 2. METAS CONFIGURADAS
             const dtInicio = new Date(inicio + 'T12:00:00');
-            const ano = dtInicio.getFullYear();
+            const anoRef = dtInicio.getFullYear();
             
             let qMetas = Sistema.supabase.from('metas')
                 .select('mes, meta_producao, meta_assertividade') 
-                .eq('ano', ano);
+                .eq('ano', anoRef);
             if (uid) qMetas = qMetas.eq('usuario_id', uid);
             
             const { data: configMetas } = await qMetas;
@@ -61,7 +54,7 @@ MinhaArea.Metas = {
                 };
             });
 
-            // 3. PROCESSAMENTO CRONOLÓGICO (O Segredo da Correção)
+            // 3. LOOP CRONOLÓGICO (Preenche lacunas)
             const labels = [];
             const dProdR = [], dProdM = [];
             const dAssR = [], dAssM = [];
@@ -72,38 +65,34 @@ MinhaArea.Metas = {
 
             const metaPadraoProd = uid ? 100 : (100 * this.getQtdAssistentesConfigurada());
 
-            // Loop dia a dia: De Inicio a Fim
             let currentDt = new Date(inicio + 'T12:00:00');
             const endDt = new Date(fim + 'T12:00:00');
 
-            while (currentDt <= endDt) {
-                // Formata data atual do loop para YYYY-MM-DD
+            // Proteção contra loop infinito (máx 366 dias)
+            let safetyCounter = 0;
+            while (currentDt <= endDt && safetyCounter < 370) {
+                safetyCounter++;
+                
                 const isoDate = currentDt.toISOString().split('T')[0];
                 const diaMes = currentDt.getDate();
                 const mes = currentDt.getMonth() + 1;
                 const isFDS = (currentDt.getDay() === 0 || currentDt.getDay() === 6);
 
-                // Recupera Meta do Mês
                 const metaDoMes = mapMetasConfig[mes] || { prod: metaPadraoProd, assert: 98.0 };
                 const metaDia = isFDS ? 0 : metaDoMes.prod;
 
-                // Tenta pegar dados reais do mapa, se não existir, usa 0/null
                 const dadosDia = mapaDados[isoDate] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
 
-                // --- POPULA GRAFICO ---
-                // Label: 01/01
                 labels.push(`${String(diaMes).padStart(2,'0')}/${String(mes).padStart(2,'0')}`);
                 
-                // Produção
                 dProdR.push(dadosDia.total_producao);
                 dProdM.push(metaDia);
 
-                // Assertividade (Null se não tiver auditoria, para não quebrar a linha média)
+                // Assertividade: null se 0 (para não desenhar linha no zero)
                 const valAssert = dadosDia.media_assertividade > 0 ? parseFloat(dadosDia.media_assertividade) : null;
                 dAssR.push(valAssert);
                 dAssM.push(metaDoMes.assert);
 
-                // --- ACUMULA TOTAIS ---
                 totalVal += dadosDia.total_producao;
                 totalMeta += metaDia;
                 totalAudit += dadosDia.total_auditados;
@@ -114,16 +103,15 @@ MinhaArea.Metas = {
                     diasComAssert++;
                 }
 
-                // Avança 1 dia
                 currentDt.setDate(currentDt.getDate() + 1);
             }
 
-            // 4. CÁLCULO KPIS FINAIS
+            // 4. KPIS TOTAIS
             const mediaFinalAssert = diasComAssert > 0 ? (somaMediasAssert / diasComAssert) : 0;
             const cob = totalVal > 0 ? ((totalAudit / totalVal) * 100) : 0;
             const res = totalAudit > 0 ? (((totalAudit - totalNok) / totalAudit) * 100) : 100;
 
-            // 5. ATUALIZAR DOM
+            // 5. ATUALIZAR INTERFACE
             this.setTxt('meta-prod-real', totalVal.toLocaleString('pt-BR'));
             this.setTxt('meta-prod-meta', totalMeta.toLocaleString('pt-BR'));
             this.setBar('bar-meta-prod', totalMeta > 0 ? (totalVal/totalMeta)*100 : 0, 'bg-blue-600');
@@ -141,19 +129,26 @@ MinhaArea.Metas = {
             this.setTxt('auditoria-total-nok', totalNok.toLocaleString('pt-BR'));
             this.setBar('bar-auditoria-res', res, res>=95?'bg-emerald-500':'bg-rose-500');
 
-            // Renderiza
-            document.querySelectorAll('.periodo-label').forEach(el => el.innerText = 'Diário');
-            this.renderizarGrafico('graficoEvolucaoProducao', labels, dProdR, dProdM, 'Validação', '#2563eb', false);
-            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dAssR, dAssM, 'Assertividade', '#059669', true);
-
-            console.timeEnd("⏱️ Tempo Total");
+            // 6. RENDERIZAR GRÁFICOS
+            const periodoTxt = this.getLabelPeriodo(inicio, fim);
+            document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
+            
+            this.renderizarGrafico('graficoEvolucaoProducao', labels, dProdR, dProdM, 'Produção', '#2563eb', false);
+            this.renderizarGrafico('graficoEvolucaoAssertividade', labels, dAssR, dAssM, 'Qualidade', '#059669', true);
 
         } catch (err) {
-            console.error("❌ Erro RPC:", err);
+            console.error("Erro Metas:", err);
             this.resetarCards(false); 
         } finally {
             this.isLocked = false;
         }
+    },
+
+    getLabelPeriodo: function(i, f) {
+        // Ex: 01/10 a 31/10
+        const d1 = i.split('-').reverse().slice(0,2).join('/');
+        const d2 = f.split('-').reverse().slice(0,2).join('/');
+        return `${d1} a ${d2}`;
     },
 
     getQtdAssistentesConfigurada: function() { 
@@ -165,10 +160,14 @@ MinhaArea.Metas = {
         const ctx = document.getElementById(id);
         if(!ctx) return;
         
-        if(id.includes('Producao')) { if(this.chartProd) this.chartProd.destroy(); } 
-        else { if(this.chartAssert) this.chartAssert.destroy(); }
+        // Destruição segura
+        if(id.includes('Producao')) { 
+            if(this.chartProd) { this.chartProd.destroy(); this.chartProd = null; }
+        } else { 
+            if(this.chartAssert) { this.chartAssert.destroy(); this.chartAssert = null; }
+        }
         
-        const chart = new Chart(ctx, {
+        const config = {
             type: 'line',
             data: {
                 labels: lbl,
@@ -177,7 +176,7 @@ MinhaArea.Metas = {
                         label: label, 
                         data: dReal, 
                         borderColor: cor, 
-                        backgroundColor: cor+'10', 
+                        backgroundColor: cor+'15', 
                         fill: true, 
                         tension: 0.3, 
                         pointRadius: 3 
@@ -185,11 +184,12 @@ MinhaArea.Metas = {
                     { 
                         label: 'Meta', 
                         data: dMeta, 
-                        borderColor: '#cbd5e1', 
-                        borderDash: [4,4], 
-                        tension: 0.3, 
+                        borderColor: '#94a3b8', 
+                        borderDash: [5,5], 
+                        tension: 0.1, 
                         fill: false, 
-                        pointRadius: 0 
+                        pointRadius: 0,
+                        borderWidth: 2
                     }
                 ]
             },
@@ -197,30 +197,45 @@ MinhaArea.Metas = {
                 responsive: true, 
                 maintainAspectRatio: false, 
                 interaction: { intersect: false, mode: 'index' },
-                plugins: { legend: { display: false }, tooltip: {callbacks:{label: c => c.dataset.label + ': ' + (c.raw?.toLocaleString('pt-BR') || '-') + (isPct ? '%' : '')}} },
+                plugins: { 
+                    legend: { display: false }, 
+                    tooltip: {
+                        backgroundColor: '#1e293b',
+                        padding: 10,
+                        callbacks: {
+                            label: c => ` ${c.dataset.label}: ` + (c.raw?.toLocaleString('pt-BR') || '-') + (isPct ? '%' : '')
+                        }
+                    } 
+                },
                 scales: { 
-                    y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { callback: v => isPct ? v+'%' : v } }, 
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: '#f1f5f9' }, 
+                        ticks: { callback: v => isPct ? v+'%' : v } 
+                    }, 
                     x: { 
                         grid: { display: false }, 
                         ticks: { 
                             font: { size: 10 },
-                            color: '#94a3b8',
-                            autoSkip: false, // Força mostrar todos se couber
+                            color: '#64748b',
+                            autoSkip: false, // Força mostrar tudo
                             maxRotation: 45, 
                             minRotation: 0
                         } 
                     } 
                 }
             }
-        });
+        };
+
+        const novoChart = new Chart(ctx, config);
         
-        if(id.includes('Producao')) this.chartProd = chart; 
-        else this.chartAssert = chart;
+        if(id.includes('Producao')) this.chartProd = novoChart; 
+        else this.chartAssert = novoChart;
     },
 
     resetarCards: function(showLoading) {
         const ids = ['meta-assert-real','meta-prod-real','auditoria-total-validados','auditoria-total-auditados','auditoria-total-ok','auditoria-total-nok'];
-        ids.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = showLoading ? '<i class="fas fa-circle-notch fa-spin text-slate-300"></i>' : '--'; });
+        ids.forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = showLoading ? '<i class="fas fa-spinner fa-spin text-blue-300"></i>' : '--'; });
         ['bar-meta-assert','bar-meta-prod','bar-auditoria-cov','bar-auditoria-res'].forEach(id => { const el = document.getElementById(id); if(el) el.style.width = '0%'; });
     },
 
