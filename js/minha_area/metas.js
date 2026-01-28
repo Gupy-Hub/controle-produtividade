@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Correção: Considerar Fator de Abono no Cálculo da Meta)
-   SOLUÇÃO: Cruza a meta configurada com o 'fator' real salvo na tabela de produção.
+   DESCRIÇÃO: Engine de Metas (Correção V2: Garantia de ID do Usuário + Fator de Abono)
+   SOLUÇÃO: Garante que o UID nunca seja nulo na busca de abonos e aplica o Fator (0, 0.5, 1) na Meta.
 */
 
 MinhaArea.Metas = {
@@ -19,7 +19,14 @@ MinhaArea.Metas = {
         console.log(`🚀 Metas: Carregando ${inicio} a ${fim} (Modo Mensal: ${modoMensal})`);
 
         this.resetarCards(true);
-        const uid = MinhaArea.getUsuarioAlvo(); 
+        
+        // --- CORREÇÃO DO ID (CRÍTICO) ---
+        // Se getUsuarioAlvo() retornar nulo (minha própria visão), pega o ID da sessão.
+        let uid = MinhaArea.getUsuarioAlvo(); 
+        if (!uid) {
+            const sessao = Sistema.lerSessao();
+            if (sessao) uid = sessao.id;
+        }
         
         try {
             const anoInicio = new Date(inicio).getFullYear();
@@ -30,6 +37,7 @@ MinhaArea.Metas = {
             // 1. QUERY MULTIPLA
             const [kpisRes, metasRes, usersRes, abonosRes] = await Promise.all([
                 // A. Dados de Produção (Realizado)
+                // Nota: A RPC get_kpis geralmente aceita null, mas mandamos o UID garantido por segurança
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
                 
                 // B. Tabela de Metas (Configurado)
@@ -38,13 +46,12 @@ MinhaArea.Metas = {
                 // C. Usuários Ativos
                 Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true),
 
-                // D. BUSCA DIRETA DE FATORES/ABONOS (A Chave da Correção)
-                // Busca registros de produção para saber o fator (1, 0.5, 0) de cada dia
+                // D. BUSCA DIRETA DE FATORES/ABONOS (Agora com UID garantido)
                 Sistema.supabase.from('producao')
                     .select('data_referencia, usuario_id, fator')
                     .gte('data_referencia', inicio)
                     .lte('data_referencia', fim)
-                    .eq('usuario_id', uid) // Foca no usuário atual para aplicar o abono corretamente
+                    .eq('usuario_id', uid) 
             ]);
 
             if (kpisRes.error) throw kpisRes.error;
@@ -52,11 +59,12 @@ MinhaArea.Metas = {
             if (abonosRes.error) throw abonosRes.error;
 
             // --- 2. MAPEAMENTO DE ABONOS ---
-            // Cria um mapa: "2026-01-07" -> 0 (ou 0.5, ou 1)
             const mapaFatores = {};
             (abonosRes.data || []).forEach(r => {
+                // Guarda o fator indexado pela data (YYYY-MM-DD)
                 mapaFatores[r.data_referencia] = (r.fator !== null && r.fator !== undefined) ? Number(r.fator) : 1;
             });
+            console.log(`🎟️ Abonos Carregados: ${abonosRes.data.length} registros para User ${uid}`);
 
             // --- 3. DEFINIÇÃO DE QUEM ENTRA NA CONTA ---
             const mapMetaMensal = {}; 
@@ -71,6 +79,7 @@ MinhaArea.Metas = {
                 }
             });
 
+            // Se for visão individual, filtra só o usuário. Se for geral (impossível aqui pois MinhaArea é pessoal), usa todos.
             let idsValidos;
             if (uid) {
                 idsValidos = new Set([parseInt(uid)]);
@@ -117,8 +126,7 @@ MinhaArea.Metas = {
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
                 if (modoMensal) {
-                    // (Lógica Mensal omitida para brevidade, segue padrão similar multiplicando por fatores)
-                    // Para simplificar, assumimos média de fatores se for mensal, ou soma dias úteis reais
+                    // MODO MENSAL (Visão Macro)
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
@@ -130,12 +138,12 @@ MinhaArea.Metas = {
                         const isFDS = (diaObj.getDay()===0 || diaObj.getDay()===6);
                         const reg = mapaDados[diaStr] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
                         
-                        // FATOR DO DIA (Aqui está a mágica)
+                        // FATOR DO DIA (Recuperado do Mapa)
                         const fatorDia = mapaFatores[diaStr] !== undefined ? mapaFatores[diaStr] : 1;
 
                         pReal += reg.total_producao;
                         
-                        // Meta só soma se não for FDS E tiver fator > 0
+                        // Meta Mensal = Soma dos dias úteis considerados
                         if(!isFDS) {
                             pMeta += (metaMesCfg.prod * fatorDia);
                         }
@@ -154,17 +162,16 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
-                    // Visão Diária (A que o usuário vê)
-                    const iso = curr.toISOString().split('T')[0];
+                    // MODO DIÁRIO (Visão Detalhada)
+                    // Garante formatação YYYY-MM-DD segura
+                    const iso = curr.toISOString().split('T')[0]; 
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
                     
-                    // BUSCA O FATOR REAL DO BANCO (1, 0.5, 0)
-                    // Se não tiver registro, assume 1 (trabalho normal)
+                    // FATOR DO DIA
                     const fatorDia = mapaFatores[iso] !== undefined ? mapaFatores[iso] : 1;
 
-                    // Aplica o Fator na Meta
-                    // Ex: Meta 650 * Fator 0 (Abonado) = 0
+                    // Aplica Abono na Meta (Ex: 450 * 0 = 0)
                     pMeta = isFDS ? 0 : (metaMesCfg.prod * fatorDia);
                     
                     pReal = reg.total_producao;
@@ -177,6 +184,12 @@ MinhaArea.Metas = {
                     
                     aAudit = reg.total_auditados;
                     aNok = reg.total_nok;
+                    
+                    // DEBUG PONTUAL PARA O DIA 07/01/2026
+                    if (iso === '2026-01-07') {
+                        console.log(`🐛 DEBUG 07/01: Fator=${fatorDia}, MetaConfig=${metaMesCfg.prod}, MetaCalc=${pMeta}`);
+                    }
+
                     curr.setDate(curr.getDate() + 1);
                 }
 
@@ -184,8 +197,10 @@ MinhaArea.Metas = {
             }
 
             // 6. ATUALIZAÇÃO UI
-            // Se a Meta Acumulada for 0 (ex: período todo abonado), consideramos 100% de atingimento se não houve erro, ou 0.
-            // Regra de Negócio: Se meta é 0, atingimento é 100% (Neutralizado)
+            // Lógica de 100% se meta for 0 e produziu algo, ou 100% se meta 0 e produziu 0 (neutro)
+            // Aqui mantemos: Se Meta > 0, calcula %. Se Meta = 0, mostra traço ou regra específica?
+            // Regra comum: Se Meta 0, atingimento é N/A ou 100% se não houver erro.
+            // Ajuste simples: Se Meta = 0 e Prod > 0 -> 100%. Se Meta = 0 e Prod = 0 -> 0%.
             const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : (acc.val > 0 ? 100 : 0);
             const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
             const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
