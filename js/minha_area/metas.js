@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Correção Definitiva: DB-Driven + Suporte Multi-ano)
-   SOLUÇÃO: Busca metas exatas do banco (tabela 'metas') para o período selecionado.
+   DESCRIÇÃO: Engine de Metas (Correção: Considerar Fator de Abono no Cálculo da Meta)
+   SOLUÇÃO: Cruza a meta configurada com o 'fator' real salvo na tabela de produção.
 */
 
 MinhaArea.Metas = {
@@ -14,7 +14,7 @@ MinhaArea.Metas = {
 
         const { inicio, fim } = MinhaArea.getDatasFiltro();
         const diffDias = (new Date(fim) - new Date(inicio)) / (1000 * 60 * 60 * 24);
-        const modoMensal = diffDias > 35; // Agrupa por mês se período longo
+        const modoMensal = diffDias > 35; 
 
         console.log(`🚀 Metas: Carregando ${inicio} a ${fim} (Modo Mensal: ${modoMensal})`);
 
@@ -22,46 +22,55 @@ MinhaArea.Metas = {
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            // Prepara range de anos para evitar bugs em virada de ano (ex: Dez/25 a Jan/26)
             const anoInicio = new Date(inicio).getFullYear();
             const anoFim = new Date(fim).getFullYear();
             const anosEnvolvidos = [anoInicio];
             if (anoFim !== anoInicio) anosEnvolvidos.push(anoFim);
 
-            // 1. QUERY MULTIPLA: Dados + Metas (Range de Anos) + Usuários
-            const [kpisRes, metasRes, usersRes] = await Promise.all([
+            // 1. QUERY MULTIPLA
+            const [kpisRes, metasRes, usersRes, abonosRes] = await Promise.all([
                 // A. Dados de Produção (Realizado)
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
                 
-                // B. Tabela de Metas (Configurado) - Busca para os anos do filtro
+                // B. Tabela de Metas (Configurado)
                 Sistema.supabase.from('metas').select('*').in('ano', anosEnvolvidos),
                 
-                // C. Usuários Ativos (Para filtrar cargos Operacionais)
-                Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true)
+                // C. Usuários Ativos
+                Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true),
+
+                // D. BUSCA DIRETA DE FATORES/ABONOS (A Chave da Correção)
+                // Busca registros de produção para saber o fator (1, 0.5, 0) de cada dia
+                Sistema.supabase.from('producao')
+                    .select('data_referencia, usuario_id, fator')
+                    .gte('data_referencia', inicio)
+                    .lte('data_referencia', fim)
+                    .eq('usuario_id', uid) // Foca no usuário atual para aplicar o abono corretamente
             ]);
 
             if (kpisRes.error) throw kpisRes.error;
             if (metasRes.error) throw metasRes.error;
+            if (abonosRes.error) throw abonosRes.error;
 
-            // --- 2. DEFINIÇÃO DE QUEM ENTRA NA CONTA ---
-            // Mapa com chave composta "ANO-MES" para evitar colisão de datas
+            // --- 2. MAPEAMENTO DE ABONOS ---
+            // Cria um mapa: "2026-01-07" -> 0 (ou 0.5, ou 1)
+            const mapaFatores = {};
+            (abonosRes.data || []).forEach(r => {
+                mapaFatores[r.data_referencia] = (r.fator !== null && r.fator !== undefined) ? Number(r.fator) : 1;
+            });
+
+            // --- 3. DEFINIÇÃO DE QUEM ENTRA NA CONTA ---
             const mapMetaMensal = {}; 
-            
-            // Cargos que NÃO devem somar meta (Gestão/Auditoria)
             const termosGestao = ['GESTOR', 'AUDITOR', 'ADMIN', 'COORD', 'LIDER', 'LÍDER', 'SUPERVIS', 'GERENTE'];
-            
             const idsOperacionais = new Set();
+            
             (usersRes.data || []).forEach(u => {
                 const p = (u.perfil || '').toUpperCase();
                 const f = (u.funcao || '').toUpperCase();
-                
-                // Se NÃO tiver termo de gestão, é operacional (Assistente)
                 if (!termosGestao.some(t => p.includes(t) || f.includes(t))) {
                     idsOperacionais.add(u.id);
                 }
             });
 
-            // Se tem filtro de usuário (uid), usa só ele. Se não, usa todos os operacionais.
             let idsValidos;
             if (uid) {
                 idsValidos = new Set([parseInt(uid)]);
@@ -69,43 +78,30 @@ MinhaArea.Metas = {
                 idsValidos = idsOperacionais;
             }
 
-            console.log(`👥 Usuários considerados na Meta: ${idsValidos.size}`);
-
-            // --- 3. CÁLCULO DA META (SOMA DO BANCO) ---
+            // --- 4. CÁLCULO DA META MENSAL (BASE) ---
             (metasRes.data || []).forEach(m => {
-                // Só processa se o usuário for válido (Ativo e Operacional)
                 if (idsValidos.has(m.usuario_id)) {
-                    // Chave única para diferenciar Jan/2025 de Jan/2026
                     const key = `${m.ano}-${m.mes}`;
-                    
-                    if (!mapMetaMensal[key]) {
-                        mapMetaMensal[key] = { prod: 0, assert_soma: 0, count: 0 };
-                    }
-
-                    // SOMA A META DIÁRIA (Valores do banco)
+                    if (!mapMetaMensal[key]) mapMetaMensal[key] = { prod: 0, assert_soma: 0, count: 0 };
                     mapMetaMensal[key].prod += (m.meta_producao || 0);
-                    
-                    // Assertividade é média, não soma
                     mapMetaMensal[key].assert_soma += (m.meta_assertividade || 98.0);
                     mapMetaMensal[key].count++;
                 }
             });
 
-            // Finaliza médias de assertividade
             Object.keys(mapMetaMensal).forEach(k => {
                 const item = mapMetaMensal[k];
                 item.assert = item.count > 0 ? (item.assert_soma / item.count) : 98.0;
             });
 
-            // --- 4. MAPA DE DADOS REAIS ---
+            // --- 5. MAPA DE DADOS REAIS ---
             const mapaDados = {};
             (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
 
-            // --- 5. LOOP CRONOLÓGICO (DIA A DIA) ---
+            // --- 6. LOOP CRONOLÓGICO (COM FATOR DE ABONO) ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
 
-            // Ajuste de Timezone: Força meio-dia para evitar problemas de UTC-3
             let curr = new Date(inicio + 'T12:00:00');
             const end = new Date(fim + 'T12:00:00');
             
@@ -114,30 +110,36 @@ MinhaArea.Metas = {
             while (curr <= end) {
                 const mes = curr.getMonth() + 1;
                 const ano = curr.getFullYear();
-                const key = `${ano}-${mes}`; // Busca pela chave exata do ano/mês
+                const keyMeta = `${ano}-${mes}`;
                 
-                // Recupera a meta SOMADA do mês (ex: 600, 1200...) ou 0 se não configurada
-                const metaMesCfg = mapMetaMensal[key] || { prod: 0, assert: 98.0 };
+                const metaMesCfg = mapMetaMensal[keyMeta] || { prod: 0, assert: 98.0 };
                 
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
                 if (modoMensal) {
-                    // Visão Agregada (Mês)
+                    // (Lógica Mensal omitida para brevidade, segue padrão similar multiplicando por fatores)
+                    // Para simplificar, assumimos média de fatores se for mensal, ou soma dias úteis reais
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
                     for(let d=1; d<=lastDay; d++) {
-                        // Construção segura da data do loop interno
                         const diaStr = `${ano}-${String(mes).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                         const diaObj = new Date(diaStr + 'T12:00:00');
-
                         if (diaObj < new Date(inicio + 'T00:00:00') || diaObj > new Date(fim + 'T23:59:59')) continue;
                         
                         const isFDS = (diaObj.getDay()===0 || diaObj.getDay()===6);
                         const reg = mapaDados[diaStr] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
                         
+                        // FATOR DO DIA (Aqui está a mágica)
+                        const fatorDia = mapaFatores[diaStr] !== undefined ? mapaFatores[diaStr] : 1;
+
                         pReal += reg.total_producao;
-                        if(!isFDS) pMeta += metaMesCfg.prod; // Soma meta diária para cada dia útil do mês
+                        
+                        // Meta só soma se não for FDS E tiver fator > 0
+                        if(!isFDS) {
+                            pMeta += (metaMesCfg.prod * fatorDia);
+                        }
+                        
                         aAudit += reg.total_auditados;
                         aNok += reg.total_nok;
                     }
@@ -152,14 +154,19 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
-                    // Visão Detalhada (Dia)
+                    // Visão Diária (A que o usuário vê)
                     const iso = curr.toISOString().split('T')[0];
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
                     
-                    // Meta do dia = Soma das metas individuais do banco
-                    // Se não tiver meta no banco, será 0. Se for FDS, é 0.
-                    pMeta = isFDS ? 0 : metaMesCfg.prod;
+                    // BUSCA O FATOR REAL DO BANCO (1, 0.5, 0)
+                    // Se não tiver registro, assume 1 (trabalho normal)
+                    const fatorDia = mapaFatores[iso] !== undefined ? mapaFatores[iso] : 1;
+
+                    // Aplica o Fator na Meta
+                    // Ex: Meta 650 * Fator 0 (Abonado) = 0
+                    pMeta = isFDS ? 0 : (metaMesCfg.prod * fatorDia);
+                    
                     pReal = reg.total_producao;
                     
                     chartData.labels.push(`${curr.getDate()}/${mes}`);
@@ -177,7 +184,9 @@ MinhaArea.Metas = {
             }
 
             // 6. ATUALIZAÇÃO UI
-            const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : 0;
+            // Se a Meta Acumulada for 0 (ex: período todo abonado), consideramos 100% de atingimento se não houve erro, ou 0.
+            // Regra de Negócio: Se meta é 0, atingimento é 100% (Neutralizado)
+            const pctProd = acc.meta > 0 ? (acc.val/acc.meta)*100 : (acc.val > 0 ? 100 : 0);
             const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
             const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
             const pctAprov = acc.audit > 0 ? ((acc.audit-acc.nok)/acc.audit*100) : 100;
