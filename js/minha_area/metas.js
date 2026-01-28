@@ -1,5 +1,5 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas V5 (Debug Visual - Alert On Error)
+   DESCRIÇÃO: Engine de Metas V6 (Correção Definitiva de Fuso Horário/Datas)
 */
 
 MinhaArea.Metas = {
@@ -11,7 +11,7 @@ MinhaArea.Metas = {
         if (this.isLocked) return;
         this.isLocked = true;
 
-        console.log("🚀 INICIANDO CARREGAMENTO DE METAS V5...");
+        console.log("🚀 INICIANDO CARREGAMENTO DE METAS V6 (Safe Date)...");
 
         try {
             const datas = MinhaArea.getDatasFiltro();
@@ -30,8 +30,7 @@ MinhaArea.Metas = {
                 if (sessao) uid = sessao.id;
             }
 
-            if (!uid) throw new Error("ID do Usuário não identificado (Login ou Filtro).");
-            console.log(`👤 Usuário Alvo: ${uid}`);
+            if (!uid) throw new Error("ID do Usuário não identificado.");
             
             const anoInicio = new Date(inicio).getFullYear();
             const anoFim = new Date(fim).getFullYear();
@@ -39,10 +38,7 @@ MinhaArea.Metas = {
             if (anoFim !== anoInicio) anosEnvolvidos.push(anoFim);
 
             // --- 2. BUSCA DE DADOS ---
-            // Adicionamos logs para identificar qual query pode estar falhando
-            console.log("⏳ Buscando dados no Supabase...");
-
-            const promessas = [
+            const [kpisRes, metasRes, usersRes, abonosRes] = await Promise.all([
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
                 Sistema.supabase.from('metas').select('*').in('ano', anosEnvolvidos),
                 Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true),
@@ -51,27 +47,36 @@ MinhaArea.Metas = {
                     .gte('data_referencia', inicio)
                     .lte('data_referencia', fim)
                     .eq('usuario_id', uid) 
-            ];
+            ]);
 
-            const [kpisRes, metasRes, usersRes, abonosRes] = await Promise.all(promessas);
+            if (kpisRes.error) throw new Error("Erro KPIs: " + kpisRes.error.message);
+            if (abonosRes.error) throw new Error("Erro Abonos: " + abonosRes.error.message);
 
-            if (kpisRes.error) throw new Error("Falha RPC KPIs: " + kpisRes.error.message);
-            if (metasRes.error) throw new Error("Falha Tabela Metas: " + metasRes.error.message);
-            if (usersRes.error) throw new Error("Falha Tabela Usuários: " + usersRes.error.message);
-            if (abonosRes.error) throw new Error("Falha Tabela Produção (Abonos): " + abonosRes.error.message);
+            // --- 3. PROCESSAMENTO SEGURO DE DATAS ---
+            // Função auxiliar para gerar YYYY-MM-DD local sem fuso
+            const toDateStr = (dateObj) => {
+                const y = dateObj.getFullYear();
+                const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+                const d = String(dateObj.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            };
 
-            console.log("✅ Dados recebidos com sucesso.");
-
-            // --- 3. PROCESSAMENTO DOS DADOS ---
+            // Mapeia Abonos (Fatores)
             const mapaFatores = {};
             (abonosRes.data || []).forEach(r => {
                 if(r.data_referencia) {
-                    const dataKey = r.data_referencia.substring(0, 10); // Mais seguro que split
+                    // Pega os primeiros 10 chars (YYYY-MM-DD) ignorando hora
+                    const dataKey = r.data_referencia.substring(0, 10);
                     mapaFatores[dataKey] = (r.fator !== null && r.fator !== undefined) ? Number(r.fator) : 1;
+                    
+                    // Log de Auditoria para o dia problemático
+                    if (dataKey.includes('2026-01-07')) {
+                        console.log(`🔎 ABONO ENCONTRADO NO BANCO: Dia ${dataKey} = Fator ${mapaFatores[dataKey]}`);
+                    }
                 }
             });
 
-            // Filtro de Operacionais
+            // Configuração de Metas Mensais
             const mapMetaMensal = {}; 
             const termosGestao = ['GESTOR', 'AUDITOR', 'ADMIN', 'COORD', 'LIDER', 'LÍDER', 'SUPERVIS', 'GERENTE'];
             const idsOperacionais = new Set();
@@ -81,9 +86,8 @@ MinhaArea.Metas = {
                 if (!termosGestao.some(t => p.includes(t) || f.includes(t))) idsOperacionais.add(u.id);
             });
 
-            const idsValidos = new Set([parseInt(uid)]); // Foca no usuário atual
+            const idsValidos = new Set([parseInt(uid)]);
 
-            // Mapa de Metas
             (metasRes.data || []).forEach(m => {
                 if (idsValidos.has(m.usuario_id)) {
                     const key = `${m.ano}-${m.mes}`;
@@ -93,6 +97,8 @@ MinhaArea.Metas = {
                     mapMetaMensal[key].count++;
                 }
             });
+
+            // Médias de Assertividade
             Object.keys(mapMetaMensal).forEach(k => {
                 const item = mapMetaMensal[k];
                 item.assert = item.count > 0 ? (item.assert_soma / item.count) : 98.0;
@@ -101,10 +107,11 @@ MinhaArea.Metas = {
             const mapaDados = {};
             (kpisRes.data || []).forEach(d => { mapaDados[d.data_ref || d.data] = d; });
 
-            // --- 4. CÁLCULO CRONOLÓGICO ---
+            // --- 4. LOOP CRONOLÓGICO ---
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
 
+            // Inicializa datas ignorando hora (meio-dia para evitar problemas de virada)
             let curr = new Date(inicio + 'T12:00:00');
             const end = new Date(fim + 'T12:00:00');
             if (modoMensal) curr.setDate(1);
@@ -121,12 +128,16 @@ MinhaArea.Metas = {
                     const label = curr.toLocaleDateString('pt-BR', { month: 'short' }).toUpperCase().replace('.','');
                     const lastDay = new Date(ano, mes, 0).getDate();
                     for(let d=1; d<=lastDay; d++) {
+                        // Constrói Data Manualmente
                         const diaStr = `${ano}-${String(mes).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
                         const diaObj = new Date(diaStr + 'T12:00:00');
+                        
                         if (diaObj < new Date(inicio + 'T00:00:00') || diaObj > new Date(fim + 'T23:59:59')) continue;
                         
                         const isFDS = (diaObj.getDay()===0 || diaObj.getDay()===6);
                         const reg = mapaDados[diaStr] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
+                        
+                        // Busca Fator
                         const fatorDia = mapaFatores[diaStr] !== undefined ? mapaFatores[diaStr] : 1;
 
                         pReal += reg.total_producao;
@@ -134,6 +145,8 @@ MinhaArea.Metas = {
                         aAudit += reg.total_auditados;
                         aNok += reg.total_nok;
                     }
+                    
+                    // Adiciona ao gráfico
                     if (curr >= new Date(inicio + 'T00:00:00') || new Date(ano, mes, 0) <= end) {
                         chartData.labels.push(label);
                         chartData.prodReal.push(pReal);
@@ -144,34 +157,44 @@ MinhaArea.Metas = {
                     curr.setMonth(curr.getMonth() + 1);
 
                 } else {
-                    const iso = curr.toISOString().split('T')[0];
+                    // MODO DIÁRIO
+                    // Chave de Data Segura (Manual)
+                    const iso = toDateStr(curr);
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
+                    
+                    // Busca Fator
                     const fatorDia = mapaFatores[iso] !== undefined ? mapaFatores[iso] : 1;
 
+                    // Aplica Abono
                     pMeta = isFDS ? 0 : (metaMesCfg.prod * fatorDia);
                     pReal = reg.total_producao;
                     
+                    // Debug Visual no Console para o dia específico
+                    if (iso.includes('2026-01-07')) {
+                        console.log(`🎯 LOOP DIA 07: DataKey="${iso}", Fator=${fatorDia}, MetaCalc=${pMeta}`);
+                    }
+
                     chartData.labels.push(`${curr.getDate()}/${mes}`);
                     chartData.prodReal.push(pReal);
                     chartData.prodMeta.push(pMeta);
                     chartData.assReal.push(reg.media_assertividade > 0 ? reg.media_assertividade : null);
                     chartData.assMeta.push(metaMesCfg.assert);
+                    
                     aAudit = reg.total_auditados;
                     aNok = reg.total_nok;
+                    
                     curr.setDate(curr.getDate() + 1);
                 }
+
                 acc.val += pReal; acc.meta += pMeta; acc.audit += aAudit; acc.nok += aNok;
             }
 
-            // ATUALIZAÇÃO VISUAL
-            console.log("🎨 Renderizando Gráficos e Cards...");
-            
-            // Regra de Abono Visual: Se meta é 0, atingimento é 100% (ou N/A)
+            // ATUALIZAÇÃO VISUAL (CARDS)
+            // Lógica: Se Meta > 0, calcula %. Se Meta == 0 e Prod > 0, 100%. Se ambos 0, 100% (cumpriu).
             let pctProd = 0;
-            if (acc.meta > 0) pctProd = (acc.val/acc.meta)*100;
-            else if (acc.val > 0) pctProd = 100; // Produziu sem meta
-            else pctProd = 100; // Meta 0 e Prod 0 (Abonado Total) -> Consideramos 100% Ok
+            if (acc.meta > 0) pctProd = (acc.val / acc.meta) * 100;
+            else pctProd = 100; // Meta zerada (abono) = 100% Ok
 
             const pctAssert = acc.audit > 0 ? ((acc.audit - acc.nok)/acc.audit*100) : 0;
             const pctCob = acc.val > 0 ? (acc.audit/acc.val)*100 : 0;
@@ -192,14 +215,19 @@ MinhaArea.Metas = {
 
             const periodoTxt = this.getLabelPeriodo(inicio, fim);
             document.querySelectorAll('.periodo-label').forEach(el => el.innerText = periodoTxt);
-            this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false);
-            this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true);
+            
+            // Renderização Segura do Gráfico
+            if (document.getElementById('graficoEvolucaoProducao')) {
+                this.renderizarGrafico('graficoEvolucaoProducao', chartData.labels, chartData.prodReal, chartData.prodMeta, 'Produção', '#3b82f6', false);
+            }
+            if (document.getElementById('graficoEvolucaoAssertividade')) {
+                this.renderizarGrafico('graficoEvolucaoAssertividade', chartData.labels, chartData.assReal, chartData.assMeta, 'Qualidade', '#10b981', true);
+            }
 
-            console.log("🏁 Carregamento concluído!");
+            console.log("✅ Metas carregadas e interface atualizada.");
 
         } catch (err) {
-            console.error("❌ ERRO FATAL EM METAS:", err);
-            alert("⚠️ ERRO AO CARREGAR METAS:\n\n" + err.message); // ALERTA VISUAL
+            console.error("❌ ERRO METAS:", err);
             this.resetarCards(false); 
         } finally {
             this.isLocked = false;
@@ -208,7 +236,7 @@ MinhaArea.Metas = {
 
     updateCard: function(type, real, meta, pct, subLabel, isPct = false) {
         const elReal = document.getElementById(`meta-${type}-real`);
-        if(!elReal) return; // Evita crash se elemento não existir
+        if(!elReal) return;
         
         const txtReal = isPct ? this.fmtPct(real) : real.toLocaleString('pt-BR');
         const txtMeta = isPct ? `${meta}%` : meta.toLocaleString('pt-BR');
@@ -248,15 +276,9 @@ MinhaArea.Metas = {
 
     renderizarGrafico: function(id, lbl, dReal, dMeta, label, corHex, isPct) {
         const ctx = document.getElementById(id);
-        if(!ctx) {
-            console.warn(`Canvas não encontrado: ${id}`);
-            return;
-        }
+        if(!ctx) return;
         
-        // Verifica se Chart.js está carregado
-        if (typeof Chart === 'undefined') {
-            throw new Error("Biblioteca Chart.js não foi carregada.");
-        }
+        if (typeof Chart === 'undefined') return console.warn("Chart.js não carregado.");
 
         if(id.includes('Producao')) { if(this.chartProd) { this.chartProd.destroy(); this.chartProd = null; } } 
         else { if(this.chartAssert) { this.chartAssert.destroy(); this.chartAssert = null; } }
@@ -307,9 +329,12 @@ MinhaArea.Metas = {
                 }
             }
         };
-        const novoChart = new Chart(ctx, config);
-        if(id.includes('Producao')) this.chartProd = novoChart; 
-        else this.chartAssert = novoChart;
+        
+        try {
+            const novoChart = new Chart(ctx, config);
+            if(id.includes('Producao')) this.chartProd = novoChart; 
+            else this.chartAssert = novoChart;
+        } catch(e) { console.warn("Erro ao desenhar gráfico:", e); }
     },
 
     resetarCards: function(showLoading) {
