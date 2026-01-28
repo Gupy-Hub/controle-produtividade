@@ -1,6 +1,6 @@
 /* ARQUIVO: js/minha_area/metas.js
-   DESCRIÇÃO: Engine de Metas (Correção: Soma de Metas Individuais + Filtro de Cargo)
-   SOLUÇÃO: Soma a meta de todos os assistentes ativos para compor a meta do time.
+   DESCRIÇÃO: Engine de Metas (Correção Definitiva: DB-Driven + Suporte Multi-ano)
+   SOLUÇÃO: Busca metas exatas do banco (tabela 'metas') para o período selecionado.
 */
 
 MinhaArea.Metas = {
@@ -22,17 +22,21 @@ MinhaArea.Metas = {
         const uid = MinhaArea.getUsuarioAlvo(); 
         
         try {
-            const anoRef = new Date(inicio).getFullYear();
+            // Prepara range de anos para evitar bugs em virada de ano (ex: Dez/25 a Jan/26)
+            const anoInicio = new Date(inicio).getFullYear();
+            const anoFim = new Date(fim).getFullYear();
+            const anosEnvolvidos = [anoInicio];
+            if (anoFim !== anoInicio) anosEnvolvidos.push(anoFim);
 
-            // 1. QUERY MULTIPLA: Dados + Metas + Usuários
+            // 1. QUERY MULTIPLA: Dados + Metas (Range de Anos) + Usuários
             const [kpisRes, metasRes, usersRes] = await Promise.all([
                 // A. Dados de Produção (Realizado)
                 Sistema.supabase.rpc('get_kpis_minha_area', { p_inicio: inicio, p_fim: fim, p_usuario_id: uid }),
                 
-                // B. Tabela de Metas (Configurado)
-                Sistema.supabase.from('metas').select('*').eq('ano', anoRef),
+                // B. Tabela de Metas (Configurado) - Busca para os anos do filtro
+                Sistema.supabase.from('metas').select('*').in('ano', anosEnvolvidos),
                 
-                // C. Usuários Ativos (Para filtrar cargos)
+                // C. Usuários Ativos (Para filtrar cargos Operacionais)
                 Sistema.supabase.from('usuarios').select('id, perfil, funcao').eq('ativo', true)
             ]);
 
@@ -40,6 +44,7 @@ MinhaArea.Metas = {
             if (metasRes.error) throw metasRes.error;
 
             // --- 2. DEFINIÇÃO DE QUEM ENTRA NA CONTA ---
+            // Mapa com chave composta "ANO-MES" para evitar colisão de datas
             const mapMetaMensal = {}; 
             
             // Cargos que NÃO devem somar meta (Gestão/Auditoria)
@@ -70,18 +75,19 @@ MinhaArea.Metas = {
             (metasRes.data || []).forEach(m => {
                 // Só processa se o usuário for válido (Ativo e Operacional)
                 if (idsValidos.has(m.usuario_id)) {
-                    const mes = m.mes;
+                    // Chave única para diferenciar Jan/2025 de Jan/2026
+                    const key = `${m.ano}-${m.mes}`;
                     
-                    if (!mapMetaMensal[mes]) {
-                        mapMetaMensal[mes] = { prod: 0, assert_soma: 0, count: 0 };
+                    if (!mapMetaMensal[key]) {
+                        mapMetaMensal[key] = { prod: 0, assert_soma: 0, count: 0 };
                     }
 
-                    // SOMA (Aqui estava o erro: antes sobrescrevia, agora soma +=)
-                    mapMetaMensal[mes].prod += (m.meta_producao || 0);
+                    // SOMA A META DIÁRIA (Valores do banco)
+                    mapMetaMensal[key].prod += (m.meta_producao || 0);
                     
                     // Assertividade é média, não soma
-                    mapMetaMensal[mes].assert_soma += (m.meta_assertividade || 98.0);
-                    mapMetaMensal[mes].count++;
+                    mapMetaMensal[key].assert_soma += (m.meta_assertividade || 98.0);
+                    mapMetaMensal[key].count++;
                 }
             });
 
@@ -99,16 +105,19 @@ MinhaArea.Metas = {
             const chartData = { labels: [], prodReal: [], prodMeta: [], assReal: [], assMeta: [] };
             let acc = { val: 0, meta: 0, audit: 0, nok: 0 };
 
+            // Ajuste de Timezone: Força meio-dia para evitar problemas de UTC-3
             let curr = new Date(inicio + 'T12:00:00');
             const end = new Date(fim + 'T12:00:00');
+            
             if (modoMensal) curr.setDate(1);
 
             while (curr <= end) {
                 const mes = curr.getMonth() + 1;
                 const ano = curr.getFullYear();
+                const key = `${ano}-${mes}`; // Busca pela chave exata do ano/mês
                 
-                // Recupera a meta SOMADA do mês (ex: 10.650)
-                const metaMesCfg = mapMetaMensal[mes] || { prod: 0, assert: 98.0 };
+                // Recupera a meta SOMADA do mês (ex: 600, 1200...) ou 0 se não configurada
+                const metaMesCfg = mapMetaMensal[key] || { prod: 0, assert: 98.0 };
                 
                 let pReal = 0, pMeta = 0, aAudit = 0, aNok = 0;
 
@@ -118,20 +127,22 @@ MinhaArea.Metas = {
                     const lastDay = new Date(ano, mes, 0).getDate();
                     
                     for(let d=1; d<=lastDay; d++) {
-                        const dia = new Date(ano, mes-1, d);
-                        if (dia < new Date(inicio) || dia > new Date(fim)) continue;
+                        // Construção segura da data do loop interno
+                        const diaStr = `${ano}-${String(mes).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                        const diaObj = new Date(diaStr + 'T12:00:00');
+
+                        if (diaObj < new Date(inicio + 'T00:00:00') || diaObj > new Date(fim + 'T23:59:59')) continue;
                         
-                        const iso = dia.toISOString().split('T')[0];
-                        const isFDS = (dia.getDay()===0 || dia.getDay()===6);
-                        const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
+                        const isFDS = (diaObj.getDay()===0 || diaObj.getDay()===6);
+                        const reg = mapaDados[diaStr] || { total_producao: 0, total_auditados: 0, total_nok: 0 };
                         
                         pReal += reg.total_producao;
-                        if(!isFDS) pMeta += metaMesCfg.prod; // Soma meta do time por dia útil
+                        if(!isFDS) pMeta += metaMesCfg.prod; // Soma meta diária para cada dia útil do mês
                         aAudit += reg.total_auditados;
                         aNok += reg.total_nok;
                     }
                     
-                    if (curr >= new Date(inicio) || new Date(ano, mes, 0) <= end) {
+                    if (curr >= new Date(inicio + 'T00:00:00') || new Date(ano, mes, 0) <= end) {
                         chartData.labels.push(label);
                         chartData.prodReal.push(pReal);
                         chartData.prodMeta.push(pMeta);
@@ -146,7 +157,8 @@ MinhaArea.Metas = {
                     const isFDS = (curr.getDay()===0 || curr.getDay()===6);
                     const reg = mapaDados[iso] || { total_producao: 0, total_auditados: 0, total_nok: 0, media_assertividade: 0 };
                     
-                    // Meta do dia = Soma das metas individuais (10.650)
+                    // Meta do dia = Soma das metas individuais do banco
+                    // Se não tiver meta no banco, será 0. Se for FDS, é 0.
                     pMeta = isFDS ? 0 : metaMesCfg.prod;
                     pReal = reg.total_producao;
                     
