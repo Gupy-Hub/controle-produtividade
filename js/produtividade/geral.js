@@ -1,4 +1,6 @@
-/* ARQUIVO: js/produtividade/geral.js */
+/* ARQUIVO: js/produtividade/geral.js
+   DESCRIÇÃO: Engine de Visualização + Correção da Lógica de Abono (Update Direto)
+*/
 window.Produtividade = window.Produtividade || {};
 
 Produtividade.Geral = {
@@ -8,7 +10,7 @@ Produtividade.Geral = {
     diasAtivosGlobal: 1, 
 
     init: function() { 
-        console.log("🚀 [GupyMesa] Produtividade: Engine V34 (Smart Visibility)...");
+        console.log("🚀 [GupyMesa] Produtividade: Engine V35 (Abono Direct-Write)...");
         this.updateHeader(); 
         this.carregarTela(); 
         this.initialized = true; 
@@ -171,15 +173,12 @@ Produtividade.Geral = {
             const corProducao = atingimento >= 100 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold';
             const corProducaoBg = atingimento >= 100 ? 'bg-emerald-50' : 'bg-rose-50';
 
-            // -----------------------------------------------------------------
-            // AQUI ESTÁ A MUDANÇA: USANDO O RENDERIZADOR CENTRAL DO SISTEMA
-            // -----------------------------------------------------------------
-            const htmlAssertividade = Sistema.Assertividade.renderizarCelulaHTML(
+            // Renderiza célula de assertividade usando o módulo do sistema
+            const htmlAssertividade = Sistema.Assertividade ? Sistema.Assertividade.renderizarCelulaHTML(
                 d.auditoria.soma,
                 d.auditoria.qtd,
                 d.meta_assertividade
-            );
-            // -----------------------------------------------------------------
+            ) : '--';
 
             const temJustificativa = d.totais.justificativa && d.totais.justificativa.length > 0;
             const isAbonado = d.totais.diasUteis % 1 !== 0 || d.totais.diasUteis === 0;
@@ -293,8 +292,8 @@ Produtividade.Geral = {
         if(barVol) barVol.style.width = totalMetaGeral > 0 ? Math.min((totalProdGeral/totalMetaGeral)*100, 100) + '%' : '0%';
 
         // CÁLCULO DA MÉDIA GLOBAL VIA SISTEMA
-        const mediaGlobalAssert = Sistema.Assertividade.calcularMedia(somaNotasAssistentes, qtdAuditoriasAssistentes);
-        this.setTxt('kpi-meta-assertividade-val', Sistema.Assertividade.formatarPorcentagem(mediaGlobalAssert));
+        const mediaGlobalAssert = Sistema.Assertividade ? Sistema.Assertividade.calcularMedia(somaNotasAssistentes, qtdAuditoriasAssistentes) : 0;
+        this.setTxt('kpi-meta-assertividade-val', Sistema.Assertividade ? Sistema.Assertividade.formatarPorcentagem(mediaGlobalAssert) : '--%');
         
         this.setTxt('kpi-meta-producao-val', totalMetaGeral > 0 ? ((totalProdGeral/totalMetaGeral)*100).toFixed(1) + '%' : '0%');
 
@@ -345,6 +344,10 @@ Produtividade.Geral = {
     
     toggleAll: function(checked) { document.querySelectorAll('.check-user').forEach(c => c.checked = checked); },
 
+    // =========================================================================
+    //  FIX: LÓGICA DE ABONO (AGORA ESCREVE DIRETO NA TABELA 'producao')
+    // =========================================================================
+    
     abonarEmMassa: async function() {
         const checks = document.querySelectorAll('.check-user:checked');
         if (checks.length === 0) return alert("Selecione pelo menos um assistente na lista.");
@@ -376,12 +379,8 @@ Produtividade.Geral = {
 
         for (const chk of checks) {
             try {
-                await Sistema.supabase.rpc('abonar_producao', {
-                    p_usuario_id: chk.value, 
-                    p_data: dataAlvo, 
-                    p_fator: novoFator, 
-                    p_justificativa: justificativa
-                });
+                // Chama a função interna que lida com o UPSERT direto
+                await this.aplicarAbonoDB(chk.value, dataAlvo, novoFator, justificativa);
                 sucessos++;
             } catch (err) { console.error(err); }
         }
@@ -411,18 +410,50 @@ Produtividade.Geral = {
         }
 
         try {
-            const { error } = await Sistema.supabase.rpc('abonar_producao', {
-                p_usuario_id: uid, 
-                p_data: dataAlvo, 
-                p_fator: novoFator, 
-                p_justificativa: justificativa
-            });
-
-            if (error) throw error;
+            await this.aplicarAbonoDB(uid, dataAlvo, novoFator, justificativa);
             this.carregarTela();
         } catch (error) { 
             console.error(error);
             alert("Erro ao abonar: " + error.message); 
+        }
+    },
+
+    /**
+     * FUNÇÃO CORE DE ABONO (Substitui RPC quebrada)
+     * Verifica se existe: se sim, UPDATE. Se não, INSERT.
+     */
+    aplicarAbonoDB: async function(usuarioId, dataRef, fator, justificativa) {
+        // 1. Tenta buscar registro existente
+        const { data: existe, error: errGet } = await Sistema.supabase
+            .from('producao')
+            .select('id')
+            .eq('usuario_id', usuarioId)
+            .eq('data_referencia', dataRef)
+            .maybeSingle(); // maybeSingle não estoura erro se vazio
+
+        if (existe) {
+            // UPDATE: Atualiza apenas fator e justificativa (mantém produção se houver)
+            const { error } = await Sistema.supabase
+                .from('producao')
+                .update({ 
+                    fator: fator, 
+                    justificativa: justificativa 
+                })
+                .eq('id', existe.id);
+            if (error) throw error;
+        } else {
+            // INSERT: Cria registro zerado apenas para constar o abono
+            const { error } = await Sistema.supabase
+                .from('producao')
+                .insert({
+                    usuario_id: usuarioId,
+                    data_referencia: dataRef,
+                    fator: fator,
+                    justificativa: justificativa,
+                    quantidade: 0,
+                    status: fator === 0 ? 'ABONADO' : 'OK'
+                });
+            if (error) throw error;
         }
     },
 
